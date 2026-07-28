@@ -167,13 +167,25 @@ Every entry shows its **status**, because a reader needs to know whether a docum
 | Document | Path | Status |
 |---|---|---|
 | Implementation Roadmap | `19_roadmap/implementation_roadmap.md` | Approved (v2.0) |
-| **Implementation Status (living)** | `19_roadmap/implementation_status.md` | Active |
+| **Implementation Status (living, short)** | `19_roadmap/implementation_status.md` | Active |
+| **Implementation History Index (detailed, split by milestone)** | `19_roadmap/history/INDEX.md` | Active |
 | Phase 0 Completion Review | `19_roadmap/phase_0_completion_review.md` | Approved |
 | Documentation Baseline Record | `19_roadmap/documentation_freeze.md` | Approved (v2.0) |
 
+## 15. Process Docs (Claude Code / Contributor Workflow)
+
+| Document | Path | Status |
+|---|---|---|
+| **CLAUDE.md (auto-read every session)** | `../CLAUDE.md` | Active |
+| Files to Read First | `process/files_to_read_first.md` | Active |
+| Standing Rules (scope, docs, git discipline) | `process/standing_rules.md` | Active |
+| Reporting Format | `process/reporting_format.md` | Active |
+| Coding Standards (curated pointer) | `process/coding_standards.md` | Active |
+| Folder Structure (real vs. placeholder) | `process/folder_structure.md` | Active |
+
 ---
 
-## 15. Reading Order for a New Contributor or Model
+## 16. Reading Order for a New Contributor or Model
 
 1. `../README.md` → `../PROJECT_INDEX.md`
 2. `00_constitution/project_constitution.md`
@@ -190,12 +202,12 @@ Every entry shows its **status**, because a reader needs to know whether a docum
 
 ---
 
-## 16. Maintenance
+## 17. Maintenance
 
 Update this index whenever a document is added, moved, renamed, or changes status. A document not listed here is not discoverable, which for this project is equivalent to not existing.
 
 ---
 
-## 17. Final Authority
+## 18. Final Authority
 
 This index is a navigation aid. On conflict, the individual authoritative documents, the Architecture Decision Records, and the Project Constitution prevail.
