@@ -19,10 +19,39 @@ Every entry shows its **status**, because a reader needs to know whether a docum
 ## 2. How to Use This Index
 
 1. Start with `../README.md` and `../PROJECT_INDEX.md` for orientation.
-2. Read the Constitution and the AI Governance Framework.
-3. **Read the Decision Log** (`18_decision_log/README.md`) — it records every technology and architecture decision, and is the fastest route to understanding why the platform is shaped as it is.
-4. Use this index to find the detailed document you need.
-5. On conflict, follow the precedence rules in the Project Constitution.
+2. **Read `../CLAUDE.md`** — the working process (approval workflow, standing rules, environment quirks).
+3. **Read `19_roadmap/implementation_status.md`** — what actually exists right now. Short by design.
+4. Read the Constitution and the AI Governance Framework.
+5. **Read the Decision Log** (`18_decision_log/README.md`) — it records every technology and architecture decision (all 25 ADRs, each with an appended implementation-status note), and is the fastest route to understanding why the platform is shaped as it is.
+6. Use this index to find the detailed document you need.
+7. On conflict, follow the precedence rules in the Project Constitution.
+
+---
+
+## 2a. Critical: these documents are specifications, not descriptions of working software
+
+**AI_OS is documentation-first (ADR-0003).** Most architecture documents in this index were written *before* the code they describe, and much of that code does not exist yet. A document being **Approved** means its design is authoritative — **not** that it is implemented.
+
+Every subsystem document under `03_architecture/` carries an **Implementation Status** section near the top stating honestly what is built and what is not. **Read that section before assuming the rest of the document describes something you can call.**
+
+Entirely unbuilt as of 2026-07-28 — these documents are pure specification, with no corresponding code:
+
+- `03_architecture/platform/platform_sdk.md` — **no `ai-os-sdk` package exists.** All 15 Protocols, the boundary models, the `AiOsError` hierarchy, and `pack_contract_suite` are design only. This is why packs import Kernel internals directly.
+- All 7 documents in `03_architecture/services/` (Storage, Search's vector half, Document Processing, Notification, Caching, Git Integration)
+- `03_architecture/quality/quality_gates_framework.md` and `03_architecture/kernel/quality_gate_engine.md` — **nothing enforces any quality gate in code today**
+- `03_architecture/kernel/{evaluation_engine,event_bus,knowledge_manager,memory_manager,traceability_engine}.md`
+- `03_architecture/traceability/traceability_model.md`
+- All of `13_dashboard/`, `14_voice_jarvis/`, `07_api/cli_design.md`
+- `06_capability_packs/{project_intelligence,voice_jarvis,benchmarking}/`
+- `ai_context/` and `knowledge/` structure documents — both describe root directories with zero content
+
+**The three live-status documents are the authority on what is real:**
+
+| Document | Purpose |
+|---|---|
+| `19_roadmap/implementation_status.md` | Short: current stage, what exists, blockers, next step. Read first, every session. |
+| `19_roadmap/feature_inventory.md` | Per-module completion tracker — the authority on "how done is X" |
+| `19_roadmap/history/INDEX.md` | Full chronological build history by milestone |
 
 ---
 

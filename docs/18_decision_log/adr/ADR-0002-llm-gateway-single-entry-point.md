@@ -47,3 +47,13 @@ Complies with the Project Constitution (LLM Agnosticism) and the AI Governance F
 
 - `docs/03_architecture/kernel/llm_gateway.md`
 - `docs/06_capability_packs/benchmarking/overview.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+The Gateway is the only provider egress path in the codebase: `AnthropicAdapter` and `LocalAdapter` sit behind `Router`/`DispatchingLLMGateway` with alias-based selection, a capability negotiator matrix, circuit breaker, backoff, a typed error taxonomy, two independent budget ceilings, and an `llm_calls` recorder for token/cost accounting. Only `anthropic` is registered by default, and three parts of the decided contract are absent: `embed()` (so there is no embedding path at all — see ADR-0013), `stream()`, and `count_tokens()`.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

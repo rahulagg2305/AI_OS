@@ -56,3 +56,13 @@ Amends the AI Governance Framework's Deterministic Engineering principle. Consis
 
 - `docs/03_architecture/kernel/evaluation_engine.md`
 - `docs/06_capability_packs/benchmarking/overview.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+Obligation 2 (deterministic platform behaviour) holds for what is built — context assembly, prompt rendering, and cost computation are deterministic — and obligation 3 is partially met: the `llm_calls` recorder captures resolved model, token counts, and cost per call. Obligation 1 is not built: there is no run manifest, no experiment concept, and no replicate or variance machinery, because `ai_os_kernel.evaluation_engine` is a docstring-only stub (the `evaluation` schema tables exist but have no writer).
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

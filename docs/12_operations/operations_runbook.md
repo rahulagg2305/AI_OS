@@ -8,6 +8,16 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**This runbook describes operating a deployed system that does not exist yet.** Read it as the Stage G target, not as current procedure.
+
+AI_OS today runs only as a local development process against Compose-provided Postgres. Specifically absent: **any container image** (there is no Dockerfile in the repository), any Kubernetes/Helm deployment, the `api`/`worker` role split as deployed units, backup/restore tooling and any rehearsed restore drill, alerting and dashboards (telemetry is console-only), and the audit-chain verification job this runbook's incident procedures depend on (`governance.audit_log` has no writer and no chain).
+
+The two procedures with a real basis today are database migration (Alembic, run as a separate command) and local start-up via Docker Compose. Everything else has no operable target.
+
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 Day-to-day operation of AI_OS: what to watch, what the alerts mean, and what to do when they fire. Written to be actionable at 3 a.m. by someone who did not build the system.

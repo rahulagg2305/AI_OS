@@ -64,3 +64,13 @@ Complies with the Capability Pack Contract (independently installable, versioned
 ## References
 
 - `docs/06_capability_packs/capability_pack_development_guide.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+The `uv` workspace is real, with a committed `uv.lock` and shared tool configuration at the root, but only two of the five decided distributions exist (`ai-os-kernel`, `ai-os-pack-software-engineering`) — there is no `ai-os-sdk`, `ai-os-services`, or `ai-os-cli`, and consequently the Software Engineering pack depends on `ai-os-kernel` directly, so the CI-enforced pack-to-kernel dependency prohibition is not yet in force. Of the two decided discovery mechanisms only the filesystem scan for `manifest.yaml` is built; the `ai_os.capability_packs` entry-point group is not implemented.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

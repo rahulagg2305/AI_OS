@@ -2,9 +2,9 @@
 
 **Project:** AI_OS (AI Operating System)  
 **Document:** Agent Catalog  
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Approved  
-**Last Updated:** 2026-07-25
+**Last Updated:** 2026-07-28 (added `build` to the catalog to match the amendment already recorded in `../06_capability_packs/software_engineering/agents.md` and in the pack's real manifest; added Implementation Status and Related Documents; no responsibility changed)
 
 ---
 
@@ -19,6 +19,28 @@ It defines the identity, responsibility, and scope of each Agent so that:
 - Future LLMs and developers can understand the division of responsibilities
 
 This document is subordinate to the Agent Architecture & Agent Contract.
+
+---
+
+## Implementation Status (2026-07-28)
+
+**Built: 5 of the 17 agents catalogued below.** All five live in the Software Engineering pack, all five are registered in its real manifest (`../../capability_packs/software-engineering/manifest.yaml`), and all five have real tests:
+
+| Agent slug | Real module | State |
+|---|---|---|
+| `requirements-analyst` | `../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/requirements_analyst.py` | Proven independently; **not yet chained** into `se.delivery_pipeline` |
+| `architecture` | `../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/architecture.py` | Chained — step 1 of `se.delivery_pipeline` |
+| `build` | `../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/build.py` | Chained — step 2 |
+| `qa-test` | `../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/verification.py` | Chained — step 3. Makes **no LLM call**; pass/fail comes from a real sandboxed exit code |
+| `documentation` | `../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/documentation.py` | Chained — step 4 |
+
+Note that the real module filename for `qa-test` is `verification.py`, not `qa_test.py` — a historical name kept after the agent id was reconciled.
+
+**Not built — 12 of 17:** `technical-planner`, `backend-developer`, `frontend-developer`, `database`, `api-designer`, `devops`, `security`, `code-reviewer`, `release`, `refactoring`, `performance`, and `existing-project-analyzer`. For none of these does any code, manifest entry, or prompt exist. `existing-project-analyzer` additionally has no pack to live in: `capability_packs/project_intelligence/` is an empty directory.
+
+The only real workflow any of these agents participates in is `se.delivery_pipeline` (`../../capability_packs/software-engineering/workflows/delivery_pipeline.yaml`), which is narrower than any of the workflows named in `../06_capability_packs/software_engineering/workflows.md`.
+
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` (per-module completion table — see rows 29–34) and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -41,7 +63,7 @@ Ownership is single: exactly one pack owns each agent. Full contract-level speci
 
 ---
 
-## 4. Initial Agent Catalog (16 Agents)
+## 4. Initial Agent Catalog (17 Agents)
 
 | #  | Agent slug                       | Name                              | Primary Responsibility                                                                 | Owning Capability Pack         |
 |----|----------------------------------|-----------------------------------|----------------------------------------------------------------------------------------|--------------------------------|
@@ -61,19 +83,24 @@ Ownership is single: exactly one pack owns each agent. Full contract-level speci
 | 14 | refactoring                      | Refactoring Agent                 | Improve structure, readability and maintainability of existing code without changing behaviour | Software Engineering     |
 | 15 | existing-project-analyzer        | Existing Project Analysis Agent   | Understand, document and analyse existing / legacy codebases                           | Project Intelligence           |
 | 16 | performance                      | Performance Agent                 | Analyse performance characteristics and recommend or apply optimizations               | Software Engineering           |
+| 17 | build                            | Build Agent                       | Given a design or instruction, produce exactly one concrete file and write it through the sandbox — deliberately generic and stack-agnostic | Software Engineering           |
+
+**On entry 17.** `build` was added to this catalog on 2026-07-28 to match the amendment already made and reasoned through in `../06_capability_packs/software_engineering/agents.md` ("Currently Implemented Subset"). It is a real, shipped agent whose scope — write one generic file from an instruction — does not fit `backend-developer`'s documented scope ("backend services, business logic and APIs") or any other pre-existing entry. It was catalogued honestly rather than force-fitted to an ill-matching id or left undocumented in code.
 
 ---
 
 ## 5. Agent Ownership
 
-- Fifteen of the agents above are owned by the **Software Engineering Capability Pack** (`software-engineering/…`).
+- Sixteen of the agents above are owned by the **Software Engineering Capability Pack** (`software-engineering/…`).
 - **`existing-project-analyzer` is owned solely by the Project Intelligence Pack** (`project-intelligence/existing-project-analyzer`). It is not an agent of the Software Engineering pack and carries no `SE-…` identity.
 - An agent owned by one pack may **participate** in a workflow declared by another. That is not pack coupling: the Workflow Engine invokes the agent, the workflow declares the reference, and neither pack imports the other.
 - Future Capability Packs may introduce additional specialized agents.
 
 ---
 
-## 5. Rules
+## 6. Rules
+
+*(This section was numbered "5" alongside Agent Ownership until 2026-07-28; corrected here.)*
 
 - No agent may take on responsibilities that belong to another agent without an explicit workflow-level decision.
 - Agents must stay within the scope defined in this catalog.
@@ -81,15 +108,18 @@ Ownership is single: exactly one pack owns each agent. Full contract-level speci
 
 ---
 
-## 6. Current Status
+## 7. Current Status
 
-This catalog defines the initial target set of agents.
+This catalog defines the initial target set of agents. Five of the seventeen are real — see the Implementation Status block above.
 
-Detailed specifications (inputs, outputs, tools, prompts, quality gates) for each agent will be defined inside the respective Capability Pack documentation.
+Detailed specifications live in two places, both of which exist today:
+
+- **Contract-level specifications** (identity, I/O models, tools, prompts, permissions, model alias, behavioural requirements, tests) → `agent_specifications.md`. That document currently specifies three agents in full; see its own Implementation Status block for which, and for the gap between what it specifies and what is built.
+- **Pack-level responsibilities and the currently-implemented subset** → `../06_capability_packs/software_engineering/agents.md` and `../06_capability_packs/project_intelligence/agents_workflows.md`.
 
 ---
 
-## 7. Final Authority
+## 8. Final Authority
 
 Order of precedence:
 
@@ -99,3 +129,36 @@ Order of precedence:
 4. Agent Catalog  
 5. Capability Pack specific agent definitions  
 6. Source Code
+
+---
+
+## 9. Related Documents
+
+**Governing documents (this one is subordinate to these)**
+- `../03_architecture/agents/agent_architecture.md` — the Agent Contract this catalog assumes
+- `../03_architecture/agents/agent_communication.md` — the 5 allowed / 5 forbidden communication patterns
+- `../03_architecture/capability_framework/capability_pack_contract.md` — what a pack must provide to own an agent
+- `../03_architecture/capability_framework/manifest_schema.md` — how an agent is declared
+- `../../platform_sdk/schemas/manifest.schema.json` — the real, enforced machine schema for those declarations
+
+**Downstream specification**
+- `agent_specifications.md` — contract-level specifications for these agents
+- `../06_capability_packs/software_engineering/agents.md` — pack-level responsibilities for the 16 SE agents
+- `../06_capability_packs/software_engineering/workflows.md` — the workflows these agents are intended to participate in
+- `../06_capability_packs/project_intelligence/agents_workflows.md` — `existing-project-analyzer`'s owning pack
+
+**Real implementations (the only agent code that exists)**
+- `../../capability_packs/software-engineering/manifest.yaml` — the five real agent declarations
+- `../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/requirements_analyst.py`
+- `../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/architecture.py`
+- `../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/build.py`
+- `../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/verification.py` — the `qa-test` agent
+- `../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/documentation.py`
+- `../../capability_packs/software-engineering/prompts/` — the four real prompts
+- `../../capability_packs/software-engineering/workflows/delivery_pipeline.yaml` — the one real workflow chaining four of them
+
+**Requirements and status**
+- `../02_requirements/functional/functional_requirements.md` — FR-030–FR-045 (SE pack), FR-050–FR-059 (Project Intelligence)
+- `../19_roadmap/feature_inventory.md` — live completion status (rows 29–34)
+- `../19_roadmap/implementation_status.md` — current stage and blockers
+- `../20_glossary/glossary.md` — canonical definition of "Agent" and related terms

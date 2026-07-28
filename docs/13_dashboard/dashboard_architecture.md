@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** The `dashboard/` directory has **no tracked content at all** — no frontend project is scaffolded, no `package.json`, no React application. It is absent from a fresh clone (git does not track empty directories). Stage F deliverable.
+
+A reader should also note the Dashboard is specified as a pure client of the HTTP API and its WebSocket stream: **only 9 of ~45 documented endpoints exist, and the `/api/v1/stream` WebSocket route does not exist at all** (see `../07_api/api_architecture.md`). Most views specified here have no data source yet.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines the high-level architecture of the **Dashboard** in AI_OS.

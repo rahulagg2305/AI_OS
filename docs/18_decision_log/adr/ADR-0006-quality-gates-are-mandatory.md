@@ -46,3 +46,13 @@ Complies with the Project Constitution (Quality Gates are Mandatory) and the AI 
 
 - `docs/06_capability_packs/software_engineering/tools_quality_gates.md`
 - `docs/10_testing/test_strategy.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Not yet implemented
+
+Nothing enforces any quality gate anywhere in the code today: `ai_os_kernel.quality_gate_engine` is a docstring-only stub, and while `quality_gate` exists as a declared workflow step type and `quality_gate_failed` as a workflow state, no gate is ever declared, evaluated, or acted on. The Software Engineering pack declares no quality gates in its manifest.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

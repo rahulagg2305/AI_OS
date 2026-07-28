@@ -9,6 +9,16 @@ under that same, still-evolving pre-release version.
 
 ### Added
 
+- **The Requirements Analyst Agent (`requirements-analyst`, added 2026-07-28).** Given a
+  raw software requirement or ask, produces a structured, refined requirements analysis —
+  no architecture design, no code generation. Matches
+  `docs/06_capability_packs/software_engineering/agents.md`'s own documented id, so no
+  catalog amendment was needed. Proven independently by
+  `tests/test_requirements_analyst.py` and the Kernel-side
+  `tests/integration/workflow_engine/test_requirements_analyst_agent_pack.py`; **not yet
+  chained into `se.delivery_pipeline`**, following the same "prove alone first, chain
+  later" sequencing every other agent here has used. Ships with its own prompt,
+  `requirements.analyze@0.1.0` (`prompts/requirements_analysis.md`).
 - The Architecture Agent (`architecture` — renamed from `architect`
   during a later documentation-reconciliation step, see below). Given a
   software requirement, proposes a concrete technical design — no code
@@ -27,7 +37,8 @@ under that same, still-evolving pre-release version.
   record what was built and how it was verified, writing a real
   Markdown file through the sandbox.
 - `se.delivery_pipeline`, a real, declared `WorkflowDefinition`
-  (`workflows/delivery_pipeline.yaml`) chaining all four agents — see
+  (`workflows/delivery_pipeline.yaml`) chaining Architecture, Build, QA/Test, and
+  Documentation — see
   `docs/06_capability_packs/software_engineering/workflows.md`'s own
   "Currently Implemented Subset" section for why this is a distinct,
   real workflow, not a fork of any of that document's own 7 documented
@@ -39,6 +50,18 @@ under that same, still-evolving pre-release version.
 
 ### Changed
 
+- **`DockerSandbox` is now this pack's real default sandbox (2026-07-28).** The Build,
+  QA/Test, and Documentation Agents previously defaulted to `LocalSubprocessSandbox`
+  (3 of 5 ADR-0016 guarantees). They now resolve their default through
+  `ai_os_kernel.sandbox.default_executor.build_default_sandbox_executor()`, which reads
+  `AIOS_SANDBOX_BACKEND` — `"docker"` unless explicitly set to `"local"`. This makes the
+  pack ADR-0016 Tier 1 by default: ephemeral container, no network, read-only root,
+  non-root user, resource-limited. Verified live against a real Docker daemon
+  (`tests/integration/sandbox/test_delivery_pipeline_docker.py`), including proof that
+  network isolation and filesystem containment hold for code the pipeline itself
+  generated. Two real bugs were found and fixed by that verification: a `python_command`
+  mismatch in `pipeline.py`'s own composition, and a hardcoded `sys.executable` in a
+  Kernel-side test.
 - **Documentation reconciliation (2026-07-28):** agent ids `architect`
   and `test` were renamed to `architecture` and `qa-test` to match
   `agents.md`'s own Approved, authoritative Agent Catalog; `build` was
@@ -53,17 +76,26 @@ under that same, still-evolving pre-release version.
 
 ### Not included in this release
 
-- 11 of `agents.md`'s own other documented agents (Requirements
-  Analyst, Technical Planning, Frontend Development, Database, API
-  Design, DevOps, Security, Code Review, Release, Refactoring,
-  Performance).
-- 6 of `workflows.md`'s own other documented workflows
+- 10 of `agents.md`'s own other documented agents (Technical Planning,
+  Frontend Development, Database, API Design, DevOps, Security, Code
+  Review, Release, Refactoring, Performance).
+- All 7 of `workflows.md`'s own documented workflows
   (`se.product_creation`, `se.implement_task`, `se.feature_addition`,
-  `se.bug_fix`, `se.code_review`, `se.refactoring`, `se.release`).
-- Human-approval gating between any of this pack's own steps.
-- Any Tool, Quality Gate, or Command declaration of this pack's own.
+  `se.bug_fix`, `se.code_review`, `se.refactoring`, `se.release`) —
+  `se.delivery_pipeline` is a distinct, smaller, real workflow, not one
+  of these under another name.
+- `requirements-analyst` as a step of `se.delivery_pipeline` — the agent
+  exists and is proven, but the pipeline still starts at `architecture`.
+- Human-approval gating between any of this pack's own steps (the Kernel
+  has no approval execution path at all — ADR-0007).
+- Any Tool, Quality Gate, or Command declaration of this pack's own
+  (nothing in the Kernel evaluates a quality gate yet — ADR-0006).
 - An automated manifest -> catalog installer (`catalog.agents`/
   `catalog.prompts`/`catalog.workflow_definitions` rows are seeded
   directly by this pack's own tests).
-- A `DockerSandbox`-backed default for any agent (the Kernel now has a
-  real ADR-0016 Tier 1 backend; no agent in this pack uses it yet).
+- A dependency on `ai-os-sdk` instead of `ai-os-kernel` — no such
+  package exists yet, so the direct Kernel import remains in place
+  under a dated, documented exception (ADR-0009).
+- A `LICENSE` file, and any run of the ADR-0015 pack contract suite —
+  `ai_os_sdk.testing.pack_contract_suite` does not exist anywhere in
+  this codebase.

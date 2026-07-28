@@ -8,6 +8,18 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Barely built — telemetry is produced but never leaves the process, and the audit path does not exist.**
+
+**Built:** `structlog` JSON logging with trace-context binding; a real OpenTelemetry `TracerProvider` producing a genuine span per HTTP request with the documented attributes; **exactly one** metric, `aios.http.requests`. Both exporters are the OTel **console** exporters.
+
+**Not built:** the entire collection and storage half of this document — **no OTLP export, no OpenTelemetry Collector**, and therefore no Prometheus, Tempo, Loki, or Grafana; no Compose observability profile. Of the metrics named in the metric-catalogue section, **only `aios.http.requests` exists** — none of the workflow, LLM, gate, sandbox, outbox, or authz metrics do. No alerting and no dashboards.
+
+**The audit path (`governance.audit_log`) is 0% built:** the table exists, but nothing writes a row, no `row_hash`/`prev_hash` chain is computed, UPDATE/DELETE revocation for an application role is not applied (no such role exists), there is no daily verification job, and no offsite export. The tamper-evidence guarantee this document and [ADR-0017](../18_decision_log/adr/ADR-0017-observability-stack.md) describe is therefore **entirely unenforced today**. Outstanding Stage A/G work.
+
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 This document defines the concrete Observability Stack architecture for AI_OS — how logs, metrics, and traces are collected, correlated, stored, and consumed.

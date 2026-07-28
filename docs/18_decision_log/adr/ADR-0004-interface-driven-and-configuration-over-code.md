@@ -45,3 +45,13 @@ Complies with the Project Constitution (Interface-Driven Design, Configuration o
 ## References
 
 - `docs/03_architecture/platform/platform_sdk.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+Protocols exist at the seams that genuinely have a second implementation — `SandboxExecutor` (local + Docker), `SecretProvider`, the LLM Gateway and its provider adapters, `PromptEngine` (in-memory + SQL), and the workflow repositories — and backend selection is genuinely configuration-driven (`AIOS_SANDBOX_BACKEND`, `AIOS_SECRET_BACKEND`). Two gaps: those Protocols live in `kernel/src/ai_os_kernel/` rather than the decided `platform_sdk/contracts/`, which is empty because no `ai-os-sdk` distribution exists yet; and the Configuration Manager implements 3 of the 7 documented precedence layers.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

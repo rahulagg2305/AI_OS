@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** The root `ai_context/` directory has **no tracked content** — zero Context Packs of any type have been written, and the directory is absent from a fresh clone (git does not track empty directories).
+
+Its intended runtime consumer is also absent: the Context Manager has **no AI Context Pack resolver** (it implements 2 of 6 documented sources). Until packs exist and a resolver is built, this strategy has no effect on any agent invocation. Structure specification: `context_pack_structure.md`.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines the strategy for **AI Context Packs** in AI_OS.

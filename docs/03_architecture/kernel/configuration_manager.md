@@ -24,6 +24,16 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built:** `kernel/src/ai_os_kernel/configuration_manager/` (4 modules). `ConfigurationManager` in `loader.py` resolves **3 of the 7 precedence layers** in §4 — layer 1 (built-in defaults, as field defaults on the `PlatformConfig` model in `models.py`), layer 3 (`config/platform.yaml`), and layer 4 (`infra/environments/<env>.yaml`) — deep-merged in that order into one validated, frozen `PlatformConfig`. A missing file contributes nothing rather than erroring, so the layers beneath it apply. Only the `kernel:` top-level mapping of each file is read. `BootstrapEnv` in `bootstrap_env.py` is the separate, deliberately minimal `pydantic-settings` reader for the bootstrap-identity env vars that cannot themselves be file-driven (`AIOS_ENV`, `AIOS_ROLE`, database URL, and so on). `errors.py` raises `ConfigurationError` on an unknown environment, invalid YAML, a non-mapping top level, or a `PlatformConfig` validation failure. The valid-environment set (`local`, `dev`, `staging`, `production`) is a structural constant, not itself configuration. This component is constructed first in `kernel/src/ai_os_kernel/bootstrap.py`, before anything else.
+
+**Not built:** 4 of the 7 layers in §4 — layer 2 (pack-level defaults from `configSchema`), layer 5 (runtime overrides via `PATCH /api/v1/config`; the route does not exist), layer 6 (experiment overrides; no experiment mechanism exists anywhere), layer 7 (`secret://` resolution at point of use; `kernel/src/ai_os_kernel/secrets_manager/` exists with an `env` backend but is **not wired into the configuration merge**). No Feature Flag Manager. No Configuration API. No Change Auditor — `governance.config_changes` exists as a table in `kernel/src/ai_os_kernel/persistence/governance_schema.py` with no writer, so §8's audit question ("what configuration was active during this run?") is **not yet answerable**: no run manifest is recorded either (`evaluation.run_manifests` is likewise a table with no writer). The property tests §4 requires for precedence verification cover only the three implemented layers. Of §5's seven components, only Configuration Loader, Layer Merger and Schema Validator are real.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `001_project_bootstrap_and_configuration.md`).
+
+---
+
 ## 2. Design Goals
 
 The Configuration Manager must:
@@ -119,9 +129,14 @@ At minimum, the system should be able to answer: “What configuration was activ
 
 ## 9. Current Status
 
-This document defines the design baseline for the Configuration Manager.
+This document defines the design baseline for the Configuration Manager. The four items v1.0 of this section deferred are settled as follows — none is left open as "to be refined."
 
-Detailed schema formats, storage locations, secret backend integration, and API shapes will be refined during implementation.
+| Item | Status |
+|---|---|
+| **Schema formats** | **Decided.** Configuration is typed and validated by Pydantic v2 / `pydantic-settings` models, not by an external schema language ([ADR-0008](../../18_decision_log/adr/ADR-0008-primary-language-and-runtime.md), [ADR-0004](../../18_decision_log/adr/ADR-0004-interface-driven-and-configuration-over-code.md)). The concrete model is `PlatformConfig` in `kernel/src/ai_os_kernel/configuration_manager/models.py`; the bootstrap-env model is `BootstrapEnv` in `bootstrap_env.py`. Pack-supplied configuration is the one exception, validated against the manifest's JSON Schema `configSchema` (`../capability_framework/manifest_schema.md`), because a pack's schema must be declarative and machine-readable to a Kernel that has never seen that pack. |
+| **Storage locations** | **Decided, and already listed in §4.** `config/platform.yaml` (layer 3) and `infra/environments/<env>.yaml` (layer 4), each read from its `kernel:` top-level mapping. `../services/configuration_management.md` is the concrete file-layout and env-var-mapping reference. Only the six bootstrap-identity variables are env vars; everything else is a file value. |
+| **Secret backend integration** | **Decided in [ADR-0024](../../18_decision_log/adr/ADR-0024-secrets-management-backend.md)** — `secret://<provider>/<name>[#version]` references resolved at point of use through a pluggable `SecretProvider`, with Vault as the production reference and four backends specified (env/file/vault/cloud). Real code exists in `kernel/src/ai_os_kernel/secrets_manager/` (`provider.py`, `env_provider.py`, `reference.py`, `value.py`) — `EnvSecretProvider` only. **Named remaining gap:** layer 7 is not wired into this component's merge, so a `secret://` reference appearing in `platform.yaml` today is resolved by no one; it is carried through as a literal string. Closing it needs one call site in `ConfigurationManager.load()`, not a new decision. |
+| **API shapes** | **Decided at the platform level, unbuilt here.** Runtime overrides (layer 5) are `PATCH /api/v1/config` under the REST conventions in `../../07_api/api_architecture.md` ([ADR-0014](../../18_decision_log/adr/ADR-0014-api-style-and-realtime-transport.md)); the CLI surface is `aios config` (`../../07_api/cli_design.md`). **Named remaining gap:** neither the route nor the CLI exists, and neither can be built credibly before the Change Auditor exists — §4 requires runtime overrides to be audited, and `governance.config_changes` still has no writer. Order is therefore: writer, then route. |
 
 ---
 
@@ -135,3 +150,40 @@ Order of precedence:
 4. Kernel Architecture  
 5. Configuration Manager Design  
 6. Source Code
+
+---
+
+## 11. Related Documents
+
+**Governing decisions (ADRs):**
+- [ADR-0004 — Interface-Driven and Configuration over Code](../../18_decision_log/adr/ADR-0004-interface-driven-and-configuration-over-code.md) — the principle this component implements
+- [ADR-0008 — Primary Language and Runtime](../../18_decision_log/adr/ADR-0008-primary-language-and-runtime.md) — Pydantic v2 / `pydantic-settings` as the validation mechanism
+- [ADR-0022 — Reproducibility over Determinism](../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md) — why experiment overrides outrank runtime overrides
+- [ADR-0024 — Secrets Management Backend](../../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — layer 7
+- [ADR-0015 — Testing and CI](../../18_decision_log/adr/ADR-0015-testing-and-ci.md) — precedence verified by property tests
+- [ADR-0014 — API Style and Realtime Transport](../../18_decision_log/adr/ADR-0014-api-style-and-realtime-transport.md) — the runtime-override route
+
+**Superior documents:**
+- `../platform/system_architecture.md`
+- `kernel_architecture.md`
+- `../../21_templates/CODING_STANDARDS_AND_BEST_PRACTICES.md`
+
+**Concrete reference (does not restate §4's order):**
+- `../services/configuration_management.md` — file layout, env-var mapping
+
+**Interacting subsystems:**
+- `llm_gateway.md` — provider credentials, model mappings, budgets, routing rules
+- `workflow_engine.md` — timeouts, retry policies, feature flags
+- `capability_manager.md` — which packs are enabled
+- `evaluation_engine.md` — experiment overrides create controlled conditions
+- `manifest_loader.md` — where packs are discovered
+- `security_manager.md` — secure configuration values
+- `../platform/platform_sdk.md` §5.8 `ConfigService`, §5.9 `SecretResolver` — the pack-facing surface (specified, not yet built)
+- `../../09_security/secrets_management.md`
+
+**Owned tables:**
+- `../../08_database/data_model.md` §9.2 (`governance.config_changes`)
+
+**Reference:**
+- `../../20_glossary/glossary.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`

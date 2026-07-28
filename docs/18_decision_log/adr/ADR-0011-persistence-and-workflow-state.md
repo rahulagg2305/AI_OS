@@ -63,3 +63,13 @@ Complies with the Constitution (Observability by Default, Traceability by Design
 
 - `docs/08_database/data_model.md`
 - [ADR-0012](ADR-0012-event-bus.md), [ADR-0013](ADR-0013-search-and-vector-store.md)
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Fully implemented
+
+Honoured in full for everything built: PostgreSQL is the sole system of record, accessed through SQLAlchemy 2.0 Core with Alembic migrations; `workflow_events` is append-only and written in the same transaction as the `workflow_instances` snapshot; and `SELECT … FOR UPDATE SKIP LOCKED` leasing over `workflow_leases`, with expiry reaping, is real and integration-tested against a live Postgres container. The optional SQLite development path in this decision's supporting table is not implemented — Postgres (via `infra/docker-compose.yml` or testcontainers) is currently the only supported backend.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

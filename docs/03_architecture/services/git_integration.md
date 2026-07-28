@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** No Platform Service exists in code — the `platform_services/` directory has **no tracked content at all**, so it is absent from a fresh clone (git does not track empty directories). No Kernel component consumes this service. No Git operation of any kind is performed by AI_OS today — no clone, no commit, no push. The Software Engineering pack's Build Agent writes files into a sandbox working directory and nothing places them under version control.
+
+Consequence for the threat model: the T11 ("Git history or branch destruction") controls in `../../09_security/security_architecture.md` §14 — force-push prohibition, protected-branch policy, credentials never entering a sandbox — are **currently satisfied only because no Git capability exists**. They become real implementation requirements with this service. Stage C deliverable.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines the design of the **Git Integration Service**, a shared Platform Service in AI_OS.

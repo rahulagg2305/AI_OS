@@ -49,3 +49,13 @@ Complies with the Project Constitution (Human Governance) and the AI Governance 
 
 - `docs/13_dashboard/information_architecture.md`
 - `docs/09_security/authentication_authorization.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Not yet implemented
+
+The `approvals` table exists in the persistence schema and `human_approval` is a valid declared step type, but there is no writer, no reader, and no execution path — a `human_approval` step completes as a NoOp rather than pausing the workflow in `WaitingForHuman`. Escalation policy, timeout handling, the `approver` role, and audit attribution of decisions are all unbuilt.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

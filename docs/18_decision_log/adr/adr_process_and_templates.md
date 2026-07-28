@@ -2,9 +2,9 @@
 
 **Project:** AI_OS (AI Operating System)  
 **Document:** Decision Log (ADR) Process & Templates  
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Approved  
-**Last Updated:** 2026-07-25
+**Last Updated:** 2026-07-28 (added §5.1, the appended implementation-status note convention)
 
 ---
 
@@ -113,6 +113,29 @@ Does this decision comply with the Project Constitution and Governance Framework
 - Links to related documents, discussions, or prior ADRs
 ```
 
+### 5.1 Appended implementation-status notes (added 2026-07-28)
+
+An Accepted ADR records a decision, not its delivery, and a reader arriving at an ADR has no way to tell which parts of it exist in code. To close that gap without violating ADR immutability, every ADR carries an **appended, clearly-delimited implementation-status note at the very end of the file**:
+
+```markdown
+---
+
+## Implementation Status (appended YYYY-MM-DD — not part of the Accepted decision)
+
+**Status in code:** Fully implemented | Partially implemented | Not yet implemented
+
+<one or two concrete sentences on exactly what exists and what does not>
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)
+```
+
+Rules:
+
+- The note is **append-only and additive**. It never edits the ADR's Context, Decision, Alternatives, Consequences, Compliance, References, `Status:` line, or `Date:`. Reversing or revising a decision still requires a superseding ADR.
+- The note is **derived, not authoritative**. `docs/19_roadmap/feature_inventory.md` governs on any conflict.
+- It states what is *not* built as explicitly as what is. A note that lists only progress is a defect.
+- A pre-existing note of a different kind (for example ADR-0016's "Implementation naming note", which sits inside the Decision section) is left in place; the status note is added alongside it, not merged into it.
+
 ---
 
 ## 6. Decision Log Index
@@ -156,6 +179,8 @@ That index is the authoritative list. This document defines only the *process* a
 ## 9. Current Status
 
 This document establishes the Decision Log process and template. ADR-0001 through ADR-0025 are written and Accepted; the index at `../README.md` is maintained alongside them.
+
+As of 2026-07-28 all 25 carry an appended implementation-status note (§5.1): **3 fully implemented, 16 partially implemented, 6 not yet implemented**. No Accepted decision has been contradicted by implementation — every gap is an unbuilt part of an accepted decision. The index's `In code` column summarises this.
 
 **Recording a deferral.** Where a decision is deliberately postponed, it is recorded in the index's *Open Decision Points* table with the trigger condition that will require deciding it. A deferral with no recorded trigger is indistinguishable from an oversight, so the trigger is mandatory.
 

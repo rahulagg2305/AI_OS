@@ -2,9 +2,11 @@
 
 **Project:** AI_OS (AI Operating System)  
 **Document:** System Architecture  
-**Version:** 2.0  
+**Version:** 2.1  
 **Status:** Approved  
-**Last Updated:** 2026-07-25
+**Last Updated:** 2026-07-28 (added Implementation Status and Related Documents; corrected the deployment section's tense — the two process roles exist as entrypoints but no image is built yet)
+
+**Previously:** 2026-07-25 (v2.0 — reconciled the layer diagram with the Kernel Architecture)
 
 ---
 
@@ -17,6 +19,18 @@ It describes the architectural style, major platform components, responsibilitie
 This document serves as the architectural blueprint for the entire platform and shall be consulted before designing or implementing any subsystem.
 
 This document operates under the authority of the Project Constitution and the AI Governance Framework.
+
+**This is a blueprint, not a description of running software.** The layer diagram below shows the intended v1 architecture in full. A substantial part of it does not exist yet — see Implementation Status immediately below for exactly which parts.
+
+---
+
+## Implementation Status (2026-07-28)
+
+**Built:** the API Layer as 9 authenticated FastAPI routes (`kernel/src/ai_os_kernel/routes/`, `entrypoints/api.py`); the `api`/`worker` process-role split as entrypoint modules (`entrypoints/api.py`, `entrypoints/worker.py`); and, in the Platform Kernel, real code for the Workflow Engine core (definition load/validate → instance → event-sourced state → lease → agent/tool step → completion), LLM Gateway, Prompt Engine, Context Manager (1 of 6 documented sources), Capability Manager (register/activate/deactivate), Security Manager (pre-shared-secret JWT, not OIDC), Manifest Loader (filesystem-scan discovery only), Configuration Manager (3 of 7 precedence layers), Observability (real OpenTelemetry spans + 1 metric, console exporters only), Health & Lifecycle (ready path only), Secrets Management (`env` backend only), and the Sandbox (`LocalSubprocessSandbox`, `DockerSandbox` — real ADR-0016 Tier 1). PostgreSQL schemas exist for all documented table groups. One Capability Pack is real: `../../../capability_packs/software-engineering/` (5 agents, 1 workflow, 4 prompts).
+
+**Not built:** the **entire Platform SDK layer** — `platform_sdk/` contains only `schemas/manifest.schema.json`, there is no `ai-os-sdk` package, and consequently the "only pack-facing surface" is not yet enforceable (see `platform_sdk.md`). The **entire Platform Services layer** — Storage, Search & Vector Search (keyword search only, one layer down in `persistence/knowledge_keyword_search.py`), Document Processing, Git Integration, Notification, Caching (Redis is provisioned in `../../../infra/docker-compose.yml` but no Kernel code uses it), Speech Gateway, and Workspace are all 0%. In the Kernel: Knowledge Manager, Memory Manager, Evaluation Engine, Quality Gate Engine, Traceability Engine, Event Bus, and Retrieval are docstring-only stub packages with no implementation. In the User Interface Layer: Dashboard, CLI, and the WebSocket `/api/v1/stream` transport are all 0%. Of the four Capability Packs named in the diagram, only Software Engineering exists; `capability_packs/project_intelligence/`, `voice_jarvis/`, and `benchmarking/` are empty directories.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -190,6 +204,8 @@ Note that there is no "planning" or "agent assignment" phase: the step sequence 
 
 AI_OS is a **modular monolith deployed as two process roles** — `api` and `worker` — from one image, scaling horizontally over shared PostgreSQL and Redis. Workflow state lives in the database, not in worker memory, and workers lease work with `SELECT … FOR UPDATE SKIP LOCKED`; that is the mechanism by which horizontal scaling works. Criteria for extracting a component into a separate service are stated in [ADR-0020](../../18_decision_log/adr/ADR-0020-deployment-topology-and-scaling.md); absent one of those criteria, extraction is not undertaken.
 
+*Status of the above (2026-07-28):* the two process roles exist as real entrypoint modules (`kernel/src/ai_os_kernel/entrypoints/api.py`, `entrypoints/worker.py`) and the lease mechanism is genuinely implemented (`workflow_engine/lease.py`, `lease_reaper.py`) — but **no container image is built** (no `Dockerfile` exists), and nothing yet schedules leases across many workflow instances: `advance_runner.run_to_completion` and `lease_reaper.reap_once` each handle one instance / one bounded pass. Horizontal scaling is therefore designed and partly mechanised, not demonstrated.
+
 ---
 
 ## Architecture Governance
@@ -214,3 +230,49 @@ Order of precedence:
 5. Subsystem Architecture Documents  
 6. Technical Specifications  
 7. Source Code
+
+---
+
+## Related Documents
+
+**Authority above this document**
+
+- `../../00_constitution/project_constitution.md` — Project Constitution
+- `../../00_constitution/ai_governance_framework.md` — AI Governance Framework
+
+**Governing ADRs** (every one of the architectural rules above traces to one of these)
+
+- [ADR-0001 — Modular Capability Pack Architecture](../../18_decision_log/adr/ADR-0001-modular-capability-pack-architecture.md)
+- [ADR-0002 — LLM Gateway as single entry point](../../18_decision_log/adr/ADR-0002-llm-gateway-single-entry-point.md)
+- [ADR-0004 — Interface-driven and configuration-over-code](../../18_decision_log/adr/ADR-0004-interface-driven-and-configuration-over-code.md)
+- [ADR-0005 — Agents never communicate directly](../../18_decision_log/adr/ADR-0005-agents-never-communicate-directly.md)
+- [ADR-0010 — Composition and dependency injection](../../18_decision_log/adr/ADR-0010-composition-and-dependency-injection.md)
+- [ADR-0014 — API style and real-time transport](../../18_decision_log/adr/ADR-0014-api-style-and-realtime-transport.md)
+- [ADR-0016 — Tool execution sandboxing](../../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md)
+- [ADR-0020 — Deployment topology and scaling](../../18_decision_log/adr/ADR-0020-deployment-topology-and-scaling.md)
+- [ADR-0021 — Declarative workflows, no dynamic task planner](../../18_decision_log/adr/ADR-0021-declarative-workflows-no-dynamic-task-planner.md)
+- Full index: `../../18_decision_log/README.md`
+
+**Requirements traced to this document**
+
+- `../../02_requirements/functional/functional_requirements.md` — §3 Platform Kernel (FR-001 – FR-022) is the requirement set this architecture must satisfy
+- `../../02_requirements/non_functional/nfr.md` — platform-wide quality attributes
+
+**Layer-by-layer detail**
+
+- `../../07_api/api_architecture.md` — API Layer
+- `../kernel/kernel_architecture.md` — Platform Kernel (and the per-component documents alongside it)
+- `platform_sdk.md` — Platform SDK (specification only; no implementing package yet)
+- `../services/` — Platform Services (all specification only; see each document's own Implementation Status)
+- `../capability_framework/capability_pack_contract.md` — Capability Pack layer
+- `technology_stack.md` — the canonical technology list backing every box in the diagram
+- `../../11_deployment/deployment_architecture.md` — deployment topology
+- `../../08_database/data_model.md` — persistence schema
+
+**Terminology**
+
+- `../../20_glossary/glossary.md`
+
+**Current state of the build**
+
+- `../../19_roadmap/implementation_status.md`, `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`

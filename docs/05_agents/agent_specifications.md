@@ -2,9 +2,9 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Agent Specifications
-**Version:** 1.0
+**Version:** 1.1
 **Status:** Approved
-**Last Updated:** 2026-07-25
+**Last Updated:** 2026-07-28 (added Implementation Status recording the spec-vs-code divergence; corrected §1's internally-contradictory "three Stage C agents" claim; added `build` to §7's table; added Related Documents. No specification content changed.)
 
 ---
 
@@ -12,9 +12,41 @@
 
 The Agent Catalog names the agents and their responsibilities. This document specifies them at contract level: identity, I/O schemas, tools, prompts, permissions, model alias, and gates — enough to implement and test them.
 
-The three **Stage C** agents are specified in full because they are the ones being built first. The remaining agents follow the same template and are specified to the same depth as their stage is reached; §7 defines the template so there is no ambiguity about what "specified" means.
+**Three agents are specified in full below** — `requirements-analyst` (§4), `backend-developer` (§5) and `code-reviewer` (§6) — chosen when this document was written as the ones expected to be built first. They are *not* the same three agents that §7's table assigns to Stage C (`technical-planner`, `qa-test`, `documentation`); an earlier version of this sentence claimed they were, which was an internal contradiction, corrected here. The remaining agents follow the same template and are specified to the same depth as their stage is reached; §7 defines the template so there is no ambiguity about what "specified" means.
 
 This document is subordinate to the Agent Architecture & Agent Contract and the Agent Catalog.
+
+---
+
+## Implementation Status (2026-07-28)
+
+**This document does not currently specify the agents that exist, and does not currently describe the agents it specifies.** That divergence is the single most important thing to know before using it, so it is recorded plainly.
+
+**Built: 5 agents.** `requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation` — all in `../../capability_packs/software-engineering/`, all declared in `../../capability_packs/software-engineering/manifest.yaml`. Four of them (`architecture` → `build` → `qa-test` → `documentation`) are chained in the one real workflow, `../../capability_packs/software-engineering/workflows/delivery_pipeline.yaml`.
+
+**Specified in full here: 3 agents** — `requirements-analyst`, `backend-developer`, `code-reviewer`.
+
+**The overlap is exactly one agent.** Consequences, all of them real:
+
+1. **`backend-developer` (§5) and `code-reviewer` (§6) are fully specified but entirely unbuilt.** No module, no manifest entry, no prompt, no test. Their sections are design specification only.
+2. **Four of the five built agents have no contract-level specification in this document at all.** `architecture`, `qa-test` and `documentation` appear only as rows in §7's deferral table; `build` did not appear anywhere until this revision added it. This violates this document's own rule that "an agent is not implementable until items 4, 5, 10, and 12 are written" — those four were built without items 10 and 12 ever being written here. Their real, narrower contracts are documented instead in `../../capability_packs/software-engineering/manifest.yaml` and in `../06_capability_packs/software_engineering/agents.md`'s "Currently Implemented Subset" section, which is honest about each one's reduced scope.
+3. **The one agent that is both specified and built — `requirements-analyst` — does not match its specification in §4.** The real implementation (`../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/requirements_analyst.py`) is a deliberate first slice, narrower on every axis:
+
+| §4 specifies | Reality in code |
+|---|---|
+| Input `RequirementsAnalystInput` with `specification_ref: ArtifactRef`, `project_id`, `existing_requirements`, `domain_context` | `RequirementsAnalysisInput` with one field: `requirement: str`. Not validated at runtime — no per-step input-mapping mechanism exists yet |
+| Output with structured `requirements[]`, `ambiguities[]`, `gaps[]`, `assumptions[]`, `coverage_note` | `RequirementsAnalysisOutput` with one field: `analysis: str` — the model's completion verbatim, unparsed |
+| Model alias `reasoning` | `coding-strong` |
+| Tools `fs.read` (tier2), `doc.parse` (tier2) | None. The pack declares no Tools in its manifest at all |
+| Permissions `filesystem:read`, `llm:invoke` | `llm:invoke` only |
+| Prompts `se.requirements.analyze@1`, `se.requirements.detect_ambiguity@1` | One prompt, `requirements.analyze@0.1.0` (`../../capability_packs/software-engineering/prompts/requirements_analysis.md`). Note also the id-namespace and version-scheme mismatch: this document uses `se.<area>.<action>@<major>`, the real pack uses `<area>.<action>@<semver>` |
+| Gate `se.requirements_complete` | No gate. The Quality Gate Engine is 0% built and the pack declares no gates |
+| Behavioural requirements 1–4, each "an acceptance criterion, not advice" | None is enforced. 1 and 3 need the gate that does not exist; 4 (stable requirement IDs across re-runs) is not merely unenforced but currently unachievable, since the output contains no requirement IDs |
+| Tests: deliberate omission → `gap`; vague criterion rejected; IDs stable across runs | `../../capability_packs/software-engineering/tests/test_requirements_analyst.py` exists and passes, but tests the real free-text slice — none of the three specified cases is present |
+
+**Not built:** the other 12 agents (`technical-planner`, `backend-developer`, `frontend-developer`, `database`, `api-designer`, `devops`, `security`, `code-reviewer`, `release`, `refactoring`, `performance`, `existing-project-analyzer`). Also not built and assumed throughout this document: the Tool Invoker and any manifest-declared Tool (no `fs.read`, `fs.list`, `code.search`, `fs.apply_patch`, `build.run`, `git.diff` or `doc.parse` tool exists anywhere), the Quality Gate Engine (so no gate named in any section below is real), and the `ai-os-sdk` package that would supply `ArtifactRef`, `ContextItem`, `StepBudget` and `StructuredError` — `platform_sdk/` contains exactly one real file, `../../platform_sdk/schemas/manifest.schema.json`.
+
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` (per-module completion table — rows 29–31 for this pack, row 18 for the Tool Invoker, row 15 for the Quality Gate Engine, row 27 for the SDK) and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -56,6 +88,7 @@ Every agent:
 ## 4. `software-engineering/requirements-analyst`
 
 **Version:** 1.0.0 · **Model alias:** `reasoning` · **Satisfies:** FR-031
+> **Status: partially built, and the real agent does not match this specification.** A deliberate narrower first slice exists in code (free-text `analysis` output, no tools, no gate). See the Implementation Status block above for the field-by-field divergence table.
 
 **Purpose:** Convert a specification into structured, testable requirements; surface ambiguities and gaps rather than inventing answers.
 

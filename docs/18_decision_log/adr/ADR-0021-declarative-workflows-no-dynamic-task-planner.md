@@ -51,3 +51,13 @@ Resolves the contradiction between `workflow_architecture.md` (task decompositio
 
 - `docs/03_architecture/workflow/workflow_patterns.md`
 - `docs/05_agents/agent_specifications.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+The decision is honoured in the sense that matters most: workflow definitions are static, declared YAML validated at load time, `agent_ref` is always declared, and no Task Planner or Agent Orchestrator component exists anywhere — nothing in the codebase can choose a next step at runtime. Of the nine decided step types only `agent` and `tool` actually execute; `decision`, `parallel`, `foreach`, `sub_workflow`, `quality_gate`, and `compensate` are declared in the enum without executors, and `human_approval` completes as a NoOp — so the plan-artifact-plus-`foreach` pattern for dynamic decomposition is not yet available.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

@@ -60,3 +60,13 @@ Complies with the System Architecture (no business logic in the API layer) and t
 ## References
 
 - `docs/07_api/api_architecture.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+FastAPI serves 12 REST handlers under the decided `/api/v1` prefix — liveness/readiness/version, four pack-lifecycle routes, and five workflow routes including cursor-paginated listing — all with Pydantic v2 models shared with the Kernel, and 9 of them behind the Security Manager. Not built: the WebSocket `/api/v1/stream` endpoint, the RFC 9457 `application/problem+json` error shape, the OpenAPI 3.1 snapshot test, `Idempotency-Key` handling, and Redis-backed rate limiting. MCP remains correctly absent.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

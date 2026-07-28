@@ -4,7 +4,7 @@
 **Document:** Implementation Status
 **Version:** 2.0 (restructured short form)
 **Status:** Active
-**Last Updated:** 2026-07-28 (Docker Desktop confirmed running — the full integration suite, including the real `DockerSandbox` end-to-end pipeline test, ran for real and passed; two real bugs found and fixed along the way (a `python_command` mismatch in `pipeline.py`'s own composition, a hardcoded `sys.executable` in `test_verification_agent_pack.py`); fifth real Software Engineering agent, Requirements Analyst, built and proven independently. See `history/024_docker_verification_and_requirements_analyst.md`.)
+**Last Updated:** 2026-07-28 (documentation consolidation audit — 100 files, docs/structure only, no code behaviour changed. Corrected badly stale stage status in `PROJECT_INDEX.md`/`README.md`/`implementation_roadmap.md`; added honest Implementation Status sections to 82 documents; annotated all 25 ADRs append-only; discovered that ~70 documented directories have zero tracked files and are absent from a fresh clone; removed the dead `capability_packs/software_engineering/` duplicate. See `history/025_documentation_consolidation_audit.md`.)
 
 ---
 
@@ -45,7 +45,10 @@ Three prior steps (2026-07-28) were documentation/infrastructure-only. This step
 - **Documentation reconciliation**: agent-catalog naming fixed (`architecture`/`qa-test`/`build`), doc-drift closed, shared Postgres test fixture (`tests/integration/_postgres_fixture.py`) skips cleanly without Docker. → `history/021`.
 - **Feature/module/phase inventory**: tracked, weighted completion table — see `docs/19_roadmap/feature_inventory.md`. Update that document's own table at the end of every future step.
 - **Prior step**: `capability_packs/analytics/` (stale, undocumented) deleted; `DockerSandbox` wired in as the SE pack's real default sandbox. → `history/023`.
-- **This step**: the full integration suite (incl. the Docker-gated pipeline test) ran for real and passed; two real bugs found and fixed (a `python_command` mismatch, a hardcoded `sys.executable` in a test); Requirements Analyst Agent built. → `history/024`.
+- **Prior step**: the full integration suite (incl. the Docker-gated pipeline test) ran for real and passed; two real bugs found and fixed (a `python_command` mismatch, a hardcoded `sys.executable` in a test); Requirements Analyst Agent built. → `history/024`.
+- **This step**: documentation consolidation audit — the docs are now self-sufficient for a zero-context LLM. 82 documents carry honest Implementation Status sections; stage status corrected everywhere; all 25 ADRs annotated; every TBD resolved; the dead `capability_packs/software_engineering/` duplicate removed. → `history/025`.
+
+**Reading the architecture docs correctly (important, new this step):** AI_OS is documentation-first, so most `docs/03_architecture/` documents were written before their code and many describe subsystems that are 0% built. **Every one now carries an `## Implementation Status` section near the top — read it before assuming the document describes callable code.** `docs/DOCUMENTATION_INDEX.md` §2a enumerates the entirely-unbuilt set. `docs/process/folder_structure.md` is definitive on which directories actually exist (git tracks no empty directories, so most "planned" folders are absent from a fresh clone).
 
 ---
 
@@ -75,7 +78,13 @@ Per standing rule (`docs/process/standing_rules.md`), every step from now on end
 
 ## 6. Recommended Next Small Step
 
-The real-Docker-verification recommendation from the previous step is now done — genuinely green. Recommendation: **build the next Software Engineering agent — `code-reviewer` is the natural next candidate** (a downstream quality step after Build/Test, needing no sandbox — LLM review + structured feedback only), continuing the same "prove alone first" sequencing Requirements Analyst just used. A good second candidate, if chaining is preferred over breadth: wire Requirements Analyst into `se.delivery_pipeline` as its own first step, extending the real hand-off chain by one.
+The documentation consolidation audit is done. Recommendation: **wire the Requirements Analyst Agent into `se.delivery_pipeline` as its own first step** — extending the real hand-off chain from four steps to five (`requirements-analyst` → `architecture` → `build` → `qa-test` → `documentation`), so the pipeline starts from a raw requirement rather than one already shaped as a design brief.
+
+Preferred over building a sixth agent (`code-reviewer`) because it converts an already-built-but-unused agent into delivered value, exercises the existing `WorkflowStepOutputResolver` hand-off once more without inventing any mechanism, and keeps the pack's breadth honest — five agents of which five are used, rather than six of which four are.
+
+Concretely: add the step to `capability_packs/software-engineering/workflows/delivery_pipeline.yaml`, extend `pipeline.py`'s `_STEP_SOURCES`/`_FIELD_SELECTORS` for the new first hand-off, move `_StepScopedResolver`'s `WorkflowStateResolver` scope from `architecture` to `requirements-analyst`, and re-verify both delivery-pipeline integration tests (deterministic and Docker-gated).
+
+A separate, small follow-up worth scheduling: complete the ~20 documents this audit did not line-by-line audit (listed in `history/025_documentation_consolidation_audit.md`'s "honest note on completeness"). None is misleading today, but each still lacks its own Implementation Status and Related Documents sections.
 
 ---
 

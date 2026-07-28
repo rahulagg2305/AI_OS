@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** **No Kernel code uses Redis at all**, despite Redis 7 being provisioned in `infra/docker-compose.yml` and declared in the technology stack. There is no `Cache` Protocol, no platform cache, and no rate limiter.
+
+One rule here is nonetheless already honoured *by absence*: the response cache that [ADR-0025](../../18_decision_log/adr/ADR-0025-caching-strategy.md) requires to be off by default and unconditionally disabled for experiment runs does not exist, so no cache-served response can currently contaminate a benchmark. That protection becomes a real enforcement requirement the moment this document is implemented. Stage B deliverable.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines the caching strategy for AI_OS.

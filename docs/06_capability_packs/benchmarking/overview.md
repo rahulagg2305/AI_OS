@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** `capability_packs/benchmarking/` has **no tracked content** and is absent from a fresh clone. No experiment can be defined, submitted, or reported today.
+
+The Evaluation Engine that this pack depends on for all metric collection, run-manifest recording, and comparison statistics is likewise **0% built** (`kernel/src/ai_os_kernel/evaluation_engine/` is a docstring-only stub) — though all six `evaluation.*` tables exist as schema. One Stage D prerequisite *has* landed early: a second real provider adapter (`LocalAdapter`), so multi-provider comparison is mechanically possible once the engine exists. Stage D deliverable.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document provides the high-level design of the **Benchmarking Capability Pack**.

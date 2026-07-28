@@ -8,6 +8,12 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** No Voice/Jarvis code exists: `capability_packs/voice_jarvis/` has **no tracked content**, and the platform-level Speech Gateway it depends on (per [ADR-0019](../18_decision_log/adr/ADR-0019-speech-gateway.md)) is likewise 0% built. There is no wake-word engine, no STT/TTS adapter, no intent engine, and no voice session manager anywhere in the codebase. Stage F deliverable. Of the channels this document coordinates, **only the HTTP API partially exists** (9 routes); the Dashboard, Voice, and CLI channels are all 0% built, so no cross-channel hand-off is possible today.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines how AI_OS supports **multi-modal interaction** — the coordinated use of multiple interfaces (Dashboard, Voice, API, CLI, etc.) so that users can move fluidly between them while working with the same workflows, approvals, and experiments.

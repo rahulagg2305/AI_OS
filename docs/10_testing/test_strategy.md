@@ -8,6 +8,20 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built — two documented test tiers are real and substantial; four directories are empty and one does not exist.**
+
+**Built:** `tests/unit/` and `tests/integration/` — **849 passing, 11 skipped, 0 failing** as of this date. Integration tests use real Postgres via `testcontainers` and a real Docker daemon (no mocked database, per [ADR-0015](../18_decision_log/adr/ADR-0015-testing-and-ci.md)), through the shared `tests/integration/_postgres_fixture.py` helper that turns a missing daemon into a clean skip. Opt-in live-provider tests are gated on `AIOS_SECRET_LLM_ANTHROPIC_API_KEY`. CI runs lint, types, unit, and integration for real.
+
+**Not built:** `tests/security/` — Stage C requires it organised by threat ID, and it is **empty**, so no T1-T12 threat control has a dedicated regression test. `tests/performance/`, `tests/regression/`, and `tests/benchmarks/` are likewise **empty**, and **there is no `tests/contract/` directory at all**. CI's contract and security stages are therefore deliberately gated to no-ops. The 90% kernel coverage floor is met only when unit and integration are measured **together**.
+
+One recorded exception to this strategy's own "real fakes, never mocks" rule: `tests/unit/kernel/sandbox/test_docker_executor.py` uses `unittest.mock` against the third-party `docker` SDK — see `../process/coding_standards.md` for the reasoning.
+
+**A known flake family worth knowing about:** tests that stand up a real local HTTP server (`test_local_adapter.py`, `test_multi_provider_routing.py`, and `test_anthropic_adapter.py`'s error-classification cases) occasionally fail under full-suite load and pass in isolation. Three instances have been observed. Re-run in isolation before treating one as a regression.
+
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 This document defines how AI_OS is tested: the layers, what belongs in each, the tooling, the CI pipeline, and the rules that keep the suite honest.

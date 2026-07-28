@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** The root `ai_context/` directory and every subdirectory documented below (`platform/`, `kernel/`, `agents/`, `capability_packs/`, `services/`, `projects/`, `releases/`, `summaries/`) have **no tracked content** — no `manifest.yaml`, no pack, nothing. They are absent from a fresh clone.
+
+No code reads this structure: the Context Manager has no AI Context Pack resolver. Strategy and rationale: `ai_context_strategy.md`.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines the standard structure and format for **AI Context Packs** in AI_OS.

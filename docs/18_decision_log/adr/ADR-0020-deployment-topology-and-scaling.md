@@ -71,3 +71,13 @@ Resolves the contradiction between `system_architecture.md` (modular monolith) a
 
 - `docs/11_deployment/deployment_architecture.md`
 - `docs/12_operations/operations_runbook.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+The two-process-role split is real in code: `ai_os_kernel.entrypoints.api` and `ai_os_kernel.entrypoints.worker` start from the same composition root, and the `SKIP LOCKED` leasing that makes worker scaling possible works (ADR-0011). Everything operational is missing: there is **no Dockerfile anywhere**, so no image exists; `infra/docker/`, `infra/kubernetes/`, and `infra/terraform/` are empty; `infra/docker-compose.yml` brings up only Postgres and Redis, not the Kernel; and no multi-instance worker loop exists — `run_to_completion`/`reap_once` handle one instance or one bounded pass, with nothing scheduling either across many instances.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

@@ -2,7 +2,9 @@
 
 **Status:** Active — Living Document
 **Created:** 2026-07-28
-**Last Updated:** 2026-07-28
+**Last Updated:** 2026-07-28 (documentation consolidation audit — module 35 removed, module rows 20/29/41 refreshed, and the documentation-accuracy note below added. See `history/025_documentation_consolidation_audit.md`.)
+
+> **This document is now cross-referenced from every architecture document.** As of the 2026-07-28 consolidation audit, 82 documents carry an `## Implementation Status` section pointing here as the authority on per-module completion. When you change a module's percentage here, that document's own section may also need updating — `docs/process/standing_rules.md` covers the discipline.
 
 ---
 
@@ -300,7 +302,7 @@ Percentages are against each module's own **documented** v1 scope (Section 2), b
 | 39 | Dashboard | F | 0% | not started | `dashboard/` directory is empty — no frontend project scaffolded at all. |
 | 40 | Deployment & Infrastructure | G | 10% | minimal slice | Docker Compose (Postgres+Redis dev only) exists; no `Dockerfile`, no `api`/`worker` images, no Kubernetes manifests, no Helm chart, no Terraform — `infra/kubernetes/` and `infra/terraform/` are empty. |
 | 41 | Threat Controls (T1–T12) | C/G | 35% | minimal slice | **Updated 2026-07-28**: T1 (generated-code containment) now has a real, live-verified proof — network isolation and filesystem containment held for code the pipeline itself generated and ran, not just an isolated check. Sandboxing (T1/T12 — workspace isolation still not yet *mandatory*) and supply-chain scanning (T6, via CI) are the strongest; audit-chain (T8), Git safety (T11, no Git service exists), provider-egress controls (T7), and approval-fraud prevention (T10, no approvals writer) are all effectively unstarted. |
-| 42 | Testing Infrastructure | A–G | 40% | minimal slice | Unit (616 passing) + integration (218 passing, 10 skipped) are strong; `tests/security/`, `tests/performance/`, `tests/regression/`, `tests/benchmarks/` all exist as empty directories; no `tests/contract/` exists at all. |
+| 42 | Testing Infrastructure | A–G | 40% | minimal slice | **Updated 2026-07-28:** unit + integration are strong — **849 passing, 11 skipped, 0 failing** combined. `tests/security/`, `tests/performance/`, `tests/regression/`, `tests/benchmarks/` have **zero tracked files** (absent from a fresh clone); no `tests/contract/` exists at all. `tests/security/` being empty means **no T1–T12 threat control has a dedicated regression test**, contrary to a Stage C deliverable. A known flake family is now documented in `../10_testing/test_strategy.md`: real-local-HTTP-server tests occasionally fail under full-suite load and pass in isolation (3 instances observed). |
 | 43 | CI Pipeline | A | 50% | minimal slice | Lint/types/unit/integration real and green; contract/security/build(image)/frontend stages are correctly gated off (no-op) pending their prerequisites, per design — never actually executed. |
 | 44 | Platform-wide `AiOsError` hierarchy | B | 0% | not started | `LLMProviderError` etc. exist locally in the LLM Gateway but do not inherit from any shared hierarchy, because none exists yet anywhere in the codebase. |
 

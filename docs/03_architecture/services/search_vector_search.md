@@ -8,6 +8,18 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built — the keyword half only; there is no vector search.**
+
+**Built:** the four `knowledge.*` tables (migration `0029`, with the `pgvector` extension enabled and a generated `content_tsv` column + GIN index); a real writer (`kernel/src/ai_os_kernel/persistence/knowledge_writer.py`) persisting a document and its already-chunked content in one transaction; and a real keyword searcher (`knowledge_keyword_search.py`) ranking chunks via `plainto_tsquery`/`ts_rank`.
+
+**Not built:** **vector search, the Hybrid Ranker, and Reciprocal Rank Fusion** — none exists, so the central claim of this document is unimplemented. Also absent: any embeddings writer (nothing ever populates `knowledge.embeddings`), the Indexing Pipeline and chunking engine (the writer requires input already chunked and hashed precisely because nothing produces it), metadata/`trust`/`project_id` filtering, SQL-predicate access control, `index_generation` pinning, and a Retrieval Service (`kernel/src/ai_os_kernel/retrieval/` is a docstring-only stub). **Neither the writer nor the reader has any consumer** — no Context Manager resolver, no Knowledge Manager, and no API route calls either.
+
+Two deliberate deferrals pending a real embedding-model decision this codebase has not made: `embeddings.embedding` has **no fixed dimension**, and its documented HNSW cosine index **does not exist**. Any step that starts generating embeddings must choose a model and dimension, then add that index in an additive migration. Outstanding Stage B deliverable.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 This document defines the design of the **Search & Vector Search** capabilities of AI_OS.

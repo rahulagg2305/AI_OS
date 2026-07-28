@@ -2,23 +2,39 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Canonical Technology Stack
-**Version:** 1.0
+**Version:** 1.1
 **Status:** Approved
-**Last Updated:** 2026-07-25
+**Last Updated:** 2026-07-28 (added Implementation Status and Related Documents; corrected the LLM-adapter import-boundary path in §6, which pointed at a directory that does not exist)
+
+**Previously:** 2026-07-25 (v1.0)
 
 ---
 
 ## 1. Purpose
 
-This document is the single canonical list of technologies used by AI_OS. Every entry is backed by an Architecture Decision Record. If another document names a technology that contradicts this table, this document and its ADRs prevail.
+This document is the single canonical list of technologies **decided** for AI_OS. Every entry is backed by an Architecture Decision Record. If another document names a technology that contradicts this table, this document and its ADRs prevail.
 
 No technology may be introduced into the platform without an entry here and an ADR.
+
+A row in this document means "decided and permitted", **not** "in use today". A decided technology that nothing yet imports is still the binding choice for when that subsystem is built — that is the point of deciding it in advance. Implementation Status below distinguishes the two.
 
 This document is subordinate to:
 
 1. Project Constitution
 2. AI Governance Framework
 3. System Architecture
+
+---
+
+## 1a. Implementation Status (2026-07-28)
+
+**Built — decided technologies genuinely in use in the codebase today:** Python 3.12/3.13, `asyncio`, `mypy --strict` (283 source files, clean), `typing.Protocol`, Pydantic v2, `pydantic-settings`, `uv` workspace + PEP 621, explicit composition root (`kernel/src/ai_os_kernel/bootstrap.py`); PostgreSQL 16, SQLAlchemy Core 2.0, `asyncpg`, Alembic, the append-only-event-log + materialised-snapshot workflow state, `SELECT … FOR UPDATE SKIP LOCKED` leases; FastAPI, Uvicorn; the `anthropic` provider SDK; `structlog`, OpenTelemetry SDK (traces + one metric); `pytest`, `pytest-asyncio`, `pytest-cov`, `testcontainers[postgres]`, `ruff`, `pip-audit`, GitHub Actions; Docker (as the ADR-0016 Tier 1 sandbox runtime, via the `docker` SDK), Docker Compose (Postgres + Redis, development only). `pgvector` is installed and its schema exists.
+
+**Not built — decided but not yet exercised by any code:** Redis (provisioned in `../../../infra/docker-compose.yml`; **no Kernel code imports a Redis client** — §3's cache/rate-limiting row and all of `../services/caching_strategy.md` are unimplemented); the transactional outbox relay and the in-process `asyncio` event bus (§4 — the `platform.event_outbox` table exists, nothing reads or writes it); OpenAPI 3.1 generation/snapshot tests, RFC 9457 `problem+json` errors, the WebSocket `/api/v1/stream` transport, Typer + Rich CLI, and the entire React/TanStack/Tailwind dashboard stack (§5); `pgvector` HNSW vector search, Postgres FTS `tsvector`/GIN, and Reciprocal Rank Fusion (§3 — only a plain keyword-search reader exists, in `persistence/knowledge_keyword_search.py`); S3-compatible blob storage and content-addressed `sha256:` artifact identity (§3 — no Storage Service exists); embeddings and provider token-counting through the Gateway (§6); the Speech Gateway and its `faster-whisper`/Piper/`openWakeWord` adapters (§6); OIDC human authentication (§7 — a pre-shared-secret JWT verifier stands in), Vault/cloud secret backends and age/SOPS files (§7 — only the `env` backend exists), gVisor (§7); OTLP export to a Collector and the Prometheus/Tempo/Loki/Grafana reference backends, and the hash-chained audit log (§8 — console exporters only; `governance.audit_log` is schema-only); `hypothesis`, `gitleaks`, `vitest`, `playwright` (§9 — not in any dependency group); every §10 deployment technology except Compose (**no `Dockerfile` exists**, no Kubernetes manifests, no Helm chart). SQLite as a local dev database (§3) is permitted but unused — Postgres via `testcontainers` is what tests actually run against.
+
+Nothing in §11 (Explicitly Rejected) has been reintroduced.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -77,7 +93,7 @@ This document is subordinate to:
 
 ## 6. AI Providers
 
-All model access is through the LLM Gateway ([ADR-0002](../../18_decision_log/adr/ADR-0002-llm-gateway-single-entry-point.md)). Provider SDKs may be imported **only** inside `kernel/llm_gateway/adapters/`.
+All model access is through the LLM Gateway ([ADR-0002](../../18_decision_log/adr/ADR-0002-llm-gateway-single-entry-point.md)). Provider SDKs may be imported **only** inside `kernel/src/ai_os_kernel/llm_gateway/adapters/` — the real directory on disk; v1.0 of this document cited `kernel/llm_gateway/adapters/`, which does not exist (the Kernel uses a `src/` layout).
 
 | Concern | Technology | ADR |
 |---|---|---|
@@ -89,17 +105,22 @@ All model access is through the LLM Gateway ([ADR-0002](../../18_decision_log/ad
 
 ### 6.1 Default model aliases
 
-Aliases are the only model identifiers permitted in pack, agent, or workflow definitions. The mapping below is the shipped default in `config/llm.yaml` and is environment-overridable.
+Aliases are the only model identifiers permitted in pack, agent, or workflow definitions. The mapping below is the canonical default set and is environment-overridable.
 
-| Alias | Default model | Intended use |
-|---|---|---|
-| `reasoning` | `claude-opus-5` | Architecture, planning, complex analysis, code review |
-| `coding-strong` | `claude-opus-5` | Implementation, refactoring, debugging |
-| `coding-balanced` | `claude-sonnet-5` | High-volume implementation where cost matters |
-| `fast-cheap` | `claude-haiku-4-5` | Classification, extraction, short scoped tasks |
-| `frontier` | `claude-fable-5` | Reserved for the hardest long-horizon work; opt-in only |
+| Alias | Default model | Intended use | In `config/llm.yaml` today? |
+|---|---|---|---|
+| `reasoning` | `claude-opus-5` | Architecture, planning, complex analysis, code review | Yes |
+| `coding-strong` | `claude-opus-5` | Implementation, refactoring, debugging | Yes |
+| `coding-balanced` | `claude-sonnet-5` | High-volume implementation where cost matters | Yes |
+| `fast-cheap` | `claude-haiku-4-5` | Classification, extraction, short scoped tasks | Yes |
+| `frontier` | `claude-fable-5` | Reserved for the hardest long-horizon work; opt-in only | **No — not yet defined** |
+| `local-fast` | `llama3.1:8b` | Local-adapter alias; not part of the canonical five | Yes (checked in, routes to `LocalAdapter`) |
 
-Default request parameters, per `docs/03_architecture/kernel/llm_gateway.md`: adaptive thinking enabled, `effort` defaulting to `high` (`xhigh` for coding and agentic workflows). **Sampling parameters (`temperature`, `top_p`, `top_k`) are not sent** — current frontier models reject them, and behaviour is steered by prompt and effort instead. Assistant-turn prefill is not used.
+The last column is a correction, not a decision change: `../../../config/llm.yaml` currently ships four of the five canonical aliases plus `local-fast`. `frontier` is decided here but not yet configured — nothing routes it, so a definition naming it would fail alias resolution. Adding it is a one-line configuration change, not an architectural one.
+
+`config/llm.yaml` is also, deliberately, a flatter shape than the full Router configuration in `../kernel/llm_gateway.md` §7 (a plain `alias → model id` map plus per-model pricing, with fallback chains present but commented out) — the file's own header records why.
+
+Default request parameters, per `../kernel/llm_gateway.md`: adaptive thinking enabled, `effort` defaulting to `high` (`xhigh` for coding and agentic workflows). **Sampling parameters (`temperature`, `top_p`, `top_k`) are not sent** — current frontier models reject them, and behaviour is steered by prompt and effort instead. Assistant-turn prefill is not used.
 
 ## 7. Security
 
@@ -191,3 +212,40 @@ Order of precedence:
 4. Architecture Decision Records
 5. Technology Stack (this document)
 6. Source Code
+
+---
+
+## 15. Related Documents
+
+**Governing ADRs** — every row in this document cites one; the complete set referenced above is ADR-0002, ADR-0004, ADR-0008 through ADR-0020, and ADR-0023 through ADR-0025. Full index: `../../18_decision_log/README.md`.
+
+**Architecture**
+
+- `system_architecture.md` — the layers these technologies implement
+- `platform_sdk.md` — the pack-facing surface (specification only; no implementing package yet)
+- `../kernel/kernel_architecture.md` and the per-component documents alongside it
+- `../../08_database/data_model.md` — the PostgreSQL schema behind §3
+- `../../11_deployment/deployment_architecture.md` — §10 in operational detail
+- `../../16_observability/observability_stack.md` — §8 in detail
+- `../../09_security/security_architecture.md` — §7 in detail
+- `../../10_testing/test_strategy.md` — §9 in detail
+- `../services/caching_strategy.md` — the Redis row in §3, in detail (unimplemented)
+- `../services/search_vector_search.md` — the `pgvector`/FTS/RRF rows in §3, in detail (mostly unimplemented)
+
+**Requirements**
+
+- `../../02_requirements/functional/functional_requirements.md` — FR-007 (all model calls via the Gateway, CI-enforced import boundary), FR-016 (layered configuration), FR-021 (Tier 1 sandbox)
+- `../../02_requirements/non_functional/nfr.md` — the measurable targets these technologies are chosen to meet
+
+**Standards**
+
+- `../../21_templates/CODING_STANDARDS_AND_BEST_PRACTICES.md` — how these technologies must be used
+- `../../process/coding_standards.md` — the load-bearing subset
+
+**Terminology**
+
+- `../../20_glossary/glossary.md`
+
+**Current state of the build**
+
+- `../../19_roadmap/implementation_status.md`, `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`

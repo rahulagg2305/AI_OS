@@ -8,6 +8,12 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** `capability_packs/project_intelligence/` has **no tracked content** and is absent from a fresh clone. The `project-intelligence/existing-project-analyzer` agent does not exist, nor do any of the five documented workflows. The Document Processing service this pack depends on for ingestion is also 0% built. Stage E deliverable.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document provides the high-level overview of the **Project Intelligence Capability Pack**.

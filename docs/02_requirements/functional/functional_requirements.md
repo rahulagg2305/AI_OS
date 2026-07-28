@@ -18,6 +18,18 @@ Each requirement states a capability and its acceptance criterion. Non-functiona
 
 ---
 
+## Implementation Status (2026-07-28)
+
+This document is **approved requirements**, not a description of built software. Roughly a fifth of it is realised in code today.
+
+**Built (fully or as a working slice):** FR-001 (manifest validation, fail-closed), FR-004/FR-005 (declared workflow graph executes; append-only event log + snapshot in one transaction), FR-007 (all model calls go through the LLM Gateway), FR-021 (Tier 1 sandbox — `DockerSandbox` is the config-driven default and has been verified live: no network, no host filesystem access, for code the pipeline itself generated). Partially built: FR-002/FR-003 (register/activate/deactivate only — no discovery, upgrade, or health), FR-006 (leases acquire/renew/release/reap exist; no multi-instance worker loop schedules them), FR-008 (retry/fallback/circuit-breaker code is real but only the `anthropic` provider is registered by default), FR-009 (spans + `evaluation` tables exist; not every field is populated), FR-010 (1 of 6 documented context sources), FR-011 (render + validate, no version resolver), FR-015/FR-016/FR-017 (minimal slices — `Ready` path only; 3 of 7 config layers; `env` secret backend only), FR-022 (2 of 5 budget checks). In the Software Engineering pack: FR-031, FR-032, FR-034, FR-038 and FR-041 each have one real agent behind them (`requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`).
+
+**Not built at all:** FR-012 (Quality Gate Engine — 0%), FR-013 and FR-111 (no Human Approval execution path; the `approvals` table has no writer), FR-014 (no Event Bus; only the `platform.event_outbox` table exists), FR-018 (monotonic narrowing not enforced end-to-end), FR-019 and FR-115 (no Traceability Engine), FR-020 and FR-114 (no run manifest, no replay), FR-033, FR-035–FR-037, FR-039, FR-040, FR-042–FR-045, all of §5 (FR-050–FR-059, Project Intelligence), all of §6 (FR-070–FR-078, benchmarking), all of §7 (FR-090–FR-100 — the `dashboard/` directory is empty and no `aios` CLI package exists), FR-110 (audit log is schema-only: no writer, no hash chain, no verification job), FR-116 (no Notification Service).
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
+---
+
 ## 2. Requirement Conventions
 
 | Field | Meaning |
@@ -157,6 +169,16 @@ Every requirement above is linked in `trace.links` to the architecture elements 
 
 A requirement with no verifying test is reported by the coverage query and is a release blocker for `MUST` items.
 
+### 9.1 Traceability today (until the Traceability Engine exists)
+
+The `trace.links` table and the Traceability Engine described above are **not built** (see the Implementation Status block). Until they are, the live view of which requirements have real code behind them is **`../../19_roadmap/feature_inventory.md`** — its Section 5 completion table maps every documented module to a percentage derived from direct source inspection, and its Section 4 maps the Stage A–H phases to checkable exit criteria. Use that document, not this one, to answer "is FR-### done?"; use this document to answer "is FR-### in scope, and what proves it?"
+
+Three known reconciliation gaps between this document's `Stage` column and `feature_inventory.md`'s phase assignments, recorded here rather than silently changed (either could be the one that is wrong; resolving it is a product-owner call):
+
+- **FR-012** (quality gates) is `Stage C` here, but the Quality Gate Engine is tracked as a Phase **B** module in `feature_inventory.md` §5 row 15, because Stage B's own exit criteria in `../../19_roadmap/implementation_roadmap.md` call for two Kernel gates.
+- **FR-098** (CLI) is `Stage H` here, but the CLI is tracked as a Phase **F** module (`feature_inventory.md` §5 row 38) and appears in Stage F's exit criteria.
+- **FR-110** (tamper-evident audit log) is `Stage C` here, but audit is tracked inside the Phase **A** "Observability & Audit" module (`feature_inventory.md` §5 row 4).
+
 ---
 
 ## 10. Out of Scope for v1
@@ -182,3 +204,47 @@ Order of precedence:
 3. Functional Requirements (this document)
 4. Architecture Documents
 5. Source Code
+
+---
+
+## 12. Related Documents
+
+**Companion requirements documents**
+- `../non_functional/nfr.md` — measurable targets for the same scope
+- `../constraints/constraints.md` — the conditions this scope must work within
+
+**Live build status (read these before assuming anything here exists)**
+- `../../19_roadmap/feature_inventory.md` — per-module completion table; the authority on "% done"
+- `../../19_roadmap/implementation_status.md` — current stage, blockers, next step
+- `../../19_roadmap/history/INDEX.md` — chronological build history
+- `../../19_roadmap/implementation_roadmap.md` — Stage A–H sequence and exit criteria referenced by the `Stage` column
+
+**Architecture documents realising these requirements**
+- FR-001–FR-003 → `../../03_architecture/kernel/manifest_loader.md`, `../../03_architecture/kernel/capability_manager.md`, `../../03_architecture/capability_framework/capability_pack_contract.md`
+- FR-004–FR-006, FR-013, FR-022 → `../../03_architecture/kernel/workflow_engine.md`, `../../03_architecture/workflow/workflow_architecture.md`, `../../03_architecture/workflow/state_management.md`, `../../03_architecture/workflow/workflow_patterns.md`, `../../03_architecture/workflow/error_handling_retry.md`
+- FR-007–FR-009 → `../../03_architecture/kernel/llm_gateway.md`
+- FR-010 → `../../03_architecture/kernel/context_manager.md`
+- FR-011 → `../../03_architecture/kernel/prompt_engine.md`
+- FR-012 → `../../03_architecture/kernel/quality_gate_engine.md`, `../../03_architecture/quality/quality_gates_framework.md`
+- FR-014 → `../../03_architecture/kernel/event_bus.md`
+- FR-015 → `../../03_architecture/kernel/health_lifecycle.md`
+- FR-016 → `../../03_architecture/kernel/configuration_manager.md`, `../../03_architecture/services/configuration_management.md`
+- FR-017 → `../../09_security/secrets_management.md`
+- FR-018 → `../../03_architecture/kernel/security_manager.md`, `../../09_security/authentication_authorization.md`, `../../09_security/security_architecture.md`
+- FR-019, FR-115 → `../../03_architecture/kernel/traceability_engine.md`, `../../03_architecture/traceability/traceability_model.md`
+- FR-020, FR-070–FR-078 → `../../03_architecture/kernel/evaluation_engine.md`, `../../06_capability_packs/benchmarking/overview.md`
+- FR-021 → `../../09_security/security_architecture.md` §5, `../../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md`
+- FR-030–FR-045 → `../../06_capability_packs/software_engineering/overview.md`, `../../06_capability_packs/software_engineering/agents.md`, `../../06_capability_packs/software_engineering/workflows.md`, `../../05_agents/agent_catalog.md`
+- FR-050–FR-059 → `../../06_capability_packs/project_intelligence/overview.md`, `../../06_capability_packs/project_intelligence/agents_workflows.md`
+- FR-090–FR-097 → `../../13_dashboard/dashboard_architecture.md`, `../../13_dashboard/information_architecture.md`, `../../13_dashboard/monitoring_experiment_views.md`
+- FR-096 → `../../07_api/api_architecture.md`
+- FR-098 → `../../07_api/cli_design.md`
+- FR-099, FR-100 → `../../14_voice_jarvis/voice_architecture.md`, `../../14_voice_jarvis/multimodal_interaction.md`
+- FR-110, FR-113 → `../../16_observability/observability_stack.md`, `../../03_architecture/kernel/observability.md`
+- FR-111 → `../../03_architecture/governance/human_approval_points.md`
+- FR-112 → `../../03_architecture/kernel/knowledge_manager.md`, `../../knowledge/knowledge_base_structure.md`
+- FR-116 → `../../03_architecture/services/notification_service.md`
+
+**Verification**
+- `../../10_testing/test_strategy.md` — how these requirements are verified
+- `../../20_glossary/glossary.md` — canonical definitions for the terms used above

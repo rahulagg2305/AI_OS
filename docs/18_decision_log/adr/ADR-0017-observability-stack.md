@@ -68,3 +68,13 @@ Complies with the Constitution (Observability by Default), the Logging/Audit/Obs
 ## References
 
 - `docs/16_observability/observability_stack.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+Real OpenTelemetry spans and one metric are emitted, with `structlog` configured to emit JSON carrying trace context (`ai_os_kernel/observability/`) — but export is to **console exporters only**: there is no OTLP exporter, no Collector, and no Compose observability profile, so no backend receives telemetry. On the audit side the `audit_log` table exists from migration `0004_governance_audit_log`, with no writer, no hash chaining, and no verification job.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

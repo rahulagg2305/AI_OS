@@ -2,9 +2,24 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Documentation Baseline Record
-**Version:** 2.0
-**Status:** Approved
-**Last Updated:** 2026-07-25
+**Version:** 2.1
+**Status:** Approved — **historical record, superseded as a status document**
+**Last Updated:** 2026-07-28 (header note added marking this a historical record; §3 and §8 annotated where they have been overtaken by implementation. The baseline record itself is unchanged.)
+
+---
+
+> ## ⚠️ This is a historical record, not current state
+>
+> **Read this document for what the documentation baseline of 2026-07-25 authorised, and why. Do not read it as a description of the project today.**
+>
+> It was written *before implementation began*, and its §4 and §8 sign-off ("approved for implementation from Stage A") have since been acted on: Stage A is process-complete, Stage B is well underway, and parts of Stage C have landed. It still serves two live purposes — it is the record of *why* the baseline was re-issued (§2), and it is where the accepted documentation gaps are listed (§5). Nothing else in it is current.
+>
+> **For current state, read instead:**
+> - [`implementation_status.md`](implementation_status.md) — current stage, what exists, blockers, next step
+> - [`feature_inventory.md`](feature_inventory.md) — per-module completion percentages
+> - [`implementation_roadmap.md`](implementation_roadmap.md) — the Stage A–H sequence with per-deliverable delivery status
+> - [`history/INDEX.md`](history/INDEX.md) — full chronological build history
+> - [`../18_decision_log/README.md`](../18_decision_log/README.md) — the 25 ADRs, each with an appended implementation-status note
 
 ---
 
@@ -42,6 +57,8 @@ An independent architecture review of 2026-07-25 identified these; this document
 | APIs and interfaces | **Approved.** API Architecture, CLI, Dashboard, Voice |
 | Quality and operations | **Approved.** Test Strategy, Observability Stack, Deployment Architecture, Operations Runbook |
 | Documentation status | **62 documents Approved**, 0 Draft, 25 ADRs Accepted |
+
+> **Annotation (2026-07-28).** Every "Approved" above still refers to *documentation* approval — that a contract is specified and governs — never to the existence of an implementation. Several rows describe subsystems with no code at all (Evaluation Engine, Event Bus, Knowledge Manager, Memory Manager, Quality Gate Engine, Traceability Engine, Dashboard, Voice, Speech Gateway), and the "Platform SDK Specification" row describes a package that does not exist yet: `platform_sdk/` holds exactly one real file, `schemas/manifest.schema.json`. See [`feature_inventory.md`](feature_inventory.md) for what is built.
 
 ---
 
@@ -99,6 +116,8 @@ There is now **one** sequence: the lettered **Stages A–H** in `implementation_
 ## 8. Sign-off
 
 The documentation baseline is **approved for implementation from Stage A**, with the gaps in §5 accepted and tracked.
+
+> **Annotation (2026-07-28).** This sign-off has been acted on. Implementation started, Stage A is process-complete (its remaining exit criteria are OTLP export and the Compose observability profile), Stage B is well underway, and a real Software Engineering pack plus a real ADR-0016 Tier 1 sandbox have landed from Stage C. This section is retained as the record of the authorisation, not as a statement of where work stands — see [`implementation_status.md`](implementation_status.md).
 
 ---
 

@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** The root `knowledge/` directory and all ten documented subdirectories (`architecture_memory/`, `best_practices/`, `design_patterns/`, `anti_patterns/`, `engineering_memory/`, `lessons_learned/`, `reusable_patterns/`, `reusable_workflows/`, `known_limitations/`, `onboarding/`) have **no tracked content** and are absent from a fresh clone.
+
+Neither of the components that would populate or read it exists: the **Knowledge Manager** and **Memory Manager** are both docstring-only stub packages. A real document/chunk writer and a keyword searcher do exist one layer down in `kernel/src/ai_os_kernel/persistence/`, but nothing calls them and no Context Manager resolver reads from them.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines the structure and governance rules for the **Knowledge Base** in AI_OS.

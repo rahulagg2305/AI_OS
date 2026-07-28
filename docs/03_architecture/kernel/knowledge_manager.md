@@ -26,6 +26,16 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built:** No Knowledge Manager component — `kernel/src/ai_os_kernel/knowledge_manager/` contains a docstring-only `__init__.py` and zero other `.py` files. What is real sits **one layer down, in the persistence package**, and is deliberately narrower than this design: `kernel/src/ai_os_kernel/persistence/knowledge_schema.py` (tables `knowledge.documents`, `knowledge.chunks`, `knowledge.embeddings`, `knowledge.memory_items`), `knowledge_writer.py` (`KnowledgeWriter` Protocol + `SqlKnowledgeWriter.write_document()`, with `ChunkInput` / `ChunkRecord` / `DocumentRecord` models), `knowledge_keyword_search.py` (`KeywordSearcher` Protocol + `SqlKeywordSearcher.search()` over the generated `content_tsv` column), and `knowledge_ids.py`. That is a document/chunk writer and a keyword reader — not a Knowledge Manager.
+
+**Not built:** every component in §5. No **Knowledge Ingestion** — the writer accepts only *already-chunked* input; there is no chunking pipeline, no format detection, and no parser adapters (`../services/document_processing.md` is 0% built), so nothing ingests `docs/`, ADRs, or specifications, and §4's "ingest knowledge from approved sources" does not happen. No **Indexer (structured + vector)** — the `knowledge.embeddings` table exists but no embedding is ever written (the LLM Gateway has no `embed()`), so there is no vector index and §3/§4's "semantic queries" are impossible. No **Query Engine** beyond the single keyword `search()`, and no hybrid Reciprocal Rank Fusion. No **Version Manager** — §4's "versioned access to knowledge items" and §6's "same query returns consistent results" have no mechanism, and there is no `index_generation` to pin for experiments. No **Provenance Tracker** as a component (rows carry source fields; nothing tracks or exposes provenance to a consumer). No **Access / Filter Layer** — §2's "permission-aware retrieval" is entirely absent. Critically, **no Context Manager resolver reads any of this**: `kernel/src/ai_os_kernel/context_manager/resolvers.py` has no Knowledge Resolver, so nothing in the running platform consumes knowledge at all, and §8's observability requirements have no producer. Roadmap stage: **B** (basic) / **E** (full).
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `013_retrieval.md`).
+
+---
+
 ## 2. Design Goals
 
 The Knowledge Manager must:
@@ -139,9 +149,14 @@ Every knowledge retrieval must be able to record:
 
 ## 9. Current Status
 
-This document defines the design baseline for the Knowledge Manager.
+This document defines the design baseline for the Knowledge Manager. **Three of the four items v1.0 of this section deferred were already decided by [ADR-0013](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md) and [ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md)** — this section previously described them as open. Corrected:
 
-Detailed storage technology choices, indexing strategy, schema for knowledge items, and concrete APIs will be refined during implementation.
+| Item | Status |
+|---|---|
+| **Storage technology** | **Not open.** PostgreSQL 16 with SQLAlchemy Core and Alembic ([ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md)); vectors in the same database via `pgvector` ([ADR-0013](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md)). No separate document store or search cluster is to be introduced in v1. A documented scale trigger to a dedicated vector store (Qdrant) exists behind the same `VectorIndex` Protocol — see `../services/search_vector_search.md`. |
+| **Indexing strategy** | **Not open.** Keyword via PostgreSQL full-text search with a GIN index, vector via `pgvector` HNSW with cosine distance, and the two combined by **Reciprocal Rank Fusion** ([ADR-0013](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md)). Every stored vector records `embedding_model_id`, version, and `dimensions`; queries compare only vectors from the same model and version, and changing the embedding model is a tracked re-index migration. The keyword half is real (`kernel/src/ai_os_kernel/persistence/knowledge_keyword_search.py`); the vector and fusion halves are not. |
+| **Schema for knowledge items** | **Not open.** `knowledge.documents` / `knowledge.chunks` / `knowledge.embeddings`, specified in `../../08_database/data_model.md` §7 and built in `kernel/src/ai_os_kernel/persistence/knowledge_schema.py`. |
+| **Concrete APIs** | **Partly decided, and this is the one genuinely open item.** The pack-facing surface is fixed by `../platform/platform_sdk.md` §5.4 `RetrievalService` — packs never get a Knowledge-Manager-shaped API, only a retrieval one, and never query it directly (`context_manager.md` §7). **Named remaining gaps, three of them:** (a) the *ingestion* API has no specified shape at all — who submits a document, whether ingestion is a workflow step or an operator action, and how a re-ingested document supersedes its predecessor; (b) `../services/document_processing.md`'s chunking contract is unwritten, and the existing writer's "already-chunked input" assumption means the seam between chunker and writer is undefined; (c) §2's permission-aware retrieval has no model — [ADR-0023](../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) fixes the permission *vocabulary* but nothing states what a per-document ACL looks like, and `../services/search_vector_search.md` requires access control to be applied as SQL predicates rather than post-filtering, which constrains any answer. (c) is the one to settle first: retrofitting access predicates after an index exists is materially harder than designing them in. |
 
 ---
 
@@ -155,3 +170,37 @@ Order of precedence:
 4. Kernel Architecture  
 5. Knowledge Manager Design  
 6. Source Code
+
+---
+
+## 11. Related Documents
+
+**Governing decisions (ADRs):**
+- [ADR-0013 — Search and Vector Store](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md) — the governing decision for storage, indexing, and hybrid ranking
+- [ADR-0011 — Persistence and Workflow State](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) — PostgreSQL as the single store
+- [ADR-0003 — Documentation-First Development](../../18_decision_log/adr/ADR-0003-documentation-first-development.md) — why repository documentation is the primary source of truth (§6)
+- [ADR-0022 — Reproducibility over Determinism](../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md) — pinnable `index_generation` for fair comparison
+- [ADR-0023 — Identity, Roles and Permissions](../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) — the permission vocabulary any access layer must use
+
+**Superior documents:**
+- `../platform/system_architecture.md`
+- `kernel_architecture.md`
+- `context_manager.md` — the **only** legitimate consumer of this component
+
+**Boundary partners:**
+- `memory_manager.md` — the other side of the §3 authority/lifetime boundary; Memory never overrides Knowledge
+- `../services/search_vector_search.md` — the Retrieval component that actually executes queries against this store
+- `../services/document_processing.md` — the ingestion pipeline (chunking, parsers) this component depends on; 0% built
+- `../../knowledge/knowledge_base_structure.md` — the on-disk directory taxonomy being ingested
+- `../../ai_context/ai_context_strategy.md`, `../../ai_context/context_pack_structure.md` — AI Context Packs as curated, high-priority knowledge
+- `llm_gateway.md` §11 — the sole source of embeddings (`embed()`, not yet built)
+- `evaluation_engine.md` — depends on stable retrieval for fair multi-LLM comparison
+- `traceability_engine.md` — traceability data as long-term project knowledge
+- `../platform/platform_sdk.md` §5.4 `RetrievalService` — the pack-facing surface
+
+**Owned tables:**
+- `../../08_database/data_model.md` §7 — `knowledge.documents`, `knowledge.chunks`, `knowledge.embeddings` (and `knowledge.memory_items`, owned by the Memory Manager)
+
+**Reference:**
+- `../../20_glossary/glossary.md` §3 — the single authority for Knowledge / Memory / Context / Context Pack
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`

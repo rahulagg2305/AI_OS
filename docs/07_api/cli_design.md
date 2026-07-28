@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** There is no `aios` CLI — no package, no `[project.scripts]` entry point declared anywhere, and the `tools/` directory (its intended home) has no tracked content. None of the eight documented command groups exists.
+
+A reader should also note that the CLI is specified as a pure client of the HTTP API, and **only 9 of that API's ~45 documented endpoints exist** (see `api_architecture.md`) — so even once built, most commands below would have no endpoint to call. Stage F deliverable.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines the design of the **Command Line Interface (CLI)** for AI_OS.

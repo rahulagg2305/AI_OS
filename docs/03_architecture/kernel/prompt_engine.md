@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built.** Real: `PromptEngine` Protocol with two implementations — `InMemoryPromptEngine` and `SqlPromptCatalog` (reads `catalog.prompts` by composite `(prompt_id, version)` key) — plus a shared `render_template()` doing variable substitution, and `PromptedCompletionService` composing render→Gateway.
+
+**Not built:** version *resolution* (a caller must supply an exact version; nothing resolves "latest" or a role/alias), the role/alias-based Prompt Resolver, prompt composition/inheritance, the `cache_boundary_index` cache-boundary split ([ADR-0025](../../18_decision_log/adr/ADR-0025-caching-strategy.md)), and a dedicated Observability writer. Note the interface path this document's own Current Status section once cited (`platform_sdk/contracts/prompts.py`) **does not exist** — there is no SDK package; the real code is `kernel/src/ai_os_kernel/prompt_engine/`.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 This document defines the design of the **Prompt Engine**, a core component of the AI_OS Platform Kernel.

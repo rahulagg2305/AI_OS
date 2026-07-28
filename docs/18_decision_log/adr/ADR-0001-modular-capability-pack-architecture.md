@@ -45,3 +45,13 @@ Complies with the Project Constitution (Capability Pack Architecture, Modular by
 
 - `docs/03_architecture/capability_framework/capability_pack_contract.md`
 - `docs/06_capability_packs/capability_pack_development_guide.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+The Kernel holds no domain logic, and one real pack (`capability_packs/software-engineering/`) is discovered from its `manifest.yaml`, validated, registered, activated, and resolved through the Capability Manager, receiving a reduced `PackContext` (`ai_os_kernel.capability_manager.pack_contract`). The Platform SDK that the pack boundary is supposed to be expressed through does not exist yet — `platform_sdk/` contains only `schemas/manifest.schema.json`, so the pack currently depends on `ai-os-kernel` directly as a documented temporary exception, and pack upgrade, removal, health monitoring, and permission enforcement are not built.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

@@ -59,3 +59,13 @@ Complies with the Caching Strategy (configurable, observable, explicit invalidat
 ## References
 
 - `docs/03_architecture/services/caching_strategy.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Not yet implemented
+
+There is no Redis usage anywhere in the Kernel code — no `Cache` Protocol, no in-memory adapter, and no cached configuration, secrets, documents, retrieval results, or rate-limit counters; the Redis container in `infra/docker-compose.yml` is started but nothing connects to it. Provider prompt caching is not exploited either: the capability negotiator models `supports_prompt_caching`/`prompt_cache_min_tokens` as provider metadata, but no request is ever marked cacheable. No response cache exists, so the experiment prohibition is trivially satisfied.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

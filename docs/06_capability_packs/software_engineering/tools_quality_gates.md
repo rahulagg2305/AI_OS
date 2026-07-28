@@ -8,6 +8,18 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing declared. This document is a design specification only.** The Software Engineering pack's `manifest.yaml` declares **no `tools[]` entries and no `qualityGates[]` entries at all**.
+
+**Tools:** none of the documented categories (source code, build/dependency, test, static analysis, git, documentation, container) exists as a declared, registry-resolvable Tool. The one real adjacent thing is `ai_os_kernel.workflow_engine.sandboxed_tool.SandboxedCommandTool`, which three pack agents compose *internally* — it is not declared in the manifest, so no workflow step can name it, and the trust-tier validation this document describes never runs on it. There is also **no Tool Invoker** anywhere in the codebase.
+
+**Quality gates:** **zero** are implemented, and none could be — the Quality Gate Engine is a docstring-only stub package, the `quality_gate` workflow step type completes as a no-op, and `evaluation.gate_results` has no writer. Consequently the [ADR-0006](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) invariant that blocking gates cannot be skipped is currently unenforced for this pack.
+
+What *is* real is the tiering principle: generated code executes only inside a genuine ADR-0016 Tier 1 sandbox (`DockerSandbox`, now the default and live-verified). Outstanding Stage B/C work.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 This document defines the Tools and Quality Gates that belong to (or are primarily contributed by) the **Software Engineering Capability Pack**.

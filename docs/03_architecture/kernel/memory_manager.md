@@ -25,6 +25,16 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built:** Nothing — this component is a documented design only; `kernel/src/ai_os_kernel/memory_manager/` contains a docstring-only `__init__.py` and zero other `.py` files. The single real artifact anywhere is the **table**: `knowledge.memory_items`, defined in `kernel/src/ai_os_kernel/persistence/knowledge_schema.py` and specified in `../../08_database/data_model.md` §7. It has no writer and no reader. This is the least-built component in the Kernel: unlike the Knowledge Manager, there is not even a persistence-layer writer one layer down.
+
+**Not built:** every element of §5 — no Workflow Memory Store, no Engineering Memory Store, no Asset Registry, no Memory Writer, no Memory Retriever, no Promotion/Demotion Logic, no observability or provenance recording. `MemoryService.write()`, named in §6 as the only mediated write path, does not exist in the Kernel or in the Platform SDK (`../platform/platform_sdk.md` §5.5 specifies the Protocol; `platform_sdk/` contains only `schemas/manifest.schema.json`). §6's "Memory is consumed through the Context Manager" is structurally true today only because there is nothing to consume — `kernel/src/ai_os_kernel/context_manager/resolvers.py` has no Memory Resolver. Note that §3.1's "Workflow Memory" partly overlaps something that *is* real but is **not** this component: the Workflow Engine persists step outputs in `workflow.workflow_steps.outputs`, and `WorkflowStepOutputResolver` gives a later step awareness of an earlier step's output (`context_manager.md` §4). That is workflow *state*, owned by the Workflow Engine — it is not memory, is not promotable, and carries no quality or confidence signals. Roadmap stage: **B**.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md`.
+
+---
+
 ## 2. Design Goals
 
 The Memory Manager must:
@@ -93,7 +103,9 @@ Memory Manager
 
 ### 6.1 Scope for v1
 
-Workflow memory and explicit engineering-memory writes are implemented. **Automatic promotion from workflow memory to engineering memory, decay scoring, and archival are deferred** until there is real usage data to calibrate them — a promotion heuristic invented before any workflows have run would be a guess encoded as architecture. Promotion in v1 is an explicit, audited operation.
+Workflow memory and explicit engineering-memory writes are **in scope for v1**. **Automatic promotion from workflow memory to engineering memory, decay scoring, and archival are deferred** until there is real usage data to calibrate them — a promotion heuristic invented before any workflows have run would be a guess encoded as architecture. Promotion in v1 is an explicit, audited operation.
+
+*Correction (2026-07-28): earlier revisions of this paragraph read "Workflow memory and explicit engineering-memory writes are implemented." They are not — nothing in this component is implemented (see Implementation Status above). The sentence stated v1 scope, not built state, and now says so.*
 
 ---
 
@@ -120,9 +132,14 @@ Every significant memory operation should record:
 
 ## 9. Current Status
 
-This document defines the design baseline for the Memory Manager.
+This document defines the design baseline for the Memory Manager. The four items v1.0 of this section deferred are settled as follows — none is left open as "to be refined."
 
-Detailed storage models, retention policies, promotion criteria, and APIs will be refined during implementation.
+| Item | Status |
+|---|---|
+| **Storage models** | **Decided.** PostgreSQL, SQLAlchemy Core, Alembic ([ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md)), in the `knowledge.memory_items` table — which already exists in `kernel/src/ai_os_kernel/persistence/knowledge_schema.py` and is specified in `../../08_database/data_model.md` §7, including its `source_workflow_id` provenance link. Retrieval mechanics are fixed by [ADR-0013](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md), the same keyword + `pgvector` + RRF path Knowledge uses; memory is not to get its own search stack. |
+| **Retention policies** | **Decided at the platform level.** Retention is configurable per environment and governed by `../../08_database/data_model.md` §11, not by a memory-specific policy. §6.1 above deliberately defers decay scoring and archival, so retention for v1 means "kept" — there is no expiry job to design. |
+| **Promotion criteria** | **Decided by §6.1, and the decision is to keep it manual.** Promotion in v1 is an explicit, audited operation; automatic promotion is deferred until real usage data exists to calibrate it. This is a settled position, not an open question — the *reason* for deferral is itself the decision. **Named remaining gap:** who is authorized to promote. [ADR-0023](../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md)'s closed permission vocabulary has no memory-promotion permission, and §6 forbids agents from writing arbitrary memory, so "explicit and audited" currently has no principal, no permission, and no audit destination (`governance.audit_log` has no writer). That triple is what a first increment must settle. |
+| **APIs** | **Decided in specification, unbuilt.** The pack-facing surface is `MemoryService` in `../platform/platform_sdk.md` §5.5, with `write()` as the sole mediated write path (§6); reads reach agents only through the Context Manager, never directly (§7, `context_manager.md` §7). **Named remaining gap:** neither the SDK Protocol nor a Kernel implementation exists, and there is no Memory Resolver in the Context Manager to read through — so both ends of the documented path are missing. Note the ordering constraint: building a writer before a resolver would produce §2's "uncontrolled dumping ground" with no consumer to justify any of it. |
 
 ---
 
@@ -136,3 +153,36 @@ Order of precedence:
 4. Kernel Architecture  
 5. Memory Manager Design  
 6. Source Code
+
+---
+
+## 11. Related Documents
+
+**Governing decisions (ADRs):**
+- [ADR-0011 — Persistence and Workflow State](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) — the storage substrate
+- [ADR-0013 — Search and Vector Store](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md) — how memory will be retrieved
+- [ADR-0023 — Identity, Roles and Permissions](../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) — who may write or promote
+- [ADR-0022 — Reproducibility over Determinism](../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md) — why memory reads must be pinnable for experiments
+- [ADR-0005 — Agents Never Communicate Directly](../../18_decision_log/adr/ADR-0005-agents-never-communicate-directly.md) — memory is not a side channel between agents
+
+**Superior documents:**
+- `../platform/system_architecture.md`
+- `kernel_architecture.md`
+- `context_manager.md` — the **only** legitimate consumer
+- `knowledge_manager.md` — the higher-authority counterpart; §3 there defines the boundary by authority and lifetime
+
+**Interacting subsystems:**
+- `workflow_engine.md` — signals outcomes worth remembering; also owns `workflow.workflow_steps.outputs`, which is state, not memory
+- `../services/search_vector_search.md` — the Retrieval component that will query memory
+- `evaluation_engine.md` — may use memory of prior runs; must be able to pin it for fair comparison
+- `../platform/platform_sdk.md` §5.5 `MemoryService` — the pack-facing Protocol (specified, not built)
+- `../../knowledge/knowledge_base_structure.md` — `engineering_memory/`, `lessons_learned/`, `reusable_patterns/` directories
+- `security_manager.md` — the permission and audit requirements for promotion
+- `observability.md` — §8's memory-operation records
+
+**Owned tables:**
+- `../../08_database/data_model.md` §7 — `knowledge.memory_items` (exists; no writer, no reader), §11 for retention
+
+**Reference:**
+- `../../20_glossary/glossary.md` §3 — the single authority for the Knowledge / Memory / Context / Context Pack distinction
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`

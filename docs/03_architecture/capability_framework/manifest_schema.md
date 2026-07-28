@@ -2,9 +2,11 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Manifest Schema
-**Version:** 2.1
+**Version:** 2.2
 **Status:** Approved
-**Last Updated:** 2026-07-28 (Validation Rules: added rule 11 — `modelAlias` required only when an agent declares `llm:invoke`; fixed the same way in the JSON schema itself — no other content changed)
+**Last Updated:** 2026-07-28 (added Implementation Status and Related Documents; corrected the Validation Rules section — **none** of the semantic rules 12–21 is enforced by the Loader today — and the discovery section, which claimed entry-point discovery exists)
+
+**Previously:** 2026-07-28 (v2.1 — Validation Rules: added rule 11, `modelAlias` required only when an agent declares `llm:invoke`)
 
 ---
 
@@ -24,6 +26,22 @@ Version 2.0 replaces the earlier illustrative YAML sketch with a typed, enforcea
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built:** the schema itself and the validation path around it are among the most genuinely real parts of the platform. `../../../platform_sdk/schemas/manifest.schema.json` exists, is valid draft 2020-12, and is loaded and enforced by `ai_os_kernel/manifest_loader/loader.py` — `ManifestLoader.load_one()` parses the YAML and raises `ManifestError` on any schema violation, and `ManifestLoader.scan()` reports per-pack failures without aborting the scan. **All eleven schema-level rules (1–11) below are genuinely enforced**, including rule 11's conditional `modelAlias` requirement, which is implemented as an `agents[].if`/`then` in the schema file. Filesystem-scan discovery is real (`manifest_loader/discovery.py`). The lifecycle state machine is real to the extent of `register → activate → deactivate`, with every transition recorded in `catalog.pack_state_transitions` by `ai_os_kernel/capability_manager/repository.py`. One real manifest validates and loads: `../../../capability_packs/software-engineering/manifest.yaml`.
+
+**Not built:**
+
+- **None of the semantic rules 12–21 is enforced.** The Manifest Loader performs YAML parse + JSON Schema validation + `metadata` extraction, and nothing else; its own module docstring says so. No kernel-version compatibility check, no `sdkVersion` range check (unenforceable — no SDK exists), no cross-pack global ID uniqueness, no reference resolution for `requiredTools`/`requiredPrompts`/`qualityGates`, no workflow-definition existence or step-reference resolution, no permission-subset checks, no `modelAlias` alias-resolution check, no sub-workflow circularity check, and no comparison of declared components against what `activate()` returns.
+- **Entry-point discovery** (the production mechanism) is not implemented — filesystem scan only. So "both routes validate identically" is currently true only because one route does not exist.
+- **Nothing calls a pack's `entryPoint`.** No code imports a pack's `CapabilityPack` class or calls `activate()`; the lifecycle repository only flips `catalog.packs.state`. It also does not parse a manifest's `agents`/`tools`/`workflows` arrays into `catalog.agents`/`catalog.tools` rows — those are written directly by tests and composition code today.
+- **Of the lifecycle states below, `discovered`, `validated`, `activated`, and `deactivated` have real code paths; `installed`, `configured`, `failed`, and `uninstalled` do not have distinct implemented transitions.** "Activation of a pack that affects platform behaviour requires human approval" has no implementation at all — there is no approvals writer or reader anywhere (see `../governance/human_approval_points.md`).
+- The `events`, `commands`, `qualityGates`, `tools`, `secrets`, and `health` manifest sections are all schema-valid and declarable but have **no consuming runtime**: no Event Bus, no command dispatcher, no Quality Gate Engine, no pack-declared Tool path, no per-pack secret resolution, and no health-check caller.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table — rows 2, 13, 28) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
+---
+
 ## Scope
 
 Applies to every Capability Pack. Agents, workflows, tools, commands, prompts, quality gates, and events are declared **within** the pack manifest — they do not have separate manifests.
@@ -38,14 +56,16 @@ capability_packs/<pack_id>/manifest.yaml
 
 Discovered by ([ADR-0009](../../18_decision_log/adr/ADR-0009-packaging-and-dependency-management.md)):
 
-1. **Entry point** — installed packs register under the `ai_os.capability_packs` group. Production mechanism; supports packs installed from a package index.
-2. **Filesystem scan** — configured directories are scanned for `manifest.yaml`. Development mechanism.
+1. **Entry point** — installed packs register under the `ai_os.capability_packs` group. Production mechanism; supports packs installed from a package index. *Specification only; not yet implemented* — it requires real installable pack distributions from outside the repository, which do not exist yet (`manifest_loader/discovery.py` records the same).
+2. **Filesystem scan** — configured directories are scanned for `manifest.yaml`, one level deep. Development mechanism. **Implemented** (`manifest_loader/discovery.py`); a configured directory that does not exist is skipped rather than raised on.
 
 Both routes validate identically. A pack without a valid manifest is never loaded, and a pack that fails validation leaves no partial registration.
 
 ---
 
 ## Structure
+
+The listing below is a **complete illustrative example**, showing every section the schema permits. It is not the real `software-engineering` manifest: none of the agents, tools, workflows, gates, prompts, commands, or events named here exists in code (`backend-developer`, `build.run`, `se.product_creation`, `se.build`, `se.backend.implement`, `create-product`, `se.implementation.completed`). For the real, loading manifest — 5 agents, 1 workflow, 4 prompts, no tools, no gates, no commands, no events — read `../../../capability_packs/software-engineering/manifest.yaml`. For an authoring starting point, `../../../capability_packs/_template/manifest.yaml`.
 
 ```yaml
 apiVersion: ai-os/v1
@@ -174,9 +194,11 @@ health:
 
 ## Validation Rules
 
-The Manifest Loader enforces all of the following. Any failure rejects the pack.
+The Manifest Loader is specified to enforce all of the following. Any failure rejects the pack.
 
-**Schema-level** (enforced by the JSON Schema):
+**Status of enforcement (2026-07-28):** rules 1–11 are genuinely enforced today; **rules 12–21 are specification only and are enforced by nothing.** `ManifestLoader.load_one()` performs a YAML parse, a JSON Schema validation, and a `metadata` extraction — no more. Treat 12–21 as the rule set to be built, not as checks a manifest has already passed.
+
+**Schema-level** (enforced by the JSON Schema — **all implemented**):
 1. `apiVersion` is `ai-os/v1` and `kind` is `CapabilityPack`.
 2. All required fields present; no additional properties anywhere.
 3. `metadata.version` and every component `version` are valid semantic versions.
@@ -189,9 +211,9 @@ The Manifest Loader enforces all of the following. Any failure rejects the pack.
 10. `entryPoint` is required when the pack declares agents or workflows.
 11. `modelAlias` is required on an `agents[]` entry only when that entry's own `permissions` declares `llm:invoke`; an agent that declares no `llm:invoke` permission (because it genuinely makes no LLM call) may omit `modelAlias` entirely (fixed 2026-07-28 — a genuine, discovered gap: the schema originally required `modelAlias` unconditionally on every agent, forcing an agent with no LLM call to declare a syntactically-valid but unused decoy value; see `docs/19_roadmap/implementation_status.md` for the discovery and `platform_sdk/schemas/manifest.schema.json`'s own `agents[].if`/`then` for the fix).
 
-**Semantic-level** (enforced by the Loader beyond the schema):
+**Semantic-level** (to be enforced by the Loader beyond the schema — **none of rules 12–21 is implemented**; see the status note above):
 12. `compatibility.minKernelVersion` ≤ running Kernel version ≤ `maxKernelVersion`.
-13. `dependencies.sdkVersion` range includes the running SDK version.
+13. `dependencies.sdkVersion` range includes the running SDK version. *Currently unenforceable rather than merely unimplemented: there is no SDK distribution and therefore no running SDK version to compare against (`../platform/platform_sdk.md` §1a).*
 14. All IDs are globally unique across installed packs.
 15. Every `requiredTools`, `requiredPrompts`, and `qualityGates` reference resolves within this pack or the Kernel.
 16. Every workflow definition file exists, parses, and its step references resolve.
@@ -201,7 +223,7 @@ The Manifest Loader enforces all of the following. Any failure rejects the pack.
 20. No circular dependency among workflows and sub-workflows.
 21. Declared components match the implementations returned by `activate()` exactly.
 
-Rules 17 and 18 are what make the monotonic narrowing rule checkable at install time rather than discovered at runtime.
+Rules 17 and 18 are what make the monotonic narrowing rule checkable at install time rather than discovered at runtime. **Because they are unimplemented, monotonic narrowing is currently not checked at install time or at runtime** — a real, open gap, tracked as part of the Security Manager (`../../19_roadmap/feature_inventory.md` row 14) and traced to FR-018.
 
 ---
 
@@ -231,7 +253,9 @@ discovered → validated → installed → configured → activated
 | `failed` | Validation, activation, or health failed; not available |
 | `uninstalled` | Removed from the platform |
 
-Every transition is recorded in `catalog.pack_state_transitions` with actor and reason. Activation of a pack that affects platform behaviour requires human approval.
+Every transition is recorded in `catalog.pack_state_transitions` with actor and reason — genuinely implemented, in `ai_os_kernel/capability_manager/repository.py`, for the `register → activate → deactivate` transitions that exist. `installed`, `configured`, `failed`, and `uninstalled` have no distinct implemented transition yet.
+
+"Activation of a pack that affects platform behaviour requires human approval" is *specification only; not yet implemented* — the `approvals` table exists (migration 0003) but has no writer, no reader, and no execution path, so no activation is gated on an approval today (see `../governance/human_approval_points.md`).
 
 ---
 
@@ -257,6 +281,50 @@ Order of precedence:
 2. AI Governance Framework
 3. System Architecture
 4. Capability Pack Contract
-5. **`platform_sdk/schemas/manifest.schema.json`** (machine-readable, authoritative)
+5. **`../../../platform_sdk/schemas/manifest.schema.json`** (machine-readable, authoritative)
 6. Manifest Schema (this document)
 7. Source Code
+
+---
+
+## Related Documents
+
+**Machine-readable schema and the real manifests**
+
+- `../../../platform_sdk/schemas/manifest.schema.json` — **authoritative**; where this document and the schema differ, the schema prevails and this document is the defect
+- `../../../capability_packs/software-engineering/manifest.yaml` — the one real, schema-valid, loading pack manifest
+- `../../../capability_packs/_template/manifest.yaml` — the authoring scaffold
+
+**Governing ADRs**
+
+- [ADR-0001 — Modular Capability Pack Architecture](../../18_decision_log/adr/ADR-0001-modular-capability-pack-architecture.md) — why a manifest is the single source of truth
+- [ADR-0009 — Packaging and dependency management](../../18_decision_log/adr/ADR-0009-packaging-and-dependency-management.md) — the two discovery routes; `dependencies.packs` must be empty
+- [ADR-0008 — Primary language and runtime](../../18_decision_log/adr/ADR-0008-primary-language-and-runtime.md) — Python-only entrypoints (Not in v1)
+- [ADR-0023 — Identity, roles, and permissions](../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) — the closed permission vocabulary and rules 17–18
+- [ADR-0002 — LLM Gateway single entry point](../../18_decision_log/adr/ADR-0002-llm-gateway-single-entry-point.md) — `modelAlias` may never be a literal model id (rule 19)
+- [ADR-0016 — Tool execution sandboxing](../../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md) — `trustTier` (rule 7)
+- [ADR-0024 — Secrets management backend](../../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — `secrets[].reference` (rule 9)
+- [ADR-0004 — Interface-driven and configuration-over-code](../../18_decision_log/adr/ADR-0004-interface-driven-and-configuration-over-code.md) — `configSchema` and `featureFlags`
+- Full index: `../../18_decision_log/README.md`
+
+**Architecture**
+
+- `capability_pack_contract.md` — the contract this manifest declares compliance with
+- `../platform/system_architecture.md` — where the pack layer sits
+- `../platform/platform_sdk.md` — §8 (`sdkVersion` semantics), §7 (`entryPoint` contract), §9 (the contract suite that would check rules 12–21 from the pack side); **specification only**
+- `../kernel/manifest_loader.md` — the component that performs discovery and validation
+- `../kernel/capability_manager.md` — the canonical lifecycle state machine restated above
+- `../../06_capability_packs/capability_pack_development_guide.md` — authoring a manifest
+- `../../09_security/security_architecture.md` §8 — the signed-manifest gap recorded under "Not in v1"
+
+**Requirements traced to this document**
+
+- `../../02_requirements/functional/functional_requirements.md` — FR-001 (invalid manifest rejected with a specific error, leaving no registration), FR-002 (every lifecycle transition recorded in `catalog.pack_state_transitions`), FR-003 (activate/deactivate without restart), FR-018 (monotonic narrowing, rules 17–18)
+
+**Terminology**
+
+- `../../20_glossary/glossary.md`
+
+**Current state of the build**
+
+- `../../19_roadmap/feature_inventory.md` (rows 2, 13, 28), `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`

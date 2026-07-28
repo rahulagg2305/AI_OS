@@ -50,18 +50,29 @@ Every design decision, requirement, specification, architecture document, implem
 
 **Documentation baseline:** Approved
 **Architecture decisions:** 25 ADRs Accepted
-**Current stage:** **Stage A – Platform Skeleton — implementation in progress**
+**Current stage:** **Stage B – Minimum Viable Kernel, underway.** Stage A is process-complete but not exit-criteria-complete; some Stage C work (a real Capability Pack, a real Tier 1 sandbox) landed early.
+**Tests:** 849 passing, 11 skipped (opt-in live-provider), 0 failing. `mypy --strict` and `ruff` clean.
 
 The technology stack is decided and every choice is backed by an Architecture Decision Record. Implementation follows `docs/19_roadmap/implementation_roadmap.md`.
 
-**Implementation has started.** The repository is a working `uv` workspace with the Kernel installable and its API skeleton running:
+**What works end to end today:** a five-agent Software Engineering Capability Pack in which four agents are chained into one real declared workflow (`se.delivery_pipeline`) — it takes a requirement, produces a design, writes a real file, executes it, and documents the result, with all generated-code execution inside a real, live-verified, network-isolated OCI container sandbox.
+
+**What does not exist yet:** the Dashboard, the CLI, the Voice/Jarvis pack, Project Intelligence, Benchmarking, the Platform SDK package, and several Kernel subsystems (Event Bus, Quality Gate Engine, Evaluation Engine, Traceability Engine, Knowledge/Memory Managers) plus all Platform Services. Do not assume a directory has content because it is named in the docs — check `docs/process/folder_structure.md`.
+
+Run the Kernel API:
 
 ```sh
 uv sync
 uv run uvicorn ai_os_kernel.entrypoints.api:app --reload
 ```
 
-See `kernel/README.md` for details on what exists so far.
+**The three live-status documents** — read these rather than this summary for current state:
+
+- `docs/19_roadmap/implementation_status.md` — **read first, every session.** Short: current stage, what exists, blockers, next step.
+- `docs/19_roadmap/feature_inventory.md` — per-module completion tracker; the authority on "how done is X."
+- `docs/19_roadmap/history/INDEX.md` — full build history by milestone.
+
+See `kernel/README.md` for Kernel-specific detail.
 
 ---
 
@@ -100,16 +111,21 @@ Before making any change, read in this order:
 
 1. `README.md`
 2. `PROJECT_INDEX.md`
-3. `docs/00_constitution/` — Constitution and Governance Framework
-4. `docs/20_glossary/glossary.md` — the vocabulary is precise
-5. `docs/18_decision_log/README.md` — all ADRs
-6. `docs/03_architecture/platform/` — system architecture, technology stack, Platform SDK
-7. `docs/02_requirements/` — requirements, NFRs, constraints
-8. Relevant subsystem documents and AI Context Packs
+3. **`CLAUDE.md`** — the working process: approval workflow, standing rules, known environment quirks
+4. **`docs/19_roadmap/implementation_status.md`** — what actually exists right now (short by design)
+5. `docs/00_constitution/` — Constitution and Governance Framework
+6. `docs/20_glossary/glossary.md` — the vocabulary is precise
+7. `docs/18_decision_log/README.md` — all 25 ADRs
+8. `docs/03_architecture/platform/` — system architecture, technology stack, Platform SDK (note: the SDK document is a *specification*; no SDK package exists yet)
+9. `docs/02_requirements/` — requirements, NFRs, constraints
+10. Relevant subsystem documents
 
 **Do not rely on previous conversation history.**
 
 Complete index with per-document status: `docs/DOCUMENTATION_INDEX.md`.
+Process/working rules: `docs/process/` (see `docs/process/files_to_read_first.md` for what to reach for and when).
+
+> **A note on reading architecture documents.** Every subsystem document under `docs/03_architecture/` now carries an **Implementation Status** section near the top stating honestly what is built and what is not. Read that section before assuming the rest of the document describes working software — several describe subsystems that are 0% built.
 
 ---
 

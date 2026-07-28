@@ -23,6 +23,16 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built:** 10 of the 17 components below exist as real code under `kernel/src/ai_os_kernel/`, all at partial scope: Workflow Engine (22 modules), LLM Gateway (11 modules + `adapters/`), Prompt Engine, Context Manager, Configuration Manager, Manifest Loader, Capability Manager, Security Manager, Observability, Health. The composition root — the real, explicit, no-DI-container startup order required by [ADR-0010](../../18_decision_log/adr/ADR-0010-composition-and-dependency-injection.md) — is `kernel/src/ai_os_kernel/bootstrap.py`. Two additional real packages exist that are cross-cutting rather than components in the list below: `secrets_manager/` (ADR-0024, `env` backend only) and `sandbox/` (ADR-0016, `LocalSubprocessSandbox` + `DockerSandbox`). `persistence/` (13 modules) holds the shared schema and engine that several components' tables live in. `routes/` and `entrypoints/` hold the `api` process role's real HTTP surface; the `worker` role's entrypoint exists but there is no multi-instance worker loop yet.
+
+**Not built:** 7 of the 17 components are empty stubs — a docstring-only `__init__.py` and zero other `.py` files: Knowledge Manager, Memory Manager, Retrieval, Evaluation Engine, Quality Gate Engine, Traceability Engine, Event Bus. The build order below is therefore accurate as a *plan*, not as a description: Stage A's Configuration Manager / Observability / Health & Lifecycle / Manifest Loader all exist at partial scope, but Stage B's Quality Gate Engine and Event Bus do not exist at all, and Stage D's two components do not exist at all. The Platform SDK boundary described under "Capability Pack Interaction" is **specified but not built** — `platform_sdk/` currently contains exactly one real file (`platform_sdk/schemas/manifest.schema.json`); there is no `ai-os-sdk` package, so packs presently import Kernel internals directly as a documented, dated, temporary compromise (see `../capability_framework/capability_pack_contract.md`). Of the five horizontal-scaling mechanisms listed under "Scalability", (1) Postgres-resident state, (2) `SKIP LOCKED` leasing, (3) idempotency-keyed steps and (5) per-step stateless sandboxing are real; (4) the transactional outbox is a table (`platform.event_outbox`) with no relay or publisher.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md`.
+
+---
+
 ## Design Goals
 
 The Kernel shall be:
@@ -219,7 +229,7 @@ The scaling ceiling is shared PostgreSQL. Concurrency targets and the trigger co
 
 ## Current Status
 
-This document establishes the Kernel architecture. Every component has a detailed design document in this directory, and every technology choice is recorded in an ADR (see `../../18_decision_log/README.md`). The composition and lifecycle mechanism is specified in [ADR-0010](../../18_decision_log/adr/ADR-0010-composition-and-dependency-injection.md); component startup order is explicit in `kernel/bootstrap.py`.
+This document establishes the Kernel architecture. Sixteen of the seventeen components have a detailed design document in this directory; **Retrieval is the exception** — its design lives in `../services/search_vector_search.md` (with [ADR-0013](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md)) rather than under `kernel/`, because search is specified once for both Knowledge and Memory. Every technology choice is recorded in an ADR (see `../../18_decision_log/README.md`). The composition and lifecycle mechanism is specified in [ADR-0010](../../18_decision_log/adr/ADR-0010-composition-and-dependency-injection.md); component startup order is explicit in `kernel/src/ai_os_kernel/bootstrap.py` (this document previously gave the path as `kernel/bootstrap.py`, which does not exist — the package root is `kernel/src/ai_os_kernel/`).
 
 ---
 
@@ -234,3 +244,33 @@ Order of precedence:
 5. Kernel Architecture  
 6. Subsystem Design Documents  
 7. Source Code
+
+---
+
+## Related Documents
+
+**Governing decisions (ADRs):**
+- [ADR-0001 — Modular Capability Pack Architecture](../../18_decision_log/adr/ADR-0001-modular-capability-pack-architecture.md)
+- [ADR-0004 — Interface-Driven and Configuration over Code](../../18_decision_log/adr/ADR-0004-interface-driven-and-configuration-over-code.md)
+- [ADR-0010 — Composition and Dependency Injection](../../18_decision_log/adr/ADR-0010-composition-and-dependency-injection.md)
+- [ADR-0017 — Observability Stack](../../18_decision_log/adr/ADR-0017-observability-stack.md)
+- [ADR-0020 — Deployment Topology and Scaling](../../18_decision_log/adr/ADR-0020-deployment-topology-and-scaling.md)
+- Full index: `../../18_decision_log/README.md`
+
+**Superior documents:**
+- `../../00_constitution/project_constitution.md`
+- `../../00_constitution/ai_governance_framework.md`
+- `../platform/system_architecture.md`
+- `../capability_framework/capability_pack_contract.md`
+
+**Peer / dependent documents:**
+- `../platform/platform_sdk.md` — the only pack-facing surface
+- `../platform/technology_stack.md`
+- Component designs in this directory: `workflow_engine.md`, `llm_gateway.md`, `prompt_engine.md`, `context_manager.md`, `knowledge_manager.md`, `memory_manager.md`, `evaluation_engine.md`, `configuration_manager.md`, `manifest_loader.md`, `capability_manager.md`, `security_manager.md`, `quality_gate_engine.md`, `traceability_engine.md`, `event_bus.md`, `observability.md`, `health_lifecycle.md`
+- `../services/search_vector_search.md` — the Retrieval component's design document
+- `../../08_database/data_model.md` — all Kernel-owned tables
+- `../../02_requirements/non_functional/nfr.md` — concurrency and scaling targets
+- `../../20_glossary/glossary.md`
+
+**Status and history:**
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/implementation_roadmap.md`, `../../19_roadmap/history/INDEX.md`

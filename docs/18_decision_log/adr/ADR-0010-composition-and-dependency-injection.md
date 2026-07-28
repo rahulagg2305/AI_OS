@@ -50,3 +50,13 @@ Complies with the Coding Standards (Interface-Driven Design, Dependency Injectio
 
 - `docs/03_architecture/platform/platform_sdk.md`
 - `docs/03_architecture/kernel/health_lifecycle.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+`kernel/src/ai_os_kernel/bootstrap.py` is the single, explicit composition root — it wires the whole object graph in a deterministic order, builds the FastAPI app, and manages startup/shutdown through one lifespan handler, with constructor injection throughout and no DI container anywhere. The pack-facing surface exists but is reduced: `PackContext` (`capability_manager/pack_contract.py`) declares the intended shape including `health()`, while permission-narrowed capability handing and a uniform component `start()`/`stop()`/`health()` lifecycle protocol are not yet applied across all components.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

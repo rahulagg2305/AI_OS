@@ -26,6 +26,16 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built:** `kernel/src/ai_os_kernel/context_manager/` (4 modules). `ContextManager` (Protocol) and `DefaultContextManager` in `manager.py`; `ContextSourceResolver` (Protocol) plus **two** real resolvers in `resolvers.py` — `WorkflowStateResolver` (a workflow instance's own top-level `inputs`) and `WorkflowStepOutputResolver` (a named prior step's persisted output from `workflow.workflow_steps.outputs`); both sit behind §4's single "Workflow State Resolver" category. `models.py` carries the §6 response contract for real: `SourceType`, `SourceRef`, `ContextItem` (including the mandatory `trust` field), `ContextRequest`, `AssembledContext` with `items_excluded_count` and `assembly_id`. The Size & Token Budget Enforcer is real — `_apply_token_budget` in `manager.py` truncates by rank and reports the excluded count, with `estimate_tokens` in `models.py`. First real production use: the four-step `se.delivery_pipeline` chain in `capability_packs/software-engineering/src/ai_os_pack_software_engineering/pipeline.py`.
+
+**Not built:** **1 of the 6 sources in §3 is real.** There is no Knowledge Resolver, no Memory Resolver, no AI Context Pack Resolver, no Configuration Resolver, and no distinct user-input source — the four missing resolvers are blocked on components that are themselves empty stubs (`knowledge_manager/`, `memory_manager/`, `retrieval/` all contain a docstring-only `__init__.py`). No **Context Filter / Ranker** exists as a component: `relevance_score` is a field on `ContextItem` that nothing computes, so §6's "truncates by rank" currently ranks by resolver order. No persisted **Context Audit Logger** — §9's per-assembly record is not written to any table, and `assembly_id` is generated but never stored, so **exact replay of a past assembly is not currently possible**. `index_generation` is specified in §6 but has no producer (there is no vector index yet). §6's `trust` field is enforced as a required field but nothing yet emits `untrusted` items, because no ingestion or repository-reading source exists; the Prompt Engine's boundary-wrapping of untrusted content is likewise not implemented. Token counting is a character-length estimate (`_CHARS_PER_TOKEN_ESTIMATE = 4`), not a provider token count — the LLM Gateway has no `count_tokens()` yet.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `012_context_manager.md`).
+
+---
+
 ## 2. Design Goals
 
 The Context Manager must:
@@ -75,7 +85,7 @@ Context Manager
 └── Context Audit Logger
 ```
 
-**Two real "Workflow State" resolvers now exist (2026-07-28), not one.** `ai_os_kernel.context_manager.resolvers.WorkflowStateResolver` reads a workflow instance's own top-level `inputs` (unchanged, matches "Workflow State Resolver" above exactly). A second, sibling resolver, `WorkflowStepOutputResolver`, reads a *named prior step's* own persisted output (`workflow_steps.outputs`) — §5's own `required_context_types` example already named this case (`previous_outputs`) without a resolver to back it; this is that resolver. Both share the same source category — this is not a new bullet in the diagram above, but a second real implementation behind the existing "Workflow State Resolver" one. See `ai_os_pack_software_engineering.pipeline` (the `software-engineering` capability pack) for its first real, production use, chaining a real four-step workflow.
+**Two real "Workflow State" resolvers now exist (2026-07-28), not one.** `ai_os_kernel.context_manager.resolvers.WorkflowStateResolver` reads a workflow instance's own top-level `inputs` (unchanged, matches "Workflow State Resolver" above exactly). A second, sibling resolver, `WorkflowStepOutputResolver`, reads a *named prior step's* own persisted output (`workflow_steps.outputs`) — §5's own `required_context_types` example already named this case (`previous_outputs`) without a resolver to back it; this is that resolver. Both share the same source category — this is not a new bullet in the diagram above, but a second real implementation behind the existing "Workflow State Resolver" one. Both live in `kernel/src/ai_os_kernel/context_manager/resolvers.py`. See `capability_packs/software-engineering/src/ai_os_pack_software_engineering/pipeline.py` (module `ai_os_pack_software_engineering.pipeline`) for its first real, production use, chaining a real four-step workflow declared in `capability_packs/software-engineering/workflows/delivery_pipeline.yaml`.
 
 ---
 
@@ -153,9 +163,13 @@ This supports debugging and exact replay of experiments.
 
 ## 10. Current Status
 
-This document defines the design baseline for the Context Manager.
+This document defines the design baseline for the Context Manager. The three items v1.0 of this section deferred are settled as follows — none is left open as "to be refined."
 
-Detailed interfaces, data models, and ranking/filtering strategies will be refined during implementation.
+| Item | Status |
+|---|---|
+| **Detailed interfaces** | **Decided and built.** `ContextManager` and `ContextSourceResolver` are Protocols in `kernel/src/ai_os_kernel/context_manager/` (`manager.py`, `resolvers.py`), per [ADR-0004](../../18_decision_log/adr/ADR-0004-interface-driven-and-configuration-over-code.md) (interface-driven) and [ADR-0010](../../18_decision_log/adr/ADR-0010-composition-and-dependency-injection.md) (constructed in `bootstrap.py`, no container). The pack-facing name for the same capability is `ContextService` in `../platform/platform_sdk.md` §5.3. **Named remaining gap:** that SDK-facing Protocol does not exist as code — `platform_sdk/` contains only `schemas/manifest.schema.json` — so packs currently depend on the Kernel Protocol directly, under the dated temporary exception in `../capability_framework/capability_pack_contract.md`. |
+| **Data models** | **Decided and built.** §5 and §6 above *are* the data models, and they are implemented field-for-field in `kernel/src/ai_os_kernel/context_manager/models.py`. `trust` is mandatory, as [ADR-0016](../../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md) requires. **Named remaining gap:** `index_generation` has no producer until a vector index exists ([ADR-0013](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md)), and `relevance_score` has no producer until the Filter/Ranker below exists. |
+| **Ranking / filtering strategy** | **Genuinely open, and correctly so.** [ADR-0013](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md) already decides how *retrieval* ranks — keyword (Postgres FTS) plus vector (pgvector) combined by Reciprocal Rank Fusion — so ranking *within one retrieval source* is not open. What is open is **cross-source ranking**: how a Knowledge item, a Memory item, and an AI Context Pack item are ordered against one another when they compete for the same token budget. The two hard constraints are already fixed and constrain any answer: Knowledge outranks Memory in *authority* (`../../20_glossary/glossary.md` §3, `memory_manager.md` §6), and §7's determinism rule forbids any non-reproducible tiebreak. Settling it needs a real multi-source assembly to calibrate against, which cannot exist until at least two resolvers do; picking a weighting now would encode a guess as architecture — the same reasoning `memory_manager.md` §6.1 applies to promotion heuristics. |
 
 ---
 
@@ -169,3 +183,40 @@ Order of precedence:
 4. Kernel Architecture  
 5. Context Manager Design  
 6. Source Code
+
+---
+
+## 12. Related Documents
+
+**Governing decisions (ADRs):**
+- [ADR-0013 — Search and Vector Store](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md) — retrieval ranking, `index_generation`
+- [ADR-0016 — Tool Execution Sandboxing](../../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md) — the mandatory `trust` tag and structural injection containment
+- [ADR-0022 — Reproducibility over Determinism](../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md) — why assembly must be replayable
+- [ADR-0004 — Interface-Driven and Configuration over Code](../../18_decision_log/adr/ADR-0004-interface-driven-and-configuration-over-code.md)
+- [ADR-0010 — Composition and Dependency Injection](../../18_decision_log/adr/ADR-0010-composition-and-dependency-injection.md)
+
+**Superior documents:**
+- `../platform/system_architecture.md`
+- `kernel_architecture.md`
+- `../agents/agent_architecture.md`
+- `../workflow/workflow_architecture.md`
+
+**Source components (§3's six sources):**
+- `knowledge_manager.md` — authoritative documented knowledge (stub)
+- `memory_manager.md` — experiential memory (stub)
+- `../services/search_vector_search.md` — the Retrieval component behind both (stub)
+- `../../ai_context/context_pack_structure.md`, `../../ai_context/ai_context_strategy.md` — AI Context Packs
+- `configuration_manager.md` — Runtime Configuration source
+- `workflow_engine.md` — the one real source: workflow state and prior step outputs
+
+**Consumers:**
+- `prompt_engine.md` — receives assembled context, wraps untrusted items in data boundaries
+- `llm_gateway.md` — receives the prompt built from this context
+- `../platform/platform_sdk.md` §5.3 `ContextService` — the pack-facing Protocol (specified, not built)
+
+**Owned / referenced tables:**
+- `../../08_database/data_model.md` §4 (`workflow.workflow_instances`, `workflow.workflow_steps` — the only sources read today), §7 (Knowledge and Retrieval — read once a Knowledge Resolver exists). This component owns no tables of its own; §9's audit record has no table yet.
+
+**Reference:**
+- `../../20_glossary/glossary.md` §3 — the single authority for Knowledge / Memory / Context / Context Pack
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`

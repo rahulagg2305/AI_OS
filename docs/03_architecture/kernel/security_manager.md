@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built — a minimal slice, not production-credible.** Real: `Principal`, `SecurityContext`, `permissions_for_roles()`, `JWTBearerTokenVerifier`, and a `require_permission()` FastAPI dependency enforcing **four** permissions (`workflow:start`, `workflow:read`, `pack:read`, `pack:manage`) across 9 routes.
+
+**Not built:** full OIDC — tokens are **pre-shared-secret JWTs** verified against `AIOS_SECRET_SECURITY_JWT_SIGNING_KEY`, with no identity provider, no JWKS, and no issuer/audience validation, so anyone holding that secret can mint a token for any principal. Also absent: service-account API keys as a distinct mechanism, **the full [ADR-0023](../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) monotonic-narrowing chain** (agent and tool declared-permission subsets are never checked, so narrowing is not enforced end to end), the SDK's complete closed permission vocabulary, role administration, rate limiting, RFC 9457 error bodies, and **a `governance.audit_log` writer** (authn/authz events are logged via structlog only, not to the tamper-evident audit path). Outstanding Stage C/G work.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 This document defines the design of the **Security Manager**, a core component of the AI_OS Platform Kernel.

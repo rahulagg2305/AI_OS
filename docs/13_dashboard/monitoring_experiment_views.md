@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** The `dashboard/` directory has **no tracked content at all** — no frontend project is scaffolded, no `package.json`, no React application. It is absent from a fresh clone (git does not track empty directories). Stage F deliverable.
+
+Additionally, the experiment-comparison half of this document depends on the **Evaluation Engine and Benchmarking pack, both 0% built** — there are no experiments, no run manifests, and no comparison statistics to display. Stage D must land before these views have anything to show.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines the requirements and design guidance for two critical Dashboard capabilities:

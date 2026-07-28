@@ -8,6 +8,25 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built — roughly 9 of the ~45 endpoints documented below exist.** Read this section before assuming an endpoint is callable.
+
+**Built** (`kernel/src/ai_os_kernel/routes/`, all bearer-token authenticated): `POST /api/v1/workflows`, `GET /api/v1/workflows`, `GET /api/v1/workflows/{id}`, `GET /api/v1/workflows/{id}/steps`, `GET /api/v1/workflows/{id}/events`, `POST /api/v1/packs`, `POST /api/v1/packs/{id}/activate`, `POST /api/v1/packs/{id}/deactivate`, `GET /api/v1/packs/{id}`, plus the health endpoints.
+
+**Not built:**
+- **The entire WebSocket stream** (`/api/v1/stream`) — no route, no topics, no event envelope. Every real-time feature specified here and in `../13_dashboard/` has no transport.
+- All Approvals, Experiments, Gates, Usage, Agents, Config, Traceability, and Logs/Traces endpoint groups — each blocked on a subsystem that is itself 0% built (Human Approval Manager, Evaluation Engine, Quality Gate Engine, Traceability Engine).
+- **RFC 9457 `application/problem+json` error bodies** — responses currently use FastAPI's default `{"detail": ...}` shape. The documented `error_code` catalogue does not exist.
+- **`Idempotency-Key` handling** — the `platform.idempotency_keys` table exists as schema only, with no reader or writer.
+- **Per-principal rate limiting** — requires Redis, which no Kernel code uses.
+- **Cursor pagination** on `/steps` and `/events` (they return unpaginated), and filtering on the workflow list.
+- **The generated OpenAPI 3.1 contract and its CI snapshot test.** FastAPI serves a schema, but it is neither snapshot-tested nor verified against this document, so drift is currently undetected.
+
+Deliberate documented divergences in what *is* built: `POST /api/v1/workflows` returns `200` with a reduced body rather than `202` with `definition_id`; pack activate/deactivate return `200` not `202`; `POST /api/v1/packs` is not in this document's endpoint list at all (a reasoned addition). Stage B/F deliverable.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document specifies the AI_OS platform API: the HTTP surface, the real-time stream, authentication, authorization, error format, and versioning rules. The Dashboard, CLI, Voice interface, and external integrations are all clients of this API and of nothing else.

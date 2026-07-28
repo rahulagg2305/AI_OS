@@ -2,9 +2,24 @@
 
 **Project:** AI_OS (AI Operating System)  
 **Document:** Phase 0 Completion Review  
-**Version:** 1.0  
-**Status:** Approved  
-**Last Updated:** 2026-07-25
+**Version:** 1.1  
+**Status:** Approved — **historical record; retired terminology**  
+**Last Updated:** 2026-07-28 (header note added marking this a historical record; §5 and §6 annotated because they point at a retired "Phase 1" that no longer exists. The Phase 0 record itself is unchanged.)
+
+---
+
+> ## ⚠️ This is a historical record of a retired process
+>
+> **This document closes a documentation-authoring milestone from before implementation began. It is not a planning document and nothing in it describes current state.**
+>
+> Two things in it are actively misleading if read as current, and are annotated in place below:
+>
+> 1. The **"Phase" numbering is retired.** There is one delivery sequence — the lettered Stages A–H in [`implementation_roadmap.md`](implementation_roadmap.md) — and "Phase 1 – Core Kernel Subsystems" (§5, §6) does not exist as a plan. See [`documentation_freeze.md`](documentation_freeze.md) §7.
+> 2. The **§3 deliverables table uses absolute Windows paths** (`C:\Projects\AI_OS\...`) from the machine it was authored on. Those are not portable references; use repository-relative paths.
+>
+> **For current state, read instead:** [`implementation_status.md`](implementation_status.md) (current stage, blockers, next step) · [`feature_inventory.md`](feature_inventory.md) (per-module completion) · [`implementation_roadmap.md`](implementation_roadmap.md) (Stage A–H with delivery status) · [`history/INDEX.md`](history/INDEX.md) (build history) · [`../18_decision_log/README.md`](../18_decision_log/README.md) (the 25 ADRs).
+>
+> **Residual value that justifies keeping it:** it is the only record of which 14 documents constituted the original foundation and in what order, and of the eight decisions Phase 0 locked before any ADR existed — which is the provenance of ADR-0001 through ADR-0007.
 
 ---
 
@@ -90,6 +105,8 @@ Recommended starting points for Phase 1:
 1. Workflow Engine Architecture (detailed)
 2. LLM Gateway Architecture (detailed)
 3. Manifest Loader Detailed Design
+
+> **Annotation (2026-07-28) — §5 and §6 are superseded.** "Phase 1 – Core Kernel Subsystems" is retired terminology and is not a plan anyone should act on ([`documentation_freeze.md`](documentation_freeze.md) §7). All three "immediate next actions" above were completed as documentation and have since been implemented in code: the Workflow Engine and LLM Gateway architecture documents were written to v2.0, and the Workflow Engine core, LLM Gateway, and Manifest Loader now exist and are tested. **For the actual next step, read [`implementation_status.md`](implementation_status.md) §6 — never this section.**
 
 ---
 

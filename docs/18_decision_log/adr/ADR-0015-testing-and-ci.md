@@ -64,3 +64,13 @@ Complies with the Coding Standards (Testing Standards), the Quality Gates Framew
 
 - `docs/10_testing/test_strategy.md`
 - `.github/workflows/ci.yml`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+The core toolchain is real and green: `pytest` + `pytest-asyncio`, `pytest-cov` with branch coverage, `testcontainers[postgres]` for integration tests against real Postgres, `ruff` (including the `S` security rules), `mypy --strict`, `pip-audit`, and GitHub Actions at `.github/workflows/ci.yml` — currently **849 passed, 11 skipped (opt-in live provider tests), 0 failed**. The load-bearing part of the decision is missing: `ai_os_sdk.testing.pack_contract_suite` does not exist anywhere (there is no SDK to ship it), so there is no contract-test layer at all; `hypothesis`, `gitleaks`, `vitest`, and `playwright` are unused, and `tests/security/`, `tests/performance/`, `tests/regression/`, and `tests/benchmarks/` are empty directories.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

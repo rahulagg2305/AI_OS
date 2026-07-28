@@ -51,3 +51,13 @@ Complies with the AI Governance Framework (Separation of Responsibilities) and t
 ## References
 
 - `docs/03_architecture/workflow/workflow_patterns.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Fully implemented
+
+Honoured for everything built so far: the four chained agents of `se.delivery_pipeline` never reference one another, and each step's output reaches the next step's input only through durable workflow state, read back by the Context Manager's `WorkflowStepOutputResolver`. No agent-invocation capability exists on `PackContext`, so the prohibition is structural rather than advisory; content-addressed passing of large artifacts is not needed yet and is not built.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

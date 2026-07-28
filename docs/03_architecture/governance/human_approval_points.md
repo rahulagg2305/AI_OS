@@ -8,6 +8,16 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing functional.** The `workflow.approvals` table exists as schema only (migration `0003`, with the documented six-value `status` CHECK constraint) — **it has no writer and no reader.**
+
+Nothing creates a pending approval when a `human_approval` step is reached: that step type completes as a **no-op** via `NoOpStepExecutor`, so a workflow declaring an approval point runs straight through it. There is no Human Approval Manager, no durable pause/resume, no notification of any channel (the Notification Service is also 0% built), and no decision-recording path.
+
+The invariant that **a timeout never implies approval** ([ADR-0007](../../18_decision_log/adr/ADR-0007-human-governance-for-critical-decisions.md)) is currently satisfied only vacuously — no approval can time out because none is ever created. Outstanding Stage C deliverable.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 This document defines the framework for **Human Approval Points** in AI_OS.

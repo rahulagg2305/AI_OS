@@ -27,6 +27,16 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built:** Nothing behavioural — this component is a documented design only; `kernel/src/ai_os_kernel/evaluation_engine/` contains a docstring-only `__init__.py` and zero other `.py` files. What *does* exist is the storage layer it will write to: all six `evaluation` tables are real, migrated, and foreign-keyed in `kernel/src/ai_os_kernel/persistence/evaluation_schema.py` — `run_manifests`, `experiments`, `experiment_runs`, `metrics`, `gate_results`, `llm_calls` (see `../../08_database/data_model.md` §6). Two upstream producers this engine will consume are partly real: the LLM Gateway records per-call token/cost data (`kernel/src/ai_os_kernel/llm_gateway/call_recorder.py`), and the Workflow Engine persists step and event records. That is the whole of it — the component is `schema-only`.
+
+**Not built:** every component in §5 — no Metrics Collector, no Metrics Aggregator, no Run Manifest Recorder, no Comparison Computer, no Results Store writer, no Reporting Interface. Consequently **none of §6's mandatory experiment guarantees is enforced anywhere**: no run manifest is written (so no run is re-launchable under identical conditions, which is [ADR-0022](../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md)'s central requirement), no per-replicate storage, no mean/variance computation, no `served_from_cache` exclusion, no prompt-adaptation recording. The Benchmarking Pack that §5.1 assigns experiment *definition* to does not exist either (`capability_packs/` contains only `software-engineering/` and a `_template/`), so neither side of that boundary is built. §3's metric categories have no collector: the only real metric in the entire Kernel is `aios.http.requests` (`kernel/src/ai_os_kernel/observability/metrics.py`), and Quality Gate results cannot be collected because the Quality Gate Engine is itself an empty stub. Roadmap stage: **D**.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md` (the schema itself: `005_catalog_and_evaluation_schema_buildout.md`).
+
+---
+
 ## 2. Design Goals
 
 The Evaluation Engine must:
@@ -169,9 +179,16 @@ Every metric and experiment result must carry:
 
 ## 10. Current Status
 
-This document defines the design baseline for the Evaluation Engine.
+This document defines the design baseline for the Evaluation Engine. The four items v1.0 of this section deferred are settled as follows — none is left open as "to be refined."
 
-Detailed metric schemas, storage design, experiment definition format, and reporting APIs will be refined during implementation.
+| Item | Status |
+|---|---|
+| **Storage design** | **Decided and already built.** PostgreSQL, SQLAlchemy Core, Alembic ([ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md)). The concrete tables exist: `kernel/src/ai_os_kernel/persistence/evaluation_schema.py`, specified in `../../08_database/data_model.md` §6. Nothing further to design. |
+| **Metric schemas** | **Decided at the storage level, open at the naming level.** `evaluation.metrics` and `evaluation.llm_calls` fix the row shape (see `data_model.md` §6), and the metric-naming convention `aios.<subsystem>.<metric>` is fixed by [ADR-0017](../../18_decision_log/adr/ADR-0017-observability-stack.md) / `../../16_observability/observability_stack.md`. **Named remaining gap:** the specific metric-name-to-column mapping for §3's four categories has not been enumerated — i.e. which of §3's measures are OpenTelemetry metrics (sampled, aggregated) versus `evaluation.metrics` rows (exact, per-run, never sampled). That distinction is load-bearing for §7's "traceable back to a specific workflow run": a sampled telemetry metric cannot satisfy it. Settling it is one enumeration pass over §3, not a new decision. |
+| **Experiment definition format** | **Decided, and it is not this component's concern.** §5.1 assigns experiment definition to the **Benchmarking Pack** — as a declared pack artifact, since [ADR-0021](../../18_decision_log/adr/ADR-0021-declarative-workflows-no-dynamic-task-planner.md) requires control flow to be declared rather than planned, and [ADR-0001](../../18_decision_log/adr/ADR-0001-modular-capability-pack-architecture.md) makes packs the only extension point. The format therefore belongs in `../../06_capability_packs/benchmarking/overview.md`, not here. **Named remaining gap:** that pack does not exist, so the format is unwritten; this engine's side of the seam (`evaluation.experiments` / `evaluation.experiment_runs`) is already fixed and does not wait on it. |
+| **Reporting APIs** | **Decided at the platform level, unbuilt.** REST under `/api/v1` with the conventions in `../../07_api/api_architecture.md` ([ADR-0014](../../18_decision_log/adr/ADR-0014-api-style-and-realtime-transport.md)); the consuming views are specified in `../../13_dashboard/monitoring_experiment_views.md`. Per §5.1, *presentation and interpretation* belong to the Benchmarking Pack and Dashboard — this engine exposes computed statistics, not reports. **Named remaining gap:** no route, no computation, no consumer exists yet. |
+
+**One naming inconsistency worth noting, resolved in favour of this document:** §5.1 states this engine has **no "Experiment Manager" component**. Where other documents refer to an "Experiment Manager" applying pinned conditions, the real owners are the Benchmarking Pack (definition), the Configuration Manager's experiment-override layer (`configuration_manager.md` §4, layer 6), and the LLM Gateway (model pinning, `llm_gateway.md` §7). No such component is to be built.
 
 ---
 
@@ -185,3 +202,41 @@ Order of precedence:
 4. Kernel Architecture  
 5. Evaluation Engine Design  
 6. Source Code
+
+---
+
+## 12. Related Documents
+
+**Governing decisions (ADRs):**
+- [ADR-0022 — Reproducibility over Determinism](../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md) — run manifests, replicates, mean+variance, cache exclusion
+- [ADR-0005 — Agents Never Communicate Directly](../../18_decision_log/adr/ADR-0005-agents-never-communicate-directly.md) — why the Benchmarking Pack cannot orchestrate its own runs
+- [ADR-0011 — Persistence and Workflow State](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) — the storage substrate
+- [ADR-0017 — Observability Stack](../../18_decision_log/adr/ADR-0017-observability-stack.md) — telemetry vs. exact-measurement separation
+- [ADR-0025 — Caching Strategy](../../18_decision_log/adr/ADR-0025-caching-strategy.md) — why cache-served runs are excluded
+- [ADR-0006 — Quality Gates Are Mandatory](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) — gate results as a metric source
+
+**Superior documents:**
+- `../platform/system_architecture.md`
+- `kernel_architecture.md`
+- `../workflow/workflow_architecture.md`
+- `../quality/quality_gates_framework.md`
+
+**Interacting subsystems:**
+- `workflow_engine.md` — emits execution events and outcomes; the sole orchestrator of experiment runs
+- `llm_gateway.md` — the sole producer of token and cost data (§9 there: one producer, so cost is reconcilable)
+- `quality_gate_engine.md` — emits gate results
+- `configuration_manager.md` — §4 layer 6, isolated experiment overrides
+- `prompt_engine.md` — prompt-version pinning for fair comparison
+- `observability.md` — the telemetry pipeline this engine sits beside, not inside
+- `traceability_engine.md` — traceability coverage as a quality signal
+- `../platform/platform_sdk.md` — pack-contributed metrics arrive across this boundary
+- `../../06_capability_packs/benchmarking/overview.md` — owns experiment definition, submission, and reporting (§5.1)
+- `../../13_dashboard/monitoring_experiment_views.md` — the comparison views
+
+**Owned tables:**
+- `../../08_database/data_model.md` §6 — `evaluation.run_manifests`, `.experiments`, `.experiment_runs`, `.metrics`, `.gate_results`, `.llm_calls`
+
+**Reference:**
+- `../../20_glossary/glossary.md`
+- `../../02_requirements/non_functional/nfr.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`

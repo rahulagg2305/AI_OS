@@ -23,6 +23,15 @@ Work proceeds in small, explicitly-scoped steps, each approved by the product ow
 
 Any file expected to grow indefinitely (a running history, a running log) gets split into a numbered folder once it's grown too large for one file to serve its purpose, grouped by logical milestone/subsystem (not by date), with an `INDEX.md`. `docs/19_roadmap/history/` is the reference example — apply the same pattern again if another document starts growing the same way.
 
+## Documentation-vs-reality discipline
+
+This project is documentation-first (ADR-0003), so **most architecture documents were written before their code and many describe subsystems that do not exist yet.** "Approved" means the design is authoritative, not that it is built.
+
+- Every `docs/03_architecture/` subsystem document carries an **Implementation Status** section near the top. Read it before assuming the document describes callable code.
+- `docs/19_roadmap/feature_inventory.md` is the authority on how complete any module is. Update it every step (standing rule above).
+- **Folders named in the docs frequently do not exist.** Git does not track empty directories, so every "planned" folder (`dashboard/`, `platform_services/`, `ai_context/`, `knowledge/`, `traceability/`, `specs/`, `manifests/`, `tools/`, and others) is absent from a fresh clone. `docs/process/folder_structure.md` is the definitive real-vs-planned list. Do not create a planned folder speculatively; it arrives with the step that fills it.
+- `platform_sdk/` holds exactly one real file (`schemas/manifest.schema.json`). There is **no `ai-os-sdk` package**, which is why Capability Packs import Kernel internals directly — a documented, dated exception, not a pattern to copy.
+
 ## Process docs (read as needed, not all at once)
 
 - `docs/process/files_to_read_first.md` — what to read, and when, for a given task

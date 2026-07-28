@@ -18,6 +18,20 @@ Requirement IDs are `NFR-###` and are traceable from tests and architecture elem
 
 ---
 
+## Implementation Status (2026-07-28)
+
+Almost nothing here is measured yet. These are approved targets awaiting the measurement infrastructure that Section 13 names.
+
+**Built:** the quality thresholds that CI can already enforce — NFR-064 (`mypy --strict` clean across 283 source files) and NFR-065 (`ruff` clean) are enforced on every CI run; NFR-066 (dependency vulnerabilities) and NFR-067 (secret detection) run as real supply-chain scanning stages. NFR-080/NFR-081 (zero egress and zero secrets in untrusted execution) hold in practice for `DockerSandbox`, which is the config-driven default and has been verified live against a real daemon. NFR-032 (zero committed workflow state lost) is structurally supported by the event-log-plus-snapshot-in-one-transaction design and is covered by integration tests, though not yet by a process-kill chaos test. NFR-050/NFR-051 (per-step context budget, hard enforcement recording exclusions) are implemented in the Context Manager's Size & Token Budget Enforcer.
+
+**Not built — no measurement path exists yet:** every latency target (NFR-010–NFR-019) and every throughput target (NFR-020–NFR-025), because `tests/performance/` is an empty directory and there is no Collector, Prometheus, or Grafana — observability is real OTel spans plus exactly one metric (`aios.http.requests`) to console exporters only. NFR-019 additionally has no subject: the `dashboard/` directory is empty. NFR-030–NFR-038 (availability/recovery) have no deployment to measure — there is no `Dockerfile` anywhere in the repository, no Helm chart, and no Kubernetes manifests. NFR-034/NFR-035 (RPO/RTO) have no backup or restore tooling. NFR-040–NFR-046 are partially structural only: two budget ceilings (alias, workflow) are real, NFR-043 has no prompt-cache implementation to measure, NFR-045 has no alerting pipeline. NFR-060–NFR-063 (coverage thresholds) are **not** currently gated in CI. NFR-070–NFR-074 (reproducibility) depend on run manifests and replay, neither of which exists. NFR-082–NFR-086: no authorization-latency measurement, no audit chain (the `governance.audit_log` table has no writer), no secret rotation (`env` backend only). NFR-090–NFR-094: correlation IDs are emitted on real spans, but there is no telemetry backend to assert visibility windows against. NFR-107 (≤ 15 s cold start) is believed met but not asserted by a test.
+
+Section 13's verification paths reference `tests/performance/`, `tests/benchmarks/` and `tests/security/` — all three exist as **empty directories**. `tests/unit/` and `tests/integration/` are real and substantial (849 passed, 11 skipped, 0 failed).
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
+---
+
 ## 2. Scale Assumptions (v1)
 
 These bound every other number in this document.
@@ -189,17 +203,19 @@ These become Quality Gate configuration values.
 
 ## 13. Verification
 
-| Category | Verified by |
-|---|---|
-| Latency, throughput | `tests/performance/` load suite in CI nightly; production SLO dashboards |
-| Availability, recovery | `tests/integration/` chaos cases: kill worker mid-step, kill Redis, drop provider |
-| Cost | Cost assertions in `tests/benchmarks/`; production cost dashboard |
-| Quality thresholds | CI quality gates ([ADR-0015](../../18_decision_log/adr/ADR-0015-testing-and-ci.md)) |
-| Reproducibility | Run-manifest schema validation; repeat-run variance report |
-| Security | `tests/security/` organised by threat ID |
-| Observability | Assertions that required correlation IDs are present on emitted telemetry |
+| Category | Verified by | Exists (2026-07-28)? |
+|---|---|---|
+| Latency, throughput | `tests/performance/` load suite in CI nightly; production SLO dashboards | No — `tests/performance/` is an empty directory; no SLO dashboards |
+| Availability, recovery | `tests/integration/` chaos cases: kill worker mid-step, kill Redis, drop provider | Suite exists and is substantial; **the chaos cases themselves do not** |
+| Cost | Cost assertions in `tests/benchmarks/`; production cost dashboard | No — `tests/benchmarks/` is an empty directory |
+| Quality thresholds | CI quality gates ([ADR-0015](../../18_decision_log/adr/ADR-0015-testing-and-ci.md)) | Partly — lint/types/unit/integration real and green; coverage thresholds (NFR-060–NFR-063) not gated |
+| Reproducibility | Run-manifest schema validation; repeat-run variance report | No — no run manifest is written anywhere |
+| Security | `tests/security/` organised by threat ID | No — `tests/security/` is an empty directory. Sandbox guarantees are currently asserted from `tests/integration/` instead |
+| Observability | Assertions that required correlation IDs are present on emitted telemetry | Partly — spans and one metric (`aios.http.requests`) are asserted; no backend-visibility assertions |
 
-A target without a verification path is not a requirement. Any NFR added here must name how it is measured.
+A target without a verification path is not a requirement. Any NFR added here must name how it is measured. The "Exists" column above is the honest current answer and must be updated whenever a suite becomes real — see `../../10_testing/test_strategy.md`.
+
+**Re-baselining commitment.** Every target marked **(baseline)** above must be re-measured against real data by the end of Stage D. Because no performance or benchmark suite exists yet, **none has been re-baselined**; they all still carry their original first-principles estimate. The concrete prerequisite is a populated `tests/performance/` suite plus an OTLP export path to a metrics backend (`feature_inventory.md` §5 rows 4 and 42).
 
 ---
 
@@ -213,3 +229,28 @@ Order of precedence:
 4. Non-Functional Requirements (this document)
 5. Quality Gate configuration
 6. Source Code
+
+---
+
+## 15. Related Documents
+
+**Companion requirements documents**
+- `../functional/functional_requirements.md` — the capabilities these targets qualify
+- `../constraints/constraints.md` — CON-030–CON-038 explain why several targets are shaped as they are
+
+**Live build status**
+- `../../19_roadmap/feature_inventory.md` — per-module completion table
+- `../../19_roadmap/implementation_status.md` — current stage and blockers
+- `../../19_roadmap/history/INDEX.md` — build history
+
+**Architecture documents that own these targets**
+- Latency/throughput/scaling (NFR-010–NFR-025, NFR-107) → `../../03_architecture/platform/system_architecture.md`, `../../11_deployment/deployment_architecture.md`, `../../18_decision_log/adr/ADR-0020-deployment-topology-and-scaling.md`
+- Availability/recovery (NFR-030–NFR-038) → `../../03_architecture/kernel/health_lifecycle.md`, `../../03_architecture/workflow/state_management.md`, `../../12_operations/operations_runbook.md`
+- Cost controls (NFR-040–NFR-046) → `../../03_architecture/kernel/llm_gateway.md`, `../../03_architecture/workflow/workflow_patterns.md`
+- Context/token budgets (NFR-050–NFR-053) → `../../03_architecture/kernel/context_manager.md`
+- Quality thresholds (NFR-060–NFR-069) → `../../03_architecture/quality/quality_gates_framework.md`, `../../10_testing/test_strategy.md`, `../../21_templates/CODING_STANDARDS_AND_BEST_PRACTICES.md`
+- Reproducibility (NFR-070–NFR-074) → `../../03_architecture/kernel/evaluation_engine.md`, `../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md`
+- Security (NFR-080–NFR-086) → `../../09_security/security_architecture.md`, `../../09_security/secrets_management.md`, `../../09_security/authentication_authorization.md`
+- Observability (NFR-090–NFR-094) → `../../16_observability/observability_stack.md`, `../../03_architecture/kernel/observability.md`
+- Retrieval latency (NFR-014) → `../../03_architecture/services/search_vector_search.md`
+- Maintainability/extensibility (NFR-100–NFR-106) → `../../03_architecture/platform/platform_sdk.md`, `../../03_architecture/capability_framework/capability_pack_contract.md`

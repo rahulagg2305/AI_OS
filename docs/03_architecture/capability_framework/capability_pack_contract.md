@@ -2,9 +2,11 @@
 
 **Project:** AI_OS (AI Operating System)  
 **Document:** Capability Pack Contract  
-**Version:** 1.1  
+**Version:** 1.2  
 **Status:** Approved  
-**Last Updated:** 2026-07-28 (Platform Interaction Rules: added a dated exception note recording the `software-engineering` pack's real, live direct-Kernel-import compromise — no other content changed)
+**Last Updated:** 2026-07-28 (added Implementation Status and Related Documents; corrected the Current Priority Packs status column, the contract-suite requirement, and the directory-structure claims against the one real pack on disk)
+
+**Previously:** 2026-07-28 (v1.1 — Platform Interaction Rules: added a dated exception note recording the `software-engineering` pack's real, live direct-Kernel-import compromise)
 
 ---
 
@@ -27,6 +29,22 @@ The contract ensures that all Capability Packs are:
 No Capability Pack may be loaded by AI_OS unless it complies with this contract.
 
 This contract is mandatory for every present and future Capability Pack.
+
+---
+
+## Implementation Status (2026-07-28)
+
+**Built:** the manifest half of this contract is real and enforced. `../../../platform_sdk/schemas/manifest.schema.json` genuinely validates every manifest before any pack code is imported, and `ai_os_kernel/manifest_loader/` enforces a subset of the semantic rules on top of it. The Capability Manager (`ai_os_kernel/capability_manager/`) implements a real `register → activate → deactivate` lifecycle, recording every transition in `catalog.pack_state_transitions`, and the Agent/Tool registries resolve real catalog rows gated on pack activation. **One pack genuinely complies with the manifest contract and loads:** `../../../capability_packs/software-engineering/` — 5 declared agents (`requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`), 1 declared workflow (`se.delivery_pipeline`), 4 prompts, its own `pyproject.toml` as a real `uv` workspace member, `README.md`, `CHANGELOG.md`, and tests. `../../../capability_packs/_template/` provides a manifest + README + CHANGELOG scaffold.
+
+**Not built:**
+
+- **The SDK half of this contract does not exist.** There is no `ai-os-sdk` package (see `../platform/platform_sdk.md` §1a), so "interact only through the Platform SDK" is currently unenforceable — and is knowingly violated by the one real pack. See the dated exception under Platform Interaction Rules below.
+- **The SDK pack contract suite does not exist**, so the Testing Requirements and Validation Checklist below are review-enforced, not tool-enforced. Nothing checks the Prohibited Practices list mechanically, including "no forbidden dependencies".
+- **No pack discovery beyond a filesystem scan**, no entry-point discovery, no upgrade path, no health monitoring, and no permissions enforcement in the Capability Manager. The Health Contract below has no implementation: no pack exposes a health check and nothing would call one.
+- **No Quality Gate Engine**, so the Validation Checklist's "Quality Gates passed" cannot be satisfied; **no `EventBus`**, so the Event Contract is unexercised; **no Command implementation path**; **no pack-declared Tool** (the one real tool, `SandboxedCommandTool`, is Kernel-internal and not manifest-declared); **no pack-declared Quality Gate**.
+- **Three of the four scoped packs are empty directories:** `capability_packs/project_intelligence/`, `capability_packs/voice_jarvis/`, `capability_packs/benchmarking/`. (`capability_packs/software_engineering/` — underscored — is also an empty directory and is *not* the real pack; the real one is hyphenated, `software-engineering`.)
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table — rows 13, 27, 29–34) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -68,11 +86,11 @@ Every Capability Pack shall:
 
 **Always required:**
 
-- `manifest.yaml` — valid against `platform_sdk/schemas/manifest.schema.json`
-- `README.md` and `CHANGELOG.md`
-- A `CapabilityPack` entry point implementation
-- Tests, including a passing run of the SDK pack contract suite
-- Semantic version and health reporting
+- `manifest.yaml` — valid against `../../../platform_sdk/schemas/manifest.schema.json` *(enforced today)*
+- `README.md` and `CHANGELOG.md` *(review-enforced)*
+- A `CapabilityPack` entry point implementation *(declared and checked by the schema; not yet resolved/imported by any contract test)*
+- Tests, including a passing run of the SDK pack contract suite *(the suite does not exist — see `../platform/platform_sdk.md` §9; packs currently ship their own tests only)*
+- Semantic version and health reporting *(version enforced by the schema; health reporting has no implementation on either side)*
 
 **Required only if the pack provides them:**
 
@@ -106,6 +124,8 @@ capability_packs/
 ```
 
 Only the folders a pack actually uses need to exist. Additional folders may be added when justified.
+
+**How the one real pack compares (2026-07-28).** `../../../capability_packs/software-engineering/` has `manifest.yaml`, `pyproject.toml`, `README.md`, `CHANGELOG.md`, `src/ai_os_pack_software_engineering/` (with `pack.py`, `agents/`, `workflows/models.py`, and a `pipeline.py` not in the layout above), `workflows/`, `prompts/`, and `tests/`. It has **no `LICENSE`** and **no `docs/`**, both listed as required above — a real, open gap, not a permitted omission (the "only the folders a pack actually uses" allowance covers the conditional folders, not the required ones). Its pack-level documentation currently lives outside the pack, in `../../06_capability_packs/software_engineering/`. Closing this means either adding `LICENSE` + `docs/` to the pack or amending this contract; it is recorded here rather than left as silent drift.
 
 ---
 
@@ -158,7 +178,7 @@ Identifiers shall remain globally unique.
 
 Capability Packs may depend on:
 
-- Platform Kernel interfaces
+- Platform Kernel interfaces — meaning **the Kernel-implemented interfaces as published by the Platform SDK**, never the `ai_os_kernel` distribution itself. `../platform/platform_sdk.md` §2 rule 1 is the binding form: a pack depending on `ai-os-kernel` fails CI. This clarification resolves an apparent contradiction between this list and Platform Interaction Rules' "Direct Kernel access is prohibited" below — they are consistent; the phrase above was ambiguous, not permissive.
 - Platform SDK
 - Approved Platform Services
 
@@ -446,13 +466,17 @@ Documentation shall remain synchronized with implementation.
 
 ## Current Priority Packs
 
+Status column refreshed 2026-07-28 against what is actually on disk; see Implementation Status above and `../../19_roadmap/feature_inventory.md` rows 29–34 for the authoritative figures.
+
 | Capability Pack                  | Priority | Status   |
 |----------------------------------|----------|----------|
-| Software Engineering             | Highest  | Planned |
-| Existing Project Intelligence    | High     | Planned |
-| Voice (Jarvis)                   | High     | Planned |
-| Benchmarking                     | Medium   | Planned |
+| Software Engineering             | Highest  | **Partially built** — `capability_packs/software-engineering/`: 5 agents, 1 workflow (`se.delivery_pipeline`), 4 prompts, real and loading; no pack-declared tools or quality gates; imports Kernel internals under the dated exception below |
+| Existing Project Intelligence    | High     | Not started — `capability_packs/project_intelligence/` is an empty directory; documented in `../../06_capability_packs/project_intelligence/` |
+| Voice (Jarvis)                   | High     | Not started — `capability_packs/voice_jarvis/` is an empty directory; documented in `../../14_voice_jarvis/` |
+| Benchmarking                     | Medium   | Not started — `capability_packs/benchmarking/` is an empty directory |
 | Future Domain Packs              | Future   | -        |
+
+A fifth directory, `capability_packs/_template/`, holds a manifest + README + CHANGELOG scaffold for authoring a new pack; it is not itself a pack. `capability_packs/software_engineering/` (underscored) is a stale empty directory, not a pack.
 
 ---
 
@@ -460,15 +484,15 @@ Documentation shall remain synchronized with implementation.
 
 Before activation / installation, verify:
 
-- [ ] Manifest is valid
-- [ ] Required contracts are implemented
-- [ ] Dependencies are satisfied
-- [ ] Tests have passed
-- [ ] Documentation is complete
-- [ ] Security validation passed
-- [ ] Configuration is valid
-- [ ] Quality Gates passed
-- [ ] No prohibited dependencies exist
+- [ ] Manifest is valid — *machine-enforced today by the JSON Schema + Manifest Loader*
+- [ ] Required contracts are implemented — *review only; no SDK Protocols exist to check against*
+- [ ] Dependencies are satisfied — *`dependencies.packs` emptiness is schema-enforced; `sdkVersion` is unenforceable while no SDK exists*
+- [ ] Tests have passed — *the pack's own tests run in CI; there is no contract suite*
+- [ ] Documentation is complete — *review only*
+- [ ] Security validation passed — *review only; `tests/security/` is an empty directory*
+- [ ] Configuration is valid — *`configSchema` is declared and schema-checked; pack config defaults are not yet a resolved precedence layer (`../services/configuration_management.md`)*
+- [ ] Quality Gates passed — *not possible today: the Quality Gate Engine is 0%*
+- [ ] No prohibited dependencies exist — *not checked by any tool; knowingly violated, see below*
 
 ---
 
@@ -531,3 +555,51 @@ Where conflicts exist, the order of precedence is:
 6. Source Code
 
 Compliance with this contract is mandatory for every Capability Pack developed for AI_OS.
+
+---
+
+## Related Documents
+
+**Governing ADRs**
+
+- [ADR-0001 — Modular Capability Pack Architecture](../../18_decision_log/adr/ADR-0001-modular-capability-pack-architecture.md) — the decision this contract implements
+- [ADR-0009 — Packaging and dependency management](../../18_decision_log/adr/ADR-0009-packaging-and-dependency-management.md) — a pack is its own PEP 621 distribution; entry-point registration
+- [ADR-0004 — Interface-driven and configuration-over-code](../../18_decision_log/adr/ADR-0004-interface-driven-and-configuration-over-code.md) — the Configuration Contract
+- [ADR-0005 — Agents never communicate directly](../../18_decision_log/adr/ADR-0005-agents-never-communicate-directly.md) — the Agent Contract and Communication Rules
+- [ADR-0002 — LLM Gateway single entry point](../../18_decision_log/adr/ADR-0002-llm-gateway-single-entry-point.md) — "shall not hardcode LLM providers / model names"
+- [ADR-0006 — Quality gates are mandatory](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) · [ADR-0007 — Human governance](../../18_decision_log/adr/ADR-0007-human-governance-for-critical-decisions.md) — the Workflow Contract's gate and approval fields
+- [ADR-0016 — Tool execution sandboxing](../../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md) — the Tool Contract's trust tier
+- [ADR-0023 — Identity, roles, and permissions](../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) — the Security Contract's least-privilege rule
+- [ADR-0024 — Secrets management backend](../../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — "secrets shall never be stored inside pack source"
+- Full index: `../../18_decision_log/README.md`
+
+**Machine-readable schema and the one real example**
+
+- `../../../platform_sdk/schemas/manifest.schema.json` — **authoritative**; validates every manifest before any pack code is imported
+- `../../../capability_packs/software-engineering/manifest.yaml` — the one real, loading pack manifest
+- `../../../capability_packs/_template/manifest.yaml` — the authoring scaffold
+
+**Architecture**
+
+- `../platform/system_architecture.md` — where the pack layer sits
+- `../platform/platform_sdk.md` — the interface surface this contract requires packs to use (**specification only; no implementing package** — the reason for the dated exception above)
+- `manifest_schema.md` — the manifest structure and every validation rule in detail
+- `../kernel/capability_manager.md` — the canonical lifecycle state machine
+- `../kernel/manifest_loader.md` — discovery, validation, registration
+- `../agents/agent_architecture.md` · `../agents/agent_communication.md` — the Agent Contract in detail
+- `../workflow/workflow_architecture.md` — the Workflow Contract in detail
+- `../quality/quality_gates_framework.md` — the Quality Gate Contract in detail (unimplemented)
+- `../../06_capability_packs/capability_pack_development_guide.md` — how to author a pack (pre-`discovered` phase)
+- `../../06_capability_packs/software_engineering/overview.md` — the flagship pack's own documentation
+
+**Requirements traced to this contract**
+
+- `../../02_requirements/functional/functional_requirements.md` — FR-001 (load and validate a pack, rejecting invalid manifests without partial registration), FR-002 (lifecycle state machine recorded in `catalog.pack_state_transitions`), FR-003 (activate/deactivate without restart), FR-018 (monotonic permission narrowing)
+
+**Terminology**
+
+- `../../20_glossary/glossary.md`
+
+**Current state of the build**
+
+- `../../19_roadmap/feature_inventory.md` (rows 13, 27, 29–34), `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`

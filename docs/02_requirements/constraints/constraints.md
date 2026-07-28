@@ -16,6 +16,28 @@ IDs are `CON-###`.
 
 ---
 
+## Implementation Status (2026-07-28)
+
+Constraints are binding conditions, not features, so "built" here means *enforced by real code or CI* rather than merely written down.
+
+**Enforced today:** CON-001 (no domain logic in the Kernel — holds; all domain logic lives in `capability_packs/software-engineering/`), CON-002/CON-013 (all model access goes through the LLM Gateway; aliases only outside Gateway config), CON-003 (agents never call each other — the one real workflow hands off strictly via `WorkflowStepOutputResolver`), CON-006 (control flow is declared in `workflows/delivery_pipeline.yaml`, never planned at runtime), CON-008 (`DockerSandbox` is the config-driven default via `AIOS_SANDBOX_BACKEND` and delivers all 5 ADR-0016 Tier 1 guarantees, verified live), CON-014 (every state change is an appended event), CON-020/CON-021/CON-023/CON-024/CON-027 (Python 3.12, Postgres 16 + `pgvector` schema, Redis 7 provisioned, one async process per role, Windows development is real and load-bearing).
+
+**Not yet enforced — known, tracked gaps:**
+- **CON-004/CON-005** are currently **violated by design, under a documented dated exception**: no `ai-os-sdk` package exists (`platform_sdk/` contains exactly one real file, `../../../platform_sdk/schemas/manifest.schema.json`), so the Software Engineering pack imports Kernel internals directly. See the exception note in `../../03_architecture/capability_framework/capability_pack_contract.md`.
+- **CON-007** — monotonic narrowing is documented and modelled but not enforced end-to-end; the Capability Manager does not check agent/tool permission subsets.
+- **CON-009** — secrets never reach the sandbox (structurally true), but there is no prompt-assembly secret-leak scan, and only the `env` backend exists.
+- **CON-010** — the `governance.audit_log` table exists as schema only: no writer, no hash chain computed, no verification job.
+- **CON-011** — no Quality Gate Engine exists, so there is nothing yet to skip; the constraint is unexercised rather than satisfied.
+- **CON-012** — no Human Approval execution path exists; the `approvals` table has no writer.
+- **CON-022** — a container runtime is required and used in development, but there is no `Dockerfile` in the repository and no Kubernetes node configuration to constrain yet.
+- **CON-026** — no Dashboard TypeScript toolchain exists; the `dashboard/` directory is empty and CI's frontend stage is a deliberate no-op.
+- **CON-030–CON-038** are properties of the world and remain true; the platform absorbs CON-030, CON-031, CON-035 and CON-036 today (reproducibility framing, no sampling params in the request contract, retry/circuit-breaker/fallback, aliases-as-configuration). CON-032's capability matrix exists; CON-033 (prefix-stable prompt caching), CON-034 (provider token-counting endpoints) and CON-038 (egress controls) have no implementation.
+- **CON-025** is moot in practice: there is no SQLite development mode — Postgres-backed integration tests use `tests/integration/_postgres_fixture.py`, which skips cleanly when Docker is unavailable.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
+---
+
 ## 2. Architectural Constraints (self-imposed, binding)
 
 | ID | Constraint | Source |
@@ -106,3 +128,33 @@ Order of precedence:
 3. Architecture Decision Records
 4. Constraints (this document)
 5. Source Code
+
+---
+
+## 8. Related Documents
+
+**Companion requirements documents**
+- `../functional/functional_requirements.md` — the capabilities these constraints bound
+- `../non_functional/nfr.md` — NFR-001–NFR-009 quantify the scale assumptions behind CON-050
+
+**Live build status**
+- `../../19_roadmap/feature_inventory.md` — per-module completion table (the authority on which constraints are actually enforced by code)
+- `../../19_roadmap/implementation_status.md` — current stage and blockers
+- `../../19_roadmap/history/INDEX.md` — build history
+
+**Architecture documents that enforce these constraints**
+- CON-001, CON-004, CON-005 → `../../03_architecture/platform/system_architecture.md`, `../../03_architecture/platform/platform_sdk.md`, `../../03_architecture/capability_framework/capability_pack_contract.md`
+- CON-002, CON-013, CON-031–CON-038 → `../../03_architecture/kernel/llm_gateway.md`
+- CON-003 → `../../03_architecture/agents/agent_communication.md`, `../../05_agents/agent_catalog.md`
+- CON-006, CON-014, CON-041, CON-042 → `../../03_architecture/kernel/workflow_engine.md`, `../../03_architecture/workflow/state_management.md`
+- CON-007 → `../../09_security/authentication_authorization.md`, `../../03_architecture/kernel/security_manager.md`
+- CON-008, CON-043, CON-054 → `../../09_security/security_architecture.md` §5, `../../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md`
+- CON-009 → `../../09_security/secrets_management.md`
+- CON-010 → `../../16_observability/observability_stack.md`
+- CON-011 → `../../03_architecture/quality/quality_gates_framework.md`, `../../03_architecture/kernel/quality_gate_engine.md`
+- CON-012 → `../../03_architecture/governance/human_approval_points.md`
+- CON-020–CON-027 → `../../03_architecture/platform/technology_stack.md`, `../../11_deployment/deployment_architecture.md`
+- CON-021, CON-052 → `../../03_architecture/services/search_vector_search.md`, `../../08_database/data_model.md`
+- CON-026 → `../../13_dashboard/dashboard_architecture.md`
+- CON-040 → `../../03_architecture/kernel/evaluation_engine.md`, `../../06_capability_packs/benchmarking/overview.md`
+- CON-044, CON-051 → `../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md`

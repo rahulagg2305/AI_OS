@@ -81,3 +81,13 @@ Complies with the Constitution (Article 6: Least Privilege, Secure Defaults, Def
 
 - `docs/09_security/security_architecture.md`
 - [ADR-0023](ADR-0023-identity-roles-and-permissions.md), [ADR-0024](ADR-0024-secrets-management-backend.md)
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented (Tier 1 container isolation fully honoured)
+
+The Tier 1 decision is real and live-verified: `DockerSandbox` (`ai_os_kernel.sandbox.docker_executor`) implements all five guarantees — `--network=none`, read-only root with a single writable mount, non-root `--user`, `--cap-drop=ALL` with `no-new-privileges`, resource and wall-clock limits, ephemeral per-step lifetime, no Docker socket, no secrets — and it is now the configuration-driven default (`AIOS_SANDBOX_BACKEND`, default `docker`), proven end to end against a live daemon including network and filesystem containment for code the pipeline itself generated. `LocalSubprocessSandbox` remains as the explicit 3-of-5 opt-out. Of the five prompt-injection controls, three hold: provenance tagging is real (every `ContextItem` carries `trust: "trusted" | "untrusted"` plus a `SourceRef`, defaulting workflow inputs to `untrusted`), authority never comes from content (control 3), and agent output is schema-validated (control 4). Not built: delimited framing of untrusted content at prompt-render time (control 2), the Human Approval Point gating irreversible actions (control 5 — see ADR-0007), the egress proxy with a package-registry allowlist, manifest-declared tier classification validated at pack load, and Tier 2 path allowlisting with canonical-path resolution.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

@@ -1,8 +1,8 @@
 # AI Governance Framework – AI_OS
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Active  
-**Last Updated:** 2026-07-24
+**Last Updated:** 2026-07-28 (corrected one stale use of *deterministic* left over from the ADR-0022 amendment; recorded which enforcement mechanisms exist in code today; added Related Documents. No governance principle changed.)
 
 ---
 
@@ -118,7 +118,7 @@ Every workflow shall define:
 - Failure handling
 - Human approval points
 
-Workflows should remain deterministic wherever practical.
+A workflow's *shape* should remain declared, validated, and reproducible wherever practical — see *Reproducible Engineering* above and [ADR-0021](../18_decision_log/adr/ADR-0021-declarative-workflows-no-dynamic-task-planner.md) (workflows are declarative; there is no runtime task planner). Per [ADR-0022](../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md), *deterministic* is used in AI_OS only about platform behaviour, never about model output; this line previously said "deterministic" and was missed when that amendment was applied.
 
 ---
 
@@ -269,6 +269,50 @@ Governance in AI_OS is enforced by machinery, not by good intentions. Each rule 
 | Every significant decision is recorded | ADR process, with the Decision Log index as the check |
 
 A governance rule without a mechanism is a defect in this framework, and adding one requires naming its mechanism.
+
+#### Which mechanisms exist in code today (2026-07-28)
+
+The table above names the mechanism each rule *will be* enforced by. Most are not yet built, and a governance framework that implies otherwise is exactly the "false assurance" it exists to prevent — so the current state is recorded here rather than left to be discovered:
+
+| Mechanism | In code today |
+|---|---|
+| No agent communicates with a provider directly | **Partly real.** The LLM Gateway is genuinely the only provider egress path in the codebase, but this is currently a convention held by review, not a check: no import-boundary CI rule exists and there is no pack contract suite. |
+| No agent communicates with another agent | **Real.** `PackContext` exposes no agent-invocation capability, and the four chained agents pass data only through durable workflow state. |
+| Agents operate only within declared scope | **Not built.** Manifests are schema-validated, but monotonic permission narrowing is not computed or enforced at invocation (ADR-0023). |
+| No agent bypasses a quality gate | **Vacuously true.** No Quality Gate Engine exists; nothing evaluates a gate anywhere (ADR-0006). |
+| No unapproved governance decision proceeds | **Not built.** The `approvals` table exists with no writer or reader; a `human_approval` step completes as a NoOp instead of pausing (ADR-0007). |
+| Every significant action is logged | **Partly real.** Workflow events are append-only and complete; the separate `audit_log` table exists with no writer, no hash chain, and no verification job (ADR-0017). |
+| No secret is exposed | **Real for what exists.** `SecretValue` redacts on stringification and no secret is injected into a sandbox; only the `env` backend exists, and there is no per-access audit or prompt-scanning defence (ADR-0024). |
+| Documentation stays current | **Manual.** Enforced by the standing rules in `../process/standing_rules.md` and periodic audits; there is no documentation quality gate and no contract snapshot test. |
+| Every significant decision is recorded | **Real.** 25 ADRs Accepted, indexed at `../18_decision_log/README.md`, each carrying an appended implementation-status note. |
+
+Per-module detail: [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md).
+
+---
+
+## Related Documents
+
+**Above this framework**
+- [`project_constitution.md`](project_constitution.md) — supreme governing document; this framework operates under its authority
+
+**Decisions that amend or implement these rules**
+- [`../18_decision_log/README.md`](../18_decision_log/README.md) — Decision Log index, 25 Accepted ADRs
+- [`../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md`](../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md) — amended the *Reproducible Engineering* principle above
+- [`../18_decision_log/adr/ADR-0005-agents-never-communicate-directly.md`](../18_decision_log/adr/ADR-0005-agents-never-communicate-directly.md) — *Separation of Responsibilities*
+- [`../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md`](../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) — *Quality Governance*
+- [`../18_decision_log/adr/ADR-0007-human-governance-for-critical-decisions.md`](../18_decision_log/adr/ADR-0007-human-governance-for-critical-decisions.md) — *Human Approval Points*
+- [`../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md`](../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md) and [`ADR-0023`](../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md), [`ADR-0024`](../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — *Security Governance* and *Least Authority*
+
+**Designs these rules govern**
+- [`../03_architecture/governance/human_approval_points.md`](../03_architecture/governance/human_approval_points.md)
+- [`../03_architecture/quality/quality_gates_framework.md`](../03_architecture/quality/quality_gates_framework.md)
+- [`../03_architecture/capability_framework/capability_pack_contract.md`](../03_architecture/capability_framework/capability_pack_contract.md)
+- [`../09_security/security_architecture.md`](../09_security/security_architecture.md)
+- [`../16_observability/observability_stack.md`](../16_observability/observability_stack.md)
+
+**What exists today**
+- [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) · [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_roadmap.md`](../19_roadmap/implementation_roadmap.md)
+- [`../DOCUMENTATION_INDEX.md`](../DOCUMENTATION_INDEX.md) — master index
 
 ---
 

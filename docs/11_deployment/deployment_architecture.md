@@ -8,6 +8,24 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Barely built — this document is close to pure specification.** Read this before treating any deployment artifact below as existing.
+
+**Built:** `infra/docker-compose.yml` (Postgres 16 + pgvector, Redis 7) and `infra/environments/{local,dev,staging,production}.yaml`. Alembic migrations run as a separate command, consistent with the migration-as-Job principle here.
+
+**Not built:**
+- **There is no Dockerfile anywhere in the repository.** Neither documented process role (`api`, `worker`) has an image, so the multi-stage build, digest-pinned bases, non-root uid 10001, and read-only filesystem described below do not exist. CI's image-build stage is deliberately gated off for this reason.
+- **No Kubernetes manifests and no Helm chart.** `infra/kubernetes/` and `infra/terraform/` have no tracked content and are absent from a fresh clone. Every K8s object specified here — Deployments, Service, Ingress, HPA, ConfigMap, ExternalSecret, ServiceAccount, PodDisruptionBudget, and the **NetworkPolicy egress allowlist** — is unbuilt.
+- **No separate sandbox image.** `DockerSandbox` is real and live-verified, but pulls the public `python:3.12-slim` tag; it is **tag-pinned, not digest-pinned**, contrary to the hardening target here and in `../09_security/security_architecture.md` §10.
+- **No worker role deployment.** `run_to_completion` drives a single workflow instance; there is no multi-instance worker loop, so lease-based horizontal scaling is untested in a real deployment.
+- **No backup/restore tooling and no rehearsed restore drill**; no PITR configuration; no offsite audit-log export (the audit log itself has no writer).
+- **No release pipeline, no staging verification, no canary.**
+
+Consequence: AI_OS currently runs only as a local development process against Compose-provided Postgres. Treat this document as the Stage G target, not a description of a deployable system.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document specifies how AI_OS is packaged, configured, and deployed, and how it scales. It implements [ADR-0020](../18_decision_log/adr/ADR-0020-deployment-topology-and-scaling.md).

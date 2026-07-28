@@ -65,3 +65,13 @@ Complies with the Constitution (Article 6: Secret Management) and the Secrets Ma
 
 - `docs/09_security/security_architecture.md`
 - `docs/03_architecture/services/git_integration.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+The mechanism is real: `secret://<provider>/<name>` references are parsed and resolved at point of use through a `SecretProvider` Protocol, and resolved values are wrapped in a `SecretValue` that redacts on `str`/`repr` (`ai_os_kernel/secrets_manager/`) — the Gateway's Anthropic key and the JWT signing key both flow through it. Only the `env` backend exists: no encrypted-file, Vault, or cloud adapter, no TTL cache or rotation signal, no per-access audit record, no prompt-scanning defence, and no Git Integration Service to hold credentials on the sandbox's behalf (rule 4 holds today only because nothing injects secrets at all).
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

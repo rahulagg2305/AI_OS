@@ -78,3 +78,13 @@ Complies with the Constitution (Article 6: Least Privilege, Secure Defaults) and
 
 - `docs/09_security/authentication_authorization.md`
 - `docs/03_architecture/capability_framework/manifest_schema.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+The Security Manager authenticates bearer JWTs against a **pre-shared signing secret, not OIDC**, and enforces 4 permissions across 9 HTTP routes, deny-by-default. The decision's substance is not yet in force: none of the five roles exist, agents are not derived principals with a `SecurityContext`, and the monotonic narrowing intersection (principal ∩ workflow ∩ agent ∩ tool) is not computed or enforced end to end. Single-tenancy holds trivially, by absence of any tenant concept.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

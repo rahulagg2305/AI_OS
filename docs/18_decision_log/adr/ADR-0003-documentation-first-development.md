@@ -44,3 +44,13 @@ Complies with the Project Constitution, Articles 1 and 3.
 ## References
 
 - `docs/19_roadmap/documentation_freeze.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Fully implemented
+
+This is a process decision rather than code, and it is in force: contracts are documented before implementation, every step's rationale is recorded in `docs/19_roadmap/history/`, and `CLAUDE.md` makes the documentation set — never chat history — the resumption point for each session. `workspace/prototypes/` exists and is empty, so the prototype exemption has not yet been used.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

@@ -58,3 +58,13 @@ Complies with `docs/03_architecture/kernel/event_bus.md` and the Constitution's 
 ## References
 
 - [ADR-0011](ADR-0011-persistence-and-workflow-state.md), [ADR-0020](ADR-0020-deployment-topology-and-scaling.md)
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Not yet implemented
+
+`ai_os_kernel.event_bus` is a docstring-only stub — there is no in-process asyncio bus, no event envelope type, no publisher, and no subscriber anywhere in the codebase. The only part of this decision that exists is the `platform.event_outbox` table in the persistence schema, which has no writer and no relay.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

@@ -56,3 +56,13 @@ Complies with `docs/03_architecture/services/search_vector_search.md` (backend-a
 ## References
 
 - `docs/08_database/data_model.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+`knowledge.documents` and `knowledge.chunks` exist with a real writer and a PostgreSQL full-text keyword-search reader (in `ai_os_kernel/persistence/`), integration-tested against the `pgvector/pgvector:pg16` image. Everything vector-side is absent: no embeddings are ever generated (the Gateway has no `embed()`), no HNSW index, no cosine search, no Reciprocal Rank Fusion, no Search Service, and no consumer — the Context Manager does not read from this index at all yet.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

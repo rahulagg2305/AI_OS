@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built.** Real: `structlog` JSON logging with trace-context binding, a real OpenTelemetry `TracerProvider` creating a genuine span per HTTP request, and **exactly one** metric (`aios.http.requests`). All exporters are **console only**.
+
+**Not built:** OTLP export and the OpenTelemetry Collector (so nothing leaves the process), the Prometheus/Tempo/Loki/Grafana backends, the Compose observability profile, and every metric in `../../16_observability/observability_stack.md` §3.1 beyond the one above — no workflow, LLM, gate, or sandbox metrics. **The audit path does not exist at all**: `governance.audit_log` is a table with no writer, no `row_hash`/`prev_hash` computed, and no daily verification job, so the append-only hash-chain guarantee is unenforced. Outstanding Stage A/G work.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
 ## Purpose
 
 This document defines the enterprise observability architecture for AI_OS, including structured logging, metrics, distributed tracing, audit logging, health monitoring, dashboards, alerting, telemetry governance and replay capabilities.

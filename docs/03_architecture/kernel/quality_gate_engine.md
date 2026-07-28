@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing.** `kernel/src/ai_os_kernel/quality_gate_engine/` contains a docstring-only `__init__.py` and zero other `.py` files. **Nothing in AI_OS enforces any quality gate today.** No Gate Registry, no Gate Executor, no Result Evaluator, no Policy Enforcer. The `quality_gate` workflow step type completes as a no-op via `NoOpStepExecutor`; `evaluation.gate_results` exists as a table with no writer; the Software Engineering pack declares no gates.
+
+The [ADR-0006](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) invariant that blocking gates cannot be skipped is therefore an **architectural commitment, not an enforced mechanism**. Outstanding Stage B deliverable. Framework-level policy: `../quality/quality_gates_framework.md`.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 This document defines the detailed design of the **Quality Gate Engine**, a core component of the AI_OS Platform Kernel.

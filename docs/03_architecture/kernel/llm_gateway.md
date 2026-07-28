@@ -26,11 +26,23 @@ Version 2.0 adds the tool-calling, structured-output, streaming, capability-nego
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built:** `kernel/src/ai_os_kernel/llm_gateway/` (11 modules) plus `adapters/` (`anthropic_adapter.py`, `local_adapter.py`, `model_config.py`). Real: the `LLMGateway` Protocol and `DispatchingLLMGateway` (`gateway.py`); `complete()`; the `StaticRouter` with per-alias `RoutingDecision` and real multi-candidate fallback chains via `build_routing_chain` (`router.py`), driven by `config/llm.yaml`; the Capability Negotiator matrix and its degradation rules (`capability_negotiator.py`); the Retry & Fallback Manager as three cooperating modules — `error_taxonomy.py` (mapping provider errors into the platform's single taxonomy, §10), `backoff.py` (exponential with jitter), `circuit_breaker.py` (per-provider open/half-open); the request/response contracts of §4 and §5 (`models.py`); `budget_enforcer.py`; `call_recorder.py`; `ids.py`; `errors.py`. `AnthropicAdapter` and `LocalAdapter` are both real and network-calling. Composition happens in `kernel/src/ai_os_kernel/bootstrap.py`, which builds the router from `config/llm.yaml` and merges adapters into one `DispatchingLLMGateway`.
+
+**Not built:** **no `stream()`** — §4.3's `LLMStreamEvent` set is specified but unimplemented, and `complete()` does not internally stream for large `max_output_tokens` as §4.3 describes. **No `embed()`** — §11's embedding contract has no implementation, which is why no vector is ever written to `knowledge.embeddings`. **No `count_tokens()`** — §12's provider-endpoint token counting does not exist, so the only token estimate in the platform is the Context Manager's character-length heuristic. **No Rate Limiter** — the per-principal rate-limit row in §9 and the `llm.rate_limited` handling of an outbound limiter are absent (Redis, the intended backing store, is used by no Kernel code at all). **2 of §9's 5 pre-call checks are real** (per-alias and per-workflow ceilings); the per-experiment ceiling, the allowed-model policy check, and the context-window-fit pre-check are not. **No Prompt Cache Planner** — §8's breakpoint placement is unimplemented, and `cache_boundary_index` is not produced by the Prompt Engine either. No **Request Validator** as a distinct component; no **Response Normalizer** beyond what each adapter returns directly. Tool-calling (§4.1) and structured-output emulation (§4.2) exist as models but are not exercised end to end. §13's `evaluation.llm_calls` row: the table and `call_recorder.py` exist, but the Evaluation Engine that consumes them does not. Only `anthropic` is registered by default — `LocalAdapter` and cross-provider fallback are real but commented out in checked-in configuration. §14's shared adapter conformance suite does not exist (`tests/contract/` does not exist at all).
+
+**One enforcement claim in §2 is currently false and is flagged there:** the import-boundary check is present in `.github/workflows/ci.yml` but **gated off** — it runs only `if hashFiles('scripts/check_import_boundaries.py') != ''`, and that script does not exist. The adapter-only import rule is therefore convention today, not enforcement.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `006_llm_gateway_and_prompt_engine_foundation.md`, `008_first_real_llm_integration_and_prompted_agent.md`, `011_llm_gateway_advanced_router_retry_budget.md`).
+
+---
+
 ## 2. Scope — what passes through the Gateway
 
 **All of it.** Generation, tool-using generation, structured output, streaming, token counting, **and embeddings**. Embeddings are included deliberately: they are provider calls with cost and dimensionality consequences, and excluding them would create a second, unaccounted egress path ([ADR-0013](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md)).
 
-Provider SDKs may be imported **only** inside `kernel/llm_gateway/adapters/`. This is enforced by an import-boundary check in CI, not by convention.
+Provider SDKs may be imported **only** inside `kernel/src/ai_os_kernel/llm_gateway/adapters/` (this document previously gave the path as `kernel/llm_gateway/adapters/`, which does not exist — the package root is `kernel/src/ai_os_kernel/`). The rule is intended to be enforced by an import-boundary check in CI rather than by convention. **Accuracy note (2026-07-28): that enforcement is not yet live.** `.github/workflows/ci.yml` declares an "Import boundary check" step, but it is conditioned on `hashFiles('scripts/check_import_boundaries.py')` and that script does not exist, so the step never runs. Today the boundary holds by convention only; building the checker is the named gap that makes this paragraph true.
 
 ---
 
@@ -202,7 +214,9 @@ aliases:
       - {provider: <configured>, model: <configured>, dimensions: 1536}
 ```
 
-Routing inputs: the alias chain, provider health (circuit-breaker state), rate-limit headroom, budget policy, and — decisively — **experiment pinning**. When a request carries an `experiment_id`, the Experiment Manager's pinned model overrides ordinary routing, and fallback is disabled unless the experiment declares it, because a silent fallback mid-experiment would substitute a different model than the one being measured.
+Routing inputs: the alias chain, provider health (circuit-breaker state), rate-limit headroom, budget policy, and — decisively — **experiment pinning**. When a request carries an `experiment_id`, the experiment's pinned model overrides ordinary routing, and fallback is disabled unless the experiment declares it, because a silent fallback mid-experiment would substitute a different model than the one being measured.
+
+*Naming correction (2026-07-28): earlier revisions attributed the pin to an "Experiment Manager." No such component exists or is to be built — `evaluation_engine.md` §5.1 explicitly decides against one. The pin's real owners are the Benchmarking Pack (which defines the experiment), the Configuration Manager's isolated experiment-override layer (`configuration_manager.md` §4, layer 6), and this component (which applies it). None of the three is built: there is no experiment mechanism anywhere in the codebase, so experiment pinning is specified and unimplemented.*
 
 ---
 
@@ -287,13 +301,15 @@ Metrics: `aios.llm.requests`, `.tokens`, `.cost_usd`, `.latency_ms`, `.retries`,
 
 ## 14. Adding a Provider
 
-1. Implement the adapter Protocol in `kernel/llm_gateway/adapters/`.
+1. Implement the adapter Protocol in `kernel/src/ai_os_kernel/llm_gateway/adapters/`.
 2. Declare its `ProviderCapabilities`.
 3. Add pricing to configuration.
 4. Pass the shared adapter conformance suite (the same suite every adapter passes).
-5. Add the alias mapping.
+5. Add the alias mapping (`config/llm.yaml`, read by `kernel/src/ai_os_kernel/bootstrap.py`).
 
-No change to any agent, pack, or workflow. That property is the point of the whole component (NFR-101).
+No change to any agent, pack, or workflow. That property is the point of the whole component (`../../02_requirements/non_functional/nfr.md`, NFR-101) and it has been exercised for real once: `LocalAdapter` was added as a second provider without touching any agent, pack, or workflow.
+
+**Step 4 is currently unsatisfiable and is the named gap in this procedure:** no shared adapter conformance suite exists. `tests/contract/` does not exist at all, and CI's contract stage is gated off (`if hashFiles('tests/contract/**') != ''`). Both existing adapters have their own hand-written unit tests (`tests/unit/kernel/llm_gateway/adapters/`) rather than a shared suite, so "the same suite every adapter passes" is aspirational until that suite is written.
 
 ---
 
@@ -316,3 +332,43 @@ Order of precedence:
 5. Architecture Decision Records
 6. LLM Gateway Architecture (this document)
 7. Source Code
+
+---
+
+## 17. Related Documents
+
+**Governing decisions (ADRs):**
+- [ADR-0002 — LLM Gateway Single Entry Point](../../18_decision_log/adr/ADR-0002-llm-gateway-single-entry-point.md) — the governing decision for this component
+- [ADR-0013 — Search and Vector Store](../../18_decision_log/adr/ADR-0013-search-and-vector-store.md) — why embeddings pass through this Gateway (§2, §11)
+- [ADR-0025 — Caching Strategy](../../18_decision_log/adr/ADR-0025-caching-strategy.md) — prompt-cache breakpoints (§8), response caching off for experiments
+- [ADR-0022 — Reproducibility over Determinism](../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md) — experiment pinning, no silent fallback (§7)
+- [ADR-0024 — Secrets Management Backend](../../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — provider credentials as `secret://` references
+- [ADR-0017 — Observability Stack](../../18_decision_log/adr/ADR-0017-observability-stack.md) — the span and metric conventions in §13
+- [ADR-0015 — Testing and CI](../../18_decision_log/adr/ADR-0015-testing-and-ci.md) — the adapter conformance suite and the import-boundary check
+- [ADR-0008 — Primary Language and Runtime](../../18_decision_log/adr/ADR-0008-primary-language-and-runtime.md)
+
+**Superior documents:**
+- `../platform/system_architecture.md`
+- `kernel_architecture.md`
+- `../capability_framework/capability_pack_contract.md` — provider SDK imports are prohibited in pack code
+- `../platform/technology_stack.md`
+
+**Interacting subsystems:**
+- `prompt_engine.md` — produces the rendered prompt and the `cache_boundary_index` this Gateway consumes (§8, §12 there)
+- `context_manager.md` — assembles what goes into that prompt; its `trust` tags decide what may be placed after the cache boundary
+- `workflow_engine.md` — owns step-level retry; this Gateway owns provider-level retry, and §10 is the single boundary that keeps retries from multiplying
+- `configuration_manager.md` — supplies `config/llm.yaml` aliases, pricing, budgets, and routing rules
+- `security_manager.md` — provider credentials, allowed-model policy, per-principal rate limiting
+- `evaluation_engine.md` — the sole consumer of this Gateway's cost and usage data
+- `observability.md` — the telemetry conventions §13 follows
+- `knowledge_manager.md` / `../services/search_vector_search.md` — consumers of `embed()` (§11), unbuilt
+- `../workflow/error_handling_retry.md` — the platform's **single** error taxonomy that §10 maps into; there is no Gateway-specific taxonomy
+- `../platform/platform_sdk.md` §5.1 `LLMGateway` — the pack-facing Protocol (specified, not built)
+
+**Owned tables:**
+- `../../08_database/data_model.md` §6 — `evaluation.llm_calls` is written by this component and by nothing else
+
+**Reference:**
+- `../../02_requirements/non_functional/nfr.md` — NFR-043 (cache hit-rate alerting), NFR-101 (provider substitution without pack changes)
+- `../../20_glossary/glossary.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`

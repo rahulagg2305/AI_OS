@@ -58,3 +58,13 @@ Complies with the Dashboard Architecture (client of the platform, no embedded bu
 ## References
 
 - `docs/13_dashboard/monitoring_experiment_views.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Not yet implemented
+
+`dashboard/` is an empty directory. No TypeScript, React, Vite, or generated OpenAPI client exists anywhere in the repository, and the WebSocket endpoint the Dashboard would consume is itself unbuilt (see ADR-0014). This decision is scheduled for Stage F.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

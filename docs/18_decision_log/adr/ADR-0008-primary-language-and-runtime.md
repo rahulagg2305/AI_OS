@@ -62,3 +62,13 @@ Complies with the Constitution's requirement that architecture be documented and
 
 - `docs/03_architecture/platform/technology_stack.md`
 - [ADR-0009](ADR-0009-packaging-and-dependency-management.md), [ADR-0010](ADR-0010-composition-and-dependency-injection.md)
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Partially implemented
+
+The language-level discipline holds: Python 3.12 (`requires-python = ">=3.12,<3.14"`), `mypy --strict` clean across 283 source files, `typing.Protocol` rather than ABCs at every seam, Pydantic v2 at every external boundary, and asyncio end to end. The one decided element missing is the typed exception hierarchy rooted at `AiOsError` — no such root class exists anywhere; each subsystem defines its own independent error hierarchy instead (`sandbox/errors.py`, `secrets_manager/errors.py`, `capability_manager/errors.py`, and others).
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

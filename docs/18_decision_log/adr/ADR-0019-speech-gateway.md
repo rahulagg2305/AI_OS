@@ -52,3 +52,13 @@ Complies with the Capability Pack Contract (no provider integrations or secrets 
 ## References
 
 - `docs/06_capability_packs/voice_jarvis/overview.md`
+
+---
+
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+
+**Status in code:** Not yet implemented
+
+`platform_services/` contains no files at all, so there is no Speech Gateway, no STT, TTS, or wake-word adapter, and no Voice Capability Pack. This decision is scheduled for Stage F and nothing about it has been started.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

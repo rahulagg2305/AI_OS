@@ -23,6 +23,16 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built:** Nothing — this component is a documented design only; `kernel/src/ai_os_kernel/event_bus/` contains a docstring-only `__init__.py` and zero other `.py` files. The single real artifact anywhere in the codebase is the **table**: `platform.event_outbox`, defined in `kernel/src/ai_os_kernel/persistence/platform_schema.py` and specified in `../../08_database/data_model.md` §10. It has no writer and no reader.
+
+**Not built:** every element of §4 — no `EventBus` Protocol (in the Kernel or in the Platform SDK), no in-process `asyncio` pub/sub, no bounded per-subscriber queues, no Outbox Relay, no Topic/Channel Manager, no Schema Registry of typed Pydantic event models, no observability hook. Nothing publishes to `platform.event_outbox`, so the failure mode §4 exists to prevent — committing a state change and losing its event — is currently avoided only by there being no cross-process observers at all. §5's event contract has no code shape. §7's claimed publishers do not publish: the Workflow Engine writes lifecycle rows to `workflow.workflow_events` (its own event-sourcing log, a different thing from this bus) and emits no events here; the Quality Gate Engine and Capability Manager publish nothing. **Redis is provisioned in `docker-compose` but no Kernel code uses Redis at all**, so the documented Redis Streams scale-out path in §4 has no starting point to migrate from. `LISTEN/NOTIFY` is not used. Roadmap stage: **B** — this is one of the components blocking Stage B exit.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md`.
+
+---
+
 ## 2. Design Goals
 
 The Event Bus must:
@@ -73,7 +83,7 @@ The outbox exists because of a specific failure mode: committing a state change 
 
 **Delivery is at-least-once.** Subscribers must be idempotent on `event_id` — this is a contract, not a recommendation, and it is the property that survives the transport change below.
 
-**Scale trigger → Redis Streams** (same Protocol, no call-site changes): multi-process consumption of the same stream, Dashboard served by separate processes, outbox relay lag > 5 s p95 (NFR-023), or a consumer needing independent scaling. Redis rather than Kafka or NATS because Redis is already a platform dependency for caching and rate limiting.
+**Scale trigger → Redis Streams** (same Protocol, no call-site changes): multi-process consumption of the same stream, Dashboard served by separate processes, outbox relay lag > 5 s p95 (`../../02_requirements/non_functional/nfr.md`, NFR-023), or a consumer needing independent scaling. Redis rather than Kafka or NATS because Redis is already a **declared** platform dependency for caching ([ADR-0025](../../18_decision_log/adr/ADR-0025-caching-strategy.md)) and per-principal rate limiting, and is provisioned in `docker-compose.yml`. Accuracy note (2026-07-28): that dependency is declared, not yet exercised — **no Kernel code uses Redis at all**, and neither the cache nor the rate limiter is built, so adopting Streams would be Redis's first real use rather than a reuse of an existing client.
 
 `LISTEN/NOTIFY` is used only as an optional low-latency wake-up hint for the relay — never as a delivery guarantee, since notifications are dropped when no listener is connected.
 
@@ -124,9 +134,15 @@ The Event Bus itself must emit metrics and logs about:
 
 ## 9. Current Status
 
-This document defines the design baseline for the Event Bus.
+This document defines the design baseline for the Event Bus. **The three items v1.0 of this section deferred were all decided by [ADR-0012](../../18_decision_log/adr/ADR-0012-event-bus.md), and §4 above already records the decisions** — this section previously contradicted §4 by describing them as unresolved. Corrected:
 
-Concrete technology choice (in-process, message broker, etc.), delivery guarantees, and schema management details will be refined during implementation.
+| Item | Decision | Deciding authority |
+|---|---|---|
+| **Concrete technology choice** | Not open. In-process `asyncio` pub/sub is the default transport; a transactional outbox in PostgreSQL handles durable and cross-process events; Redis Streams is the pre-approved scale-out transport behind the same Protocol, adopted only on §4's stated trigger. No message broker (Kafka, NATS) is to be introduced. | [ADR-0012](../../18_decision_log/adr/ADR-0012-event-bus.md), with [ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) for the outbox's same-transaction requirement |
+| **Delivery guarantees** | Not open. **At-least-once**, and subscriber idempotency on `event_id` is a contract, not a recommendation. Ordering is guaranteed only per outbox sequence, never across topics. `LISTEN/NOTIFY` is a latency hint only, never a delivery mechanism. | [ADR-0012](../../18_decision_log/adr/ADR-0012-event-bus.md) |
+| **Schema management** | Not open. Typed, versioned Pydantic v2 event models in a Schema Registry, with `schema_version` on every event (§5). | [ADR-0012](../../18_decision_log/adr/ADR-0012-event-bus.md), [ADR-0008](../../18_decision_log/adr/ADR-0008-primary-language-and-runtime.md) |
+
+**What genuinely remains open** is one narrow, named question, not a technology choice: **the relay's failure policy** — how many delivery attempts an outbox row gets, with what backoff, and where a permanently undeliverable event goes (a dead-letter column on `platform.event_outbox`, a separate table, or an alert-and-halt). At-least-once delivery is meaningless without a bounded retry policy, and the current `platform.event_outbox` schema has no attempt counter or dead-letter destination, so answering it is a schema decision as well as a code one. It should be settled in the same step that builds the relay.
 
 ---
 
@@ -140,3 +156,35 @@ Order of precedence:
 4. Kernel Architecture  
 5. Event Bus Design  
 6. Source Code
+
+---
+
+## 11. Related Documents
+
+**Governing decisions (ADRs):**
+- [ADR-0012 — Event Bus](../../18_decision_log/adr/ADR-0012-event-bus.md) — the governing decision for this component
+- [ADR-0011 — Persistence and Workflow State](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) — the outbox writes in the same transaction as the state change
+- [ADR-0005 — Agents Never Communicate Directly](../../18_decision_log/adr/ADR-0005-agents-never-communicate-directly.md) — why events are notification, never orchestration
+- [ADR-0020 — Deployment Topology and Scaling](../../18_decision_log/adr/ADR-0020-deployment-topology-and-scaling.md) — cross-process events between `api` and `worker`
+- [ADR-0025 — Caching Strategy](../../18_decision_log/adr/ADR-0025-caching-strategy.md) — Redis as a declared platform dependency
+- [ADR-0014 — API Style and Realtime Transport](../../18_decision_log/adr/ADR-0014-api-style-and-realtime-transport.md) — the WebSocket stream that will consume these events
+
+**Superior documents:**
+- `../platform/system_architecture.md`
+- `kernel_architecture.md`
+
+**Publishers and subscribers:**
+- `workflow_engine.md` §5.11 — the primary publisher (lifecycle events); note its own `workflow.workflow_events` log is event *sourcing*, a separate concern from this bus
+- `quality_gate_engine.md`, `capability_manager.md`, `llm_gateway.md` — Kernel publishers
+- `observability.md` — consumes events for tracing and auditing
+- `../platform/platform_sdk.md` §5.7 `EventBus` — the pack-facing Protocol (specified, not built)
+- `../../13_dashboard/dashboard_architecture.md` — the main cross-process subscriber
+- `../../07_api/api_architecture.md` — `/api/v1/stream`, the WebSocket fan-out
+
+**Owned tables:**
+- `../../08_database/data_model.md` §10 — `platform.event_outbox` (and `platform.idempotency_keys`, the related at-least-once companion)
+
+**Reference:**
+- `../../02_requirements/non_functional/nfr.md` — NFR-023, relay lag budget
+- `../../20_glossary/glossary.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`

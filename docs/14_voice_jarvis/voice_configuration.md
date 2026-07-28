@@ -8,6 +8,12 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** No Voice/Jarvis code exists: `capability_packs/voice_jarvis/` has **no tracked content**, and the platform-level Speech Gateway it depends on (per [ADR-0019](../18_decision_log/adr/ADR-0019-speech-gateway.md)) is likewise 0% built. There is no wake-word engine, no STT/TTS adapter, no intent engine, and no voice session manager anywhere in the codebase. Stage F deliverable. No configuration key documented here is read by any code, and no schema for them exists in `config/`.
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines the configuration model for the Voice (Jarvis) system in AI_OS.

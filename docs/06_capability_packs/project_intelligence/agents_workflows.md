@@ -8,6 +8,14 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing. This document is a design specification only.** Neither the `existing-project-analyzer` agent nor any of the five workflows below exists; `capability_packs/project_intelligence/` has no tracked content. Stage E deliverable.
+
+Note also that most of the *supporting* agents these workflows invoke from the Software Engineering pack (`security`, `performance`, `refactoring`, `code-reviewer`) are themselves **not built** — see `../software_engineering/agents.md`'s "Currently Implemented Subset".
+
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+
 ## 1. Purpose
 
 This document defines the Agents and major Workflows of the **Project Intelligence Capability Pack**.

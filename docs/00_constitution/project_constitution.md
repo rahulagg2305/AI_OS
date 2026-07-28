@@ -208,3 +208,31 @@ It may only be amended with:
 This Constitution is the supreme governing document of the AI_OS repository.
 
 Every developer, reviewer, architect, AI model, workflow, automation, Capability Pack, and generated artifact shall comply with the principles defined in this document.
+
+---
+
+## Related Documents (appended 2026-07-28 — navigation only, not part of the Constitution)
+
+This section is an additive navigation aid. Under Article 10 the articles above are unchanged; nothing here amends, interprets, or qualifies them.
+
+**Governance, one level down**
+- [`ai_governance_framework.md`](ai_governance_framework.md) — the operational governance rules, under this Constitution's authority
+- [`../18_decision_log/README.md`](../18_decision_log/README.md) — the Decision Log index; Article 8's ADRs, all 25 Accepted
+- [`../18_decision_log/adr/adr_process_and_templates.md`](../18_decision_log/adr/adr_process_and_templates.md) — how ADRs are written, accepted, and superseded
+- [`../21_templates/CODING_STANDARDS_AND_BEST_PRACTICES.md`](../21_templates/CODING_STANDARDS_AND_BEST_PRACTICES.md) — Article 9 rank 5
+
+**Architecture and contracts the principles govern**
+- [`../03_architecture/platform/system_architecture.md`](../03_architecture/platform/system_architecture.md) — Article 9 rank 3
+- [`../03_architecture/kernel/kernel_architecture.md`](../03_architecture/kernel/kernel_architecture.md) — the domain-agnostic Kernel of the Capability Pack Architecture principle
+- [`../03_architecture/capability_framework/capability_pack_contract.md`](../03_architecture/capability_framework/capability_pack_contract.md) — Article 9 rank 6
+- [`../03_architecture/quality/quality_gates_framework.md`](../03_architecture/quality/quality_gates_framework.md) — the "Quality Gates are Mandatory" principle in concrete form
+
+**What actually exists today** (this Constitution states principles; these state delivery)
+- [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — current stage, what exists, current blockers
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) — per-module completion, the authority on "how much of X is built"
+- [`../19_roadmap/implementation_roadmap.md`](../19_roadmap/implementation_roadmap.md) — the Stage A–H delivery sequence
+
+**Orientation**
+- [`../DOCUMENTATION_INDEX.md`](../DOCUMENTATION_INDEX.md) — master index for the whole documentation set
+
+Several principles above are **aspirations the implementation has not yet reached** — most notably "Quality Gates are Mandatory" (nothing enforces a gate in code today) and parts of "Human Governance" (no approval execution path exists yet). That is a delivery gap tracked in the roadmap documents, not a licence to disregard the principle: see [`../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md`](../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) and [`../18_decision_log/adr/ADR-0007-human-governance-for-critical-decisions.md`](../18_decision_log/adr/ADR-0007-human-governance-for-critical-decisions.md) and their appended implementation-status notes.

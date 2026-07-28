@@ -8,6 +8,18 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built — 1 of the 8 patterns below is real.**
+
+**Built:** the **Sequential Pattern** only — `se.delivery_pipeline` chains four agent steps, each step's persisted output reaching the next step's input through a real Context Manager resolver.
+
+**Not built — and structurally blocked, not merely unimplemented:** Parallel, Request-Review-Revise Loop, Human-in-the-Loop Gate, Quality Gate Pipeline, Fan-out/Fan-in, Compensation/Saga, and Experiment. Each depends on a workflow **step type that currently completes as a no-op** — `parallel`, `decision`, `sub_workflow`, `quality_gate`, and `human_approval` are all routed to `NoOpStepExecutor`, so a definition declaring them validates and runs but does nothing at those steps. `joinPolicy` is validated at load time but never honoured at run time. The Experiment pattern additionally needs the Evaluation Engine and Benchmarking pack, both 0% built.
+
+A reader must not infer from a pattern being documented here that a workflow can use it today. Outstanding Stage B/C/D work.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 This document defines the standard workflow patterns that should be used across AI_OS.

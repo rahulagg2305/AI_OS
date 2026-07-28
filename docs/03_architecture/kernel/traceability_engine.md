@@ -8,6 +8,12 @@
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Built: nothing.** `kernel/src/ai_os_kernel/traceability_engine/` contains a docstring-only `__init__.py`. The `trace.artifacts` and `trace.links` tables exist as schema only (migration `0007`) with no writer, no reader, and no impact-analysis query. Nothing creates a link anywhere; the root `traceability/` directory has no tracked content. Stage D deliverable. Data model: `../traceability/traceability_model.md`.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+
 ## 1. Purpose
 
 This document defines the design of the **Traceability Engine**, a core component of the AI_OS Platform Kernel.
