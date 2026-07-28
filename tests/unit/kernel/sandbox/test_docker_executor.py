@@ -78,6 +78,14 @@ def test_docker_sandbox_constructs_with_zero_arguments() -> None:
     )
 
 
+def test_docker_sandbox_python_command_is_python3_not_the_hosts_sys_executable() -> None:
+    """The fix for the real, previously-recorded ``sys.executable``
+    limitation this class's own docstring named: this backend's own
+    container image supplies its interpreter under this name, never the
+    host's own path."""
+    assert DockerSandbox().python_command == ("python3",)
+
+
 def test_docker_sandbox_reports_a_materially_fuller_guarantee_matrix_than_local() -> None:
     """The whole point of this step, made concrete and checkable."""
     from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox

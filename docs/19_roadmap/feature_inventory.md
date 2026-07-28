@@ -207,7 +207,7 @@ Every Kernel component, Platform Service, Capability Pack, and cross-cutting sys
 | 32 | Project Intelligence Pack | Capability Pack |
 | 33 | Voice (Jarvis) Pack | Capability Pack |
 | 34 | Benchmarking Pack | Capability Pack |
-| 35 | Analytics Pack *(undocumented placeholder — see note)* | Capability Pack |
+| 35 | ~~Analytics Pack~~ — **removed 2026-07-28**, see note | Capability Pack |
 | 36 | API (HTTP surface) | Interface |
 | 37 | WebSocket stream (`/api/v1/stream`) | Interface |
 | 38 | CLI (`aios`) | Interface |
@@ -218,7 +218,7 @@ Every Kernel component, Platform Service, Capability Pack, and cross-cutting sys
 | 43 | CI Pipeline | Cross-cutting |
 | 44 | Platform-wide `AiOsError` exception hierarchy | SDK |
 
-**Note on #35:** `capability_packs/analytics/` exists on disk (empty) but has no corresponding entry in any architecture document read for this inventory. Flagged for the product owner to confirm whether it's a planned-but-undocumented pack or stale scaffolding — tracked here rather than silently dropped or invented a purpose for.
+**Note on #35:** `capability_packs/analytics/` was investigated (2026-07-28) — confirmed empty, never git-tracked, and not referenced in any architecture document; `functional_requirements.md` §10 names "analytics" only as an example of an explicitly out-of-v1-scope future domain pack, alongside IoT and finance. Confirmed stale scaffolding, approved for removal, and deleted (see `history/023_docker_sandbox_default_wiring.md`). Row kept, struck through, rather than silently renumbering every row below it — if a real Analytics pack is ever built, it re-enters this table as a new row with its own real percentage, not a resurrection of this one.
 
 ---
 
@@ -278,7 +278,7 @@ Percentages are against each module's own **documented** v1 scope (Section 2), b
 | 17 | Event Bus | B | 5% | schema-only | `platform.event_outbox` table exists; no in-process `asyncio` bus, no relay, no `EventBus` Protocol implementation. |
 | 18 | Tool Invoker (SDK interface) | B | 15% | minimal slice | No `ToolInvoker` Protocol/package exists anywhere. A narrower, workflow-engine-internal substitute (`ToolStepExecutor` + `SandboxedCommandTool`) covers a slice of the same need but isn't the documented, pack-facing interface. |
 | 19 | Secrets Manager | A | 20% | minimal slice | `env` backend only; no file/Vault/cloud backends, no Access Broker, no TTL cache/rotation, no prompt-assembly secret-leak scan. |
-| 20 | Sandbox / SandboxExecutor | C | 65% | minimal slice | Protocol + `LocalSubprocessSandbox` (3/5 guarantees) + `DockerSandbox` (5/5, proven live) all real; not wired in as any agent's default (blocked on a `sys.executable` portability gap); no gVisor option; no egress-proxy dependency-install step. |
+| 20 | Sandbox / SandboxExecutor | C | 80% | functionally complete | **Updated 2026-07-28**: `DockerSandbox` is now the real, config-driven default (`AIOS_SANDBOX_BACKEND`) for the Software Engineering pack's agents; the `sys.executable` portability gap is resolved (`python_command` on the Protocol); a real, Docker-gated end-to-end pipeline test proves network isolation + filesystem containment during an actual generated-code run (not yet executed for real — Docker unavailable this session, see `history/023`). Remaining: digest-pinning the default image, a gVisor option, and the egress-proxy dependency-install step ADR-0016 documents. |
 | 21 | Storage Service | B | 0% | not started | No code; no content-addressed artifact store beyond ad-hoc sandbox temp directories. |
 | 22 | Notification Service | F | 0% | not started | No code, no channels. |
 | 23 | Caching (Redis) | B | 0% | not started | No Redis client usage anywhere in the Kernel despite Redis being provisioned in Compose. |
@@ -293,7 +293,7 @@ Percentages are against each module's own **documented** v1 scope (Section 2), b
 | 32 | Project Intelligence Pack | E | 0% | not started | Directory empty; docs exist, no code. |
 | 33 | Voice (Jarvis) Pack | F | 0% | not started | Directory empty; docs exist, no code. |
 | 34 | Benchmarking Pack | D | 0% | not started | Directory empty; docs exist, no code. |
-| 35 | Analytics Pack | — | 0% | not started | Directory empty; **no architecture document found** — confirm scope/intent with product owner (see Section 3 note). |
+| 35 | ~~Analytics Pack~~ | — | N/A | **removed** | Investigated and deleted 2026-07-28 — confirmed stale, undocumented, never git-tracked. Excluded from Section 6's weighted total. See Section 3 note and `history/023`. |
 | 36 | API (HTTP surface) | B/F | 15% | minimal slice | 9 real authenticated routes vs. ~45 documented across 9 resource groups; no OpenAPI generation/snapshot test, no RFC 9457 error shape (FastAPI default in use), no rate limiting, no `Idempotency-Key` handling. |
 | 37 | WebSocket stream | F | 0% | not started | No `/api/v1/stream` route exists. |
 | 38 | CLI (`aios`) | F | 0% | not started | No CLI package, no entry-point script declared anywhere. |
@@ -308,9 +308,9 @@ Percentages are against each module's own **documented** v1 scope (Section 2), b
 
 ## 6. Overall Progress Summary
 
-**44 modules tracked.** Weighted by each module's relative share of documented v1 scope (core orchestration/security/interface modules weighted higher than peripheral ones):
+**43 modules tracked** (44 rows retained for traceability; #35, Analytics Pack, was investigated and removed 2026-07-28 — excluded from this total, see its own row). Weighted by each module's relative share of documented v1 scope (core orchestration/security/interface modules weighted higher than peripheral ones):
 
-**Overall weighted completion: ≈ 20%.**
+**Overall weighted completion: ≈ 21%** (up from ≈20% — module 20, Sandbox/SandboxExecutor, moved from 65% to 80%/"functionally complete" this step; see `history/023_docker_sandbox_default_wiring.md`).
 
 This is deliberately not a simple average of the percentages above — an unweighted mean would overstate progress, since many 0% rows (Dashboard, CLI, Voice Pack, Notification Service, Speech Gateway) are genuinely large, separate bodies of work, not small missing details.
 

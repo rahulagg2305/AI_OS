@@ -31,5 +31,6 @@ Files are numbered in roughly the order the work happened, grouped by subsystem 
 | `020_docker_sandbox.md` | Real ADR-0016 Tier 1 `DockerSandbox` backend, including the Windows npipe/`detach=True` stdin-EOF bug fix. |
 | `021_documentation_reconciliation_and_verification.md` | Health-audit doc-drift closure, agent-catalog rename (`architect`→`architecture`, `test`→`qa-test`), shared Postgres fixture fix, first full green integration run (218 passed, 10 skipped). |
 | `022_gap_analysis_and_blockers_snapshot.md` | Point-in-time (2026-07-28) snapshot of the old document's full `## 4. What Remains`, `## 5. Blockers / Risks`, and `## 6. Recommended Next Small Step` sections, preserved verbatim before `implementation_status.md` was shortened. |
+| `023_docker_sandbox_default_wiring.md` | Deleted the stale `capability_packs/analytics/` folder; resolved the `sys.executable` portability gap (`python_command` on `SandboxExecutor`); wired `DockerSandbox` in as the Software Engineering pack's real default backend (`AIOS_SANDBOX_BACKEND`); new real, Docker-gated end-to-end pipeline test proving network isolation and filesystem containment during an actual generated-code run. |
 
 For the current, live state (short), see `docs/19_roadmap/implementation_status.md`.

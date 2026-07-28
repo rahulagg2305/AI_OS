@@ -355,3 +355,14 @@ def test_local_subprocess_sandbox_declares_its_real_guarantees_honestly(
         enforces_network_isolation=False,
         enforces_filesystem_containment=False,
     )
+
+
+def test_local_subprocess_sandbox_python_command_is_the_hosts_own_interpreter(
+    sandbox: LocalSubprocessSandbox,
+) -> None:
+    """This backend runs directly on the host, so its own interpreter
+    path is exactly the portable answer — see this module's own
+    docstring's "no hardcoded sys.executable" fix."""
+    import sys
+
+    assert sandbox.python_command == (sys.executable,)

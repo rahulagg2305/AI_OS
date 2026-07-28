@@ -6,6 +6,12 @@ subprocess, so a passing test means a real Markdown file genuinely
 exists on disk afterward, not an assertion about a mock's call
 arguments.
 
+**``sandbox=LocalSubprocessSandbox()`` is now passed explicitly
+(2026-07-28)** — see ``test_build_agent.py``'s own docstring for why:
+this agent's own bare default is now config-driven and defaults to
+`DockerSandbox`, and this file deliberately opts back into the fast,
+Docker-independent backend.
+
 The opt-in live proof (a real LLM producing real documentation content)
 lives under the Kernel's own
 ``tests/integration/workflow_engine/test_documentation_agent_pack.py``.
@@ -29,6 +35,7 @@ from ai_os_kernel.context_manager.models import (
 from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import PromptedCompletionService
+from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.step_executor import AgentStepExecutor
@@ -133,7 +140,7 @@ async def test_documentation_agent_genuinely_writes_a_real_doc_file_through_agen
     async def factory() -> PromptedCompletionService:
         return await _deterministic_service(_TEMPLATE)
 
-    agent = DocumentationAgentEntrypoint(service_factory=factory)
+    agent = DocumentationAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
     context_manager = DefaultContextManager([_FixedPayloadResolver(payload)])
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry, context_manager)
@@ -171,7 +178,7 @@ async def test_documentation_agent_records_a_genuine_failing_test_outcome(tmp_pa
     async def factory() -> PromptedCompletionService:
         return await _deterministic_service(_TEMPLATE)
 
-    agent = DocumentationAgentEntrypoint(service_factory=factory)
+    agent = DocumentationAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
     context_manager = DefaultContextManager([_FixedPayloadResolver(payload)])
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry, context_manager)
@@ -193,7 +200,7 @@ async def test_documentation_agent_via_direct_execute_with_inputs_supplied_direc
     async def factory() -> PromptedCompletionService:
         return await _deterministic_service(_TEMPLATE)
 
-    agent = DocumentationAgentEntrypoint(service_factory=factory)
+    agent = DocumentationAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
 
     outputs = await agent.execute(
         {
@@ -219,7 +226,7 @@ async def test_documentation_agent_rejects_a_missing_file(tmp_path: Path) -> Non
     async def factory() -> PromptedCompletionService:
         return await _deterministic_service(_TEMPLATE)
 
-    agent = DocumentationAgentEntrypoint(service_factory=factory)
+    agent = DocumentationAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
 
     with pytest.raises(DocumentationInstructionError, match="does not exist"):
         await agent.execute(
@@ -242,7 +249,7 @@ async def test_documentation_agent_rejects_a_nonexistent_working_directory(tmp_p
     async def factory() -> PromptedCompletionService:
         return await _deterministic_service(_TEMPLATE)
 
-    agent = DocumentationAgentEntrypoint(service_factory=factory)
+    agent = DocumentationAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
     missing = tmp_path / "does-not-exist"
 
     with pytest.raises(DocumentationInstructionError, match="does not exist or is not a"):

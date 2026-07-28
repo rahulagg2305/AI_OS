@@ -28,6 +28,15 @@ agents in the same run instead of one at a time.
    `pack_id` parameter is a plain, unenforced string column (no FK to
    `catalog.packs` exists — data_model.md §5, confirmed by inspection),
    and `InMemoryAgentRegistry` needs no catalog row to resolve an agent.
+   **`sandbox=LocalSubprocessSandbox()` is passed explicitly to
+   Build/Test/Documentation (2026-07-28)** — each agent's own bare
+   default is now config-driven and defaults to `DockerSandbox`; this
+   tier deliberately opts back into the fast, Docker-independent
+   backend, since proving the four-step hand-off needs a real Postgres
+   container already and gains nothing from also requiring Docker. The
+   real, Docker-gated proof of this same pipeline running through
+   `DockerSandbox` lives in
+   `tests/integration/sandbox/test_delivery_pipeline_docker.py`.
 2. **Opt-in live** (skipped without `AIOS_SECRET_LLM_ANTHROPIC_API_KEY`)
    — the real `SqlAgentRegistry`, resolving all four real pack agents
    from real, seeded `catalog.agents` rows, using this pack's own three
@@ -39,7 +48,10 @@ agents in the same run instead of one at a time.
    needed a substitute prompt specifically because their own `{{context}}`
    placeholder needed a real Context Manager/workflow-instance round
    trip no single-agent test stood up — this test finally *is* that
-   round trip, for real, end to end).
+   round trip, for real, end to end). This tier resolves each agent via
+   `EntrypointLoader`'s own zero-argument `cls()` call, so it now
+   exercises the real, config-driven `DockerSandbox` default too, on top
+   of the real LLM call.
 """
 
 import asyncio
@@ -60,6 +72,7 @@ from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import PromptedCompletionService
+from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry, SqlAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
@@ -167,11 +180,13 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
                 service_factory=architecture_service
             ),
             _AGENT_IDS["build"]: BuildAgentEntrypoint(
-                service_factory=build_service, working_directory=tmp_path
+                service_factory=build_service,
+                working_directory=tmp_path,
+                sandbox=LocalSubprocessSandbox(),
             ),
-            _AGENT_IDS["test"]: TestAgentEntrypoint(),
+            _AGENT_IDS["test"]: TestAgentEntrypoint(sandbox=LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: DocumentationAgentEntrypoint(
-                service_factory=documentation_service
+                service_factory=documentation_service, sandbox=LocalSubprocessSandbox()
             ),
         }
     )

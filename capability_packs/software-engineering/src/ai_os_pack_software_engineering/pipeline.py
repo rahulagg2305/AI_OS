@@ -78,7 +78,6 @@ in this pack, never the reverse.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -92,6 +91,7 @@ from ai_os_kernel.context_manager.resolvers import (
     WorkflowStateResolver,
     WorkflowStepOutputResolver,
 )
+from ai_os_kernel.sandbox.default_executor import default_python_command
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner, WorkflowRunResult
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
@@ -129,8 +129,20 @@ def _run_generated_file_with_python(output: dict[str, Any]) -> dict[str, Any]:
     requires from the Build Agent's own real, now-known ``filePath`` —
     real Python code supplied to `WorkflowStepOutputResolver`'s own
     ``output_transforms`` seam, never a workflow-author-facing
-    expression language declared in the YAML definition itself."""
-    return {**output, "runCommand": [sys.executable, output["filePath"]]}
+    expression language declared in the YAML definition itself.
+
+    **Uses the pipeline's own configured default sandbox backend's
+    interpreter command, not a hardcoded ``sys.executable``.** This
+    function has no sandbox instance of its own to ask (it is a pure
+    transform over a persisted output dict, run by
+    `WorkflowStepOutputResolver`, not a method on any agent) — but the
+    Build and Test agents it hands this ``runCommand`` to both resolve
+    their own default sandbox from the identical `AIOS_SANDBOX_BACKEND`
+    configuration this reads via
+    :func:`~ai_os_kernel.sandbox.default_executor.default_python_command`,
+    so the two stay in agreement without this function needing a
+    sandbox reference of its own."""
+    return {**output, "runCommand": [*default_python_command(), output["filePath"]]}
 
 
 _STEP_SOURCES: dict[str, str | list[str]] = {

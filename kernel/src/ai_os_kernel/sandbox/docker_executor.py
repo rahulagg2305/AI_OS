@@ -63,28 +63,29 @@ genuinely enforced by the Docker Engine itself, not merely attempted:**
   ``max_output_bytes`` per stream, and the container is always killed by
   ``timeout_seconds``.
 
-**The one real, load-bearing limitation this step's own approved scope
-does not extend to fixing — recorded, not silently patched.** This
+**Resolved (2026-07-28): the real, load-bearing ``sys.executable``
+limitation this class's own docstring used to record here.** This
 pack's own agents (``BuildAgentEntrypoint``, ``TestAgentEntrypoint``,
-``DocumentationAgentEntrypoint``) construct ``command`` sequences using
-``sys.executable`` — the *host's own* absolute interpreter path (e.g.
-``C:\\...\\python.exe`` or a venv path under the Kernel's own working
-tree). That path does not exist inside this backend's own container
-filesystem, which has an entirely different, minimal image — running
-those exact commands unmodified against ``DockerSandbox`` today would
-fail with "no such file or directory," not because this backend is
-broken, but because a host-specific interpreter path is not a portable
-command. This step's own approved framing explicitly forbids changing
-any agent/pack code to address this ("Do not change any agent, pack, or
-Workflow Engine code") — wiring ``DockerSandbox`` in as those agents'
-own default, and resolving how a portable interpreter invocation
-reaches a container image, is therefore explicitly out of scope here
-and recorded as the necessary follow-up in
-``docs/19_roadmap/implementation_status.md`` (§6), not silently
-patched. This class's own tests instead use commands that are portable
-across host and container by construction (``python3``/``sh`` resolved
-via the container image's own ``PATH``), which is a legitimate way to
-prove this backend's own guarantees without touching any agent.
+``DocumentationAgentEntrypoint``) and its own pipeline composition
+(``ai_os_pack_software_engineering.pipeline``) previously constructed
+``command`` sequences using ``sys.executable`` — the *host's own*
+absolute interpreter path (e.g. ``C:\\...\\python.exe`` or a venv path
+under the Kernel's own working tree). That path never existed inside
+this backend's own container filesystem, which has an entirely
+different, minimal image. The fix: :attr:`python_command` (below) — a
+new property on the ``SandboxExecutor`` Protocol itself, so each
+backend declares its own correct, portable interpreter invocation
+(``sys.executable`` for :class:`~ai_os_kernel.sandbox.executor.
+LocalSubprocessSandbox`, ``python3`` here) and every caller asks its
+*injected* sandbox instead of guessing. This class's own tests already
+used commands portable by construction (``python3``/``sh`` resolved via
+the container image's own ``PATH``) — the same fact that made this
+property's own value obvious once the seam existed to hold it.
+``DockerSandbox`` is now genuinely wired in as this pack's own real
+default backend (see ``ai_os_kernel.sandbox.default_executor``),
+``LocalSubprocessSandbox`` remaining explicitly selectable via
+``AIOS_SANDBOX_BACKEND=local`` — see that module's own docstring for the
+config-driven selection mechanism and its reasoning.
 
 **Client library: the official ``docker`` (docker-py) SDK.** Already an
 effective transitive dependency of this project's own dev tooling
@@ -150,6 +151,15 @@ _DEFAULT_TMPFS_SIZE = "64m"
 
 _CONTAINER_WORKDIR = "/workspace"
 _CONTAINER_TMPDIR = "/tmp"  # noqa: S108 — the in-container tmpfs mount point, not a host path
+
+# The portable interpreter invocation for this backend's own image
+# (see `python_command` below): `_DEFAULT_IMAGE`'s official Debian-based
+# Python image always provides `python3` on PATH — the image's own
+# interpreter, never the host's. A caller-overridden `image` is expected
+# to be Python-based too (this backend's own docstring: "matching this
+# project's own Python 3.12 requirement"); a non-Python image has no
+# reason to go through this property at all.
+_CONTAINER_PYTHON_COMMAND: tuple[str, ...] = ("python3",)
 
 
 class DockerSandboxUnavailableError(SandboxExecutionError):
@@ -217,6 +227,18 @@ class DockerSandbox:
     @property
     def guarantees(self) -> SandboxGuarantees:
         return _DOCKER_SANDBOX_GUARANTEES
+
+    @property
+    def python_command(self) -> tuple[str, ...]:
+        """``python3`` — resolved via this backend's own container
+        image's own ``PATH``, never the host's ``sys.executable`` (which
+        does not exist inside the container's filesystem at all). This
+        is the fix for the real, previously-recorded limitation this
+        module's own docstring named: agent code that hardcoded
+        ``sys.executable`` could not run against this backend. A caller
+        that asks its injected sandbox for ``python_command`` instead
+        works unmodified against both backends."""
+        return _CONTAINER_PYTHON_COMMAND
 
     async def execute(
         self,

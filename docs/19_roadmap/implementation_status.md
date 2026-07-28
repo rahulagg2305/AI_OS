@@ -4,7 +4,7 @@
 **Document:** Implementation Status
 **Version:** 2.0 (restructured short form)
 **Status:** Active
-**Last Updated:** 2026-07-28 (analysis/documentation step: full feature/module/phase inventory with a tracked completion table built — see `docs/19_roadmap/feature_inventory.md`. No feature/code changes.)
+**Last Updated:** 2026-07-28 (deleted the stale `capability_packs/analytics/` folder; resolved the `sys.executable` portability gap and wired `DockerSandbox` in as the Software Engineering pack's real default sandbox backend, `LocalSubprocessSandbox` remaining explicitly selectable. See `history/023_docker_sandbox_default_wiring.md`.)
 
 ---
 
@@ -20,11 +20,11 @@ This document is deliberately **short** — current stage, what exists, current 
 
 ## 2. Current Stage
 
-**Stage A – Platform Skeleton** is process-complete but not exit-criteria-complete (see §4). **Stage B – Minimum Viable Kernel** is underway and has reached a real, demonstrable milestone: a complete four-agent software-engineering delivery pipeline (Architecture → Build → Test → Documentation) runs end to end through the real Workflow Engine, with a real (though not yet default) Tier 1 sandbox backend (`DockerSandbox`) proven against a live daemon.
+**Stage A – Platform Skeleton** is process-complete but not exit-criteria-complete (see §4). **Stage B – Minimum Viable Kernel** is underway and has reached a real, demonstrable milestone: a complete four-agent software-engineering delivery pipeline (Architecture → Build → Test → Documentation) runs end to end through the real Workflow Engine, now through **`DockerSandbox` as the genuine default Tier 1 sandbox backend** (config-driven via `AIOS_SANDBOX_BACKEND`, `LocalSubprocessSandbox` remaining explicitly selectable) — the last real safety gap on this pipeline is closed.
 
-As of the last development step (2026-07-28, "Documentation Reconciliation and Verification"): **616 unit tests passing, 218 integration tests passing, 10 correctly skipped** (missing live API key), 0 failed. `mypy --strict` and `ruff` clean throughout.
+As of this step: **625 unit tests passing** (kernel + Software Engineering pack), **229 integration tests collected, 0 failed** (all 229 skipped this session — Docker Desktop unavailable; see §4). `mypy --strict` (280 source files) and `ruff` clean throughout. The new, Docker-gated end-to-end proof (`tests/integration/sandbox/test_delivery_pipeline_docker.py`) has not yet executed for real this session — the single highest-priority re-verification item once Docker Desktop is available.
 
-The prior step (2026-07-28) was infrastructure-only: git repository initialized, `CLAUDE.md` + `docs/process/` created, this document's own history split into `docs/19_roadmap/history/`. This step (also 2026-07-28) is analysis/documentation-only: a complete feature/module/phase inventory with a tracked completion table was built — see `docs/19_roadmap/feature_inventory.md`. Neither step touched code.
+Two prior steps (2026-07-28) were documentation-only: an infrastructure/history-split step, then a full feature/module/phase inventory (`docs/19_roadmap/feature_inventory.md`). This step returns to feature development.
 
 ---
 
@@ -40,11 +40,11 @@ The prior step (2026-07-28) was infrastructure-only: git repository initialized,
 - **Security Manager**: bearer-token JWT auth, 4 permissions, fronting 9 HTTP routes — all narrower than their documented contracts. Not OIDC. → `history/009`.
 - **Context Manager**: `WorkflowStateResolver` + `WorkflowStepOutputResolver`, Size & Token Budget Enforcer. 1 of 6 documented sources built. → `history/012`.
 - **Retrieval**: `knowledge.documents`/`chunks` writer + keyword-search reader. No vector/hybrid search, no consumer yet. → `history/013`.
-- **Sandbox & Tool execution**: `LocalSubprocessSandbox` (3/5 guarantees, every agent's current default) and `DockerSandbox` (5/5, ADR-0016 Tier 1, proven live) both implement `SandboxExecutor`; `SandboxedCommandTool` + `ToolStepExecutor` dispatch. → `history/014`, `020`.
-- **Software Engineering Capability Pack**: Architecture, Build, Test, and Documentation agents, all real, chained into one declared workflow (`se.delivery_pipeline`) via `WorkflowStepOutputResolver`. → `history/015`–`019`.
+- **Sandbox & Tool execution**: `LocalSubprocessSandbox` (3/5 guarantees) and `DockerSandbox` (5/5, ADR-0016 Tier 1, proven live) both implement `SandboxExecutor`, each now declaring its own `python_command`; `SandboxedCommandTool` + `ToolStepExecutor` dispatch; `ai_os_kernel.sandbox.default_executor` resolves the real default from `AIOS_SANDBOX_BACKEND` (`"docker"` unless set to `"local"`). → `history/014`, `020`, `023`.
+- **Software Engineering Capability Pack**: Architecture, Build, Test, and Documentation agents, all real, chained into one declared workflow (`se.delivery_pipeline`) via `WorkflowStepOutputResolver`, now defaulting to `DockerSandbox`. → `history/015`–`019`, `023`.
 - **Documentation reconciliation**: agent-catalog naming fixed (`architecture`/`qa-test`/`build`), doc-drift closed, shared Postgres test fixture (`tests/integration/_postgres_fixture.py`) skips cleanly without Docker. → `history/021`.
-- **Infrastructure step**: git repository + `CLAUDE.md`/`docs/process/` + this history split.
-- **This step**: full feature/module/phase inventory with a tracked, weighted completion table (44 modules, ≈20% overall) — see `docs/19_roadmap/feature_inventory.md`. Update that document's own table at the end of every future step, alongside this one.
+- **Feature/module/phase inventory**: tracked, weighted completion table (44 modules, ≈20% overall at the time) — see `docs/19_roadmap/feature_inventory.md`. Update that document's own table at the end of every future step.
+- **This step**: `capability_packs/analytics/` (stale, undocumented) deleted; `DockerSandbox` wired in as the SE pack's real default sandbox; a new real, Docker-gated end-to-end pipeline test proves network isolation and filesystem containment during an actual generated-code run. → `history/023`.
 
 ---
 
@@ -52,7 +52,7 @@ The prior step (2026-07-28) was infrastructure-only: git repository initialized,
 
 Full detail (every gap, every reasoning) is preserved verbatim in `history/022_gap_analysis_and_blockers_snapshot.md`. The load-bearing ones, distilled:
 
-- **`DockerSandbox` is real and proven but not wired in as any agent's default.** Blocked on `sys.executable` not being portable into its container image — this is the recommended next step (§6).
+- **The new Docker-gated end-to-end pipeline test has not yet executed for real** — Docker Desktop was unavailable this session (see below); re-running it (and every other Docker/Postgres-gated integration test) is the single highest-priority re-verification item once it's available.
 - **Only one LLM provider (`anthropic`) is registered by default**; `LocalAdapter`/cross-provider fallback exist but are commented out in checked-in config.
 - **Security Manager is pre-shared-secret JWT, not real OIDC** — not production-credible as-is.
 - **No pack discovery, upgrade path, health monitoring, or permissions enforcement** in the Capability Manager.
@@ -74,7 +74,7 @@ Per standing rule (`docs/process/standing_rules.md`), every step from now on end
 
 ## 6. Recommended Next Small Step
 
-Both prior candidates are now resolved (the inventory is this step's own output). Recommendation: **return to feature development — resolve the `sys.executable` portability gap and wire `DockerSandbox` in as the Software Engineering pack's default sandbox backend.** This closes the last real safety gap on a pipeline that already runs LLM-generated code (module 20 in `feature_inventory.md`, currently the highest-scoring "minimal slice" row precisely because this one wiring step is what's missing). Full reasoning preserved in `history/022_gap_analysis_and_blockers_snapshot.md` §6.
+The `DockerSandbox`-wiring recommendation from the previous two steps is now done. Recommendation: **re-run the full test suite (unit + integration, including the new `test_delivery_pipeline_docker.py`) once Docker Desktop is available**, to convert this step's "collects and skips cleanly" verification into a real, executed pass — the identical pattern this project has followed every time a step landed while Docker was unavailable. If Docker is available at the start of the next session, do this first, before starting any new feature work. If a new feature step is preferred instead, the next-largest gap per `feature_inventory.md` is Phase C's remaining Software Engineering agents (12 of 16 still unbuilt) or Phase D's Evaluation Engine (schema-only, 0% engine code).
 
 ---
 

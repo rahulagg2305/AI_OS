@@ -94,7 +94,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -111,7 +110,8 @@ from ai_os_kernel.prompted_completion import (
     PromptedCompletionService,
     build_anthropic_prompted_completion_service,
 )
-from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox, SandboxExecutor
+from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
+from ai_os_kernel.sandbox.executor import SandboxExecutor
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 from ai_os_kernel.workflow_engine.prompted_agent import PromptedAgent
 from ai_os_kernel.workflow_engine.sandboxed_tool import SandboxedCommandTool
@@ -362,7 +362,7 @@ class DocumentationAgentEntrypoint:
         sandbox: SandboxExecutor | None = None,
     ) -> None:
         self._service_factory = service_factory or _build_real_service
-        self.sandbox = sandbox or LocalSubprocessSandbox()
+        self.sandbox = sandbox or build_default_sandbox_executor()
         self._agent: PromptedAgent | None = None
         self._setup_lock = asyncio.Lock()
 
@@ -398,7 +398,12 @@ class DocumentationAgentEntrypoint:
 
         writer = SandboxedCommandTool(
             self.sandbox,
-            command=[sys.executable, "-c", _WRITE_FILE_SCRIPT, str(doc_relative_path)],
+            command=[
+                *self.sandbox.python_command,
+                "-c",
+                _WRITE_FILE_SCRIPT,
+                str(doc_relative_path),
+            ],
             working_directory=working_directory,
             timeout_seconds=_WRITE_TIMEOUT_SECONDS,
             max_output_bytes=_WRITE_MAX_OUTPUT_BYTES,

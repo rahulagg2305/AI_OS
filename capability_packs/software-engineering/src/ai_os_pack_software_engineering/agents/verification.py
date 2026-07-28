@@ -95,7 +95,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ai_os_kernel.context_manager.models import AssembledContext
-from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox, SandboxExecutor
+from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
+from ai_os_kernel.sandbox.executor import SandboxExecutor
 from ai_os_kernel.workflow_engine.sandboxed_tool import SandboxedCommandTool
 
 # Named, documented first-cut values — the same "placeholder safety
@@ -244,7 +245,7 @@ class TestAgentEntrypoint:
         timeout_seconds: float = _RUN_TIMEOUT_SECONDS,
         max_output_bytes: int = _RUN_MAX_OUTPUT_BYTES,
     ) -> None:
-        self.sandbox = sandbox or LocalSubprocessSandbox()
+        self.sandbox = sandbox or build_default_sandbox_executor()
         self._timeout_seconds = timeout_seconds
         self._max_output_bytes = max_output_bytes
 

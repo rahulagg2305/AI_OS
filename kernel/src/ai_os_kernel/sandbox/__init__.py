@@ -25,12 +25,24 @@ discover the mismatch on their own.
 :class:`~ai_os_kernel.sandbox.executor.LocalSubprocessSandbox` is a
 real, working backend, but **not** a full ADR-0016 Tier 1
 implementation (no network or filesystem containment; see its own
-docstring) — it remains the default for agents/tests that do not need
-genuine containment. :class:`~ai_os_kernel.sandbox.docker_executor.
+docstring) — real for development/fast tests, never for genuinely
+untrusted content. :class:`~ai_os_kernel.sandbox.docker_executor.
 DockerSandbox` is the real Tier 1 implementation: an ephemeral OCI
 container per call, network disabled, a read-only root with exactly one
 writable bind mount, dropped capabilities, a non-root user, and real
 resource limits — see that class's own docstring for the full
 guarantee-by-guarantee reasoning, and each backend's ``guarantees``
 property for a checkable, honest matrix of what it actually enforces.
+
+**`DockerSandbox` is now the real default (2026-07-28).**
+:mod:`ai_os_kernel.sandbox.default_executor` resolves which backend a
+caller gets from the `AIOS_SANDBOX_BACKEND` environment variable
+(`"docker"`, the default, or `"local"`) — see that module's own
+docstring for the full reasoning. Each backend also now declares its
+own :attr:`~ai_os_kernel.sandbox.executor.SandboxExecutor.python_command`
+— the portable way to invoke a Python interpreter *inside whatever that
+backend actually runs commands in* — closing the real gap that
+previously blocked `DockerSandbox` from being usable by the Software
+Engineering pack's own agents, which had hardcoded the host's own
+`sys.executable`.
 """

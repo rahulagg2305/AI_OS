@@ -4,6 +4,12 @@ genuine, non-mocked sandbox: every run in this file happens through a
 real ``LocalSubprocessSandbox``/real OS subprocess, so a passing test
 means a real process genuinely exited with a real code, not an
 assertion about a mock's call arguments.
+
+**``sandbox=LocalSubprocessSandbox()`` is now passed explicitly
+(2026-07-28)** — see ``test_build_agent.py``'s own docstring for why:
+this agent's own bare default is now config-driven and defaults to
+`DockerSandbox`, and this file deliberately opts back into the fast,
+Docker-independent backend.
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from ai_os_kernel.context_manager.models import (
     SourceRef,
     SourceType,
 )
+from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.step_executor import AgentStepExecutor
@@ -71,6 +78,9 @@ def _write(path: Path, content: str) -> None:
 
 
 def test_test_agent_entrypoint_constructs_with_zero_arguments() -> None:
+    """The exact call EntrypointLoader/SqlAgentRegistry make in
+    production — must succeed instantly, with no I/O (constructing
+    either sandbox backend does none)."""
     agent = TestAgentEntrypoint()
 
     assert agent.output_schema["required"] == ["passed", "exitCode", "output"]
@@ -81,7 +91,7 @@ async def test_test_agent_reports_a_genuine_passing_case_via_direct_execute(
     tmp_path: Path,
 ) -> None:
     _write(tmp_path / "ok.py", "print('all good')\n")
-    agent = TestAgentEntrypoint()
+    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
 
     outputs = await agent.execute(
         {
@@ -102,7 +112,7 @@ async def test_test_agent_reports_a_genuine_failing_case_via_direct_execute(
     tmp_path: Path,
 ) -> None:
     _write(tmp_path / "broken.py", "raise SystemExit(1)\n")
-    agent = TestAgentEntrypoint()
+    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
 
     outputs = await agent.execute(
         {
@@ -119,7 +129,7 @@ async def test_test_agent_reports_a_genuine_failing_case_via_direct_execute(
 
 @pytest.mark.asyncio
 async def test_test_agent_rejects_a_missing_file(tmp_path: Path) -> None:
-    agent = TestAgentEntrypoint()
+    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
 
     with pytest.raises(TestInstructionError, match="does not exist"):
         await agent.execute(
@@ -135,7 +145,7 @@ async def test_test_agent_rejects_a_missing_file(tmp_path: Path) -> None:
 async def test_test_agent_rejects_a_path_that_escapes_the_working_directory(
     tmp_path: Path,
 ) -> None:
-    agent = TestAgentEntrypoint()
+    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
 
     with pytest.raises(TestInstructionError, match="resolves outside"):
         await agent.execute(
@@ -149,7 +159,7 @@ async def test_test_agent_rejects_a_path_that_escapes_the_working_directory(
 
 @pytest.mark.asyncio
 async def test_test_agent_rejects_missing_required_fields() -> None:
-    agent = TestAgentEntrypoint()
+    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
 
     with pytest.raises(TestInstructionError, match="requires"):
         await agent.execute({"filePath": "ok.py"})
@@ -157,7 +167,7 @@ async def test_test_agent_rejects_missing_required_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_test_agent_rejects_a_nonexistent_working_directory(tmp_path: Path) -> None:
-    agent = TestAgentEntrypoint()
+    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
     missing = tmp_path / "does-not-exist"
 
     with pytest.raises(TestInstructionError, match="does not exist or is not a directory"):
@@ -192,7 +202,9 @@ async def test_test_agent_genuinely_dispatches_through_agent_step_executor_passi
         "runCommand": [_PYTHON, "ok.py"],
     }
     context_manager = DefaultContextManager([_FixedPayloadResolver(payload)])
-    registry = InMemoryAgentRegistry({_AGENT_ID: TestAgentEntrypoint()})
+    registry = InMemoryAgentRegistry(
+        {_AGENT_ID: TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())}
+    )
     executor = AgentStepExecutor(registry, context_manager)
 
     outputs = await executor.execute(_step(), workflow_id="wf_test")
@@ -219,7 +231,9 @@ async def test_test_agent_genuinely_dispatches_through_agent_step_executor_faili
         "runCommand": [_PYTHON, "broken.py"],
     }
     context_manager = DefaultContextManager([_FixedPayloadResolver(payload)])
-    registry = InMemoryAgentRegistry({_AGENT_ID: TestAgentEntrypoint()})
+    registry = InMemoryAgentRegistry(
+        {_AGENT_ID: TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())}
+    )
     executor = AgentStepExecutor(registry, context_manager)
 
     outputs = await executor.execute(_step(), workflow_id="wf_test")
@@ -234,7 +248,9 @@ async def test_test_agent_via_agent_step_executor_rejects_a_malformed_context_pa
     tmp_path: Path,
 ) -> None:
     context_manager = DefaultContextManager([_FixedPayloadResolver({"filePath": "ok.py"})])
-    registry = InMemoryAgentRegistry({_AGENT_ID: TestAgentEntrypoint()})
+    registry = InMemoryAgentRegistry(
+        {_AGENT_ID: TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())}
+    )
     executor = AgentStepExecutor(registry, context_manager)
 
     with pytest.raises(TestInstructionError, match="missing"):

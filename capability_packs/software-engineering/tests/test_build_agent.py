@@ -5,6 +5,16 @@ file happens through a real ``LocalSubprocessSandbox``/real OS
 subprocess, so a passing test means a real file genuinely exists on
 disk afterward, not an assertion about a mock's call arguments.
 
+**``sandbox=LocalSubprocessSandbox()`` is now passed explicitly
+(2026-07-28).** ``BuildAgentEntrypoint``'s own bare default is now
+config-driven (``ai_os_kernel.sandbox.default_executor``) and defaults
+to `DockerSandbox` — this file deliberately opts back into the fast,
+Docker-independent backend its own docstring already commits to, rather
+than requiring a real daemon for tests whose whole point is speed and
+determinism. The real, Docker-gated proof of this agent running through
+`DockerSandbox` lives in
+``tests/integration/sandbox/test_delivery_pipeline_docker.py``.
+
 The opt-in live proof (a real LLM producing a real, novel file-write
 instruction) lives under the Kernel's own
 ``tests/integration/workflow_engine/test_build_agent_pack.py``.
@@ -20,6 +30,7 @@ import pytest
 from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import PromptedCompletionService
+from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.step_executor import AgentStepExecutor
@@ -92,7 +103,9 @@ async def test_build_agent_genuinely_writes_a_real_file_through_the_sandbox(
     async def factory() -> PromptedCompletionService:
         return await _deterministic_service(template)
 
-    agent = BuildAgentEntrypoint(service_factory=factory, working_directory=tmp_path)
+    agent = BuildAgentEntrypoint(
+        service_factory=factory, working_directory=tmp_path, sandbox=LocalSubprocessSandbox()
+    )
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry)
 
@@ -118,7 +131,9 @@ async def test_build_agent_creates_a_nested_path_relative_to_the_working_directo
     async def factory() -> PromptedCompletionService:
         return await _deterministic_service(template)
 
-    agent = BuildAgentEntrypoint(service_factory=factory, working_directory=tmp_path)
+    agent = BuildAgentEntrypoint(
+        service_factory=factory, working_directory=tmp_path, sandbox=LocalSubprocessSandbox()
+    )
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry)
 
@@ -140,7 +155,7 @@ async def test_build_agent_lazily_creates_its_own_working_directory_when_none_su
     async def factory() -> PromptedCompletionService:
         return await _deterministic_service(template)
 
-    agent = BuildAgentEntrypoint(service_factory=factory)
+    agent = BuildAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry)
 
@@ -157,7 +172,9 @@ async def test_build_agent_rejects_a_malformed_completion(tmp_path: Path) -> Non
     async def factory() -> PromptedCompletionService:
         return await _deterministic_service("this completion follows no documented format at all")
 
-    agent = BuildAgentEntrypoint(service_factory=factory, working_directory=tmp_path)
+    agent = BuildAgentEntrypoint(
+        service_factory=factory, working_directory=tmp_path, sandbox=LocalSubprocessSandbox()
+    )
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry)
 

@@ -92,6 +92,7 @@ from __future__ import annotations
 import asyncio
 import os
 import platform
+import sys
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -126,6 +127,25 @@ class SandboxExecutor(Protocol):
         """Which ADR-0016 Tier 1 controls this implementation actually
         enforces at the OS level — see :class:`~ai_os_kernel.sandbox.
         models.SandboxGuarantees` for why this exists."""
+        ...
+
+    @property
+    def python_command(self) -> tuple[str, ...]:
+        """The portable argv prefix that invokes a Python interpreter
+        *inside whatever this backend actually runs commands in* —
+        added to resolve a real, discovered gap: a caller (the
+        Software Engineering pack's Build/Documentation/pipeline code)
+        that hardcodes ``sys.executable`` is naming the *host's* own
+        interpreter path, which is meaningless inside a container image
+        with an entirely separate filesystem. Each backend knows the
+        one correct answer for itself — :class:`LocalSubprocessSandbox`
+        runs directly on the host, so ``sys.executable`` genuinely is
+        the right, portable answer there; a container backend's own
+        image supplies its own interpreter under its own name on its
+        own ``PATH``, which is never the host's path. A caller asks its
+        *injected* sandbox for this instead of guessing, which is what
+        makes the same agent code work unmodified against either
+        backend."""
         ...
 
     async def execute(
@@ -218,6 +238,14 @@ class LocalSubprocessSandbox:
     @property
     def guarantees(self) -> SandboxGuarantees:
         return _LOCAL_SUBPROCESS_GUARANTEES
+
+    @property
+    def python_command(self) -> tuple[str, ...]:
+        """``sys.executable`` — this backend runs commands directly on
+        the host, using the same interpreter as the calling process, so
+        the host's own interpreter path is exactly correct here (unlike
+        a container backend, where it would be meaningless)."""
+        return (sys.executable,)
 
     async def execute(
         self,
