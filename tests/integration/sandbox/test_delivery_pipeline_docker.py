@@ -173,7 +173,13 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
 
     engine = build_engine(database_url)
     try:
-        trigger = build_pipeline_trigger(engine, registry)
+        # Matches the explicit `sandbox=DockerSandbox()` given to every
+        # agent above — passed explicitly rather than relying on this
+        # happening to also be the ambient AIOS_SANDBOX_BACKEND default;
+        # see `pipeline.py`'s own docstring for the bug this avoids.
+        trigger = build_pipeline_trigger(
+            engine, registry, python_command=DockerSandbox().python_command
+        )
 
         result = await trigger(
             {"requirement": "write a script that checks its own sandbox isolation"},

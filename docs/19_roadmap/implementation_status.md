@@ -4,7 +4,7 @@
 **Document:** Implementation Status
 **Version:** 2.0 (restructured short form)
 **Status:** Active
-**Last Updated:** 2026-07-28 (deleted the stale `capability_packs/analytics/` folder; resolved the `sys.executable` portability gap and wired `DockerSandbox` in as the Software Engineering pack's real default sandbox backend, `LocalSubprocessSandbox` remaining explicitly selectable. See `history/023_docker_sandbox_default_wiring.md`.)
+**Last Updated:** 2026-07-28 (Docker Desktop confirmed running — the full integration suite, including the real `DockerSandbox` end-to-end pipeline test, ran for real and passed; two real bugs found and fixed along the way (a `python_command` mismatch in `pipeline.py`'s own composition, a hardcoded `sys.executable` in `test_verification_agent_pack.py`); fifth real Software Engineering agent, Requirements Analyst, built and proven independently. See `history/024_docker_verification_and_requirements_analyst.md`.)
 
 ---
 
@@ -20,11 +20,11 @@ This document is deliberately **short** — current stage, what exists, current 
 
 ## 2. Current Stage
 
-**Stage A – Platform Skeleton** is process-complete but not exit-criteria-complete (see §4). **Stage B – Minimum Viable Kernel** is underway and has reached a real, demonstrable milestone: a complete four-agent software-engineering delivery pipeline (Architecture → Build → Test → Documentation) runs end to end through the real Workflow Engine, now through **`DockerSandbox` as the genuine default Tier 1 sandbox backend** (config-driven via `AIOS_SANDBOX_BACKEND`, `LocalSubprocessSandbox` remaining explicitly selectable) — the last real safety gap on this pipeline is closed.
+**Stage A – Platform Skeleton** is process-complete but not exit-criteria-complete (see §4). **Stage B – Minimum Viable Kernel** is underway and has reached a real, demonstrable, **now genuinely Docker-verified** milestone: a complete four-agent software-engineering delivery pipeline (Architecture → Build → Test → Documentation) runs end to end through the real Workflow Engine and **`DockerSandbox` as the genuine default Tier 1 sandbox backend**, proven for real against a live daemon — including a real proof that network isolation and filesystem containment hold for code the pipeline itself generated and ran, not just in an isolated guarantee check. A fifth agent, Requirements Analyst, is built and proven independently (not yet chained into the pipeline).
 
-As of this step: **625 unit tests passing** (kernel + Software Engineering pack), **229 integration tests collected, 0 failed** (all 229 skipped this session — Docker Desktop unavailable; see §4). `mypy --strict` (280 source files) and `ruff` clean throughout. The new, Docker-gated end-to-end proof (`tests/integration/sandbox/test_delivery_pipeline_docker.py`) has not yet executed for real this session — the single highest-priority re-verification item once Docker Desktop is available.
+As of this step: **849 tests passed** (unit + integration + pack, combined), **11 skipped** (opt-in-live, no API key — expected), **0 failed**. `mypy --strict` (283 source files) and `ruff` clean throughout. This is the first genuinely real-Docker-verified pass of the entire integration suite since `DockerSandbox` became the default.
 
-Two prior steps (2026-07-28) were documentation-only: an infrastructure/history-split step, then a full feature/module/phase inventory (`docs/19_roadmap/feature_inventory.md`). This step returns to feature development.
+Three prior steps (2026-07-28) were documentation/infrastructure-only. This step is real feature development plus real-environment verification.
 
 ---
 
@@ -41,10 +41,11 @@ Two prior steps (2026-07-28) were documentation-only: an infrastructure/history-
 - **Context Manager**: `WorkflowStateResolver` + `WorkflowStepOutputResolver`, Size & Token Budget Enforcer. 1 of 6 documented sources built. → `history/012`.
 - **Retrieval**: `knowledge.documents`/`chunks` writer + keyword-search reader. No vector/hybrid search, no consumer yet. → `history/013`.
 - **Sandbox & Tool execution**: `LocalSubprocessSandbox` (3/5 guarantees) and `DockerSandbox` (5/5, ADR-0016 Tier 1, proven live) both implement `SandboxExecutor`, each now declaring its own `python_command`; `SandboxedCommandTool` + `ToolStepExecutor` dispatch; `ai_os_kernel.sandbox.default_executor` resolves the real default from `AIOS_SANDBOX_BACKEND` (`"docker"` unless set to `"local"`). → `history/014`, `020`, `023`.
-- **Software Engineering Capability Pack**: Architecture, Build, Test, and Documentation agents, all real, chained into one declared workflow (`se.delivery_pipeline`) via `WorkflowStepOutputResolver`, now defaulting to `DockerSandbox`. → `history/015`–`019`, `023`.
+- **Software Engineering Capability Pack**: 5 real agents — Architecture, Build, Test, and Documentation chained into one declared workflow (`se.delivery_pipeline`) via `WorkflowStepOutputResolver`, defaulting to `DockerSandbox`; Requirements Analyst proven independently, not yet chained in. → `history/015`–`019`, `023`, `024`.
 - **Documentation reconciliation**: agent-catalog naming fixed (`architecture`/`qa-test`/`build`), doc-drift closed, shared Postgres test fixture (`tests/integration/_postgres_fixture.py`) skips cleanly without Docker. → `history/021`.
-- **Feature/module/phase inventory**: tracked, weighted completion table (44 modules, ≈20% overall at the time) — see `docs/19_roadmap/feature_inventory.md`. Update that document's own table at the end of every future step.
-- **This step**: `capability_packs/analytics/` (stale, undocumented) deleted; `DockerSandbox` wired in as the SE pack's real default sandbox; a new real, Docker-gated end-to-end pipeline test proves network isolation and filesystem containment during an actual generated-code run. → `history/023`.
+- **Feature/module/phase inventory**: tracked, weighted completion table — see `docs/19_roadmap/feature_inventory.md`. Update that document's own table at the end of every future step.
+- **Prior step**: `capability_packs/analytics/` (stale, undocumented) deleted; `DockerSandbox` wired in as the SE pack's real default sandbox. → `history/023`.
+- **This step**: the full integration suite (incl. the Docker-gated pipeline test) ran for real and passed; two real bugs found and fixed (a `python_command` mismatch, a hardcoded `sys.executable` in a test); Requirements Analyst Agent built. → `history/024`.
 
 ---
 
@@ -52,7 +53,7 @@ Two prior steps (2026-07-28) were documentation-only: an infrastructure/history-
 
 Full detail (every gap, every reasoning) is preserved verbatim in `history/022_gap_analysis_and_blockers_snapshot.md`. The load-bearing ones, distilled:
 
-- **The new Docker-gated end-to-end pipeline test has not yet executed for real** — Docker Desktop was unavailable this session (see below); re-running it (and every other Docker/Postgres-gated integration test) is the single highest-priority re-verification item once it's available.
+- **Requirements Analyst is proven but not chained into `se.delivery_pipeline`** — the pipeline still starts at Architecture; wiring Requirements Analyst in as its own first step is a distinct, later increment (would need `delivery_pipeline.yaml`/`pipeline.py`'s own `_STEP_SOURCES` updated, plus re-verification of the existing chained tests).
 - **Only one LLM provider (`anthropic`) is registered by default**; `LocalAdapter`/cross-provider fallback exist but are commented out in checked-in config.
 - **Security Manager is pre-shared-secret JWT, not real OIDC** — not production-credible as-is.
 - **No pack discovery, upgrade path, health monitoring, or permissions enforcement** in the Capability Manager.
@@ -74,7 +75,7 @@ Per standing rule (`docs/process/standing_rules.md`), every step from now on end
 
 ## 6. Recommended Next Small Step
 
-The `DockerSandbox`-wiring recommendation from the previous two steps is now done. Recommendation: **re-run the full test suite (unit + integration, including the new `test_delivery_pipeline_docker.py`) once Docker Desktop is available**, to convert this step's "collects and skips cleanly" verification into a real, executed pass — the identical pattern this project has followed every time a step landed while Docker was unavailable. If Docker is available at the start of the next session, do this first, before starting any new feature work. If a new feature step is preferred instead, the next-largest gap per `feature_inventory.md` is Phase C's remaining Software Engineering agents (12 of 16 still unbuilt) or Phase D's Evaluation Engine (schema-only, 0% engine code).
+The real-Docker-verification recommendation from the previous step is now done — genuinely green. Recommendation: **build the next Software Engineering agent — `code-reviewer` is the natural next candidate** (a downstream quality step after Build/Test, needing no sandbox — LLM review + structured feedback only), continuing the same "prove alone first" sequencing Requirements Analyst just used. A good second candidate, if chaining is preferred over breadth: wire Requirements Analyst into `se.delivery_pipeline` as its own first step, extending the real hand-off chain by one.
 
 ---
 

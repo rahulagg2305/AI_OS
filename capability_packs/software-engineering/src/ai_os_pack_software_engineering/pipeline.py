@@ -37,15 +37,37 @@ contract can satisfy on its own.
   contract requires ``runCommand``, a field the Build Agent's own
   output has no reason to produce (it never decides how its own file
   should be run — "the caller decides," per ``verification.py``'s own
-  docstring). :func:`_run_generated_file_with_python` is a real, tiny,
-  reviewed Python callable — not a workflow-author-facing expression
-  language — supplied as this one step's ``output_transforms`` entry,
-  deriving ``runCommand = [sys.executable, filePath]`` from the
+  docstring). :func:`_make_run_generated_file_with_python` builds a
+  real, tiny, reviewed Python callable — not a workflow-author-facing
+  expression language — supplied as this one step's ``output_transforms``
+  entry, deriving ``runCommand = [*python_command, filePath]`` from the
   now-known, real ``filePath`` Build actually produced. This pipeline's
   own Architecture step is the one that ultimately decides Build
   produces a Python file (see ``delivery_pipeline.yaml``'s own
   ``inputs``/this pack's own live-test instruction) — this transform is
   the one place that assumption is recorded, not silently relied upon.
+
+  **``python_command`` is threaded through explicitly
+  (``build_pipeline_trigger``/``build_pipeline_context_manager``'s own
+  ``python_command`` parameter), not independently re-derived — a real,
+  discovered bug this fixes, not a style preference.** An earlier
+  version of this function called
+  :func:`~ai_os_kernel.sandbox.default_executor.default_python_command`
+  directly, on the (false, in general) assumption that "whichever
+  backend the Build/Test agents themselves default to" always matches
+  "whichever backend `AIOS_SANDBOX_BACKEND` currently names" — true only
+  when *every* agent in the run is left to its own bare default. A
+  caller that explicitly injects a specific ``sandbox=`` into Build/Test
+  (any test wanting a fast, Docker-independent run, most concretely)
+  breaks that assumption: the transform would derive ``python3``
+  (matching the ambient env var) while the agent it hands the command to
+  was actually constructed with ``LocalSubprocessSandbox`` (needing
+  ``sys.executable``) — a real failure, caught by
+  ``test_delivery_pipeline.py``'s own deterministic tier the first time
+  it ran against a real daemon. The fix makes the *caller* — the one
+  party that genuinely knows which backend every agent in this run was
+  actually given — supply ``python_command`` once, consistently, rather
+  than leaving two independent resolutions to coincidentally agree.
 - ``documentation`` reads **both** ``build``'s and ``test``'s own
   outputs, merged (``build`` first, ``test`` second — ``test``'s own
   ``exitCode`` therefore wins over ``build``'s own same-named field,
@@ -123,26 +145,24 @@ _LEASE_DURATION_SECONDS = 30
 _MAX_ITERATIONS = 10
 
 
-def _run_generated_file_with_python(output: dict[str, Any]) -> dict[str, Any]:
-    """The one deliberate, narrow exception this module's own docstring
-    names: derives a ``runCommand`` the Test Agent's own contract
-    requires from the Build Agent's own real, now-known ``filePath`` —
-    real Python code supplied to `WorkflowStepOutputResolver`'s own
-    ``output_transforms`` seam, never a workflow-author-facing
-    expression language declared in the YAML definition itself.
+def _make_run_generated_file_with_python(
+    python_command: tuple[str, ...],
+) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    """Builds the one deliberate, narrow exception this module's own
+    docstring names: a transform that derives a ``runCommand`` the Test
+    Agent's own contract requires from the Build Agent's own real,
+    now-known ``filePath`` — real Python code supplied to
+    `WorkflowStepOutputResolver`'s own ``output_transforms`` seam, never
+    a workflow-author-facing expression language declared in the YAML
+    definition itself. ``python_command`` is bound once, by the caller
+    that actually knows which sandbox backend this run's agents were
+    given — see this module's own docstring for why that must not be
+    re-derived independently."""
 
-    **Uses the pipeline's own configured default sandbox backend's
-    interpreter command, not a hardcoded ``sys.executable``.** This
-    function has no sandbox instance of its own to ask (it is a pure
-    transform over a persisted output dict, run by
-    `WorkflowStepOutputResolver`, not a method on any agent) — but the
-    Build and Test agents it hands this ``runCommand`` to both resolve
-    their own default sandbox from the identical `AIOS_SANDBOX_BACKEND`
-    configuration this reads via
-    :func:`~ai_os_kernel.sandbox.default_executor.default_python_command`,
-    so the two stay in agreement without this function needing a
-    sandbox reference of its own."""
-    return {**output, "runCommand": [*default_python_command(), output["filePath"]]}
+    def _run_generated_file_with_python(output: dict[str, Any]) -> dict[str, Any]:
+        return {**output, "runCommand": [*python_command, output["filePath"]]}
+
+    return _run_generated_file_with_python
 
 
 _STEP_SOURCES: dict[str, str | list[str]] = {
@@ -151,7 +171,6 @@ _STEP_SOURCES: dict[str, str | list[str]] = {
     "documentation": ["build", "test"],
 }
 _FIELD_SELECTORS = {"build": "content"}
-_OUTPUT_TRANSFORMS = {"test": _run_generated_file_with_python}
 
 # WorkflowStateResolver has no per-step concept of its own — it always
 # contributes the workflow instance's own top-level `inputs`,
@@ -197,7 +216,9 @@ def load_pipeline_definition() -> WorkflowDefinition:
     return WorkflowDefinitionLoader().load(_DEFINITION_PATH)
 
 
-def build_pipeline_context_manager(repository: WorkflowInstanceRepository) -> ContextManager:
+def build_pipeline_context_manager(
+    repository: WorkflowInstanceRepository, *, python_command: tuple[str, ...] | None = None
+) -> ContextManager:
     """The real step-output-to-next-step-input seam, configured for
     this pipeline specifically — see this module's own docstring for
     the full reasoning behind each entry. ``WorkflowStateResolver`` is
@@ -206,7 +227,17 @@ def build_pipeline_context_manager(repository: WorkflowInstanceRepository) -> Co
     and needs the workflow instance's own real ``requirement`` input
     instead) — see the ``_STEP_SOURCES`` comment above for why every
     other step must not also receive it.
+
+    ``python_command``, when omitted, defaults to
+    :func:`~ai_os_kernel.sandbox.default_executor.default_python_command`
+    — correct for the real production path, where every agent this
+    pipeline dispatches to resolves its own sandbox from that identical
+    default. A caller that constructs its own agents with an explicit
+    ``sandbox=`` override (any test wanting a specific, non-default
+    backend) must pass the matching ``python_command`` here too — see
+    this module's own docstring for the bug this closes.
     """
+    resolved_python_command = python_command or default_python_command()
     return DefaultContextManager(
         [
             _StepScopedResolver(
@@ -216,14 +247,19 @@ def build_pipeline_context_manager(repository: WorkflowInstanceRepository) -> Co
                 repository,
                 step_sources=_STEP_SOURCES,
                 field_selectors=_FIELD_SELECTORS,
-                output_transforms=_OUTPUT_TRANSFORMS,
+                output_transforms={
+                    "test": _make_run_generated_file_with_python(resolved_python_command)
+                },
             ),
         ]
     )
 
 
 def build_pipeline_trigger(
-    engine: AsyncEngine, agent_registry: AgentRegistry
+    engine: AsyncEngine,
+    agent_registry: AgentRegistry,
+    *,
+    python_command: tuple[str, ...] | None = None,
 ) -> Callable[[dict[str, Any], str], Awaitable[WorkflowRunResult]]:
     """Mirrors ``kernel/bootstrap.py``'s own ``_build_workflow_trigger``
     shape exactly — real, ``engine``-backed persistence driving one
@@ -233,9 +269,12 @@ def build_pipeline_trigger(
     proof) or a deterministic, Echo-backed ``InMemoryAgentRegistry``
     keyed by this same pack-qualified id convention (this step's own
     deterministic full-chain test) — this function does not care which.
+
+    ``python_command`` is forwarded to :func:`build_pipeline_context_manager`
+    unchanged — see that function's own docstring.
     """
     repository = SqlWorkflowInstanceRepository(engine)
-    context_manager = build_pipeline_context_manager(repository)
+    context_manager = build_pipeline_context_manager(repository, python_command=python_command)
     instance_service = WorkflowInstanceService(
         repository=repository,
         step_executor=DispatchingStepExecutor(

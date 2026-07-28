@@ -33,7 +33,10 @@ agents in the same run instead of one at a time.
    default is now config-driven and defaults to `DockerSandbox`; this
    tier deliberately opts back into the fast, Docker-independent
    backend, since proving the four-step hand-off needs a real Postgres
-   container already and gains nothing from also requiring Docker. The
+   container already and gains nothing from also requiring Docker.
+   `build_pipeline_trigger`'s own `python_command` is passed to match
+   (a real, discovered bug once left these two independently resolved —
+   see `pipeline.py`'s own docstring). The
    real, Docker-gated proof of this same pipeline running through
    `DockerSandbox` lives in
    `tests/integration/sandbox/test_delivery_pipeline_docker.py`.
@@ -193,7 +196,13 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
 
     engine = build_engine(database_url)
     try:
-        trigger = build_pipeline_trigger(engine, registry)
+        # Matches the explicit `sandbox=LocalSubprocessSandbox()` given
+        # to every agent above — see `pipeline.py`'s own docstring for
+        # why this must be passed explicitly rather than left to its
+        # own default whenever a caller overrides an agent's sandbox.
+        trigger = build_pipeline_trigger(
+            engine, registry, python_command=LocalSubprocessSandbox().python_command
+        )
 
         result = await trigger({"requirement": "print a friendly message"}, "test-principal")
 

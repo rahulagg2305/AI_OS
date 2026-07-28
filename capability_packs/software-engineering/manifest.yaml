@@ -5,19 +5,24 @@
 # tests (tests/test_pack.py) for a real, executed proof.
 #
 # This is the "Highest priority" pack capability_pack_contract.md's own
-# "Current Priority Packs" table names — now four agents: Architecture
-# (design proposal only, no code), Build (writes one real file through
-# the sandbox from an LLM instruction), QA/Test (runs a real command
-# against a real file through the sandbox, reporting a real pass/fail —
-# no LLM call at all), and Documentation (calls an LLM to record what
-# Build wrote and how QA/Test verified it, writing a real Markdown file
-# through the same sandbox), chained into one real, declared workflow
-# (`se.delivery_pipeline`). Every other documented agent category from
+# "Current Priority Packs" table names — now five agents: Requirements
+# Analyst (analyzes and refines a raw requirement, no design/code),
+# Architecture (design proposal only, no code), Build (writes one real
+# file through the sandbox from an LLM instruction), QA/Test (runs a
+# real command against a real file through the sandbox, reporting a
+# real pass/fail — no LLM call at all), and Documentation (calls an LLM
+# to record what Build wrote and how QA/Test verified it, writing a
+# real Markdown file through the same sandbox). Architecture, Build,
+# QA/Test, and Documentation are chained into one real, declared
+# workflow (`se.delivery_pipeline`); Requirements Analyst is proven
+# independently (2026-07-28), the identical "prove each agent alone
+# first, chain later" sequencing every other agent in this pack's own
+# history has followed — not yet wired into that workflow. Every other
+# documented agent category from
 # docs/06_capability_packs/software_engineering/agents.md's own Agent
-# Catalog (Requirements Analyst, Technical Planning, Frontend
-# Development, Database, API Design, DevOps, Security, Code Review,
-# Release, Refactoring, Performance) is a distinct, later increment, not
-# attempted here.
+# Catalog (Technical Planning, Frontend Development, Database, API
+# Design, DevOps, Security, Code Review, Release, Refactoring,
+# Performance) is a distinct, later increment, not attempted here.
 #
 # **Agent id reconciliation (this step)**: `architect` -> `architecture`
 # and `test` -> `qa-test` were renamed to match agents.md's own
@@ -42,14 +47,18 @@ metadata:
   name: Software Engineering Pack
   version: 0.1.0
   description: >-
-    Autonomous software engineering capabilities. The Architecture Agent
-    proposes a design (no code); the Build Agent turns a design or
-    instruction into one real file, written through the sandbox; the
-    QA/Test Agent runs a real command against a real file through the
-    sandbox and reports a real pass/fail; the Documentation Agent calls
-    an LLM to record what was built and how it was verified, writing a
-    real Markdown file through the same sandbox. All four are chained
-    into one real, declared workflow (`se.delivery_pipeline`).
+    Autonomous software engineering capabilities. The Requirements
+    Analyst Agent analyzes and refines a raw requirement (no design, no
+    code); the Architecture Agent proposes a design (no code); the
+    Build Agent turns a design or instruction into one real file,
+    written through the sandbox; the QA/Test Agent runs a real command
+    against a real file through the sandbox and reports a real
+    pass/fail; the Documentation Agent calls an LLM to record what was
+    built and how it was verified, writing a real Markdown file through
+    the same sandbox. Architecture, Build, QA/Test, and Documentation
+    are chained into one real, declared workflow
+    (`se.delivery_pipeline`); Requirements Analyst is proven
+    independently, not yet wired into it.
   owner: platform-team
   license: UNLICENSED
 
@@ -66,6 +75,22 @@ permissions:
 entryPoint: ai_os_pack_software_engineering.pack:SoftwareEngineeringPack
 
 agents:
+  - id: requirements-analyst
+    name: Requirements Analyst Agent
+    version: 0.1.0
+    purpose: >-
+      Given a raw software requirement or ask as input, produce a
+      structured, refined requirements analysis as output — no
+      architecture design, no code generation.
+    entrypoint: ai_os_pack_software_engineering.agents.requirements_analyst:RequirementsAnalystAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.requirements_analyst:RequirementsAnalysisInput
+    outputSchema: ai_os_pack_software_engineering.agents.requirements_analyst:RequirementsAnalysisOutput
+    modelAlias: coding-strong
+    permissions:
+      - llm:invoke
+    requiredPrompts:
+      - requirements.analyze@0.1.0
+
   - id: architecture
     name: Architecture Agent
     version: 0.1.0
@@ -156,6 +181,15 @@ workflows:
     trigger: manual
 
 prompts:
+  - id: requirements.analyze
+    version: 0.1.0
+    location: prompts/requirements_analysis.md
+    inputSchema: ai_os_pack_software_engineering.agents.requirements_analyst:RequirementsAnalysisInput
+    description: >-
+      Instructs the model to analyze and refine a raw software
+      requirement into a structured requirements analysis — no
+      architecture design, no code.
+
   - id: architecture.propose_design
     version: 0.1.0
     location: prompts/architecture_proposal.md

@@ -3,9 +3,9 @@
 **Project:** AI_OS (AI Operating System)  
 **Capability Pack:** Software Engineering  
 **Document:** Agents Catalog & Responsibilities  
-**Version:** 1.1  
+**Version:** 1.2  
 **Status:** Approved  
-**Last Updated:** 2026-07-28 (added the `build` agent to the catalog and a "Currently Implemented Subset" section — see that section for the full reasoning; no other content changed)
+**Last Updated:** 2026-07-28 (updated the "Currently Implemented Subset" section: `requirements-analyst` is now real, 5 of 16 — see that section for the full reasoning; no other content changed)
 
 ---
 
@@ -88,18 +88,19 @@ Contract-level specifications (I/O schemas, tools, prompts, permissions, behavio
 
 This document describes the full, intended agent catalog for this pack's mature design. As of this date, a much smaller, real slice actually exists in `capability_packs/software-engineering/`, built under a separate product-owner reprioritization toward "the shortest real path to a working multi-agent software-engineering pipeline" (see `docs/19_roadmap/implementation_status.md`'s own header for the full framing). This section exists so a reader of this document is never misled about the gap between the two.
 
-**Real today: 4 of the 16 agents listed above.**
+**Real today: 5 of the 16 agents listed above.**
 
 | Agent ID (real) | Entrypoint | Notes |
 |---|---|---|
+| `software-engineering/requirements-analyst` | `ai_os_pack_software_engineering.agents.requirements_analyst:RequirementsAnalystAgentEntrypoint` | **Added 2026-07-28.** Matches this document's own catalog exactly. Analyzes/refines a raw requirement into a structured requirements analysis only — no architecture design, no code, no validation of acceptance criteria beyond what the model itself states (this catalog's own "validate requirements" is only half-real). Proven independently; not yet wired into `se.delivery_pipeline` (see below). |
 | `software-engineering/architecture` | `ai_os_pack_software_engineering.agents.architecture:ArchitectureAgentEntrypoint` | Matches this document's own catalog exactly. Design proposal only — no code generation, no validation of an existing architecture (this catalog's own "Design **and validate** architecture" is only half-real). |
 | `software-engineering/build` | `ai_os_pack_software_engineering.agents.build:BuildAgentEntrypoint` | **New catalog entry, added by this reconciliation.** Its real scope — write exactly one generic file from a design/instruction, through the sandbox — does not fit `backend-developer`'s own documented scope ("Backend services and APIs", implying a narrower, stack-specific role this agent does not have) or any other pre-existing entry. Rather than force-fit an ill-matching id or leave an undocumented one in code, this catalog gained a new, honestly-scoped entry instead. |
 | `software-engineering/qa-test` | `ai_os_pack_software_engineering.agents.verification:TestAgentEntrypoint` | Matches this document's own catalog exactly (renamed from an earlier, undocumented `test` id during this same reconciliation). Deliberately makes **no LLM call at all** — pass/fail comes only from a real sandboxed exit code, narrower than this catalog's own "Automated testing and validation." |
 | `software-engineering/documentation` | `ai_os_pack_software_engineering.agents.documentation:DocumentationAgentEntrypoint` | Matches this document's own catalog exactly. Records one Build+Test result as one Markdown file — narrower than this catalog's own general "Technical documentation." |
 
-**Not yet real: the other 12** (`requirements-analyst`, `technical-planner`, `frontend-developer`, `database`, `api-designer`, `devops`, `security`, `code-reviewer`, `release`, `refactoring`, `performance`, and `project-intelligence/existing-project-analyzer`). No code, manifest entry, or prompt exists for any of them in this pack today.
+**Not yet real: the other 11** (`technical-planner`, `frontend-developer`, `database`, `api-designer`, `devops`, `security`, `code-reviewer`, `release`, `refactoring`, `performance`, and `project-intelligence/existing-project-analyzer`). No code, manifest entry, or prompt exists for any of them in this pack today.
 
-**The four real agents are chained into one real, declared workflow**, `se.delivery_pipeline` — see `workflows.md`'s own "Currently Implemented Subset" section for why this is a distinct real workflow, not a rename of any of that document's own 7 documented ones.
+**Four of the five real agents are chained into one real, declared workflow**, `se.delivery_pipeline` — see `workflows.md`'s own "Currently Implemented Subset" section for why this is a distinct real workflow, not a rename of any of that document's own 7 documented ones. `requirements-analyst` is proven independently (its own dedicated tests) but not yet wired in as that workflow's own first step — the identical "prove alone first, chain later" sequencing every other agent in this pack's history has followed.
 
 This section should be updated (or removed, once the gap closes) every time an agent listed above genuinely gets built, per `implementation_status.md`'s own maintenance discipline.
 

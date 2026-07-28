@@ -17,7 +17,6 @@ here — every test in this file needs only a real Postgres container
 import asyncio
 import contextlib
 import os
-import sys
 from collections.abc import Generator
 from pathlib import Path
 
@@ -164,19 +163,28 @@ def test_a_real_workflow_step_genuinely_runs_a_real_file_via_sql_agent_registry(
             registry = SqlAgentRegistry(engine)
             resolved = await registry.resolve_agent(_AGENT_ID)
             assert isinstance(resolved, TestAgentEntrypoint)
+            # Derived from the agent's own *actually-resolved* sandbox,
+            # not a hardcoded `sys.executable` — `resolved` was
+            # constructed by `EntrypointLoader`'s own zero-argument
+            # `cls()` call, so its `sandbox` is whichever backend
+            # `AIOS_SANDBOX_BACKEND` currently names (real `DockerSandbox`
+            # by default), never necessarily this host's own interpreter
+            # path. See `pipeline.py`'s own docstring for the identical
+            # bug this mirrors and fixes.
+            python_command = list(resolved.sandbox.python_command)
 
             passing = await resolved.execute(
                 {
                     "workingDirectory": str(tmp_path),
                     "filePath": "ok.py",
-                    "runCommand": [sys.executable, "ok.py"],
+                    "runCommand": [*python_command, "ok.py"],
                 }
             )
             failing = await resolved.execute(
                 {
                     "workingDirectory": str(tmp_path),
                     "filePath": "broken.py",
-                    "runCommand": [sys.executable, "broken.py"],
+                    "runCommand": [*python_command, "broken.py"],
                 }
             )
 
