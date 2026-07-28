@@ -1,0 +1,43 @@
+# Local development topology only (docs/11_deployment/deployment_architecture.md
+# §5, "core" profile). Brings up Postgres and Redis so the Kernel can be run
+# and tested against real dependencies (ADR-0015: no mocking the database).
+#
+# api/worker services are not included yet — no container image exists until
+# a later Stage A/B step builds the Dockerfile.
+#
+# Usage (from the repository root):
+#   docker compose -f infra/docker-compose.yml --env-file .env up -d
+#
+# Credentials below are local-development placeholders, not managed secrets
+# (ADR-0024 secrets backend is separate, later work). Override any of them
+# by setting the corresponding variable in your `.env` (see .env.example).
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${AIOS_DB_USER:-aios}
+      POSTGRES_PASSWORD: ${AIOS_DB_PASSWORD:-aios_dev_only}
+      POSTGRES_DB: ${AIOS_DB_NAME:-aios}
+    ports:
+      - "${AIOS_DB_PORT:-5432}:5432"
+    volumes:
+      - aios_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AIOS_DB_USER:-aios}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${AIOS_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  aios_postgres_data:

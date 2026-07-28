@@ -1,0 +1,286 @@
+"""Source Resolvers (context_manager.md §4) — the components that each
+know how to pull items from exactly one source.
+
+**One real resolver this step: Workflow State.** context_manager.md §3
+lists six sources an assembly may draw on: Workflow State, Knowledge
+Manager, Memory Manager, AI Context Packs, Runtime Configuration, and
+User-provided inputs. Of these, only Workflow State has a real,
+existing implementation to read from today —
+:class:`~ai_os_kernel.workflow_engine.repository.WorkflowInstanceRepository`,
+already built and already real. Knowledge Manager, Memory Manager, and
+AI Context Packs are entirely unbuilt Kernel components
+(kernel_architecture.md's own component list); Runtime Configuration
+(the Configuration Manager) is real but is deliberately deferred here
+too, since a single real resolver is enough to prove the end-to-end
+request flow this step's own approved framing asks for ("the minimum
+number of real context resolvers required") — adding a second real
+source is a natural, additive next slice, not something this one needs
+to prove the abstraction works.
+
+**"User-provided inputs" is not a separate resolver.** context_manager.md
+§3 lists it alongside Workflow State as a distinct source, but in this
+codebase there is exactly one place user-provided data actually lives:
+``WorkflowInstance.inputs`` — the ``inputs`` dict a caller supplied to
+``POST /api/v1/workflows``, schema-validated at creation
+(``workflow_engine.input_validation.validate_inputs``) and persisted
+onto the instance. There is no second, distinct "user input" capture
+mechanism to build a separate resolver around, so
+:class:`WorkflowStateResolver` below is read as covering both
+documented sources honestly, rather than one resolver artificially
+split into two.
+
+**Trust classification, flagged as a documentation gap, not silently
+resolved.** context_manager.md §6 says every item's ``trust`` is
+mandatory and gives examples of ``untrusted`` content ("Repository
+content, ingested documents, tool output, and web content") but does
+not classify workflow/user input either way. This resolver treats
+``WorkflowInstance.inputs`` as ``untrusted``: it originates outside the
+Kernel's own trusted subsystems (a human or service caller), and
+ADR-0016's own rationale — "no untrusted content can confer
+authority" — argues for treating anything not authored by the Kernel
+itself as untrusted by default. See this package's own ``__init__.py``
+docstring for the full inconsistency note.
+
+**Token counting here is a heuristic, not a violation of
+llm_gateway.md §12.** See ``models.py``'s own docstring for why context
+assembly (which has no model alias to count against) is a different
+concern from the Gateway's own real, per-provider token accounting.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Protocol
+
+from ai_os_kernel.context_manager.models import ContextItem, ContextRequest, SourceRef, SourceType
+
+if TYPE_CHECKING:
+    # Deferred to type-checking time only, to break a real, otherwise
+    # unavoidable *runtime* import cycle: `ai_os_kernel.workflow_engine`'s
+    # own `__init__.py` eagerly imports `step_executor`, which imports
+    # `ai_os_kernel.context_manager` (for the `ContextManager` Protocol)
+    # — so importing `workflow_engine.repository` here at module-load
+    # time would re-enter this package before it finishes initialising.
+    # `WorkflowStateResolver`/`WorkflowStepOutputResolver` only ever need
+    # `WorkflowInstanceRepository` as a static type (structural duck
+    # typing, not a runtime isinstance check), so this import has no
+    # runtime behaviour to lose. The underlying dependency is real and
+    # bidirectional by design — the Context Manager reads Workflow
+    # State, and the Workflow Engine calls the Context Manager — not an
+    # accident to be designed away.
+    from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
+    from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
+
+_CHARS_PER_TOKEN_ESTIMATE = 4
+
+
+def estimate_tokens(content: str) -> int:
+    """A simple, deterministic length-based approximation — not a real
+    tokenizer, and never used for budget enforcement or cost accounting
+    (see this package's ``models.py`` docstring)."""
+    if not content:
+        return 0
+    return max(1, len(content) // _CHARS_PER_TOKEN_ESTIMATE)
+
+
+class ContextSourceResolver(Protocol):
+    """One entry in :class:`~ai_os_kernel.context_manager.manager.
+    DefaultContextManager`'s resolver list. Each resolver knows about
+    exactly one source and nothing about how its items will be
+    combined, ranked, or truncated — that is the assembler's job."""
+
+    source_type: SourceType
+
+    async def resolve(self, request: ContextRequest) -> list[ContextItem]: ...
+
+
+class WorkflowStateResolver:
+    """Reads the current workflow instance's own declared ``inputs`` —
+    see this module's own docstring for why this also stands in for
+    "User-provided inputs" (context_manager.md §3).
+
+    Returns no items, not an error, when the instance cannot be found
+    or declared no inputs — an unresolvable source contributing nothing
+    is not a failure, the same "cannot be checked, not an error" shape
+    already established for a missing ``workflow_id`` on
+    :class:`~ai_os_kernel.llm_gateway.models.TraceContext`.
+    """
+
+    source_type = SourceType.WORKFLOW_STATE
+
+    def __init__(self, repository: WorkflowInstanceRepository) -> None:
+        self._repository = repository
+
+    async def resolve(self, request: ContextRequest) -> list[ContextItem]:
+        instance = await self._repository.get_instance(request.workflow_id)
+        if instance is None or not instance.inputs:
+            return []
+
+        # Deterministic serialisation (ADR-0022: "context assembly ...
+        # is deterministic given the same inputs") — sorted keys, the
+        # identical "stable ordering" rule llm_gateway.md §8 already
+        # requires of tool-definition serialisation.
+        content = json.dumps(instance.inputs, sort_keys=True, default=str)
+
+        return [
+            ContextItem(
+                content=content,
+                provenance=SourceRef(
+                    source_type=SourceType.WORKFLOW_STATE,
+                    identifier=f"workflow_instance:{request.workflow_id}",
+                ),
+                # No ranking model exists yet — every item from the one
+                # real resolver scores the same constant. The Size &
+                # Token Budget Enforcer (manager.py) reuses this score
+                # only as a stable truncation tie-break, not as real
+                # ranking.
+                relevance_score=1.0,
+                token_count=estimate_tokens(content),
+                trust="untrusted",
+            )
+        ]
+
+
+class WorkflowStepOutputResolver:
+    """A second real resolver for the same "Workflow State" source
+    context_manager.md §3 documents — sibling to
+    :class:`WorkflowStateResolver`, not a new source category. §5's own
+    ``required_context_types`` example list names ``previous_outputs``
+    explicitly, alongside ``requirements``/``architecture``/
+    ``coding_standards`` — this resolver is that: a *named prior step's*
+    own persisted output (``workflow_steps.outputs``, data_model.md
+    §4.3), not the instance's own top-level ``inputs``
+    :class:`WorkflowStateResolver` already covers. Both share
+    ``source_type = SourceType.WORKFLOW_STATE``; :class:`~ai_os_kernel.
+    context_manager.models.SourceRef`'s own ``identifier`` is what
+    distinguishes one item's real provenance from the other's, exactly
+    the field that exists for this ("where it came from ... provenance").
+
+    **This is the "step-output-to-next-step-input" seam
+    workflow_architecture.md's own Context Management section already
+    names ("Previous workflow state") without further specifying —
+    built here as a Context Manager resolver, deliberately not as a new
+    field on :class:`~ai_os_kernel.workflow_engine.models.WorkflowStep`
+    itself.** That document's own Step Contract section is explicit that
+    its five invocation fields are "never ... a cross-step reference" —
+    a rule scoped to those five fields, but this resolver honours its
+    spirit by keeping every cross-step reference entirely inside the
+    Context Manager/composition layer instead, where "Previous workflow
+    state" is already a documented, sanctioned source.
+
+    ``step_sources`` is a flat, statically-declared mapping —
+    ``{consuming_step_id: source_step_id}`` or
+    ``{consuming_step_id: [source_step_id, ...]}`` for a step needing
+    more than one prior step's output merged together (later entries
+    win on a key collision — declared merge order, not computed). This
+    is deliberately the smallest data structure that expresses "this
+    step's input includes the named output of step X": two strings, or
+    a short list of strings, resolved once at composition time — never
+    an expression language, a template, or conditional logic. A
+    consuming step absent from ``step_sources`` resolves to no items —
+    the same "an unresolvable source contributing nothing is not a
+    failure" shape :class:`WorkflowStateResolver` already established.
+
+    ``field_selectors``, when given for a consuming step, extracts
+    exactly one named field from the (merged) source output verbatim as
+    this item's own content — for a consumer that wants free text (an
+    instruction fed into a prompt's own ``{{context}}`` variable, the
+    way :mod:`~ai_os_kernel.workflow_engine.prompted_agent` already
+    flattens context). Omitted (the default) returns the source
+    output's entire dict, JSON-encoded — for a consumer that already
+    parses a structured JSON payload out of its own assembled context
+    (every agent in the ``software-engineering`` pack's own
+    ``_extract_payload()`` convention).
+
+    ``output_transforms``, when given for a consuming step, is a real
+    Python callable applied to the (merged) source output dict before
+    field-selection/encoding — the one deliberately narrow escape hatch
+    this class needs, not a general expression language exposed to
+    workflow authors. It exists only because a downstream agent's own
+    already-shipped contract can require a field an upstream agent's
+    own already-shipped output has no reason to produce (see
+    :mod:`ai_os_pack_software_engineering.pipeline`'s own docstring for
+    the one real, reviewed transform this pack's own pipeline supplies
+    — never declared inline in any workflow definition file or YAML).
+
+    Returns no items — not an error — whenever the referenced source
+    step(s) have not (yet) produced a real, persisted output: still
+    running, not yet reached, or genuinely absent. The identical
+    "cannot be checked, not an error" shape :class:`WorkflowStateResolver`
+    already established for a missing instance.
+    """
+
+    source_type = SourceType.WORKFLOW_STATE
+
+    def __init__(
+        self,
+        repository: WorkflowInstanceRepository,
+        *,
+        step_sources: Mapping[str, str | Sequence[str]],
+        field_selectors: Mapping[str, str] | None = None,
+        output_transforms: Mapping[str, Callable[[dict[str, Any]], dict[str, Any]]] | None = None,
+    ) -> None:
+        self._repository = repository
+        self._step_sources: dict[str, tuple[str, ...]] = {
+            step_id: ((source,) if isinstance(source, str) else tuple(source))
+            for step_id, source in step_sources.items()
+        }
+        self._field_selectors = dict(field_selectors or {})
+        self._output_transforms = dict(output_transforms or {})
+
+    async def resolve(self, request: ContextRequest) -> list[ContextItem]:
+        source_step_ids = self._step_sources.get(request.step_id)
+        if not source_step_ids:
+            return []
+
+        steps = await self._repository.list_steps(request.workflow_id)
+        merged: dict[str, Any] = {}
+        for source_step_id in source_step_ids:
+            source_step = _latest_completed_output(steps, source_step_id)
+            if source_step is None:
+                return []
+            merged.update(source_step)
+
+        transform = self._output_transforms.get(request.step_id)
+        if transform is not None:
+            merged = transform(merged)
+
+        field = self._field_selectors.get(request.step_id)
+        content = (
+            str(merged.get(field, ""))
+            if field is not None
+            else json.dumps(merged, sort_keys=True, default=str)
+        )
+
+        return [
+            ContextItem(
+                content=content,
+                provenance=SourceRef(
+                    source_type=SourceType.WORKFLOW_STATE,
+                    identifier=(
+                        f"workflow_step_output:{request.workflow_id}:{','.join(source_step_ids)}"
+                    ),
+                ),
+                relevance_score=1.0,
+                token_count=estimate_tokens(content),
+                trust="untrusted",
+            )
+        ]
+
+
+def _latest_completed_output(
+    steps: Sequence[WorkflowStepRecord], step_name: str
+) -> dict[str, Any] | None:
+    """The most-recently-attempted ``steps`` row named ``step_name``
+    with a real, persisted output — ``None`` when no such row exists
+    yet. Picks the highest ``attempt`` rather than assuming there is
+    only ever one row per name: no retry mechanism re-attempts a step
+    in this codebase today, but a resolver reading already-persisted
+    state should not assume that stays true forever."""
+    candidates = [
+        step for step in steps if step.step_name == step_name and step.outputs is not None
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda step: step.attempt).outputs or {}

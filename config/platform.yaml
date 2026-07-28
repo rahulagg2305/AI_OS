@@ -1,0 +1,16 @@
+# AI_OS Platform Configuration — layer 3 (shared defaults across all
+# environments). See docs/03_architecture/kernel/configuration_manager.md §4.
+#
+# Environment-specific overrides live in infra/environments/<env>.yaml
+# (layer 4) and take precedence over the values here.
+#
+# `env` and `role` are never set here — they are bootstrap identity,
+# supplied by AIOS_ENV / AIOS_ROLE (see .env.example).
+
+kernel:
+  log_level: INFO
+  host: 127.0.0.1
+  port: 8000
+  capability_pack_dirs:
+    - capability_packs
+  manifest_schema_path: platform_sdk/schemas/manifest.schema.json

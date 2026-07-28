@@ -1,0 +1,176 @@
+# AI_OS LLM provider configuration — read by
+# ai_os_kernel.llm_gateway.adapters.model_config.load_provider_config,
+# and now consumed by the real Router
+# (ai_os_kernel.llm_gateway.router.StaticRouter, constructed in
+# kernel/bootstrap.py) rather than by AnthropicAdapter directly.
+#
+# Still deliberately NOT the documented full Router config shape
+# (docs/03_architecture/kernel/llm_gateway.md §7's `aliases.<alias>.chain`
+# list, with per-entry provider/model/effort and fallback ordering).
+# This file is a flat `alias -> model id` map plus per-model pricing —
+# the smallest thing StaticRouter needs to honor ADR-0002 ("callers
+# never name a literal model id") and to let each real provider adapter
+# compute an honest `cost_usd`. No fallback chains, no provider health,
+# no experiment pinning: that is the Retry & Fallback Manager's future
+# work, a distinct, later Gateway subsystem StaticRouter's own docstring
+# explains is not built yet.
+#
+# Model ids and pricing below match shared/models.md's "Current Models"
+# table at the time this file was written. Pricing is USD per million
+# tokens, matching every model's own published rate card.
+
+aliases:
+  reasoning: claude-opus-5
+  coding-strong: claude-opus-5
+  coding-balanced: claude-sonnet-5
+  fast-cheap: claude-haiku-4-5
+  # The second real, network-calling provider (llm_gateway.md §3's own
+  # internal component diagram names `local_adapter` explicitly).
+  # Unlike the aliases above, an alias's provider is only ever
+  # Anthropic by default (kernel/bootstrap.py) unless named here.
+  local-fast: llama3.1:8b
+
+# Optional: alias -> provider name, for any alias above that does not
+# route to the default provider (Anthropic). An alias absent here is
+# unspecified, not "no provider" — kernel/bootstrap.py's own default
+# applies.
+providers:
+  local-fast: local
+
+# Optional: the local, OpenAI-compatible chat-completions server's root
+# URL (ai_os_kernel.llm_gateway.adapters.local_adapter.build_local_adapter).
+# Absent by default in a fresh checkout — no local model server is
+# assumed to be running, and no alias above resolves to `local` unless
+# both this section and a `providers:` entry name it. Uncomment and
+# point at a real running server (e.g. Ollama's default port) to
+# exercise the `local-fast` alias above.
+# local_provider:
+#   base_url: "http://127.0.0.1:11434/v1"
+
+# Optional: alias -> ordered list of additional {provider, model}
+# candidates (ai_os_kernel.llm_gateway.router.build_routing_chain,
+# ai_os_kernel.llm_gateway.gateway.DispatchingLLMGateway). An alias
+# absent here gets no fallback, identical to before this existed.
+fallbacks:
+  # Same-provider fallback: live by default, no extra setup needed —
+  # proves real chain traversal today. Matches llm_gateway.md §7's own
+  # worked `reasoning` alias example, whose chain also names
+  # `provider: anthropic` for every candidate.
+  coding-strong:
+    - provider: anthropic
+      model: claude-sonnet-5
+
+  # Cross-provider fallback — the "primary provider -> fallback
+  # provider" shape. Commented out because it also depends on
+  # `local_provider` above being uncommented with a real server
+  # running; uncomment both together to exercise it.
+  # coding-balanced:
+  #   - provider: local
+  #     model: llama3.1:8b
+
+pricing:
+  claude-opus-5:
+    input_per_million_usd: "5.00"
+    output_per_million_usd: "25.00"
+  claude-sonnet-5:
+    input_per_million_usd: "3.00"
+    output_per_million_usd: "15.00"
+  claude-haiku-4-5:
+    input_per_million_usd: "1.00"
+    output_per_million_usd: "5.00"
+  # Self-hosted inference has no metered per-token API cost to report
+  # here — an honest "$0", not an unknown/omitted value (ModelPricing
+  # has no optional/default variant, matching this file's own existing
+  # "no field is silently defaulted" pattern for every model above).
+  llama3.1:8b:
+    input_per_million_usd: "0.00"
+    output_per_million_usd: "0.00"
+
+# The Capability Negotiator's own matrix (llm_gateway.md §3/§6): real,
+# per-model facts, not per-alias — the identical "model id -> real
+# fact" shape `pricing` above already uses, and for the identical
+# reason (ai_os_kernel.llm_gateway.adapters.model_config's own
+# docstring: "Model names ... shall always come from configuration").
+# A model id absent here is not defaulted to anything —
+# StaticCapabilityNegotiator raises `llm.no_capabilities` clearly
+# rather than fabricating a matrix (the identical "no pricing" shape
+# AnthropicAdapter already uses for an unpriced model).
+#
+# Values below are the author's best available knowledge of each real
+# model's/server's own published capabilities at the time this file
+# was written — an operator should verify them against the provider's
+# current live documentation before relying on any of them for a
+# blocking or safety decision; nothing here has been machine-verified
+# against a live API. Corrections belong here, in configuration, not
+# in a code change — the identical reasoning `pricing` above already
+# establishes for dollar figures that can go stale.
+capabilities:
+  claude-opus-5:
+    supports_tools: true
+    supports_parallel_tool_calls: true
+    supports_strict_tools: false
+    supports_structured_output: false
+    supports_streaming: true
+    supports_thinking: true
+    supports_effort: true
+    supports_prompt_caching: true
+    prompt_cache_min_tokens: 1024
+    supports_vision: true
+    max_input_tokens: 1000000
+    max_output_tokens: 8192
+    accepts_sampling_params: false
+  claude-sonnet-5:
+    supports_tools: true
+    supports_parallel_tool_calls: true
+    supports_strict_tools: false
+    supports_structured_output: false
+    supports_streaming: true
+    supports_thinking: true
+    supports_effort: true
+    supports_prompt_caching: true
+    prompt_cache_min_tokens: 1024
+    supports_vision: true
+    max_input_tokens: 1000000
+    max_output_tokens: 8192
+    accepts_sampling_params: false
+  claude-haiku-4-5:
+    supports_tools: true
+    supports_parallel_tool_calls: true
+    supports_strict_tools: false
+    # Extended thinking/effort support on the fast-cheap tier is less
+    # certain than on Opus/Sonnet — conservatively false pending
+    # verification; see this section's own header comment.
+    supports_structured_output: false
+    supports_streaming: true
+    supports_thinking: false
+    supports_effort: false
+    supports_prompt_caching: true
+    prompt_cache_min_tokens: 2048
+    supports_vision: true
+    max_input_tokens: 200000
+    max_output_tokens: 8192
+    accepts_sampling_params: false
+  # A specific, real, known model (not "any local model") — capabilities
+  # below describe Llama 3.1 8B Instruct itself. If a different model is
+  # ever run behind `local_provider.base_url`, this entry must be
+  # updated to describe *that* model, or removed so an unconfigured
+  # local model id raises `llm.no_capabilities` clearly instead of
+  # silently reporting a wrong matrix.
+  llama3.1:8b:
+    supports_tools: true
+    supports_parallel_tool_calls: false
+    supports_strict_tools: false
+    supports_structured_output: false
+    supports_streaming: true
+    supports_thinking: false
+    supports_effort: false
+    supports_prompt_caching: false
+    prompt_cache_min_tokens: null
+    supports_vision: false
+    max_input_tokens: 128000
+    # Self-hosted servers commonly cap this via their own runtime
+    # configuration, independent of what the model itself could
+    # theoretically produce — treat as a starting point, not a fact
+    # about the model.
+    max_output_tokens: 4096
+    accepts_sampling_params: true

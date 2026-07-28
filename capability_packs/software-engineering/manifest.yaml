@@ -1,0 +1,184 @@
+# Software Engineering Capability Pack manifest.
+#
+# Validated against platform_sdk/schemas/manifest.schema.json by
+# ai_os_kernel.manifest_loader.ManifestLoader — see this pack's own
+# tests (tests/test_pack.py) for a real, executed proof.
+#
+# This is the "Highest priority" pack capability_pack_contract.md's own
+# "Current Priority Packs" table names — now four agents: Architecture
+# (design proposal only, no code), Build (writes one real file through
+# the sandbox from an LLM instruction), QA/Test (runs a real command
+# against a real file through the sandbox, reporting a real pass/fail —
+# no LLM call at all), and Documentation (calls an LLM to record what
+# Build wrote and how QA/Test verified it, writing a real Markdown file
+# through the same sandbox), chained into one real, declared workflow
+# (`se.delivery_pipeline`). Every other documented agent category from
+# docs/06_capability_packs/software_engineering/agents.md's own Agent
+# Catalog (Requirements Analyst, Technical Planning, Frontend
+# Development, Database, API Design, DevOps, Security, Code Review,
+# Release, Refactoring, Performance) is a distinct, later increment, not
+# attempted here.
+#
+# **Agent id reconciliation (this step)**: `architect` -> `architecture`
+# and `test` -> `qa-test` were renamed to match agents.md's own
+# Approved, authoritative Agent Catalog exactly. `documentation` already
+# matched. `build` has no documented counterpart in agents.md — its real
+# scope (write exactly one generic file from an instruction) is
+# deliberately narrower than `backend-developer`'s own documented scope
+# ("Backend services and APIs") and does not fit any of the other 14
+# documented agent ids either — agents.md's own Agent Catalog was
+# amended to add `build` as a new, clearly-scoped entry rather than
+# force-fitting or silently keeping an undocumented id; see agents.md's
+# own "Currently Implemented Subset" section for the full reasoning.
+# The QA/Test Agent's own entry below no longer declares a decoy
+# `modelAlias` either — the schema itself was fixed the same step to
+# require it only when an agent's own permissions declare `llm:invoke`.
+
+apiVersion: ai-os/v1
+kind: CapabilityPack
+
+metadata:
+  id: software-engineering
+  name: Software Engineering Pack
+  version: 0.1.0
+  description: >-
+    Autonomous software engineering capabilities. The Architecture Agent
+    proposes a design (no code); the Build Agent turns a design or
+    instruction into one real file, written through the sandbox; the
+    QA/Test Agent runs a real command against a real file through the
+    sandbox and reports a real pass/fail; the Documentation Agent calls
+    an LLM to record what was built and how it was verified, writing a
+    real Markdown file through the same sandbox. All four are chained
+    into one real, declared workflow (`se.delivery_pipeline`).
+  owner: platform-team
+  license: UNLICENSED
+
+compatibility:
+  minKernelVersion: 0.1.0
+
+dependencies:
+  sdkVersion: ">=0.1.0,<1.0.0"
+
+permissions:
+  - llm:invoke
+  - sandbox:execute
+
+entryPoint: ai_os_pack_software_engineering.pack:SoftwareEngineeringPack
+
+agents:
+  - id: architecture
+    name: Architecture Agent
+    version: 0.1.0
+    purpose: >-
+      Given a software requirement or specification as input, propose a
+      concrete technical architecture and design as output. Produces a
+      design proposal only — no code generation.
+    entrypoint: ai_os_pack_software_engineering.agents.architecture:ArchitectureAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.architecture:ArchitectureProposalInput
+    outputSchema: ai_os_pack_software_engineering.agents.architecture:ArchitectureProposalOutput
+    modelAlias: coding-strong
+    permissions:
+      - llm:invoke
+    requiredPrompts:
+      - architecture.propose_design@0.1.0
+
+  - id: build
+    name: Build Agent
+    version: 0.1.0
+    purpose: >-
+      Given a design or instruction, produce one concrete file
+      implementing it and genuinely write it to disk through the
+      sandbox — the first real link between an LLM-produced instruction
+      and sandboxed execution.
+    entrypoint: ai_os_pack_software_engineering.agents.build:BuildAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.build:BuildInstructionInput
+    outputSchema: ai_os_pack_software_engineering.agents.build:BuildAgentOutput
+    modelAlias: coding-strong
+    permissions:
+      - llm:invoke
+      - sandbox:execute
+    requiredPrompts:
+      - build.write_file@0.1.0
+
+  - id: qa-test
+    name: QA/Test Agent
+    version: 0.1.0
+    purpose: >-
+      Given a file the Build Agent wrote and the command that runs it,
+      genuinely execute that command inside the sandbox and report the
+      real pass/fail outcome — derived only from the actual process
+      exit code, never from an LLM's opinion of the output.
+    entrypoint: ai_os_pack_software_engineering.agents.verification:TestAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.verification:TestAgentInput
+    outputSchema: ai_os_pack_software_engineering.agents.verification:TestAgentOutput
+    # No modelAlias — this agent makes no LLM call at all (see
+    # agents/verification.py's own docstring). Previously a required,
+    # genuinely-unused decoy value was declared here to satisfy the
+    # manifest schema's own unconditional requirement; the schema was
+    # fixed (2026-07-28, platform_sdk/schemas/manifest.schema.json) to
+    # require modelAlias only when this agent's own permissions declare
+    # llm:invoke, so the decoy value is removed rather than kept.
+    permissions:
+      - sandbox:execute
+
+  - id: documentation
+    name: Documentation Agent
+    version: 0.1.0
+    purpose: >-
+      Given a Build Agent result and its Test Agent outcome, call an
+      LLM to produce a concise Markdown record of what was built, why,
+      how it was verified, and its current status — then genuinely
+      write it to disk through the sandbox, for future LLM context.
+    entrypoint: ai_os_pack_software_engineering.agents.documentation:DocumentationAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.documentation:DocumentationAgentInput
+    outputSchema: ai_os_pack_software_engineering.agents.documentation:DocumentationAgentOutput
+    modelAlias: coding-strong
+    permissions:
+      - llm:invoke
+      - sandbox:execute
+    requiredPrompts:
+      - documentation.record_artifact@0.1.0
+
+workflows:
+  - id: se.delivery_pipeline
+    name: Software Delivery Pipeline
+    version: 1.0.0
+    description: >-
+      Chains Architecture, Build, QA/Test, and Documentation into one
+      real, declared workflow — each step's genuine output reaches the
+      next step's genuine input through a real Context Manager resolver.
+    definition: workflows/delivery_pipeline.yaml
+    inputsSchema: ai_os_pack_software_engineering.workflows.models:PipelineInput
+    outputsSchema: ai_os_pack_software_engineering.workflows.models:PipelineOutput
+    permissions:
+      - llm:invoke
+      - sandbox:execute
+    trigger: manual
+
+prompts:
+  - id: architecture.propose_design
+    version: 0.1.0
+    location: prompts/architecture_proposal.md
+    inputSchema: ai_os_pack_software_engineering.agents.architecture:ArchitectureProposalInput
+    description: >-
+      Instructs the model to propose a concrete technical architecture
+      for a given software requirement — design proposal only, no code.
+
+  - id: build.write_file
+    version: 0.1.0
+    location: prompts/build_write_file.md
+    inputSchema: ai_os_pack_software_engineering.agents.build:BuildInstructionInput
+    description: >-
+      Instructs the model to produce exactly one file (path + content)
+      implementing a given design/instruction, in a fixed, parseable
+      format with no surrounding prose.
+
+  - id: documentation.record_artifact
+    version: 0.1.0
+    location: prompts/documentation_record_artifact.md
+    inputSchema: ai_os_pack_software_engineering.agents.documentation:DocumentationAgentInput
+    description: >-
+      Instructs the model to produce a concise Markdown record of a
+      Build Agent result and its Test Agent outcome, with no
+      surrounding prose — the entire completion is used verbatim as
+      the documentation file's content.

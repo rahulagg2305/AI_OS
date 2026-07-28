@@ -1,0 +1,5 @@
+# Local development overrides — layer 4.
+# See docs/03_architecture/kernel/configuration_manager.md §4.
+
+kernel:
+  log_level: DEBUG

@@ -1,0 +1,6 @@
+# Production overrides — layer 4.
+# See docs/11_deployment/deployment_architecture.md §4.
+
+kernel:
+  host: 0.0.0.0
+  log_level: WARNING

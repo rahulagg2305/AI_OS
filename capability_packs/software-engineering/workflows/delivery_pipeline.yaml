@@ -1,0 +1,83 @@
+# Chains this pack's own four independently-proven agents — Architecture,
+# Build, QA/Test, Documentation (manifest agent ids: `architecture`,
+# `build`, `qa-test`, `documentation`) — into one real, declared
+# Workflow Engine pipeline. Each step's genuine output reaches the next
+# step's genuine input through ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver
+# (a Context Manager resolver, not a new orchestration mechanism) —
+# see ai_os_pack_software_engineering.pipeline's own docstring for the
+# full composition.
+#
+# Step ids below (`architecture`/`build`/`test`/`documentation`) are
+# workflow-local identifiers, independent of the agent catalog's own
+# ids — the `test` step id was deliberately left unchanged even though
+# the agent it invokes was renamed to `qa-test`, since step ids are
+# this workflow's own naming, not a copy of the agent catalog.
+#
+# Loaded by the already-real, already-existing, previously-unused
+# ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader — the
+# first real consumer of that loader in this codebase (every prior
+# WorkflowDefinition in this project, including kernel/bootstrap.py's
+# own demo, is constructed directly in Python, for the documented
+# reason that no real pack directory existed yet to load one from —
+# see bootstrap.py's own comment. One now does.)
+
+id: se.delivery_pipeline
+name: Software Delivery Pipeline
+description: >-
+  Architecture proposes a design, Build implements it, Test verifies
+  it, Documentation records it — four real agent steps, each genuinely
+  consuming the previous step's real, persisted output.
+version: 1.0.0
+trigger: manual
+
+inputs:
+  type: object
+  properties:
+    requirement:
+      type: string
+      description: The software requirement to design, build, test, and document.
+  required: [requirement]
+  additionalProperties: false
+
+outputs:
+  type: object
+  properties:
+    documentationPath:
+      type: string
+  required: [documentationPath]
+  additionalProperties: false
+
+agents:
+  - software-engineering/architecture
+  - software-engineering/build
+  - software-engineering/qa-test
+  - software-engineering/documentation
+
+failureHandling:
+  onError: halt
+
+steps:
+  - id: architecture
+    type: agent
+    agentId: software-engineering/architecture
+    promptId: architecture.propose_design
+    promptVersion: 0.1.0
+    modelAlias: coding-strong
+
+  - id: build
+    type: agent
+    agentId: software-engineering/build
+    promptId: build.write_file
+    promptVersion: 0.1.0
+    modelAlias: coding-strong
+
+  - id: test
+    type: agent
+    agentId: software-engineering/qa-test
+
+  - id: documentation
+    type: agent
+    agentId: software-engineering/documentation
+    promptId: documentation.record_artifact
+    promptVersion: 0.1.0
+    modelAlias: coding-strong

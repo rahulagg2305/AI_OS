@@ -1,0 +1,36 @@
+"""Sandbox — Tier 1 untrusted execution (ADR-0016).
+
+Runs generated/untrusted commands (compiling, testing, dependency
+installation, anything touching ingested-repository content) behind a
+pluggable :class:`~ai_os_kernel.sandbox.executor.SandboxExecutor`
+Protocol, so the isolation *mechanism* can be swapped without changing
+any caller.
+
+See docs/18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md,
+docs/09_security/security_architecture.md §5.1.
+
+**Naming note, now cross-referenced rather than left as an unreconciled
+discrepancy (2026-07-28)**: ADR-0016 and security_architecture.md §5.1
+both name this seam ``SandboxRuntime``; this package uses
+``SandboxExecutor`` instead, per this pack's own original approved
+framing. Both documents now carry an explicit note recording that
+mapping (ADR-0016's own "Implementation naming note," added the same
+day this docstring was updated) — the two names are not silently
+reconciled into one (that would mean editing an Accepted ADR's own
+decision text, which this codebase's ADR process does not permit
+in place), but a reader of either document is no longer left to
+discover the mismatch on their own.
+
+**Two backends now exist.**
+:class:`~ai_os_kernel.sandbox.executor.LocalSubprocessSandbox` is a
+real, working backend, but **not** a full ADR-0016 Tier 1
+implementation (no network or filesystem containment; see its own
+docstring) — it remains the default for agents/tests that do not need
+genuine containment. :class:`~ai_os_kernel.sandbox.docker_executor.
+DockerSandbox` is the real Tier 1 implementation: an ephemeral OCI
+container per call, network disabled, a read-only root with exactly one
+writable bind mount, dropped capabilities, a non-root user, and real
+resource limits — see that class's own docstring for the full
+guarantee-by-guarantee reasoning, and each backend's ``guarantees``
+property for a checkable, honest matrix of what it actually enforces.
+"""

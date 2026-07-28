@@ -1,0 +1,38 @@
+# Capability Pack manifest template.
+#
+# Copy this whole directory to create a new pack:
+#   cp -r capability_packs/_template capability_packs/<your-pack-id>
+#
+# Validate against the authoritative schema:
+#   platform_sdk/schemas/manifest.schema.json
+#
+# Full field reference:
+#   docs/03_architecture/capability_framework/manifest_schema.md
+
+apiVersion: ai-os/v1
+kind: CapabilityPack
+
+metadata:
+  id: template-pack
+  name: Template Capability Pack
+  version: 0.1.0
+  description: >-
+    Minimal, schema-valid Capability Pack manifest used as the starting
+    point for new packs. This is not a real pack — it declares no
+    agents, tools, or workflows, and exists only to prove manifest
+    discovery and schema validation end to end.
+  owner: platform-team
+  license: UNLICENSED
+
+compatibility:
+  minKernelVersion: 0.1.0
+
+dependencies:
+  sdkVersion: ">=0.1.0,<1.0.0"
+
+# No permissions, agents, tools, workflows, qualityGates, prompts, or
+# commands: this template deliberately declares nothing beyond identity.
+# An `entryPoint` becomes required the moment `agents` or `workflows`
+# gain an entry (see the JSON Schema's `allOf` conditional) — implement
+# the `CapabilityPack` Protocol from the Platform SDK Specification
+# (docs/03_architecture/platform/platform_sdk.md) when that happens.

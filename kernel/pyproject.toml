@@ -1,0 +1,36 @@
+[project]
+name = "ai-os-kernel"
+version = "0.1.0"
+description = "AI_OS Platform Kernel — the domain-agnostic runtime core."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+# License: not yet decided — no LICENSE file exists in the repository.
+# Do not add a `license` field here until the project owner chooses one
+# (Constitution: AI models must not invent business/legal decisions).
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    "pydantic>=2.7,<3.0",
+    "pydantic-settings>=2.4,<3.0",
+    "pyyaml>=6.0,<7.0",
+    "jsonschema>=4.23,<5.0",
+    "structlog>=24.4,<25.0",
+    "sqlalchemy>=2.0,<3.0",
+    "asyncpg>=0.29,<1.0",
+    "alembic>=1.13,<2.0",
+    "python-ulid>=2.2,<3.0",
+    "opentelemetry-api>=1.27,<2.0",
+    "opentelemetry-sdk>=1.27,<2.0",
+    "anthropic>=0.69,<1.0",
+    "httpx>=0.27,<1.0",
+    "pyjwt>=2.9,<3.0",
+    "pgvector>=0.3,<1.0",
+    "docker>=7.1,<8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_os_kernel"]

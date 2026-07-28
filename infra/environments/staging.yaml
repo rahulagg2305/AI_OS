@@ -1,0 +1,10 @@
+# Staging overrides — layer 4.
+#
+# Staging mirrors production topology and configuration shape
+# (docs/11_deployment/deployment_architecture.md §4: "staging must match
+# production in topology and configuration shape, differing only in
+# scale and credentials, never in structure").
+
+kernel:
+  host: 0.0.0.0
+  log_level: INFO

@@ -1,0 +1,476 @@
+"""SqlAgentRegistry/SqlToolRegistry against a real Postgres container
+(ADR-0015 — no mocking the database). Proves: a real, registered
+``catalog.agents``/``catalog.tools`` row's declared ``entrypoint`` is
+actually loaded and constructed (not always ``EchoAgent``/``EchoTool``),
+an unregistered id raises the documented error rather than a bare
+``None``/``KeyError``, the safety checks (``Agent``/``Tool`` Protocol
+conformance, ``trust_tier`` agreement) reject a bad entrypoint clearly
+instead of silently trusting it, and — the Capability Manager minimal
+slice this step adds — an agent/tool whose declared ``pack_id`` names a
+pack that is missing from ``catalog.packs`` or not ``activated`` is
+refused before its entrypoint is ever loaded.
+"""
+
+import asyncio
+import os
+from collections.abc import Generator
+from pathlib import Path
+
+import pytest
+import sqlalchemy as sa
+from alembic import command
+from alembic.config import Config
+
+from ai_os_kernel.persistence.engine import build_engine
+from ai_os_kernel.workflow_engine.agent import EchoAgent
+from ai_os_kernel.workflow_engine.errors import (
+    AgentNotRegisteredError,
+    AgentRegistryError,
+    EntrypointLoadError,
+    PackNotActivatedError,
+    ToolNotRegisteredError,
+    ToolRegistryError,
+)
+from ai_os_kernel.workflow_engine.registry import SqlAgentRegistry, SqlToolRegistry
+from ai_os_kernel.workflow_engine.tool import EchoTool, TrustTier
+from tests.integration._postgres_fixture import postgres_container
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+ALEMBIC_INI = REPO_ROOT / "alembic.ini"
+
+_ECHO_AGENT_ENTRYPOINT = "ai_os_kernel.workflow_engine.agent:EchoAgent"
+_ECHO_TOOL_ENTRYPOINT = "ai_os_kernel.workflow_engine.tool:EchoTool"
+_STUBS_MODULE = "tests.integration.workflow_engine._entrypoint_stubs"
+_DEFAULT_PACK_ID = "se.software_engineering"
+
+
+@pytest.fixture(scope="module")
+def database_url() -> Generator[str, None, None]:
+    with postgres_container() as postgres:
+        url = postgres.get_connection_url()
+        previous = os.environ.get("AIOS_DATABASE_URL")
+        os.environ["AIOS_DATABASE_URL"] = url
+        try:
+            command.upgrade(Config(str(ALEMBIC_INI)), "head")
+            yield url
+        finally:
+            if previous is None:
+                os.environ.pop("AIOS_DATABASE_URL", None)
+            else:
+                os.environ["AIOS_DATABASE_URL"] = previous
+
+
+async def _seed_agent(
+    database_url: str, *, agent_id: str, entrypoint: str, pack_id: str = _DEFAULT_PACK_ID
+) -> None:
+    engine = build_engine(database_url)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                sa.text(
+                    "INSERT INTO catalog.agents "
+                    "(agent_id, pack_id, version, entrypoint, input_schema, output_schema, "
+                    " required_permissions, required_tools) "
+                    "VALUES (:agent_id, :pack_id, '1.0.0', :entrypoint, "
+                    " '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb)"
+                ),
+                {"agent_id": agent_id, "pack_id": pack_id, "entrypoint": entrypoint},
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _seed_tool(
+    database_url: str,
+    *,
+    tool_id: str,
+    entrypoint: str,
+    trust_tier: str,
+    pack_id: str = _DEFAULT_PACK_ID,
+) -> None:
+    engine = build_engine(database_url)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                sa.text(
+                    "INSERT INTO catalog.tools "
+                    "(tool_id, pack_id, version, entrypoint, trust_tier, input_schema, "
+                    " output_schema, required_permissions) "
+                    "VALUES (:tool_id, :pack_id, '1.0.0', :entrypoint, "
+                    " :trust_tier, '{}'::jsonb, '{}'::jsonb, '[]'::jsonb)"
+                ),
+                {
+                    "tool_id": tool_id,
+                    "pack_id": pack_id,
+                    "entrypoint": entrypoint,
+                    "trust_tier": trust_tier,
+                },
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _seed_pack(database_url: str, *, pack_id: str, state: str) -> None:
+    engine = build_engine(database_url)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                sa.text(
+                    "INSERT INTO catalog.packs "
+                    "(pack_id, version, state, manifest, sdk_version, min_kernel_version) "
+                    "VALUES (:pack_id, '1.0.0', :state, '{}'::jsonb, '1.0.0', '1.0.0') "
+                    "ON CONFLICT (pack_id) DO NOTHING"
+                ),
+                {"pack_id": pack_id, "state": state},
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _default_pack_is_activated(database_url: str) -> None:
+    """Every test in this module that does not care about pack-activation
+    gating itself seeds an agent/tool under ``_DEFAULT_PACK_ID`` — this
+    keeps that pack ``activated`` so those tests exercise entrypoint
+    loading, not this step's own gate. Idempotent (``ON CONFLICT DO
+    NOTHING``): safe to run once per test in a module-scoped container.
+    """
+
+    asyncio.run(_seed_pack(database_url, pack_id=_DEFAULT_PACK_ID, state="activated"))
+
+
+def test_resolve_agent_loads_the_declared_entrypoint(database_url: str) -> None:
+    async def _run() -> None:
+        await _seed_agent(
+            database_url,
+            agent_id="se.software_engineering/analyst",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            resolved = await registry.resolve_agent("se.software_engineering/analyst")
+
+            assert isinstance(resolved, EchoAgent)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_loads_a_real_custom_entrypoint_not_just_echo_agent(
+    database_url: str,
+) -> None:
+    async def _run() -> None:
+        await _seed_agent(
+            database_url,
+            agent_id="se.software_engineering/named-stub",
+            entrypoint=f"{_STUBS_MODULE}:NamedStubAgent",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            resolved = await registry.resolve_agent("se.software_engineering/named-stub")
+            outputs = await resolved.execute({})
+
+            assert type(resolved).__name__ == "NamedStubAgent"
+            assert outputs == {"ranAs": "NamedStubAgent"}
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_raises_for_an_unregistered_id(database_url: str) -> None:
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            with pytest.raises(AgentNotRegisteredError, match="does-not-exist"):
+                await registry.resolve_agent("se.software_engineering/does-not-exist")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_raises_clearly_for_a_malformed_entrypoint(database_url: str) -> None:
+    async def _run() -> None:
+        await _seed_agent(
+            database_url,
+            agent_id="se.software_engineering/bad-entrypoint",
+            entrypoint="this_module_does_not_exist_anywhere:SomeClass",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            with pytest.raises(EntrypointLoadError, match="could not import module"):
+                await registry.resolve_agent("se.software_engineering/bad-entrypoint")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_rejects_an_entrypoint_that_is_not_a_valid_agent(
+    database_url: str,
+) -> None:
+    async def _run() -> None:
+        await _seed_agent(
+            database_url,
+            agent_id="se.software_engineering/not-an-agent",
+            entrypoint=f"{_STUBS_MODULE}:NotAnAgentOrTool",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            with pytest.raises(AgentRegistryError, match="did not resolve to a valid Agent"):
+                await registry.resolve_agent("se.software_engineering/not-an-agent")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_loads_the_declared_entrypoint(database_url: str) -> None:
+    async def _run() -> None:
+        await _seed_tool(
+            database_url,
+            tool_id="se.build",
+            entrypoint=_ECHO_TOOL_ENTRYPOINT,
+            trust_tier="tier2_trusted",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            resolved = await registry.resolve_tool("se.build")
+
+            assert isinstance(resolved, EchoTool)
+            assert resolved.trust_tier == TrustTier.TIER2_TRUSTED
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_loads_a_real_custom_entrypoint_declaring_tier1_sandboxed(
+    database_url: str,
+) -> None:
+    async def _run() -> None:
+        await _seed_tool(
+            database_url,
+            tool_id="se.run_untrusted_script",
+            entrypoint=f"{_STUBS_MODULE}:SandboxedStubTool",
+            trust_tier="tier1_sandboxed",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            resolved = await registry.resolve_tool("se.run_untrusted_script")
+
+            # A real, custom entrypoint whose own code and whose catalog
+            # row agree on tier1_sandboxed — accepted, not laundered
+            # into a more-trusted-looking stand-in.
+            assert type(resolved).__name__ == "SandboxedStubTool"
+            assert resolved.trust_tier == TrustTier.TIER1_SANDBOXED
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_rejects_a_trust_tier_disagreement(database_url: str) -> None:
+    async def _run() -> None:
+        # The entrypoint's own code declares tier1_sandboxed, but the
+        # catalog row (as if a manifest were edited without updating
+        # the code, or vice versa) declares tier2_trusted.
+        await _seed_tool(
+            database_url,
+            tool_id="se.mismatched_tool",
+            entrypoint=f"{_STUBS_MODULE}:MismatchedTrustTierStubTool",
+            trust_tier="tier2_trusted",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            with pytest.raises(ToolRegistryError, match="refusing to trust either value alone"):
+                await registry.resolve_tool("se.mismatched_tool")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_raises_for_an_unregistered_id(database_url: str) -> None:
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            with pytest.raises(ToolNotRegisteredError, match="does_not_exist"):
+                await registry.resolve_tool("se.does_not_exist")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_rejects_an_entrypoint_that_is_not_a_valid_tool(
+    database_url: str,
+) -> None:
+    async def _run() -> None:
+        await _seed_tool(
+            database_url,
+            tool_id="se.not_a_tool",
+            entrypoint=f"{_STUBS_MODULE}:NotAnAgentOrTool",
+            trust_tier="tier2_trusted",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            with pytest.raises(ToolRegistryError, match="did not resolve to a valid Tool"):
+                await registry.resolve_tool("se.not_a_tool")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_succeeds_when_its_pack_is_activated(database_url: str) -> None:
+    async def _run() -> None:
+        await _seed_pack(database_url, pack_id="se.active_pack", state="activated")
+        await _seed_agent(
+            database_url,
+            agent_id="se.active_pack/analyst",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            pack_id="se.active_pack",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            resolved = await registry.resolve_agent("se.active_pack/analyst")
+
+            assert isinstance(resolved, EchoAgent)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_rejects_a_non_activated_pack(database_url: str) -> None:
+    async def _run() -> None:
+        await _seed_pack(database_url, pack_id="se.deactivated_pack", state="deactivated")
+        await _seed_agent(
+            database_url,
+            agent_id="se.deactivated_pack/analyst",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            pack_id="se.deactivated_pack",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            with pytest.raises(PackNotActivatedError, match="not 'activated'"):
+                await registry.resolve_agent("se.deactivated_pack/analyst")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_rejects_a_pack_missing_from_catalog_packs(database_url: str) -> None:
+    async def _run() -> None:
+        # No catalog.packs row is ever seeded for this pack_id.
+        await _seed_agent(
+            database_url,
+            agent_id="se.no_such_pack/analyst",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            pack_id="se.no_such_pack",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            with pytest.raises(PackNotActivatedError, match="no such pack is registered"):
+                await registry.resolve_agent("se.no_such_pack/analyst")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_succeeds_when_its_pack_is_activated(database_url: str) -> None:
+    async def _run() -> None:
+        await _seed_pack(database_url, pack_id="se.active_pack", state="activated")
+        await _seed_tool(
+            database_url,
+            tool_id="se.active_pack_tool",
+            entrypoint=_ECHO_TOOL_ENTRYPOINT,
+            trust_tier="tier2_trusted",
+            pack_id="se.active_pack",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            resolved = await registry.resolve_tool("se.active_pack_tool")
+
+            assert isinstance(resolved, EchoTool)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_rejects_a_non_activated_pack(database_url: str) -> None:
+    async def _run() -> None:
+        await _seed_pack(database_url, pack_id="se.deactivated_pack", state="deactivated")
+        await _seed_tool(
+            database_url,
+            tool_id="se.deactivated_pack_tool",
+            entrypoint=_ECHO_TOOL_ENTRYPOINT,
+            trust_tier="tier2_trusted",
+            pack_id="se.deactivated_pack",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            with pytest.raises(PackNotActivatedError, match="not 'activated'"):
+                await registry.resolve_tool("se.deactivated_pack_tool")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_rejects_a_pack_missing_from_catalog_packs(database_url: str) -> None:
+    async def _run() -> None:
+        # No catalog.packs row is ever seeded for this pack_id.
+        await _seed_tool(
+            database_url,
+            tool_id="se.no_such_pack_tool",
+            entrypoint=_ECHO_TOOL_ENTRYPOINT,
+            trust_tier="tier2_trusted",
+            pack_id="se.no_such_pack",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            with pytest.raises(PackNotActivatedError, match="no such pack is registered"):
+                await registry.resolve_tool("se.no_such_pack_tool")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())

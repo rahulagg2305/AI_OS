@@ -1,0 +1,206 @@
+"""Deterministic tests for the Build Agent — no database, no live LLM
+call (ADR-0004: a deterministic Protocol implementation is a legitimate
+substitute), but a genuine, non-mocked sandbox: every write in this
+file happens through a real ``LocalSubprocessSandbox``/real OS
+subprocess, so a passing test means a real file genuinely exists on
+disk afterward, not an assertion about a mock's call arguments.
+
+The opt-in live proof (a real LLM producing a real, novel file-write
+instruction) lives under the Kernel's own
+``tests/integration/workflow_engine/test_build_agent_pack.py``.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+
+import pytest
+
+from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
+from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
+from ai_os_kernel.prompted_completion import PromptedCompletionService
+from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
+from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
+from ai_os_kernel.workflow_engine.step_executor import AgentStepExecutor
+from ai_os_pack_software_engineering.agents.build import (
+    BuildAgentEntrypoint,
+    BuildAgentOutput,
+    BuildInstructionError,
+    BuildInstructionInput,
+    _parse_build_instruction,
+    _resolve_safe_relative_path,
+)
+
+_AGENT_ID = "build"
+_PROMPT_ID = "build.write_file"
+_PROMPT_VERSION = "0.1.0"
+
+
+async def _deterministic_service(template: str) -> PromptedCompletionService:
+    return PromptedCompletionService(
+        prompt_engine=InMemoryPromptEngine({(_PROMPT_ID, _PROMPT_VERSION): template}),
+        llm_gateway=EchoLLMGateway(),
+    )
+
+
+def _step() -> WorkflowStep:
+    return WorkflowStep(
+        id="write_file",
+        type=StepType.AGENT,
+        agent_id=_AGENT_ID,
+        prompt_id=_PROMPT_ID,
+        prompt_version=_PROMPT_VERSION,
+        model_alias="coding-strong",
+    )
+
+
+def test_build_agent_entrypoint_constructs_with_zero_arguments() -> None:
+    """The exact call EntrypointLoader/SqlAgentRegistry make in
+    production — must succeed instantly, with no I/O: no sandbox
+    working directory is created until the first `execute()` call."""
+    agent = BuildAgentEntrypoint()
+
+    assert agent.output_schema["required"] == [
+        "workingDirectory",
+        "filePath",
+        "written",
+        "exitCode",
+        "stdout",
+        "stderr",
+        "instruction",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_build_agent_genuinely_writes_a_real_file_through_the_sandbox(
+    tmp_path: Path,
+) -> None:
+    """The real end-to-end proof this step exists for: a WorkflowStep
+    of type agent, dispatched through the real AgentStepExecutor,
+    genuinely results in a real file existing in the sandbox working
+    directory afterward, with content traceable to the model's own
+    completion (here, EchoLLMGateway's real echo of a real rendered
+    prompt — not asserted by inspection)."""
+    template = (
+        "FILE_PATH: hello.txt\n"
+        "FILE_CONTENT_BEGIN\n"
+        "print('hello from the build agent')\n"
+        "FILE_CONTENT_END"
+    )
+
+    async def factory() -> PromptedCompletionService:
+        return await _deterministic_service(template)
+
+    agent = BuildAgentEntrypoint(service_factory=factory, working_directory=tmp_path)
+    registry = InMemoryAgentRegistry({_AGENT_ID: agent})
+    executor = AgentStepExecutor(registry)
+
+    outputs = await executor.execute(_step())
+
+    BuildAgentOutput.model_validate(outputs)
+    assert outputs["workingDirectory"] == str(tmp_path)
+    assert outputs["filePath"] == "hello.txt"
+    assert outputs["written"] is True
+    assert outputs["exitCode"] == 0
+    written_file = tmp_path / "hello.txt"
+    assert written_file.is_file()
+    assert written_file.read_text(encoding="utf-8") == "print('hello from the build agent')"
+    assert "print('hello from the build agent')" in outputs["instruction"]
+
+
+@pytest.mark.asyncio
+async def test_build_agent_creates_a_nested_path_relative_to_the_working_directory(
+    tmp_path: Path,
+) -> None:
+    template = "FILE_PATH: src/app.py\nFILE_CONTENT_BEGIN\ndef main():\n    pass\nFILE_CONTENT_END"
+
+    async def factory() -> PromptedCompletionService:
+        return await _deterministic_service(template)
+
+    agent = BuildAgentEntrypoint(service_factory=factory, working_directory=tmp_path)
+    registry = InMemoryAgentRegistry({_AGENT_ID: agent})
+    executor = AgentStepExecutor(registry)
+
+    outputs = await executor.execute(_step())
+
+    assert outputs["written"] is True
+    written_file = tmp_path / "src" / "app.py"
+    assert written_file.is_file()
+    assert written_file.read_text(encoding="utf-8") == "def main():\n    pass"
+
+
+@pytest.mark.asyncio
+async def test_build_agent_lazily_creates_its_own_working_directory_when_none_supplied() -> None:
+    """No per-workflow workspace exists yet — see this agent's own
+    module docstring. Without an explicit working_directory, the agent
+    creates a real, private one of its own on first use."""
+    template = "FILE_PATH: note.txt\nFILE_CONTENT_BEGIN\nhello\nFILE_CONTENT_END"
+
+    async def factory() -> PromptedCompletionService:
+        return await _deterministic_service(template)
+
+    agent = BuildAgentEntrypoint(service_factory=factory)
+    registry = InMemoryAgentRegistry({_AGENT_ID: agent})
+    executor = AgentStepExecutor(registry)
+
+    outputs = await executor.execute(_step())
+
+    assert outputs["written"] is True
+    written_file = Path(outputs["workingDirectory"]) / "note.txt"
+    assert written_file.is_file()
+    assert written_file.read_text(encoding="utf-8") == "hello"
+
+
+@pytest.mark.asyncio
+async def test_build_agent_rejects_a_malformed_completion(tmp_path: Path) -> None:
+    async def factory() -> PromptedCompletionService:
+        return await _deterministic_service("this completion follows no documented format at all")
+
+    agent = BuildAgentEntrypoint(service_factory=factory, working_directory=tmp_path)
+    registry = InMemoryAgentRegistry({_AGENT_ID: agent})
+    executor = AgentStepExecutor(registry)
+
+    with pytest.raises(BuildInstructionError, match="did not follow the documented"):
+        await executor.execute(_step())
+
+    assert await asyncio.to_thread(lambda: list(tmp_path.iterdir())) == []
+
+
+@pytest.mark.parametrize("malicious_path", ["../../outside.txt", "/etc/passwd"])
+def test_resolve_safe_relative_path_rejects_paths_that_escape_the_working_directory(
+    tmp_path: Path, malicious_path: str
+) -> None:
+    with pytest.raises(BuildInstructionError, match="resolves outside"):
+        _resolve_safe_relative_path(tmp_path, malicious_path)
+
+
+def test_resolve_safe_relative_path_rejects_a_blank_path(tmp_path: Path) -> None:
+    with pytest.raises(BuildInstructionError, match="must not be blank"):
+        _resolve_safe_relative_path(tmp_path, "   ")
+
+
+def test_resolve_safe_relative_path_accepts_a_genuinely_nested_relative_path(
+    tmp_path: Path,
+) -> None:
+    result = _resolve_safe_relative_path(tmp_path, "src/app.py")
+
+    assert result == Path("src/app.py")
+
+
+def test_parse_build_instruction_extracts_path_and_content() -> None:
+    completion = "FILE_PATH: a/b.txt\nFILE_CONTENT_BEGIN\nline one\nline two\nFILE_CONTENT_END"
+
+    path, content = _parse_build_instruction(completion)
+
+    assert path == "a/b.txt"
+    assert content == "line one\nline two"
+
+
+def test_parse_build_instruction_raises_a_clear_error_for_an_unparseable_completion() -> None:
+    with pytest.raises(BuildInstructionError, match="did not follow the documented"):
+        _parse_build_instruction("no markers here at all")
+
+
+def test_build_instruction_input_documents_the_agent_contract() -> None:
+    BuildInstructionInput(instruction="Write a hello-world script.")

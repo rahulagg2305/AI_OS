@@ -1,0 +1,109 @@
+[project]
+name = "ai-os-workspace"
+version = "0.1.0"
+description = "AI_OS workspace root — orchestrates the member distributions and shared tooling config. Not published."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+# Depending on every real workspace member here is what makes a plain
+# `uv sync` (no flags) install the whole workspace into the shared venv.
+# Add each pack/service distribution to this list as it is scaffolded.
+dependencies = [
+    "ai-os-kernel",
+    "ai-os-pack-software-engineering",
+]
+
+# This root project is never built or installed as a package (ADR-0009,
+# ADR-0010). It exists only to declare the uv workspace and to hold tool
+# configuration ([tool.ruff], [tool.mypy], [tool.pytest.ini_options]) that
+# every member shares, so each package does not repeat it.
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.24,<1.0",
+    "pytest-cov>=5.0,<6.0",
+    "httpx>=0.27,<1.0",
+    "mypy>=1.11,<2.0",
+    "ruff>=0.6,<1.0",
+    "types-pyyaml>=6.0,<7.0",
+    "types-jsonschema>=4.23,<5.0",
+    "testcontainers[postgres]>=4.8,<5.0",
+    "pip-audit>=2.7,<3.0",
+]
+
+# --- Workspace members -----------------------------------------------------
+# Each member is its own PEP 621 distribution with its own pyproject.toml
+# (ADR-0009). A member is added to this list only once its pyproject.toml
+# exists — `uv sync` fails on a listed path with no manifest, so this list
+# is deliberately behind the actual scaffolding, not ahead of it.
+#
+# Planned, not yet scaffolded (added as each Implementation Roadmap step
+# lands): platform_sdk (ai-os-sdk), platform_services (ai-os-services),
+# tools/cli (ai-os-cli). capability_packs/software-engineering is the
+# first pack scaffolded this way — see its own pyproject.toml for why it
+# depends on ai-os-kernel directly (a documented, temporary compromise:
+# no ai-os-sdk exists yet for a pack to depend on instead).
+[tool.uv.workspace]
+members = [
+    "kernel",
+    "capability_packs/software-engineering",
+]
+
+[tool.uv.sources]
+ai-os-kernel = { workspace = true }
+ai-os-pack-software-engineering = { workspace = true }
+
+# --- Shared tooling ---------------------------------------------------------
+# ADR-0015: pytest + testcontainers, ruff, mypy --strict, GitHub Actions.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["kernel/src", "capability_packs/software-engineering/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "SIM"]
+# S101 (assert) is expected and required in tests; pytest relies on plain
+# `assert` and stripping it under `-O` is not a supported run mode here.
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+"capability_packs/*/tests/**" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ai_os_kernel", "ai_os_pack_software_engineering"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+plugins = ["pydantic.mypy"]
+# Only real code is checked. Empty component stubs (docstring-only
+# __init__.py files awaiting later Implementation Roadmap stages) still
+# type-check cleanly since they contain no statements.
+files = ["kernel/src", "kernel/alembic", "tests", "capability_packs/software-engineering/src", "capability_packs/software-engineering/tests"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+# docker-py ships no inline types and no py.typed marker, and no
+# maintained third-party stub package exists for it — the identical
+# "declare the gap, do not silently suppress project-wide" treatment
+# this file already avoids by scoping every override to one module.
+module = "docker.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config"
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = true
+source = ["ai_os_kernel"]
+
+[tool.coverage.report]
+skip_empty = true

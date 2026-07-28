@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-os.dev/schemas/manifest/v1.json",
+  "title": "AI_OS Capability Pack Manifest",
+  "description": "Authoritative schema for capability_packs/<pack>/manifest.yaml. The Manifest Loader validates every manifest against this schema before any pack code is imported. See docs/03_architecture/capability_framework/manifest_schema.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "compatibility", "dependencies"],
+  "properties": {
+    "apiVersion": { "const": "ai-os/v1" },
+    "kind": { "const": "CapabilityPack" },
+
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version", "description", "owner", "license"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+          "minLength": 3,
+          "maxLength": 64,
+          "description": "Globally unique, kebab-case pack identifier."
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+          "description": "Semantic version."
+        },
+        "description": { "type": "string", "minLength": 10, "maxLength": 1024 },
+        "owner": { "type": "string", "minLength": 1 },
+        "organization": { "type": "string" },
+        "license": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string", "format": "uri" },
+        "documentation": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" }, "maxItems": 16 }
+      }
+    },
+
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minKernelVersion"],
+      "properties": {
+        "minKernelVersion": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" },
+        "maxKernelVersion": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" }
+      }
+    },
+
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sdkVersion"],
+      "properties": {
+        "sdkVersion": {
+          "type": "string",
+          "description": "PEP 440 / semver range for ai-os-sdk, e.g. '>=1.0.0,<2.0.0'.",
+          "minLength": 1
+        },
+        "services": {
+          "type": "array",
+          "description": "Platform services required. Absence means the pack does not receive them.",
+          "items": {
+            "enum": ["storage", "search", "document_processing", "notification", "git", "speech", "cache"]
+          },
+          "uniqueItems": true
+        },
+        "python": {
+          "type": "array",
+          "description": "Third-party Python requirements (PEP 508 specifiers).",
+          "items": { "type": "string" }
+        },
+        "packs": {
+          "type": "array",
+          "description": "MUST be empty. Pack-to-pack dependencies are prohibited (ADR-0001, ADR-0009).",
+          "maxItems": 0
+        }
+      }
+    },
+
+    "permissions": {
+      "type": "array",
+      "description": "Closed vocabulary. An unknown permission fails validation (ADR-0023).",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "filesystem:read", "filesystem:write",
+          "git:read", "git:write",
+          "llm:invoke", "llm:embed",
+          "speech:transcribe", "speech:synthesize",
+          "sandbox:execute",
+          "network:egress",
+          "storage:read", "storage:write",
+          "knowledge:read", "knowledge:write",
+          "memory:read", "memory:write",
+          "events:publish", "events:subscribe",
+          "workflow:start",
+          "notification:send",
+          "traceability:write"
+        ]
+      }
+    },
+
+    "featureFlags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "default"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "default": { "type": "boolean" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+
+    "configSchema": {
+      "type": "object",
+      "description": "JSON Schema (draft 2020-12) for this pack's configuration namespace."
+    },
+
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "version", "purpose", "entrypoint", "inputSchema", "outputSchema"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+            "description": "Pack-local slug. Fully qualified as '<pack_id>/<id>'."
+          },
+          "name": { "type": "string" },
+          "version": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" },
+          "purpose": { "type": "string", "minLength": 10 },
+          "entrypoint": {
+            "type": "string",
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*:[a-zA-Z_][a-zA-Z0-9_]*$",
+            "description": "Python import path, 'module.path:ClassName'."
+          },
+          "inputSchema": { "type": "string", "description": "Import path to the Pydantic input model." },
+          "outputSchema": { "type": "string", "description": "Import path to the Pydantic output model." },
+          "modelAlias": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "description": "Model ALIAS only. A literal provider model id fails validation (ADR-0002). Required only when this agent's own permissions declare 'llm:invoke' — an agent that genuinely makes no LLM call (e.g. one whose entire job is running an already-written command and reporting its real exit code) declares no permissions requiring one and needs none here either (fixed 2026-07-28; see implementation_status.md for the discovered gap this closes)."
+          },
+          "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] },
+          "requiredTools": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "requiredPrompts": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "permissions": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "qualityGates": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 7200 },
+          "supportedWorkflows": { "type": "array", "items": { "type": "string" } }
+        },
+        "if": {
+          "properties": {
+            "permissions": { "contains": { "const": "llm:invoke" } }
+          },
+          "required": ["permissions"]
+        },
+        "then": {
+          "required": ["modelAlias"]
+        }
+      }
+    },
+
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "version", "description", "entrypoint", "inputSchema", "outputSchema", "trustTier"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)*$" },
+          "name": { "type": "string" },
+          "version": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" },
+          "description": { "type": "string", "minLength": 10 },
+          "entrypoint": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*:[a-zA-Z_][a-zA-Z0-9_]*$" },
+          "inputSchema": { "type": "string" },
+          "outputSchema": { "type": "string" },
+          "trustTier": {
+            "enum": ["tier1_sandboxed", "tier2_trusted"],
+            "description": "Any tool that executes a command, compiles, runs tests, installs dependencies, or processes untrusted content MUST be tier1_sandboxed (ADR-0016)."
+          },
+          "permissions": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+          "errorBehaviour": { "type": "string" }
+        }
+      }
+    },
+
+    "workflows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "version", "description", "definition", "inputsSchema", "outputsSchema", "permissions"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)*$" },
+          "name": { "type": "string" },
+          "version": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" },
+          "description": { "type": "string", "minLength": 10 },
+          "definition": { "type": "string", "description": "Path to the workflow definition file, relative to the pack root." },
+          "inputsSchema": { "type": "string" },
+          "outputsSchema": { "type": "string" },
+          "permissions": {
+            "type": "array",
+            "description": "The permission ceiling for every agent and tool in this workflow (ADR-0023).",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          },
+          "trigger": { "enum": ["manual", "api", "scheduled", "event"] },
+          "maxIterations": { "type": "integer", "minimum": 1, "maximum": 50 },
+          "maxCostUsd": { "type": "number", "exclusiveMinimum": 0 },
+          "timeoutSeconds": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+
+    "qualityGates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "version", "description", "entrypoint", "severity", "successCriteria"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)*$" },
+          "name": { "type": "string" },
+          "version": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" },
+          "description": { "type": "string", "minLength": 10 },
+          "entrypoint": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*:[a-zA-Z_][a-zA-Z0-9_]*$" },
+          "type": { "enum": ["automated", "semi_automated", "manual"], "default": "automated" },
+          "severity": { "enum": ["blocking", "warning"] },
+          "successCriteria": { "type": "string", "minLength": 5 },
+          "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+        }
+      }
+    },
+
+    "prompts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "version", "location", "inputSchema"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)*$" },
+          "version": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" },
+          "location": { "type": "string", "description": "Path relative to the pack root." },
+          "inputSchema": { "type": "string", "description": "Import path to the variables model." },
+          "description": { "type": "string" },
+          "family": { "type": "string" }
+        }
+      }
+    },
+
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "description", "entrypoint"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+          "name": { "type": "string" },
+          "description": { "type": "string", "minLength": 10 },
+          "entrypoint": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*:[a-zA-Z_][a-zA-Z0-9_]*$" },
+          "parameters": { "type": "array", "items": { "type": "object" } },
+          "permissions": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+        }
+      }
+    },
+
+    "events": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "publish": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["eventType", "schemaVersion"],
+            "properties": {
+              "eventType": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)+$" },
+              "schemaVersion": { "type": "integer", "minimum": 1 },
+              "payloadSchema": { "type": "string" }
+            }
+          }
+        },
+        "subscribe": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["eventType", "handler"],
+            "properties": {
+              "eventType": { "type": "string" },
+              "handler": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*:[a-zA-Z_][a-zA-Z0-9_]*$" }
+            }
+          }
+        }
+      }
+    },
+
+    "secrets": {
+      "type": "array",
+      "description": "Secret references this pack may resolve. Values are never in the manifest (ADR-0024).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "reference"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "reference": { "type": "string", "pattern": "^secret://[a-z0-9_-]+/[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+
+    "entryPoint": {
+      "type": "string",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*:[a-zA-Z_][a-zA-Z0-9_]*$",
+      "description": "The CapabilityPack implementation, 'module.path:ClassName'."
+    },
+
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "checkEntrypoint": { "type": "string", "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*:[a-zA-Z_][a-zA-Z0-9_]*$" },
+        "intervalSeconds": { "type": "integer", "minimum": 5, "maximum": 3600, "default": 60 }
+      }
+    }
+  },
+
+  "allOf": [
+    {
+      "if": { "required": ["agents"], "properties": { "agents": { "minItems": 1 } } },
+      "then": { "required": ["entryPoint"] }
+    },
+    {
+      "if": { "required": ["workflows"], "properties": { "workflows": { "minItems": 1 } } },
+      "then": { "required": ["entryPoint"] }
+    }
+  ]
+}

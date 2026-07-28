@@ -1,0 +1,33 @@
+[project]
+name = "ai-os-pack-software-engineering"
+version = "0.1.0"
+description = "AI_OS Software Engineering Capability Pack — Architecture Agent (first real increment)."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+# License: not yet decided at the project level — see manifest.yaml's
+# own `metadata.license: UNLICENSED` and kernel/pyproject.toml's
+# identical open item. Do not set a `license` field here until the
+# project owner decides one.
+dependencies = [
+    "pydantic>=2.7,<3.0",
+    # Direct Kernel dependency — a known, documented, temporary
+    # compromise, not the intended long-term shape. capability_pack_contract.md's
+    # own "Platform Interaction Rules" name the Platform SDK as a pack's
+    # only sanctioned interaction surface ("Direct Kernel access is
+    # prohibited"), but no ai-os-sdk package exists yet (kernel's own
+    # pyproject.toml lists it under "Planned, not yet scaffolded"). This
+    # pack's Architecture Agent needs a real PromptedCompletionService
+    # (database engine, LLM Gateway, Prompt Engine) with nowhere else
+    # honest to get one — see ai_os_pack_software_engineering.agents.
+    # architecture's own docstring for the full reasoning. Replacing
+    # this with a Platform SDK dependency is Platform SDK v1.0.0's own
+    # migration to make, not a redesign of this pack.
+    "ai-os-kernel",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_os_pack_software_engineering"]

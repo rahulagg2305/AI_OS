@@ -1,0 +1,92 @@
+# AI_OS .gitignore
+# See docs/03_architecture/platform/technology_stack.md for the full toolchain.
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+
+# === Virtual environments ===
+.venv/
+venv/
+env/
+ENV/
+
+# === uv ===
+# uv.lock IS committed (ADR-0009: reproducible installs via `uv sync --frozen`).
+# Only the local cache is ignored.
+.uv-cache/
+
+# === Testing & coverage ===
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+.nox/
+
+# === Type checking / lint ===
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+
+# === Environment & secrets ===
+# Never commit real values. .env.example is the only tracked template.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# === Editors / OS ===
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# === Claude Code (local-only settings) ===
+.claude/settings.local.json
+.claude/*.lock
+
+# === Frontend / Dashboard (React + TypeScript + Vite, ADR-0018) ===
+node_modules/
+dashboard/dist/
+dashboard/.vite/
+dashboard/coverage/
+
+# === Databases (local dev only — migrations themselves ARE committed) ===
+*.sqlite3
+*.sqlite3-journal
+*.db
+
+# === Logs & temp ===
+*.log
+*.tmp
+*.bak
+
+# === Project-specific scratch areas ===
+# workspace/ holds prototypes exempt from documentation-first (ADR-0003);
+# scratch/temp contents are disposable, the directories themselves are kept.
+workspace/scratch/*
+workspace/temp/*
+!workspace/scratch/.gitkeep
+!workspace/temp/.gitkeep
+
+# === Container / infra local overrides ===
+infra/**/*.local.yaml
+infra/**/*.local.yml

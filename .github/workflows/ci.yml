@@ -1,0 +1,224 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Per ADR-0015. Stages are fail-fast in order: lint -> types -> unit ->
+# contract -> integration -> security -> build.
+#
+# `contract`, `security`, `build`, and `frontend` reference code paths
+# (tests/contract, tests/security, Dockerfile, dashboard/) that do not
+# exist yet, per docs/19_roadmap/implementation_status.md. Rather than
+# deleting those stages — which would silently drop the pipeline shape
+# ADR-0015 and test_strategy.md §6 document as the target — each
+# not-yet-existing step is individually gated on the path actually
+# existing (`hashFiles(...) != ''`), so the stage is a real no-op today
+# and starts running for real the moment its prerequisite step lands,
+# with no further CI changes required. Steps gated this way are marked
+# below.
+env:
+  UV_VERSION: "0.5.11"
+  PYTHON_VERSION: "3.12"
+  # Never set a real provider key here. Adapter tests use recorded cassettes;
+  # the live provider suite is opt-in and runs outside the merge path.
+  AIOS_ENV: ci
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      - name: ruff check
+        run: uv run ruff check .
+      - name: ruff format
+        run: uv run ruff format --check .
+
+  types:
+    name: Static types
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      # Mirrors [tool.mypy] files in pyproject.toml exactly: only paths
+      # that exist and contain type-checkable Python source today.
+      # platform_sdk/capability_packs currently hold only schema/manifest
+      # files (no Python); platform_services does not exist yet.
+      - name: mypy --strict
+        run: uv run mypy --strict kernel/src kernel/alembic tests
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    needs: types
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      # Coverage (NFR-060) is enforced once, in `integration`, against the
+      # combined unit + integration run — not here. ADR-0015 deliberately
+      # keeps real SQL persistence code (SqlWorkflowInstanceRepository,
+      # SqlWorkflowLeaseRepository, ...) covered only by integration tests
+      # against a real Postgres, never by mocks in unit tests, so unit
+      # coverage alone never reflects "Kernel test coverage" as NFR-060
+      # means it — only unit+integration together do.
+      - name: pytest tests/unit
+        run: uv run pytest tests/unit -v
+
+  contract:
+    name: Contract tests
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      # Validates every pack manifest against the authoritative JSON Schema,
+      # runs the SDK pack contract suite, and enforces the import boundaries
+      # that make ADR-0001/0002/0009 real rather than aspirational.
+      # Gated: no capability pack has a contract suite to run yet.
+      - name: Pack contract suite and Protocol conformance
+        if: hashFiles('tests/contract/**') != ''
+        run: uv run pytest tests/contract -v
+      # Gated: the import-boundary checker script does not exist yet.
+      - name: Import boundary check
+        if: hashFiles('scripts/check_import_boundaries.py') != ''
+        run: uv run python scripts/check_import_boundaries.py
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    needs: contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      # Real Postgres via testcontainers — the same approach every test in
+      # tests/integration already uses (ADR-0015: transactional atomicity,
+      # SKIP LOCKED leasing, and Alembic up/down/up are exactly the
+      # behaviours mocks hide). No GitHub Actions `services:` container and
+      # no AIOS_DATABASE_URL here: each test module provisions and tears
+      # down its own ephemeral container and sets the URL itself. Alembic
+      # up/down/up is exercised by tests/integration/persistence/test_migrations.py,
+      # not as a separate step.
+      - name: pytest tests/unit + tests/integration (coverage-gated, NFR-060)
+        run: >
+          uv run pytest tests/unit tests/integration -v
+          --cov --cov-branch --cov-report=term-missing --cov-fail-under=90
+      # Gated: no end-to-end workflow suite exists yet (needs the LLM
+      # Gateway's stubbed-response contract first).
+      - name: pytest tests/workflow
+        if: hashFiles('tests/workflow/**') != ''
+        run: uv run pytest tests/workflow -v
+
+  security:
+    name: Security checks
+    runs-on: ubuntu-latest
+    needs: contract
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      # Gated: no threat-model control tests exist yet.
+      - name: Threat-model control tests
+        if: hashFiles('tests/security/**') != ''
+        run: uv run pytest tests/security -v
+      # Real today, scoped to runtime dependencies: `--no-emit-workspace`
+      # drops the unpublished local `ai-os-kernel` package itself (pip-audit
+      # cannot look up a package that isn't on PyPI — `--strict` would
+      # otherwise hard-fail on that lookup, not on an actual vulnerability);
+      # `--no-dev` drops dev-only tooling (pytest, mypy, ruff, ...), which
+      # never ships in a deployed AI_OS instance and so is out of scope for
+      # a *runtime* vulnerability gate.
+      - name: Dependency vulnerabilities
+        run: |
+          uv export --format requirements-txt --no-emit-workspace --no-dev -o "$RUNNER_TEMP/requirements-audit.txt"
+          uv run pip-audit --strict -r "$RUNNER_TEMP/requirements-audit.txt"
+      # Real today: runs against actual git history.
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: Build image
+    runs-on: ubuntu-latest
+    needs: [integration, security]
+    # Gated: no Dockerfile exists yet.
+    if: hashFiles('Dockerfile') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # uv sync --frozen inside the Dockerfile fails the build if uv.lock is
+      # stale, so an image can never contain unlocked dependencies.
+      - name: docker build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: ai-os:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  frontend:
+    name: Dashboard
+    runs-on: ubuntu-latest
+    # Gated: no dashboard/ exists yet, so the original trigger condition
+    # (dashboard-related commits, or any PR) is combined with an existence
+    # check — once dashboard/ lands, behavior reverts to exactly that
+    # original condition. Nothing else depends on this job, so a job-level
+    # gate — rather than per-step — is safe here.
+    if: >-
+      hashFiles('dashboard/package.json') != '' &&
+      (contains(github.event.head_commit.message, 'dashboard') || github.event_name == 'pull_request')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+        working-directory: dashboard
+      - run: npx tsc --noEmit
+        working-directory: dashboard
+      - run: npm run lint
+        working-directory: dashboard
+      - run: npm run test -- --run
+        working-directory: dashboard
+      # Fails if the generated client has drifted from the published OpenAPI
+      # document (ADR-0018).
+      - name: OpenAPI client drift check
+        run: npm run check:api-client
+        working-directory: dashboard
