@@ -6,6 +6,8 @@ Auto-read every session. Keep this short — detail lives in the linked files, n
 
 **Read `docs/19_roadmap/implementation_status.md` first, every session, before anything else.** It is short by design and links to `docs/19_roadmap/history/INDEX.md` for full chronological detail. Read any other document only when the current task specifically needs it — see `docs/process/files_to_read_first.md` for what to reach for and when. Do not rely on prior chat history; if something matters, it must be written down somewhere in this tree.
 
+**Update `docs/19_roadmap/feature_inventory.md`'s completion table and overall percentage at the end of every step**, alongside `implementation_status.md` — it is the living, granular tracker for every feature/module/phase (44 modules as of 2026-07-28); `implementation_status.md` stays short and links to it.
+
 ## Approval workflow
 
 Work proceeds in small, explicitly-scoped steps, each approved by the product owner before it starts. Finish exactly the approved scope, report using the shape in `docs/process/reporting_format.md`, recommend the next step (one recommendation, not a menu), and **wait for explicit approval before starting it** — never chain into unapproved work. Full rules: `docs/process/standing_rules.md`.

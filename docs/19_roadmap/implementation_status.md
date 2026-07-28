@@ -4,7 +4,7 @@
 **Document:** Implementation Status
 **Version:** 2.0 (restructured short form)
 **Status:** Active
-**Last Updated:** 2026-07-28 (infrastructure step: git init + baseline commit, `CLAUDE.md`/`docs/process/` set, this document's own history split into `docs/19_roadmap/history/`. No feature/code changes.)
+**Last Updated:** 2026-07-28 (analysis/documentation step: full feature/module/phase inventory with a tracked completion table built — see `docs/19_roadmap/feature_inventory.md`. No feature/code changes.)
 
 ---
 
@@ -12,7 +12,7 @@
 
 A living record of what has actually been built, checked against the exit criteria in `implementation_roadmap.md`, so any session (human or AI) can resume work without rescanning the repository or relying on chat history.
 
-This document is deliberately **short** — current stage, what exists, current blockers, and the next recommended step only. Full chronological detail, subsystem by subsystem, lives in `docs/19_roadmap/history/` (see `history/INDEX.md`). This document is descriptive, not authoritative — on any conflict, the Implementation Roadmap and the ADRs govern.
+This document is deliberately **short** — current stage, what exists, current blockers, and the next recommended step only. Full chronological detail, subsystem by subsystem, lives in `docs/19_roadmap/history/` (see `history/INDEX.md`). For the complete, granular, per-module completion tracker (every feature/module/phase with a percentage and status), see `docs/19_roadmap/feature_inventory.md` — that document, not this one, is the authority on "what % done is X." This document is descriptive, not authoritative — on any conflict, the Implementation Roadmap and the ADRs govern.
 
 **Read this file first, every session, before anything else** (see `CLAUDE.md`). Read a `history/` file only when the current task specifically needs that subsystem's detail.
 
@@ -24,7 +24,7 @@ This document is deliberately **short** — current stage, what exists, current 
 
 As of the last development step (2026-07-28, "Documentation Reconciliation and Verification"): **616 unit tests passing, 218 integration tests passing, 10 correctly skipped** (missing live API key), 0 failed. `mypy --strict` and `ruff` clean throughout.
 
-This step (also 2026-07-28) is infrastructure-only: git repository initialized, `CLAUDE.md` + `docs/process/` created, this document's own history split into `docs/19_roadmap/history/`. No feature or code work.
+The prior step (2026-07-28) was infrastructure-only: git repository initialized, `CLAUDE.md` + `docs/process/` created, this document's own history split into `docs/19_roadmap/history/`. This step (also 2026-07-28) is analysis/documentation-only: a complete feature/module/phase inventory with a tracked completion table was built — see `docs/19_roadmap/feature_inventory.md`. Neither step touched code.
 
 ---
 
@@ -43,7 +43,8 @@ This step (also 2026-07-28) is infrastructure-only: git repository initialized, 
 - **Sandbox & Tool execution**: `LocalSubprocessSandbox` (3/5 guarantees, every agent's current default) and `DockerSandbox` (5/5, ADR-0016 Tier 1, proven live) both implement `SandboxExecutor`; `SandboxedCommandTool` + `ToolStepExecutor` dispatch. → `history/014`, `020`.
 - **Software Engineering Capability Pack**: Architecture, Build, Test, and Documentation agents, all real, chained into one declared workflow (`se.delivery_pipeline`) via `WorkflowStepOutputResolver`. → `history/015`–`019`.
 - **Documentation reconciliation**: agent-catalog naming fixed (`architecture`/`qa-test`/`build`), doc-drift closed, shared Postgres test fixture (`tests/integration/_postgres_fixture.py`) skips cleanly without Docker. → `history/021`.
-- **This step**: git repository + `CLAUDE.md`/`docs/process/` + this history split. → this document's own `## 6` below.
+- **Infrastructure step**: git repository + `CLAUDE.md`/`docs/process/` + this history split.
+- **This step**: full feature/module/phase inventory with a tracked, weighted completion table (44 modules, ≈20% overall) — see `docs/19_roadmap/feature_inventory.md`. Update that document's own table at the end of every future step, alongside this one.
 
 ---
 
@@ -73,15 +74,12 @@ Per standing rule (`docs/process/standing_rules.md`), every step from now on end
 
 ## 6. Recommended Next Small Step
 
-Two live candidates, in priority order:
-
-1. **Resolve the `sys.executable` portability gap and wire `DockerSandbox` in as the Software Engineering pack's default sandbox backend.** This was the recommended step before this infrastructure detour and remains the highest-value next real development step — it closes the last real safety gap on a pipeline that already runs LLM-generated code. Full reasoning preserved in `history/022_gap_analysis_and_blockers_snapshot.md` §6.
-2. **The feature/module/phase inventory and completion-percentage table**, which the product owner has already indicated is the step to follow this one.
-
-Recommendation: proceed with whichever the product owner names next — both are already scoped in enough detail to start immediately.
+Both prior candidates are now resolved (the inventory is this step's own output). Recommendation: **return to feature development — resolve the `sys.executable` portability gap and wire `DockerSandbox` in as the Software Engineering pack's default sandbox backend.** This closes the last real safety gap on a pipeline that already runs LLM-generated code (module 20 in `feature_inventory.md`, currently the highest-scoring "minimal slice" row precisely because this one wiring step is what's missing). Full reasoning preserved in `history/022_gap_analysis_and_blockers_snapshot.md` §6.
 
 ---
 
 ## 7. Maintenance
 
 Update this document at the end of every implementation step: refresh §2 (current stage) and §4 (blockers), re-state §6 with the next recommended step, and commit. If a step's own detail is large enough to warrant its own history entry, add a new numbered file to `docs/19_roadmap/history/` and a line to `history/INDEX.md` — do not let this document grow long again (see the big-file convention in `CLAUDE.md`).
+
+**Also update `docs/19_roadmap/feature_inventory.md`'s own completion table (Section 5) and overall weighted percentage (Section 6) at the end of every step** — standing rule recorded 2026-07-28 in `CLAUDE.md` / `docs/process/standing_rules.md`.

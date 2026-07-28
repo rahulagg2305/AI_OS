@@ -168,6 +168,7 @@ Every entry shows its **status**, because a reader needs to know whether a docum
 |---|---|---|
 | Implementation Roadmap | `19_roadmap/implementation_roadmap.md` | Approved (v2.0) |
 | **Implementation Status (living, short)** | `19_roadmap/implementation_status.md` | Active |
+| **Feature / Module / Phase Completion Tracker (living)** | `19_roadmap/feature_inventory.md` | Active |
 | **Implementation History Index (detailed, split by milestone)** | `19_roadmap/history/INDEX.md` | Active |
 | Phase 0 Completion Review | `19_roadmap/phase_0_completion_review.md` | Approved |
 | Documentation Baseline Record | `19_roadmap/documentation_freeze.md` | Approved (v2.0) |
