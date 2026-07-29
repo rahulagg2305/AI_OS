@@ -58,22 +58,25 @@ agents in the same run instead of one at a time.
    exercises the real, config-driven `DockerSandbox` default too, on top
    of the real LLM call.
 
-**qa-test (step 9) and architecture (step 11) are now migrated onto the
-Platform SDK — both tiers were updated to match, not left to bit-rot.**
-The deterministic tier's `InMemoryAgentRegistry` no longer constructs
-either with a `service_factory`/`sandbox=` override; `_test_agent_with_sandbox`/
-`_architecture_agent_with_prompt` construct each zero-arg and
-`bind_pack_context()` it, mirroring the exact real caller sequence
-`SqlAgentRegistry` itself performs (step 9a). The live tier's
-`SqlAgentRegistry(engine)` call now also supplies real
+**qa-test (step 9), architecture (step 11), and build (step 12) are now
+migrated onto the Platform SDK — all tiers were updated to match, not
+left to bit-rot.** The deterministic tier's `InMemoryAgentRegistry` no
+longer constructs any of the three with a `service_factory`/`sandbox=`
+override; `_test_agent_with_sandbox`/`_architecture_agent_with_prompt`/
+`_build_agent_with_prompt` construct each zero-arg (aside from build's
+own `working_directory`) and `bind_pack_context()` it, mirroring the
+exact real caller sequence `SqlAgentRegistry` itself performs (step 9a).
+The live tier's `SqlAgentRegistry(engine)` call already supplies real
 `llm_gateway`/`prompt_engine` objects (`_build_real_llm_gateway_and_prompt_engine`
-below) — architecture's own declared `llm:invoke` permission means step
-9a's own real injection logic requires a real backing pair the moment
-`resolve_agent()` is called, exactly the same real, discovered
-consequence step 10 already proved for `requirements-analyst`. Build and
-Documentation remain unmigrated (steps 12/13) and are unaffected by
-either change — `_bind_pack_context_if_receiver` is a genuine no-op for
-any entrypoint that does not implement `PackContextReceiver`.
+below) — build's own declared `llm:invoke` permission needs the
+identical backing pair architecture's own migration (step 11) already
+required, so no further change was needed there; its own `sandbox:execute`
+permission is backed by `SqlAgentRegistry`'s own default sandbox
+(step 9a), and build's own `python_command` constructor default
+(`("python3",)`) matches that default backend (`DockerSandbox`).
+Documentation remains unmigrated (step 13) and is unaffected by any of
+this — `_bind_pack_context_if_receiver` is a genuine no-op for any
+entrypoint that does not implement `PackContextReceiver`.
 """
 
 import asyncio
@@ -212,6 +215,38 @@ def _architecture_agent_with_prompt(template: str, prompt_id: str) -> Architectu
     return agent
 
 
+def _build_agent_with_prompt(
+    template: str, prompt_id: str, *, working_directory: Path
+) -> BuildAgentEntrypoint:
+    """build is migrated onto the Platform SDK (step 12) — no more
+    ``service_factory``/``sandbox`` constructor overrides. Construct
+    zero-arg (aside from ``working_directory``, still a legitimate
+    override — see the agent's own module docstring), then bind the
+    real ``PackContext`` a real caller would inject, granting both
+    ``llm:invoke`` and ``sandbox:execute`` — the first agent in this
+    pipeline needing both together. ``python_command`` is passed
+    explicitly, matching ``LocalSubprocessSandbox().python_command``
+    (``sys.executable``) — the identical "the caller supplying the
+    sandbox must also supply the matching interpreter command"
+    discipline this module's own docstring already established for the
+    Test step's derived ``runCommand``."""
+    agent = BuildAgentEntrypoint(
+        working_directory=working_directory,
+        python_command=LocalSubprocessSandbox().python_command,
+    )
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke", "sandbox:execute"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
+            sandbox=LocalSubprocessSandbox(),
+        )
+    )
+    return agent
+
+
 @pytest.fixture(scope="module")
 def database_url() -> Generator[str, None, None]:
     with postgres_container() as postgres:
@@ -246,24 +281,21 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
     step's genuine input."""
 
     architecture_template = "DESIGN: a single Python script.\nContext was: {{context}}"
-
-    async def build_service() -> PromptedCompletionService:
-        # {{context}} (Architecture's own real, JSON-quoted output) is
-        # deliberately placed in a comment-like prefix *before* the
-        # FILE_PATH marker, never inside the generated file's own
-        # Python string literal — `_parse_build_instruction` finds the
-        # FILE_PATH/...END block anywhere in the completion, so this
-        # proves the real hand-off (readable back from `instruction`)
-        # without making the *written file's* own validity depend on
-        # what upstream free text happens to contain (quotes, newlines).
-        return await _deterministic_service(
-            "Upstream design: {{context}}\n\n"
-            "FILE_PATH: solution.py\n"
-            "FILE_CONTENT_BEGIN\n"
-            'print("hello from the pipeline")\n'
-            "FILE_CONTENT_END",
-            "build.write_file",
-        )
+    # {{context}} (Architecture's own real, JSON-quoted output) is
+    # deliberately placed in a comment-like prefix *before* the
+    # FILE_PATH marker, never inside the generated file's own Python
+    # string literal — `_parse_build_instruction` finds the
+    # FILE_PATH/...END block anywhere in the completion, so this proves
+    # the real hand-off (readable back from `instruction`) without
+    # making the *written file's* own validity depend on what upstream
+    # free text happens to contain (quotes, newlines).
+    build_template = (
+        "Upstream design: {{context}}\n\n"
+        "FILE_PATH: solution.py\n"
+        "FILE_CONTENT_BEGIN\n"
+        'print("hello from the pipeline")\n'
+        "FILE_CONTENT_END"
+    )
 
     async def documentation_service() -> PromptedCompletionService:
         return await _deterministic_service(
@@ -279,10 +311,8 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
             _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
                 architecture_template, "architecture.propose_design"
             ),
-            _AGENT_IDS["build"]: BuildAgentEntrypoint(
-                service_factory=build_service,
-                working_directory=tmp_path,
-                sandbox=LocalSubprocessSandbox(),
+            _AGENT_IDS["build"]: _build_agent_with_prompt(
+                build_template, "build.write_file", working_directory=tmp_path
             ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: DocumentationAgentEntrypoint(

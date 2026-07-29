@@ -3,34 +3,80 @@ Target)" #4/#5 (Backend/Frontend Development), reduced to the smallest
 real slice this step approves: given a design/instruction, produce
 *one* concrete file and genuinely write it — the first real connection
 in this codebase between an LLM-produced instruction and sandboxed
-execution. No Test/Documentation Agent, no automatic multi-step
-Architecture -> Build pipeline, no ``DockerSandbox`` backend — exactly
-this step's own approved scope.
+execution.
 
-**Composes two already-real pieces; invents neither.** This agent's
-``execute()`` does two things, in order: (1) render this agent's own
-prompt and complete it against a real LLM, by delegating to a real,
-internally-built :class:`~ai_os_kernel.workflow_engine.prompted_agent.
-PromptedAgent` — identical composition to
-:mod:`ai_os_pack_software_engineering.agents.architecture`'s own
-``_build_real_service()``, not a second, divergent way to assemble the
-same pieces; (2) parse that completion's text into a file path and
-content, then genuinely write it through a
+**Migrated onto the real Platform SDK (``platform_sdk_v1_scope.md``
+step 12) — the third migration, and the first needing both real gateway
+injection AND real tool injection together.** This entrypoint now
+implements :class:`~ai_os_sdk.contracts.Agent` and
+:class:`~ai_os_sdk.contracts.entrypoint_context.PackContextReceiver`
+only. It imports nothing from ``ai_os_kernel`` at all. Where it used to
+lazily build its own real :class:`~ai_os_kernel.workflow_engine.
+prompted_agent.PromptedAgent` and construct a
 :class:`~ai_os_kernel.workflow_engine.sandboxed_tool.SandboxedCommandTool`
-— reusing that Tool exactly as this step's own approved framing names
-it ("through a real SandboxedCommandTool"), not a parallel write
-mechanism.
+directly over an injected :class:`~ai_os_kernel.sandbox.executor.
+SandboxExecutor`, it now reads ``self._context.llm``/
+``self._context.prompts`` (replicating
+:meth:`~ai_os_kernel.prompted_completion.PromptedCompletionService.
+complete_from_prompt`'s own real render-then-complete logic, exactly as
+``requirements_analyst.py``/``architecture.py`` already do) and calls
+``self._context.tools.invoke(PLATFORM_SANDBOX_RUN_COMMAND, ...)`` for
+the write itself, exactly as ``verification.py`` (step 9) already does.
 
-**Zero-argument-constructible, lazily self-composing — the identical
-``ArchitectureAgentEntrypoint`` pattern, reused, not reinvented.** See
-that module's own docstring for the full reasoning behind why
-``PromptedAgent`` cannot itself be the zero-arg entrypoint
-(:class:`~ai_os_kernel.workflow_engine.entrypoint_loader.EntrypointLoader`
-always calls ``cls()``) and why deferring real async composition to the
-first :meth:`execute` call, lock-guarded, is the resolution. This agent
-additionally defers creating its own sandbox working directory the
-same way, for the same reason: creating a directory is I/O, and
-``__init__`` must stay synchronous and free of it.
+**The lock is *not* fully obsolete here — a real, discovered nuance
+neither step 10 nor step 11 needed to consider.** Those two migrations
+found their own lazy-build lock entirely obsolete, because the *only*
+thing it ever guarded (a concurrent double-build race on a lazily
+constructed LLM completion service) cannot occur once composition
+arrives once, synchronously, via :meth:`bind_pack_context`. This agent's
+own lock guarded a *second*, unrelated concern too: lazily creating its
+own private working directory (``tempfile.mkdtemp()``) on first
+:meth:`execute`, when none is supplied — a concern that has nothing to
+do with ``PackContext`` injection at all and is not resolved by it. Two
+concurrent first ``execute()`` calls with no shared lock would each call
+``mkdtemp()`` independently, silently forking into two different,
+unrelated directories instead of sharing one — a real correctness bug,
+not merely a missed optimisation. **This module therefore keeps a
+narrower lock**, guarding only the working-directory creation, not any
+LLM composition (there is none left to guard). Proven by a concurrent-
+execute test asserting every call shares the identical working
+directory, not merely that all calls individually succeed.
+
+**A real, discovered tension using ``ToolInvoker`` instead of direct
+sandbox construction — the one this step's own approved framing asked
+to watch for.** The old code asked its own injected ``SandboxExecutor``
+for its ``python_command`` property (``sys.executable`` for
+``LocalSubprocessSandbox``, ``python3`` for ``DockerSandbox`` — a real,
+backend-specific fact the sandbox object itself already knew). A
+migrated agent no longer holds a ``SandboxExecutor`` at all — only a
+generic :class:`~ai_os_sdk.contracts.ToolInvoker`, which has no
+``python_command`` concept and cannot answer this question (a real,
+already-documented gap: ``ToolInvokerAdapter``'s own docstring already
+records that the Protocol carries no trace parameter either — this is
+the same class of "the Protocol is deliberately generic, backend facts
+do not cross it" limitation, surfacing a second time). **Resolution:**
+``python_command`` becomes a constructor-time default
+(``("python3",)`` — correct for ``DockerSandbox``, the real,
+documented system-wide default backend, ``AIOS_SANDBOX_BACKEND``
+defaulting to ``"docker"``), overridable by a caller that knows better
+— the identical "optional constructor override, always the default in
+real ``EntrypointLoader`` dispatch" shape every agent in this pack
+already uses for test-only substitution. **The real, narrow regression
+risk this creates, recorded rather than silently accepted:** if a real
+deployment ever sets ``AIOS_SANDBOX_BACKEND=local`` without also
+reconfiguring this agent's own default, the write step fails with a
+real, clear ``platform.sandbox.run_command`` execution error (the
+interpreter named by the stale default is not found) rather than
+silently writing nothing — a loud failure, not a silent wrong write, but
+a real coupling the old code's own dynamic ``sandbox.python_command``
+lookup never had. Recorded in ``feature_inventory.md``'s own §6a "Known
+Regressions" section alongside the ``evaluation.llm_calls`` gap, since
+this is the same category of structural, cross-step finding, not a
+one-off.
+
+**The identical, already-recorded ``evaluation.llm_calls`` capability
+loss applies here too.** No new finding — see
+``requirements_analyst.py``'s own docstring for the full reasoning.
 
 **The LLM's file-write instruction is parsed from a fixed, explicit
 text format, not JSON.** JSON would need the model to correctly escape
@@ -43,40 +89,34 @@ verbatim. This agent's own prompt (``prompts/build_write_file.md``)
 instructs the model to respond in exactly this format and nothing else.
 
 **The write itself happens through the sandbox, never through this
-module's own Python code touching the filesystem directly — the
-constraint this step's own approved framing states explicitly ("no
-direct/unsandboxed file writes from agent code").** File content is
-delivered to a small, fixed write-file script via the Sandbox
-Executor's own ``stdin`` parameter (a small, additive extension made
-this step — see :mod:`ai_os_kernel.sandbox.executor`'s own docstring)
-rather than as a command-line argument, avoiding both shell-quoting
-risk and argv length limits for what may be a full source file. The
-script itself never touches anything outside ``working_directory``
-(POSIX/Windows-portable, uses only ``pathlib``/``sys.stdin``, no shell).
+module's own Python code touching the filesystem directly.** File
+content is delivered to a small, fixed write-file script via the
+``platform.sandbox.run_command`` tool's own ``stdin`` input (a string;
+the real Kernel-side adapter encodes it) rather than as a command-line
+argument, avoiding both shell-quoting risk and argv length limits for
+what may be a full source file. The script itself never touches
+anything outside ``working_directory`` (POSIX/Windows-portable, uses
+only ``pathlib``/``sys.stdin``, no shell).
 
 **The model's own declared file path is independently validated by
-this module before being trusted, not merely passed through.**
-:class:`~ai_os_kernel.sandbox.executor.LocalSubprocessSandbox` itself
-provides no filesystem containment (its own ``guarantees`` say so
-honestly) — a path like ``../../etc/passwd`` would otherwise reach the
-write script unchanged. :func:`_resolve_safe_relative_path` resolves
-the model's path against the working directory and rejects anything
-that does not remain inside it (absolute paths, ``..`` escapes, and —
-on Windows specifically — a root-anchored-but-driveless path like
-``/etc/passwd``, which naive ``Path.is_absolute()``-only checks miss,
-since joining an anchored path onto an existing one discards the
-existing path's own tail). This is the identical canonical-path-
-resolution discipline security_architecture.md §5.2 already mandates
-for Tier 2 operations, applied here defensively for a Tier 1 one, since
-the sandbox itself cannot be relied on to enforce it.
+this module before being trusted, not merely passed through.** The real
+sandbox backend provides no filesystem containment on its own — a path
+like ``../../etc/passwd`` would otherwise reach the write script
+unchanged. :func:`_resolve_safe_relative_path` resolves the model's
+path against the working directory and rejects anything that does not
+remain inside it (absolute paths, ``..`` escapes, and — on Windows
+specifically — a root-anchored-but-driveless path like ``/etc/passwd``,
+which naive ``Path.is_absolute()``-only checks miss). This is the
+identical canonical-path-resolution discipline security_architecture.md
+§5.2 already mandates for Tier 2 operations, applied here defensively
+for a Tier 1 one.
 
 **No per-workflow workspace exists yet (security_architecture.md §5.3
 — still Stage C, unbuilt).** Absent an explicit ``working_directory``,
 this agent creates and reuses one private temporary directory of its
 own — real isolation for *this agent instance*, not the documented
 per-workflow isolation a real Workspace Service will eventually
-provide. A future step assigning a real per-workflow workspace replaces
-this default; it does not change this agent's own write path.
+provide.
 """
 
 from __future__ import annotations
@@ -84,29 +124,14 @@ from __future__ import annotations
 import asyncio
 import re
 import tempfile
-from collections.abc import Awaitable, Callable
+import uuid
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import PROVIDER_NAME
-from ai_os_kernel.llm_gateway.adapters.model_config import load_provider_config
-from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
-from ai_os_kernel.persistence.engine import build_engine
-from ai_os_kernel.persistence.settings import DatabaseSettings
-from ai_os_kernel.prompted_completion import (
-    PromptedCompletionService,
-    build_anthropic_prompted_completion_service,
-)
-from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
-from ai_os_kernel.sandbox.executor import SandboxExecutor
-from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
-from ai_os_kernel.workflow_engine.prompted_agent import PromptedAgent
-from ai_os_kernel.workflow_engine.sandboxed_tool import SandboxedCommandTool
-
-# Mirrors architecture.py's own identical constant exactly.
-_API_KEY_SECRET_REFERENCE = "secret://env/llm/anthropic-api-key"  # noqa: S105 — a reference URI, not a credential
+from ai_os_sdk.contracts.tool_invoker import PLATFORM_SANDBOX_RUN_COMMAND
+from ai_os_sdk.models import LLMRequest, Message, MessageRole, TraceContext
 
 # Named, documented first-cut values — the same "placeholder safety
 # limit, not yet tuned" carve-out already used throughout this
@@ -117,8 +142,16 @@ _MAX_OUTPUT_TOKENS = 4096
 _WRITE_TIMEOUT_SECONDS = 10.0
 _WRITE_MAX_OUTPUT_BYTES = 65536
 
-_CONFIG_PATH = Path.cwd() / "config" / "llm.yaml"
 _WORKSPACE_PREFIX = "aios-build-agent-"
+
+# The real, documented system-wide default backend
+# (ai_os_kernel.sandbox.default_executor.ENV_VAR defaults to "docker")
+# — see this module's own docstring's "real, discovered tension" section
+# for why this is a constructor default, not a value this module can
+# discover dynamically the way the pre-migration code did.
+_DEFAULT_PYTHON_COMMAND: tuple[str, ...] = ("python3",)
+
+_REQUIRED_INVOCATION_FIELDS = ("promptId", "promptVersion", "modelAlias")
 
 # The write-file script executed inside the sandbox — portable
 # (pathlib/sys.stdin only, no shell), and confined to writing exactly
@@ -168,12 +201,15 @@ _OUTPUT_SCHEMA: dict[str, Any] = {
 
 
 class BuildInstructionError(Exception):
-    """The model's completion could not be turned into a safe file
-    write — either it did not follow the documented ``FILE_PATH``/
-    ``FILE_CONTENT_BEGIN``/``FILE_CONTENT_END`` format, or its declared
-    path does not resolve inside the sandbox working directory. Raised
-    clearly, before any sandbox call is attempted — never a bare
-    regex-miss or path exception."""
+    """Either this entrypoint's own invocation contract was violated
+    (called before :meth:`bind_pack_context`, or missing a required
+    ``promptId``/``promptVersion``/``modelAlias`` field), or the model's
+    completion could not be turned into a safe file write — it did not
+    follow the documented ``FILE_PATH``/``FILE_CONTENT_BEGIN``/
+    ``FILE_CONTENT_END`` format, or its declared path does not resolve
+    inside the sandbox working directory. Raised clearly, before any
+    sandbox call is attempted — never a bare regex-miss or path
+    exception."""
 
 
 class BuildInstructionInput(BaseModel):
@@ -184,10 +220,9 @@ class BuildInstructionInput(BaseModel):
     unchanged, "no per-step input-mapping mechanism exists" scope).
     ``instruction`` reaches this agent today via the Context Manager's
     own assembled ``context`` prompt variable, the one real channel
-    this codebase's ``AgentStepExecutor``/``PromptedAgent`` establish —
-    it may be the Architecture Agent's own proposal, or, per this
-    step's own approved framing, a simpler direct instruction; either
-    is free text from this agent's own point of view.
+    this codebase's ``AgentStepExecutor`` establishes — it may be the
+    Architecture Agent's own proposal, or a simpler direct instruction;
+    either is free text from this agent's own point of view.
     """
 
     instruction: str = Field(
@@ -199,13 +234,13 @@ class BuildAgentOutput(BaseModel):
     """Documents this agent's Agent Contract "Produced Outputs." Mirrors
     the real fields :meth:`BuildAgentEntrypoint.execute` returns —
     ``instruction`` is the model's own raw completion text, kept for
-    traceability ("content traceable back to the LLM's instruction,"
-    this step's own requirement), not re-derived from the parsed
-    path/content. ``workingDirectory`` is included because, absent a
-    real per-workflow workspace (still Stage C/unbuilt — see this
-    module's own docstring), each agent instance's directory is private
-    and otherwise undiscoverable — a future Test Agent verifying what
-    this agent wrote needs both fields together, not ``filePath`` alone.
+    traceability ("content traceable back to the LLM's instruction"),
+    not re-derived from the parsed path/content. ``workingDirectory`` is
+    included because, absent a real per-workflow workspace (still Stage
+    C/unbuilt — see this module's own docstring), each agent instance's
+    directory is private and otherwise undiscoverable — a future Test
+    Agent verifying what this agent wrote needs both fields together,
+    not ``filePath`` alone.
     """
 
     working_directory: str = Field(..., alias="workingDirectory")
@@ -252,51 +287,34 @@ def _parse_build_instruction(completion_text: str) -> tuple[str, str]:
     return match.group("path"), match.group("content")
 
 
-async def _build_real_service() -> PromptedCompletionService:
-    """The real, production composition — identical to
-    :func:`ai_os_pack_software_engineering.agents.documentation._build_real_service`
-    (architecture.py's own former copy was removed in step 11's
-    migration onto the Platform SDK; see that module's docstring and
-    `platform_sdk_v1_scope.md` §6m/§6n). Not shared as a common helper:
-    each still-unmigrated agent module owns its own copy of this small,
-    already-minimal composition, the same "no shared module needed for
-    a single real caller each" reasoning ADR-0004 already applies
-    elsewhere in this codebase; a real second use would justify
-    factoring it out, not anticipating one now.
-    """
-    provider_config = load_provider_config(_CONFIG_PATH)
-    router = StaticRouter(
-        routes={
-            alias: RoutingDecision(
-                provider=provider_config.providers.get(alias, PROVIDER_NAME), model_id=model_id
-            )
-            for alias, model_id in provider_config.model_ids.items()
-        }
-    )
-    engine = build_engine(DatabaseSettings().database_url)
-    return await build_anthropic_prompted_completion_service(
-        engine=engine,
-        secret_provider=EnvSecretProvider(),
-        api_key_secret_reference=_API_KEY_SECRET_REFERENCE,
-        router=router,
-        pricing=provider_config.pricing,
-    )
+def _build_variables(inputs: dict[str, Any]) -> dict[str, Any]:
+    """Mirrors :meth:`~ai_os_kernel.workflow_engine.prompted_agent.
+    PromptedAgent._build_variables` exactly, duck-typed rather than
+    ``isinstance``-checked against ``AssembledContext`` — see
+    ``requirements_analyst.py``'s own docstring and
+    ``platform_sdk_v1_scope.md`` §6k for why."""
+    variables = dict(inputs.get("variables") or {})
+    context = inputs.get("context")
+    items = getattr(context, "items", None)
+    if items and "context" not in variables:
+        variables["context"] = "\n\n".join(item.content for item in items)
+    return variables
 
 
 class BuildAgentEntrypoint:
     """The manifest's own ``agents[].entrypoint`` for the Build Agent —
-    zero-argument-constructible, lazily building both a real
-    ``PromptedAgent`` and (unless one is supplied) its own private
-    sandbox working directory on first :meth:`execute` call. See this
-    module's own docstring for the full reasoning.
+    zero-argument-constructible. See this module's own docstring for
+    why it still keeps a lock (guarding only lazy working-directory
+    creation, not any LLM composition) and why ``python_command`` is a
+    constructor default rather than something discovered dynamically.
 
-    ``service_factory``/``sandbox``/``working_directory`` are optional
-    constructor overrides — always their defaults in production
-    (``EntrypointLoader`` only ever calls ``cls()``), and how a test
-    substitutes a deterministic completion service, a fake/inspectable
-    sandbox, or a known temporary directory. None of these weaken the
-    zero-arg boundary: every parameter is optional and defaulted, so
-    ``cls()`` still succeeds exactly as ``EntrypointLoader`` requires.
+    ``working_directory``/``python_command`` are optional constructor
+    overrides — always their defaults in production (``EntrypointLoader``
+    only ever calls ``cls()``), and how a test substitutes a known
+    temporary directory or a non-default interpreter command. Neither
+    weakens the zero-arg boundary: both parameters are optional and
+    defaulted, so ``cls()`` still succeeds exactly as ``EntrypointLoader``
+    requires.
     """
 
     output_schema: dict[str, Any] = _OUTPUT_SCHEMA
@@ -304,53 +322,109 @@ class BuildAgentEntrypoint:
     def __init__(
         self,
         *,
-        service_factory: Callable[[], Awaitable[PromptedCompletionService]] | None = None,
-        sandbox: SandboxExecutor | None = None,
         working_directory: Path | None = None,
+        python_command: tuple[str, ...] = _DEFAULT_PYTHON_COMMAND,
     ) -> None:
-        self._service_factory = service_factory or _build_real_service
-        self.sandbox = sandbox or build_default_sandbox_executor()
+        self._context: Any | None = None
         self._working_directory = working_directory
-        self._agent: PromptedAgent | None = None
-        self._setup_lock = asyncio.Lock()
+        self._python_command = python_command
+        self._directory_lock = asyncio.Lock()
+
+    def bind_pack_context(self, context: Any) -> None:
+        self._context = context
 
     async def execute(self, inputs: dict[str, Any]) -> dict[str, Any]:
-        agent, working_directory = await self._ensure_ready()
+        if (
+            self._context is None
+            or self._context.llm is None
+            or self._context.prompts is None
+            or self._context.tools is None
+        ):
+            raise BuildInstructionError(
+                "BuildAgentEntrypoint.execute() called before bind_pack_context() bound a "
+                "PackContext granting both the llm:invoke and sandbox:execute permissions "
+                "(context.llm/context.prompts/context.tools) — a real caller must inject "
+                "one before first use"
+            )
 
-        completion_outputs = await agent.execute(inputs)
-        instruction_text = completion_outputs["content"]
+        prompt_id = inputs.get("promptId")
+        prompt_version = inputs.get("promptVersion")
+        model_alias = inputs.get("modelAlias")
+        missing = [
+            name
+            for name, value in zip(
+                _REQUIRED_INVOCATION_FIELDS,
+                (prompt_id, prompt_version, model_alias),
+                strict=True,
+            )
+            if not isinstance(value, str) or not value
+        ]
+        if missing:
+            raise BuildInstructionError(
+                "BuildAgentEntrypoint requires 'promptId', 'promptVersion', and 'modelAlias' "
+                f"in its inputs — missing: {', '.join(missing)}"
+            )
+
+        working_directory = await self._ensure_working_directory()
+
+        rendered = await self._context.prompts.render(
+            prompt_id, _build_variables(inputs), version=prompt_version
+        )
+
+        workflow_id = inputs.get("workflowId")
+        step_id = inputs.get("stepId")
+        agent_id = inputs.get("agentId")
+        metadata = (
+            TraceContext(
+                trace_id=uuid.uuid4().hex,
+                span_id=uuid.uuid4().hex,
+                workflow_id=workflow_id,
+                step_id=step_id,
+                agent_id=agent_id,
+            )
+            if workflow_id is not None or step_id is not None
+            else None
+        )
+
+        response = await self._context.llm.complete(
+            LLMRequest(
+                model_alias=model_alias,
+                messages=[Message(role=MessageRole.USER, content=rendered.content)],
+                max_output_tokens=_MAX_OUTPUT_TOKENS,
+                metadata=metadata,
+            )
+        )
+        instruction_text = response.content
         raw_path, content = _parse_build_instruction(instruction_text)
         relative_path = await asyncio.to_thread(
             _resolve_safe_relative_path, working_directory, raw_path
         )
 
-        writer = SandboxedCommandTool(
-            self.sandbox,
-            command=[*self.sandbox.python_command, "-c", _WRITE_FILE_SCRIPT, str(relative_path)],
-            working_directory=working_directory,
-            timeout_seconds=_WRITE_TIMEOUT_SECONDS,
-            max_output_bytes=_WRITE_MAX_OUTPUT_BYTES,
-            stdin=content.encode("utf-8"),
+        result = await self._context.tools.invoke(
+            PLATFORM_SANDBOX_RUN_COMMAND,
+            {
+                "command": [*self._python_command, "-c", _WRITE_FILE_SCRIPT, str(relative_path)],
+                "working_directory": str(working_directory),
+                "timeout_seconds": _WRITE_TIMEOUT_SECONDS,
+                "max_output_bytes": _WRITE_MAX_OUTPUT_BYTES,
+                "stdin": content,
+            },
         )
-        write_outputs = await writer.execute({})
 
         return {
             "workingDirectory": str(working_directory),
             "filePath": str(relative_path),
-            "written": write_outputs["exitCode"] == 0 and not write_outputs["timedOut"],
-            "exitCode": write_outputs["exitCode"],
-            "stdout": write_outputs["stdout"],
-            "stderr": write_outputs["stderr"],
+            "written": result.exit_code == 0 and not result.timed_out,
+            "exitCode": result.exit_code,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
             "instruction": instruction_text,
         }
 
-    async def _ensure_ready(self) -> tuple[PromptedAgent, Path]:
-        async with self._setup_lock:
-            if self._agent is None:
-                service = await self._service_factory()
-                self._agent = PromptedAgent(service=service, max_output_tokens=_MAX_OUTPUT_TOKENS)
+    async def _ensure_working_directory(self) -> Path:
+        async with self._directory_lock:
             if self._working_directory is None:
                 self._working_directory = await asyncio.to_thread(
                     lambda: Path(tempfile.mkdtemp(prefix=_WORKSPACE_PREFIX))
                 )
-        return self._agent, self._working_directory
+        return self._working_directory

@@ -313,13 +313,13 @@ def _resolve_safe_relative_path(working_directory: Path, raw_path: str) -> Path:
 
 
 async def _build_real_service() -> PromptedCompletionService:
-    """The real, production composition — identical to
-    :func:`ai_os_pack_software_engineering.agents.build._build_real_service`
-    (architecture.py's own former copy was removed in step 11's
-    migration onto the Platform SDK; see that module's docstring and
-    `platform_sdk_v1_scope.md` §6m/§6n). Not shared as a common helper —
-    see `build.py`'s own docstring for the ADR-0004 reasoning this
-    module also relies on.
+    """The real, production composition — this is now the last surviving
+    copy in this pack (architecture.py's own copy was removed in step
+    11's migration, build.py's own in step 12's; see each module's own
+    docstring and `platform_sdk_v1_scope.md` §6m/§6n/§6o). Not shared as
+    a common helper even while three copies existed — the "no shared
+    module needed for a single real caller each" reasoning ADR-0004
+    already applies elsewhere in this codebase.
     """
     provider_config = load_provider_config(_CONFIG_PATH)
     router = StaticRouter(

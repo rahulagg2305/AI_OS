@@ -32,13 +32,19 @@ need Docker; `postgres_container()`'s own skip already covers "Docker is
 unreachable" for both needs at once — no second, redundant Docker check
 is added here.
 
-**qa-test (step 9) and architecture (step 11) are migrated onto the
-Platform SDK** — this file's own `InMemoryAgentRegistry` construction
-was updated to match, mirroring `test_delivery_pipeline.py`'s own
-identical fix: `_test_agent_with_sandbox`/`_architecture_agent_with_prompt`
-construct each zero-arg and `bind_pack_context()` it instead of passing
+**qa-test (step 9), architecture (step 11), and build (step 12) are
+migrated onto the Platform SDK** — this file's own `InMemoryAgentRegistry`
+construction was updated to match, mirroring `test_delivery_pipeline.py`'s
+own identical fix: `_test_agent_with_sandbox`/`_architecture_agent_with_prompt`/
+`_build_agent_with_prompt` construct each zero-arg (aside from build's
+own `working_directory`) and `bind_pack_context()` it instead of passing
 a `sandbox=`/`service_factory=` constructor override that no longer
-exists.
+exists. Build's own write now happens through `context.tools.invoke`
+(`platform.sandbox.run_command`) against a real `DockerSandbox`, not a
+directly constructed `SandboxedCommandTool` — this test is this pack's
+most important real proof of that path, since the generated probe
+script's own network/filesystem-escape attempts must still genuinely
+fail when written and run this way.
 """
 
 from __future__ import annotations
@@ -118,6 +124,37 @@ def _architecture_agent_with_prompt(template: str, prompt_id: str) -> Architectu
     return agent
 
 
+def _build_agent_with_prompt(
+    template: str, prompt_id: str, *, working_directory: Path
+) -> BuildAgentEntrypoint:
+    """build is migrated onto the Platform SDK (step 12) — no more
+    ``service_factory``/``sandbox`` constructor overrides. Construct
+    zero-arg (aside from ``working_directory``), then bind the real
+    ``PackContext`` a real caller would inject, granting both
+    ``llm:invoke`` and ``sandbox:execute`` over a real ``DockerSandbox``
+    — mirrors `test_delivery_pipeline.py`'s own identical helper.
+    ``python_command`` is passed explicitly as ``DockerSandbox().python_command``
+    (``python3``) — this module's own docstring already establishes why
+    the sandbox and its matching interpreter command must always be
+    supplied together, explicitly, rather than left to bare defaults
+    that happen to currently agree."""
+    agent = BuildAgentEntrypoint(
+        working_directory=working_directory,
+        python_command=DockerSandbox().python_command,
+    )
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke", "sandbox:execute"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
+            sandbox=DockerSandbox(),
+        )
+    )
+    return agent
+
+
 # The generated file the pipeline itself writes and runs — real code
 # taking the real, deterministic Build completion path, not a command
 # this test file hands directly to a sandbox. Both checks attempt
@@ -179,15 +216,13 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
     attempt and a filesystem-escape attempt — both made by code the
     pipeline itself generated and ran — genuinely failed."""
 
-    async def build_service() -> PromptedCompletionService:
-        return await _deterministic_service(
-            "Upstream design: {{context}}\n\n"
-            "FILE_PATH: probe.py\n"
-            "FILE_CONTENT_BEGIN\n"
-            f"{_PROBE_SCRIPT}"
-            "FILE_CONTENT_END",
-            "build.write_file",
-        )
+    build_template = (
+        "Upstream design: {{context}}\n\n"
+        "FILE_PATH: probe.py\n"
+        "FILE_CONTENT_BEGIN\n"
+        f"{_PROBE_SCRIPT}"
+        "FILE_CONTENT_END"
+    )
 
     async def documentation_service() -> PromptedCompletionService:
         return await _deterministic_service(
@@ -205,10 +240,8 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
                 "Context was: {{context}}",
                 "architecture.propose_design",
             ),
-            _AGENT_IDS["build"]: BuildAgentEntrypoint(
-                service_factory=build_service,
-                working_directory=tmp_path,
-                sandbox=DockerSandbox(),
+            _AGENT_IDS["build"]: _build_agent_with_prompt(
+                build_template, "build.write_file", working_directory=tmp_path
             ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(DockerSandbox()),
             _AGENT_IDS["documentation"]: DocumentationAgentEntrypoint(

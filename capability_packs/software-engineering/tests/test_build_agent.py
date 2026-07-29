@@ -5,15 +5,31 @@ file happens through a real ``LocalSubprocessSandbox``/real OS
 subprocess, so a passing test means a real file genuinely exists on
 disk afterward, not an assertion about a mock's call arguments.
 
-**``sandbox=LocalSubprocessSandbox()`` is now passed explicitly
-(2026-07-28).** ``BuildAgentEntrypoint``'s own bare default is now
-config-driven (``ai_os_kernel.sandbox.default_executor``) and defaults
-to `DockerSandbox` — this file deliberately opts back into the fast,
-Docker-independent backend its own docstring already commits to, rather
-than requiring a real daemon for tests whose whole point is speed and
+**Migrated onto the Platform SDK (step 12) — this agent no longer takes
+``service_factory``/``sandbox`` constructor overrides, and there is no
+more LLM-service lazy build to race against.** ``_agent_with_prompt``
+below is this file's own real substitute: construct the agent with zero
+arguments (exactly as ``EntrypointLoader`` does, aside from
+``working_directory``, still a legitimate constructor override — see
+this agent's own module docstring for why), then bind it a real
+``PackContext`` built over whichever ``LLMGateway``/``PromptEngine``/
+sandbox a test wants, via the exact ``build_pack_context``/
+``bind_pack_context`` mechanism a real caller uses — the identical
+pattern steps 9-11 already established. ``LocalSubprocessSandbox()`` is
+still passed explicitly, now to ``build_pack_context``'s own ``sandbox``
+parameter rather than to this entrypoint's own constructor, deliberately
+opting back into the fast, Docker-independent backend rather than
+requiring a real daemon for tests whose whole point is speed and
 determinism. The real, Docker-gated proof of this agent running through
 `DockerSandbox` lives in
 ``tests/integration/sandbox/test_delivery_pipeline_docker.py``.
+
+The lock this agent still keeps (unlike ``requirements-analyst``/
+``architecture``, which dropped theirs entirely) guards only lazy
+working-directory creation, not any LLM composition — see this agent's
+own module docstring for the full reasoning, and
+``test_concurrent_execute_calls_share_one_working_directory`` below for
+the proof.
 
 The opt-in live proof (a real LLM producing a real, novel file-write
 instruction) lives under the Kernel's own
@@ -29,8 +45,8 @@ import pytest
 
 from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
-from ai_os_kernel.prompted_completion import PromptedCompletionService
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
+from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.step_executor import AgentStepExecutor
@@ -42,17 +58,46 @@ from ai_os_pack_software_engineering.agents.build import (
     _parse_build_instruction,
     _resolve_safe_relative_path,
 )
+from ai_os_sdk.contracts import Agent as SdkAgent
+from ai_os_sdk.contracts import PackContextReceiver
 
 _AGENT_ID = "build"
+_PACK_ID = "software-engineering"
+_PACK_VERSION = "0.1.0"
 _PROMPT_ID = "build.write_file"
 _PROMPT_VERSION = "0.1.0"
 
 
-async def _deterministic_service(template: str) -> PromptedCompletionService:
-    return PromptedCompletionService(
-        prompt_engine=InMemoryPromptEngine({(_PROMPT_ID, _PROMPT_VERSION): template}),
-        llm_gateway=EchoLLMGateway(),
+def _agent_with_prompt(
+    template: str, *, working_directory: Path | None = None
+) -> BuildAgentEntrypoint:
+    """The real, zero-arg-constructed (aside from ``working_directory``)
+    entrypoint, bound to a real ``PackContext`` granting exactly
+    ``llm:invoke`` + ``sandbox:execute`` over a real, Echo-backed
+    gateway, an in-memory prompt engine seeded with ``template``, and a
+    real ``LocalSubprocessSandbox`` — the same construction+injection
+    sequence a real ``SqlAgentRegistry``-backed caller would perform.
+    ``python_command`` defaults to ``LocalSubprocessSandbox().python_command``
+    (``sys.executable``), matching the real sandbox this test actually
+    uses — the identical "the caller supplying the sandbox must also
+    supply the matching interpreter command" discipline
+    ``test_delivery_pipeline.py`` already established at the pipeline
+    level."""
+    agent = BuildAgentEntrypoint(
+        working_directory=working_directory,
+        python_command=LocalSubprocessSandbox().python_command,
     )
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke", "sandbox:execute"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(_PROMPT_ID, _PROMPT_VERSION): template}),
+            sandbox=LocalSubprocessSandbox(),
+        )
+    )
+    return agent
 
 
 def _step() -> WorkflowStep:
@@ -83,6 +128,32 @@ def test_build_agent_entrypoint_constructs_with_zero_arguments() -> None:
     ]
 
 
+def test_the_migrated_entrypoint_satisfies_both_sdk_protocols() -> None:
+    """Step 12's own real proof: this entrypoint is a real
+    ai_os_sdk.contracts.Agent and PackContextReceiver, not merely an
+    object that happens to still work."""
+    agent = BuildAgentEntrypoint()
+
+    assert isinstance(agent, SdkAgent)
+    assert isinstance(agent, PackContextReceiver)
+
+
+@pytest.mark.asyncio
+async def test_execute_before_bind_pack_context_raises_a_clear_error() -> None:
+    """The one real, new behavior this migration adds: a caller that
+    forgets to inject a PackContext gets a clear, named error."""
+    agent = BuildAgentEntrypoint()
+
+    with pytest.raises(BuildInstructionError, match="bind_pack_context"):
+        await agent.execute(
+            {
+                "promptId": _PROMPT_ID,
+                "promptVersion": _PROMPT_VERSION,
+                "modelAlias": "coding-strong",
+            }
+        )
+
+
 @pytest.mark.asyncio
 async def test_build_agent_genuinely_writes_a_real_file_through_the_sandbox(
     tmp_path: Path,
@@ -92,20 +163,16 @@ async def test_build_agent_genuinely_writes_a_real_file_through_the_sandbox(
     genuinely results in a real file existing in the sandbox working
     directory afterward, with content traceable to the model's own
     completion (here, EchoLLMGateway's real echo of a real rendered
-    prompt — not asserted by inspection)."""
+    prompt — not asserted by inspection), written through the new
+    ToolInvoker sandbox path (context.tools.invoke), not a directly
+    constructed SandboxedCommandTool."""
     template = (
         "FILE_PATH: hello.txt\n"
         "FILE_CONTENT_BEGIN\n"
         "print('hello from the build agent')\n"
         "FILE_CONTENT_END"
     )
-
-    async def factory() -> PromptedCompletionService:
-        return await _deterministic_service(template)
-
-    agent = BuildAgentEntrypoint(
-        service_factory=factory, working_directory=tmp_path, sandbox=LocalSubprocessSandbox()
-    )
+    agent = _agent_with_prompt(template, working_directory=tmp_path)
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry)
 
@@ -127,13 +194,7 @@ async def test_build_agent_creates_a_nested_path_relative_to_the_working_directo
     tmp_path: Path,
 ) -> None:
     template = "FILE_PATH: src/app.py\nFILE_CONTENT_BEGIN\ndef main():\n    pass\nFILE_CONTENT_END"
-
-    async def factory() -> PromptedCompletionService:
-        return await _deterministic_service(template)
-
-    agent = BuildAgentEntrypoint(
-        service_factory=factory, working_directory=tmp_path, sandbox=LocalSubprocessSandbox()
-    )
+    agent = _agent_with_prompt(template, working_directory=tmp_path)
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry)
 
@@ -151,11 +212,7 @@ async def test_build_agent_lazily_creates_its_own_working_directory_when_none_su
     module docstring. Without an explicit working_directory, the agent
     creates a real, private one of its own on first use."""
     template = "FILE_PATH: note.txt\nFILE_CONTENT_BEGIN\nhello\nFILE_CONTENT_END"
-
-    async def factory() -> PromptedCompletionService:
-        return await _deterministic_service(template)
-
-    agent = BuildAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_prompt(template)
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry)
 
@@ -168,12 +225,35 @@ async def test_build_agent_lazily_creates_its_own_working_directory_when_none_su
 
 
 @pytest.mark.asyncio
-async def test_build_agent_rejects_a_malformed_completion(tmp_path: Path) -> None:
-    async def factory() -> PromptedCompletionService:
-        return await _deterministic_service("this completion follows no documented format at all")
+async def test_concurrent_execute_calls_share_one_working_directory() -> None:
+    """The real proof behind this agent's own module docstring claim:
+    the lock is not fully obsolete here — it still guards concurrent
+    first-execute() calls from each independently creating their own,
+    unrelated working directory. Five concurrent calls, no explicit
+    working_directory, must all land in the identical directory."""
+    template = "FILE_PATH: {{context}}.txt\nFILE_CONTENT_BEGIN\nx\nFILE_CONTENT_END"
+    agent = _agent_with_prompt(template)
+    step_inputs = {
+        "promptId": _PROMPT_ID,
+        "promptVersion": _PROMPT_VERSION,
+        "modelAlias": "coding-strong",
+        "variables": {},
+    }
 
-    agent = BuildAgentEntrypoint(
-        service_factory=factory, working_directory=tmp_path, sandbox=LocalSubprocessSandbox()
+    async def _run(index: int) -> dict[str, object]:
+        return await agent.execute({**step_inputs, "variables": {"context": f"file{index}"}})
+
+    results = await asyncio.gather(*(_run(i) for i in range(5)))
+
+    working_directories = {r["workingDirectory"] for r in results}
+    assert len(working_directories) == 1
+    assert all(r["written"] is True for r in results)
+
+
+@pytest.mark.asyncio
+async def test_build_agent_rejects_a_malformed_completion(tmp_path: Path) -> None:
+    agent = _agent_with_prompt(
+        "this completion follows no documented format at all", working_directory=tmp_path
     )
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry)
@@ -182,6 +262,14 @@ async def test_build_agent_rejects_a_malformed_completion(tmp_path: Path) -> Non
         await executor.execute(_step())
 
     assert await asyncio.to_thread(lambda: list(tmp_path.iterdir())) == []
+
+
+@pytest.mark.asyncio
+async def test_missing_required_invocation_fields_raise_a_clear_error() -> None:
+    agent = _agent_with_prompt("unused")
+
+    with pytest.raises(BuildInstructionError, match="promptId"):
+        await agent.execute({"modelAlias": "coding-strong"})
 
 
 @pytest.mark.parametrize("malicious_path", ["../../outside.txt", "/etc/passwd"])
