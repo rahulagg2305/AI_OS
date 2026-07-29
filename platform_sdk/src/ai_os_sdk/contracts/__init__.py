@@ -19,20 +19,26 @@ tool — see its decision block).
 
 Also real as of step 6b: ``PackContextReceiver``
 (``entrypoint_context.py``) — **not** §7's own ``CapabilityPack``/
-``PackContext`` entry-point contract (that is still step 7's job, in
-full, below), but the narrower, distinct injection mechanism a
-zero-argument-constructible entrypoint uses to receive whichever real
-context it was granted, once, before first real use — the generalized
-form of the lazy-build workaround every real Software Engineering pack
-agent already uses today. See its own module docstring for the full
-reasoning, including why it is typed ``context: Any`` rather than
-``context: PackContext``.
+``PackContext`` entry-point contract, but the narrower, distinct
+injection mechanism a zero-argument-constructible entrypoint uses to
+receive whichever real context it was granted, once, before first real
+use — the generalized form of the lazy-build workaround every real
+Software Engineering pack agent already uses today. See its own module
+docstring for the full reasoning, including why it is typed ``context:
+Any`` rather than ``context: PackContext``.
 
-The rest arrive in order:
-
-- ``context_service.py``   — ``ContextService`` (§5.3); its boundary
-  models are what v1.0.0 actually needs, not its method            — step 7
-- ``capability_pack.py``   — ``CapabilityPack`` (§7)                — step 7
+Real as of step 7: ``ContextService`` (``context_service.py``) — its
+boundary models (:mod:`ai_os_sdk.models.context`) are what v1.0.0 needs,
+not a real implementation behind its one method; structural
+compatibility is still proven against the real, already-working
+``DefaultContextManager`` — and ``CapabilityPack``/``PackContext``/
+``PackRegistration``/``HealthReport`` (``capability_pack.py``, §6/§7) —
+relocated here from ``ai_os_kernel.capability_manager.pack_contract``,
+additively, per step 6b's own record. **Deliberately not split into
+``ai_os_sdk.models`` the way every other boundary model was** — see
+``capability_pack.py``'s own module docstring for the real layering
+reason (these types reference other Protocols by nature, and ``models/``
+must never import ``contracts/``).
 
 **Deferred past v1.0.0, deliberately:** ``SecretResolver`` (§5.9 — the
 one real pack declares no secret permission, and §6 grants a
@@ -47,6 +53,13 @@ stub (``RetrievalService``, ``MemoryService``, ``EventBus``,
 from __future__ import annotations
 
 from ai_os_sdk.contracts.agent import Agent
+from ai_os_sdk.contracts.capability_pack import (
+    CapabilityPack,
+    HealthReport,
+    PackContext,
+    PackRegistration,
+)
+from ai_os_sdk.contracts.context_service import ContextService
 from ai_os_sdk.contracts.entrypoint_context import PackContextReceiver
 from ai_os_sdk.contracts.llm_gateway import LLMGateway
 from ai_os_sdk.contracts.prompt_registry import PromptRegistry
@@ -61,8 +74,13 @@ __all__ = [
     "PLATFORM_SANDBOX_RUN_COMMAND",
     "PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR",
     "Agent",
+    "CapabilityPack",
+    "ContextService",
+    "HealthReport",
     "LLMGateway",
+    "PackContext",
     "PackContextReceiver",
+    "PackRegistration",
     "PromptRegistry",
     "Tool",
     "ToolInvoker",

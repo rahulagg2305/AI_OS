@@ -7,12 +7,26 @@ in :mod:`ai_os_sdk.models.common` (step 2), the ``LLMGateway`` models in
 :mod:`ai_os_sdk.models.prompt` (step 5), and the tool-invocation models
 in :mod:`ai_os_sdk.models.tool` (``TrustTier``, ``ToolDescriptor``,
 ``ToolStatus``, ``ToolResult`` — step 6) all exist and are re-exported
-here. The rest arrive with the Protocol each belongs to:
+here. Real as of step 7: ``ContextRequest``, ``AssembledContext``,
+``ContextItem``, ``SourceRef``, ``SourceType`` in
+:mod:`ai_os_sdk.models.context` (§5.3).
 
-- ``context.py``  — ``ContextRequest``, ``AssembledContext``,
-  ``ContextItem``, ``SourceRef`` (§5.3)                            — step 7
-- ``pack.py``     — ``PackContext``, ``PackRegistration``,
-  ``HealthReport`` (§6, §7)                                        — step 7
+**No ``pack.py`` here — corrected from what this docstring originally
+planned, not silently dropped.** ``PackContext``/``PackRegistration``/
+``HealthReport`` (§6, §7) landed in
+:mod:`ai_os_sdk.contracts.capability_pack` instead, alongside the
+``CapabilityPack`` Protocol that already needs them as its own method's
+parameter/return types. Every model in *this* package is pure data —
+none types a field against another Protocol, so ``models/`` never needs
+to import ``contracts/``, and every real ``contracts/*.py`` module
+imports *from* ``models/``, never the reverse. ``PackContext``/
+``PackRegistration`` break that pattern by their very nature (they exist
+to carry other Protocol instances — ``PackContext.llm: LLMGateway``,
+``PackRegistration.agents: dict[str, Agent]``), so placing them here
+would have forced ``models/`` to import ``contracts/``, inverting every
+real dependency direction this package established before step 7 ever
+encountered the conflict. See ``capability_pack.py``'s own module
+docstring for the full reasoning.
 
 **Dropped from v1.0.0, not merely deferred:**
 
@@ -55,6 +69,13 @@ from ai_os_sdk.models.common import (
     TraceContext,
     is_artifact_id,
 )
+from ai_os_sdk.models.context import (
+    AssembledContext,
+    ContextItem,
+    ContextRequest,
+    SourceRef,
+    SourceType,
+)
 from ai_os_sdk.models.llm import (
     LLMRequest,
     LLMResponse,
@@ -71,6 +92,9 @@ __all__ = [
     "ARTIFACT_ID_PATTERN",
     "V1_TENANT_ID",
     "ArtifactRef",
+    "AssembledContext",
+    "ContextItem",
+    "ContextRequest",
     "LLMRequest",
     "LLMResponse",
     "Message",
@@ -78,6 +102,8 @@ __all__ = [
     "ProviderCapabilities",
     "RenderedPrompt",
     "SecurityContext",
+    "SourceRef",
+    "SourceType",
     "StepBudget",
     "StopReason",
     "ToolDescriptor",

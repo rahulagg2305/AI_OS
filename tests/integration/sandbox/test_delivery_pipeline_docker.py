@@ -42,6 +42,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from tests.integration._delivery_pipeline import build_pipeline_trigger
 from tests.integration._postgres_fixture import postgres_container
 
 from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
@@ -56,7 +57,6 @@ from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgen
 from ai_os_pack_software_engineering.agents.build import BuildAgentEntrypoint
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentEntrypoint
 from ai_os_pack_software_engineering.agents.verification import TestAgentEntrypoint
-from ai_os_pack_software_engineering.pipeline import build_pipeline_trigger
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
@@ -176,7 +176,7 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
         # Matches the explicit `sandbox=DockerSandbox()` given to every
         # agent above — passed explicitly rather than relying on this
         # happening to also be the ambient AIOS_SANDBOX_BACKEND default;
-        # see `pipeline.py`'s own docstring for the bug this avoids.
+        # see `_delivery_pipeline.py`'s own docstring for the bug this avoids.
         trigger = build_pipeline_trigger(
             engine, registry, python_command=DockerSandbox().python_command
         )

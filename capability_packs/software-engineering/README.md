@@ -5,7 +5,7 @@ Autonomous software engineering capabilities for AI_OS
 
 ## Status: five real agents; four of them chained into one real workflow
 
-**Last updated: 2026-07-28.**
+**Last updated: 2026-07-29** (pipeline composition relocated out of this pack's own source tree into `tests/integration/`, `platform_sdk_v1_scope.md` step 7 — see the table below).
 
 This pack declares **five** real agents:
 
@@ -29,7 +29,7 @@ And one real, declared workflow: **`se.delivery_pipeline`** ([`workflows/deliver
 |---|---|
 | Manifest (agents, prompts, workflow, permissions) | [`manifest.yaml`](manifest.yaml) |
 | Pack entry point (`CapabilityPack`) | [`src/ai_os_pack_software_engineering/pack.py`](src/ai_os_pack_software_engineering/pack.py) |
-| Pipeline composition | [`src/ai_os_pack_software_engineering/pipeline.py`](src/ai_os_pack_software_engineering/pipeline.py) |
+| Pipeline composition (test-harness code, relocated out of this pack's shipped wheel — `platform_sdk_v1_scope.md` step 7) | [`../../tests/integration/_delivery_pipeline.py`](../../tests/integration/_delivery_pipeline.py) |
 | Prompts | [`prompts/`](prompts/) — one per LLM-backed agent |
 | Pack-local tests | [`tests/`](tests/) — deterministic, no database, no live LLM call |
 | Kernel-side integration tests | `../../tests/integration/workflow_engine/` and `../../tests/integration/sandbox/` |
@@ -103,7 +103,7 @@ end-to-end proofs live in the Kernel-side integration tests listed above.
 - **`requirements-analyst` is not chained into `se.delivery_pipeline`.** The pipeline still
   starts at `architecture`. Wiring it in requires updating both
   [`workflows/delivery_pipeline.yaml`](workflows/delivery_pipeline.yaml) and
-  [`pipeline.py`](src/ai_os_pack_software_engineering/pipeline.py)'s `_STEP_SOURCES`, plus
+  [`_delivery_pipeline.py`](../../tests/integration/_delivery_pipeline.py)'s `_STEP_SOURCES`, plus
   re-verifying the existing chained tests — a distinct, later increment.
 - **`SoftwareEngineeringPack.activate()` is under-wired.** It is a real, correct
   implementation of the (reduced) `CapabilityPack` Protocol, but nothing in the Kernel

@@ -2,8 +2,10 @@
 Workflow Engine pipeline: Architecture -> Build -> Test -> Documentation,
 chained through
 `ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver`
-(built this step) and `ai_os_pack_software_engineering.pipeline`'s own
-pipeline-specific configuration of it.
+(built this step) and `tests.integration._delivery_pipeline`'s own
+pipeline-specific configuration of it (relocated here from
+`ai_os_pack_software_engineering.pipeline`, `platform_sdk_v1_scope.md`
+step 7 — see that module's own docstring for why).
 
 **Both tiers below need a real Postgres container — a genuine,
 discovered fact about this specific test, not a limitation of its own
@@ -36,7 +38,7 @@ agents in the same run instead of one at a time.
    container already and gains nothing from also requiring Docker.
    `build_pipeline_trigger`'s own `python_command` is passed to match
    (a real, discovered bug once left these two independently resolved —
-   see `pipeline.py`'s own docstring). The
+   see `_delivery_pipeline.py`'s own docstring). The
    real, Docker-gated proof of this same pipeline running through
    `DockerSandbox` lives in
    `tests/integration/sandbox/test_delivery_pipeline_docker.py`.
@@ -83,7 +85,7 @@ from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgen
 from ai_os_pack_software_engineering.agents.build import BuildAgentEntrypoint
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentEntrypoint
 from ai_os_pack_software_engineering.agents.verification import TestAgentEntrypoint
-from ai_os_pack_software_engineering.pipeline import build_pipeline_trigger
+from tests.integration._delivery_pipeline import build_pipeline_trigger
 from tests.integration._postgres_fixture import postgres_container
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -197,7 +199,7 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
     engine = build_engine(database_url)
     try:
         # Matches the explicit `sandbox=LocalSubprocessSandbox()` given
-        # to every agent above — see `pipeline.py`'s own docstring for
+        # to every agent above — see `_delivery_pipeline.py`'s own docstring for
         # why this must be passed explicitly rather than left to its
         # own default whenever a caller overrides an agent's sandbox.
         trigger = build_pipeline_trigger(

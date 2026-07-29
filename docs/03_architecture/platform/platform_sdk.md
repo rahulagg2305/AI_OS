@@ -378,6 +378,41 @@ ContextItem        content; provenance: SourceRef; relevance_score;
 
 Context assembly is deterministic for a given request, index generation, and embedding model version.
 
+> **🔵 v1.0.0 RECONCILIATION DECISION (2026-07-29): NARROW `ContextRequest` and `AssembledContext` to the real, already-reduced Kernel shape; KEEP `ContextItem` (already full parity); DESIGN `SourceRef` (this section names no fields for it); NARROW `SourceType` to the one real resolver. Boundary models only — no working `.assemble()` behind the Protocol.**
+>
+> ```text
+> ContextService (Protocol)              # ai_os_sdk.contracts.context_service — v1.0.0
+>     async def assemble(request: ContextRequest) -> AssembledContext
+>
+> ContextRequest     workflow_id: str; step_id: str; agent_id: str | None = None;
+>                    token_budget: int | None = None   # gt=0 when set
+>
+> AssembledContext   items: ContextItem[]; total_tokens: int;
+>                    sources_queried: SourceType[]; items_excluded_count: int;
+>                    assembly_id: str
+>
+> ContextItem        content: str; provenance: SourceRef; relevance_score: float;
+>                    token_count: int; trust: Literal["trusted", "untrusted"]
+>
+> SourceRef          source_type: SourceType; identifier: str
+>
+> SourceType         WORKFLOW_STATE = "workflow_state"   # the only real member
+> ```
+>
+> **Why this reconciliation exists at all, discovered rather than assumed.** No agent calls `.assemble()` today — `AgentStepExecutor` already assembles context itself and hands the result to an agent via `AgentRequest.context`, per `agent_architecture.md`'s Invocation Lifecycle — so `ContextService`'s own method has no real caller to reconcile against, the same situation `PromptRegistry`/`ToolInvoker` were in. But two real pack agents (`agents/documentation.py`, `agents/verification.py`) do import the real Kernel's `AssembledContext`/`ContextItem`/`SourceRef` today, for type annotation — so unlike those two from-scratch designs, a real, already-reduced Kernel shape exists here to reconcile against, and building the SDK's boundary models without checking it against that real shape first would have been exactly the "invented architecture" this project's documentation-first discipline exists to avoid.
+>
+> **`ContextRequest`**: this section's own documented shape (above) carries `required_types: ContextType[]`, `query: str | None`, and `filters: dict | None` in addition to the four kept. `ai_os_kernel.context_manager.models.ContextRequest` carries only the latter four — its own docstring explains why: `required_types` has no declared source anywhere in this codebase (`workflow_architecture.md`'s Step Contract names no field for which context types a step needs), and no experiment/query mechanism exists to back `query`/`filters` either. Narrowed to match; populating the other three with an unused default would reintroduce the placeholder architecture the Kernel's own model already refuses to be.
+>
+> **`AssembledContext`**: the documented shape (above) adds `index_generation`. The real Kernel model omits it because no retrieval index exists anywhere in this codebase yet (no Knowledge Manager, no Memory Manager) — `index_generation` exists to pin one for reproducibility (ADR-0022), and a fabricated value would misrepresent a guarantee this slice cannot provide. Narrowed to match, for the identical, re-verified reason.
+>
+> **`ContextItem`**: the real Kernel model already implements this section's full documented shape verbatim — kept as-is.
+>
+> **`SourceRef`**: this section names no fields for it at all — nothing to reconcile against, the same "design, not narrow or extend" situation §5.6 was in. Kept at the real Kernel's own design (`source_type`/`identifier`, no `version`) for the identical, verified reason its own docstring gives: Workflow State has no versioning concept, and an unused field for a capability that does not exist yet would be a placeholder.
+>
+> **`SourceType`**: this section (§4) documents five source resolvers; the real Kernel enum has exactly one real member. Narrowed to that one; a future resolver adds its own member additively.
+>
+> Landed in `ai_os_sdk.models.context` (the four boundary models) and `ai_os_sdk.contracts.context_service` (the Protocol) — `platform_sdk_v1_scope.md` step 7. Structural compatibility is proven against the real, already-working `ai_os_kernel.context_manager.manager.DefaultContextManager` via `isinstance` — the same discipline already applied to `Agent`/`Tool`/`LLMGateway` — even though no Kernel-side adapter wraps it (no real caller to justify one yet).
+
 ### 5.4 `RetrievalService`
 
 Lower-level search for packs that need it (primarily Project Intelligence). Consolidates knowledge and memory behind one seam.
@@ -574,6 +609,8 @@ PackContext
 
 There is no `kernel` attribute, no `db`, no `http`, and no escape hatch. A capability a pack did not declare is absent from the object.
 
+**Real as of `platform_sdk_v1_scope.md` steps 6b/7, in `ai_os_sdk.contracts.capability_pack.PackContext`:** `pack_id`/`pack_version` plus `llm`/`prompts`/`tools`, each `| None`, granted per `build_pack_context`'s own permission-gating (`llm:invoke` for the first two together, `sandbox:execute` for the third) — see that function's own docstring for the full reasoning, including why `llm:invoke` covers both `llm` and `prompts`. **One honest simplification, not yet closed:** a Pydantic field defaulting to `None` when not granted is not quite this section's own literal "absent from the object" — that would require a non-fixed-schema container this codebase does not have yet. The other eleven attributes above are absent as *fields entirely*, matching the literal rule exactly, since nothing real backs any of them.
+
 ---
 
 ## 7. Pack Entry Point
@@ -596,6 +633,8 @@ PackRegistration   agents: dict[str, Agent]
 ```
 
 `activate` must be idempotent and must not perform long-running work; heavy initialisation belongs in the first invocation or a declared warm-up step. Everything returned must match the manifest declaration exactly — a mismatch fails activation.
+
+**Real as of `platform_sdk_v1_scope.md` step 7, in `ai_os_sdk.contracts.capability_pack`:** `CapabilityPack`/`PackContext`/`PackRegistration`/`HealthReport`, relocated additively from their prior Kernel-side home (`ai_os_kernel.capability_manager.pack_contract`, now a compatibility re-export). `PackRegistration` is reduced to `agents`/`tools` only — the one real pack declares no workflows, gates, or commands of its own, and those fields are added the same additive way once a pack that provides one exists. `CapabilityPack` is deliberately **not** `@runtime_checkable`: nothing in this codebase yet loads and `isinstance`-checks an `entryPoint` at runtime (`SqlPackLifecycleRepository` only flips `catalog.packs.state`; nothing calls `activate()` yet), so there is no real caller to justify one.
 
 ---
 
@@ -649,11 +688,11 @@ Each of these is **intended to be** checked by the contract suite, by lint rules
 
 ## 11. Current Status
 
-This document is a **specification with no implementing package**. It defines the SDK surface for v1; nothing in §4–§10 can be imported. There are no concrete signatures on disk — `platform_sdk/contracts/` is an empty directory. This document and the ADRs it cites govern the signatures when they are written.
+**Updated 2026-07-29 — stale since this section was first written before step 1; corrected here rather than left describing a package that has since become real.** `platform_sdk/` is a real, installable `ai-os-sdk` PEP 621 distribution, a workspace member (`platform_sdk_v1_scope.md` step 1). §4.4's `AiOsError` hierarchy and shared boundary models (step 2), `Agent`/`Tool` (step 3), `LLMGateway` (step 4), `PromptRegistry` (step 5), `ToolInvoker` (step 6), the `PackContextReceiver` injection mechanism (step 6b), and `ContextService`'s boundary models plus the full `CapabilityPack`/`PackContext`/`PackRegistration`/`HealthReport` entry-point contract (step 7) all exist on disk and are importable today — see each section's own dated *v1.0.0 Reconciliation Decision* block above for the binding shape, which governs over this document's own un-dated prose wherever the two disagree. **Still specification only, with no implementing package, for the eleven interfaces §2's own inventory lists as deferred past v1.0.0** (`RetrievalService`, `MemoryService`, `EventBus`, `ConfigService`, `SecretResolver`, `StorageService`, `WorkspaceService`, `Telemetry`, `TraceabilityService`, `QualityGateRegistry`, `SpeechGateway`) — those sections' signatures remain prose only until a future step builds them.
 
-Once the package exists, any change to a Protocol here requires an SDK version increment and, where behaviour changes, an ADR.
+Every change to a real Protocol here requires an SDK version increment and, where behaviour changes, an ADR — unchanged from this section's original rule.
 
-**Concrete next gap, and what would settle it:** scaffold `platform_sdk/` as a real `ai-os-sdk` PEP 621 distribution and add it to `../../../pyproject.toml`'s `[tool.uv.workspace] members` (where it is already noted as "Planned, not yet scaffolded"), starting with the interfaces the one real pack actually reaches through Kernel internals today — `LLMGateway`, `PromptRegistry`, `ContextService` — plus the `AiOsError` hierarchy in §4.4, which every other contract's error field depends on. That is the minimum that lets a pack depend on the SDK instead of the Kernel and closes the dated exception in `../capability_framework/capability_pack_contract.md`.
+**Concrete next gap, and what would settle it:** `platform_sdk_v1_scope.md` step 8 — `pack_contract_suite` check 7 (forbidden imports) plus a documented, expiring waiver for the still-unmigrated Software Engineering pack, so CI stays green through the migration steps (9–13) and the waiver is removed at step 14.
 
 ---
 
