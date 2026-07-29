@@ -21,42 +21,21 @@ causes a side effect — that is ``ToolInvoker`` (§5.6), whose v1.0.0
 adapter is built directly over the sandbox rather than over this
 Protocol, so that a typed sandbox result is never flattened into a dict
 and re-parsed. See §5.6's decision block.
+
+``TrustTier`` itself now lives in :mod:`ai_os_sdk.models.tool`, moved
+there in step 6 once ``ToolDescriptor`` needed it too — a model cannot
+depend on a contract without inverting this package's own layering.
+Re-exported here unchanged, so nothing built against
+``ai_os_sdk.contracts.tool.TrustTier`` in steps 3–5 breaks.
 """
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
+from ai_os_sdk.models.tool import TrustTier
 
-class TrustTier(StrEnum):
-    """The two-value closed vocabulary from
-    ``platform_sdk/schemas/manifest.schema.json``'s own
-    ``tools[].trustTier`` enum — the authoritative artifact, which is
-    also what ``ai_os_kernel.workflow_engine.tool.TrustTier`` mirrors.
-
-    **Defined here rather than imported.** ``platform_sdk.md`` §2 rule 1
-    makes this SDK the dependency floor: it depends on no other AI_OS
-    distribution, so it cannot import the Kernel's equivalent enum. Both
-    enums independently mirror the same JSON Schema, which is what keeps
-    them in agreement; the schema is the single source of truth, not
-    either class.
-
-    A consequence worth stating plainly: because these are two distinct
-    Python types, a Kernel-typed tool is **not statically assignable**
-    to this SDK ``Tool`` Protocol, even though it satisfies it at
-    runtime. Bridging that is the Kernel-side adapter's job (step 6a),
-    and it is expected rather than a defect.
-    """
-
-    TIER1_SANDBOXED = "tier1_sandboxed"
-    """Untrusted execution. **Mandatory** for any tool that executes a
-    command, compiles, runs tests, installs dependencies, or processes
-    untrusted repository content (ADR-0016, tool execution sandboxing)."""
-
-    TIER2_TRUSTED = "tier2_trusted"
-    """In-process platform operations only, under canonical-path
-    allowlisting. Never for executing generated or untrusted code."""
+__all__ = ["Tool", "TrustTier"]
 
 
 @runtime_checkable

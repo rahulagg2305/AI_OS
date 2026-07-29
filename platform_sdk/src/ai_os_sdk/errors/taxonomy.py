@@ -1,6 +1,6 @@
-"""The one platform error taxonomy: :class:`ErrorCategory`,
-:class:`StructuredError`, and the :class:`AiOsError` exception hierarchy
-(``platform_sdk.md`` §4.4, matching
+"""The one platform error taxonomy: :class:`~ai_os_sdk.models.error.ErrorCategory`,
+:class:`~ai_os_sdk.models.error.StructuredError`, and the :class:`AiOsError`
+exception hierarchy (``platform_sdk.md`` §4.4, matching
 ``docs/03_architecture/workflow/error_handling_retry.md`` §3 and §8).
 
 **Six categories, not four and not the LLM Gateway's four.**
@@ -16,13 +16,23 @@ the Kernel changes as a result of this module existing; migrating the
 Gateway's local enum onto this one is Kernel-side work, tracked as
 ``feature_inventory.md`` module 44.
 
-**Every exception maps 1:1 onto a :class:`StructuredError`** (§4.4:
-"Each maps 1:1 onto a ``StructuredError``, so there is no translation
-layer and no possibility of an exception whose category disagrees with
-its serialised form"). That mapping is
+**Every exception maps 1:1 onto a :class:`~ai_os_sdk.models.error.StructuredError`**
+(§4.4: "Each maps 1:1 onto a ``StructuredError``, so there is no
+translation layer and no possibility of an exception whose category
+disagrees with its serialised form"). That mapping is
 :meth:`AiOsError.to_structured_error`, and the agreement is structural:
 ``category`` is a class attribute of the exception type, so it cannot
 be set to disagree with the class that raised it.
+
+**``ErrorCategory``/``StructuredError`` are defined in
+:mod:`ai_os_sdk.models.error`, not here, and re-exported below** —
+moved there in step 6 so that a *model* needing ``StructuredError``
+(:class:`~ai_os_sdk.models.tool.ToolResult`) never has to import this
+``errors`` package, which would create a real import cycle (this
+package already imports :class:`~ai_os_sdk.models.common.TraceContext`).
+See that module's own docstring for the full reasoning. Only the
+exception hierarchy itself — the classes actually *raised*, as opposed
+to the data shapes they carry — is defined here.
 
 Consumed by nothing yet — the Protocols and boundary contracts that
 carry these types land in later steps of
@@ -31,45 +41,11 @@ carry these types land in later steps of
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from ai_os_sdk.models.common import TraceContext
-
-
-class ErrorCategory(StrEnum):
-    """The six platform error categories (``error_handling_retry.md``
-    §3). Values are the lower-case wire forms §4.4 specifies.
-    """
-
-    TRANSIENT = "transient"
-    """May succeed on retry: network timeout, rate limit, provider
-    overload, lock contention, chain exhausted."""
-
-    PERMANENT = "permanent"
-    """Will not succeed with the same input: invalid input, schema
-    validation failure, context window exceeded, unsupported capability,
-    model refusal."""
-
-    QUALITY = "quality"
-    """Raised by a Quality Gate or review. Not retriable — it requires
-    corrective work, not another attempt."""
-
-    INFRASTRUCTURE = "infrastructure"
-    """Platform-side failure: database unavailable, configuration
-    missing, secret backend unreachable, provider auth failure. The only
-    category whose retriability is genuinely case-by-case."""
-
-    BUDGET = "budget"
-    """A declared ceiling was reached. Not retried automatically — an
-    operator raising the ceiling is the resolution, per §3."""
-
-    SECURITY = "security"
-    """An authorization or policy denial. Never retried automatically,
-    and always audited (§3)."""
-
+from ai_os_sdk.models.error import ErrorCategory as ErrorCategory
+from ai_os_sdk.models.error import StructuredError as StructuredError
 
 # The `Retriable` column of error_handling_retry.md §3, verbatim.
 # `infrastructure` is "Sometimes" there, which is why AiOsError accepts
@@ -83,45 +59,6 @@ _DEFAULT_RETRIABLE: dict[ErrorCategory, bool] = {
     ErrorCategory.BUDGET: False,
     ErrorCategory.SECURITY: False,
 }
-
-
-class StructuredError(BaseModel):
-    """The serialised form of any platform error (``platform_sdk.md``
-    §4.4). Returned by Agents, Tools, and Kernel components; recorded on
-    ``workflow_instances.error`` and ``workflow_steps.error``
-    (``data_model.md`` §4.1, §4.3).
-
-    Frozen, and ``extra`` deliberately not forbidden, for the same
-    reasons as every model in :mod:`ai_os_sdk.models.common` — see that
-    module's docstring.
-
-    **``trace`` is required.** §4.4 marks ``retry_after_seconds`` and
-    ``details`` as nullable and pointedly does *not* mark ``trace``, so
-    required is the faithful reading: an error that cannot be correlated
-    to a trace is not diagnosable, and §4.4's own field list ends with
-    "correlation identifiers" as a stated requirement. A raise site that
-    does not know its trace context therefore cannot produce a
-    ``StructuredError`` directly — it raises an :class:`AiOsError` and
-    the boundary that *does* know the trace performs the conversion. See
-    :meth:`AiOsError.to_structured_error`.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    error_code: str
-    """Stable, catalogued identifier — the value dashboards and alerts
-    key on (§3). The catalogue itself does not exist yet; §3 places it in
-    ``platform_sdk/errors/``, and populating it needs real producers,
-    which arrive with the Protocols in later steps."""
-
-    category: ErrorCategory
-    message: str
-    """Human-readable. **Never contains a secret** (§4.4)."""
-
-    retriable: bool
-    retry_after_seconds: float | None = Field(default=None, ge=0)
-    details: dict[str, Any] | None = None
-    trace: TraceContext
 
 
 class AiOsError(Exception):

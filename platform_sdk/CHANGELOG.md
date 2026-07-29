@@ -8,6 +8,30 @@ package has not yet cut a version past `0.1.0`.
 
 ### Added
 
+- **The `ToolInvoker` Protocol, `ToolDescriptor`, `ToolStatus`, `ToolResult`, and
+  the `platform.sandbox.run_command` tool concept** (`platform_sdk_v1_scope.md`
+  step 6), at the from-scratch shape decided in step 2a:
+  `invoke(tool_id, inputs, *, timeout_seconds) -> ToolResult` +
+  `available_tools() -> tuple[ToolDescriptor, ...]`, grounded in a real,
+  platform-provided tool id (`PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR`) since
+  the one real pack declares zero tools and the one real sandboxed tool
+  ignores its own inputs. `ToolResult` narrows `stdout_ref`/`stderr_ref` to
+  inline strings and drops `artifacts` (no `StorageService`), and **extends**
+  the documented shape with `timed_out`/`truncated` — two real outcomes the
+  original spec cannot express. **Proven against the real, actually-executed
+  `LocalSubprocessSandbox`** (a genuine clean run, timeout, and output-cap
+  breach), not hand-built values — which found and fixed two real bugs
+  first: `ToolResult`'s own validator wrongly required `exit_code` whenever
+  `timed_out` was `False` (disproven — a cap breach kills the process before
+  it can exit, leaving `exit_code=None` with `timed_out=False` too), and a
+  real circular import between `ai_os_sdk.errors` and `ai_os_sdk.models`
+  (fixed by relocating `ErrorCategory`/`StructuredError` into a new
+  `ai_os_sdk.models.error` module; both remain fully public via
+  `ai_os_sdk.errors`). `TrustTier` also relocated from
+  `ai_os_sdk.contracts.tool` to `ai_os_sdk.models.tool` for the same
+  layering reason, re-exported unchanged. **No Kernel or pack source was
+  modified.**
+
 - **The `PromptRegistry` Protocol and `RenderedPrompt`** (`platform_sdk_v1_scope.md`
   step 5), kept at the documented pack-facing keyword call style
   (`render(prompt_id, variables, *, version)`) rather than the Kernel's own
