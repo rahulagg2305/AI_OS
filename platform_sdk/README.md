@@ -3,23 +3,29 @@
 The only sanctioned interface between a Capability Pack and AI_OS
 (`docs/03_architecture/platform/platform_sdk.md`).
 
-## Status: packaging scaffold only
+## Status: error taxonomy + shared boundary models; no Protocols yet
 
-**Last updated: 2026-07-28.**
+**Last updated: 2026-07-29.**
 
-This package is real, installable, and importable — `import ai_os_sdk`
-works — but defines **no Protocol, no boundary model, and no error
-class yet**. It is Step 1 of the 15-step build sequence in
-[`../docs/03_architecture/platform/platform_sdk_v1_scope.md`](../docs/03_architecture/platform/platform_sdk_v1_scope.md).
+This package is real, installable, and importable. It now defines the
+platform error taxonomy and the four shared boundary models, but **no
+Protocol yet**. Steps 1–2 of the **18**-step build sequence in
+[`../docs/03_architecture/platform/platform_sdk_v1_scope.md`](../docs/03_architecture/platform/platform_sdk_v1_scope.md)
+are complete. *(The sequence was revised from 15 to 18 steps after an
+independent architecture review — see that document's §6a.)*
 
-| Subpackage | Holds | Filled in by |
+| Subpackage | Holds | Status |
 |---|---|---|
-| `errors/` | `AiOsError` hierarchy, `StructuredError` | Step 2 |
-| `models/` | Pydantic boundary models | Steps 2–3, 4, 5, 6, 7 |
-| `contracts/` | Protocol definitions | Steps 3–7 |
+| `errors/` | `ErrorCategory`, `StructuredError`, `AiOsError` + 6 subclasses | **Real** (step 2) |
+| `models/` | `ArtifactRef`, `TraceContext`, `SecurityContext`, `StepBudget` | **Real** (step 2); the rest arrive with steps 3–7 |
+| `contracts/` | Protocol definitions | Steps 3–7, **after** the step-2a reconciliation decision |
 | `sdk/` | Concrete helper implementations (proposed content, see the scope document §5) | Step 7 |
 | `utilities/` | ids/hashing/canonical JSON — deliberately empty, no real caller exists yet | Not scheduled |
-| `testing/` | `pack_contract_suite` | Steps 8 (check 7) and 15 (the remaining 8) |
+| `testing/` | `pack_contract_suite` | Step 8 (check 7 + waiver) and step 15 (the remaining 8) |
+
+`SecretResolver` was **dropped** from v1.0.0: the one real pack declares
+no secret permission, so granting it one would violate `platform_sdk.md`
+§6. See the scope document §2.3.
 
 No pack depends on this package yet. The Software Engineering pack
 (`capability_packs/software-engineering/`) still imports `ai_os_kernel`
