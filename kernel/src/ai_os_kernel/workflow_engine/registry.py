@@ -67,10 +67,31 @@ declares and what its catalog registration declares is exactly the
 kind of inconsistency ADR-0016's sandbox guard exists to catch, not
 paper over.
 
+**Real as of ``platform_sdk_v1_scope.md`` step 9a: the ``PackContextReceiver``
+injection this Kernel module owes every migrated entrypoint.** Step 9
+migrated ``qa-test`` onto the Platform SDK and discovered, via a real,
+unconditionally-run integration test, that nothing in this class ever
+called :meth:`~ai_os_sdk.contracts.entrypoint_context.PackContextReceiver.
+bind_pack_context` — every migrated agent was only ever usable because
+its own test bound one by hand. This step closes that gap for real,
+here, once, rather than five more times in steps 10–13: once a loaded
+entrypoint passes its ``Agent``/``Tool`` structural check, it is also
+checked against ``PackContextReceiver``, and if it implements that too,
+:func:`~ai_os_kernel.sdk_adapters.pack_context.build_pack_context` builds
+it a real ``PackContext`` from *that row's own* ``required_permissions``
+(never the pack's aggregate — the identical "no over-provisioning" rule
+``build_pack_context`` itself already enforces) and injects it before
+the entrypoint is ever returned to a caller. ``EntrypointLoader`` itself
+is untouched — this is purely additional, caller-side logic in
+``resolve_agent``/``resolve_tool``, exactly the seam step 6b's own
+design always expected some real caller to fill.
+
 No pack install/upgrade lifecycle, no health monitoring, no permissions
-system, no sandboxing, no network or code download — an activated pack
-owning the declared id is the only additional thing checked before
-loading exactly the one ``entrypoint`` string the row declares; see
+enforcement (only per-agent *provisioning* by declared permission, not
+runtime enforcement against a grant), no sandboxing, no network or code
+download — an activated pack owning the declared id is the only
+additional thing checked before loading exactly the one ``entrypoint``
+string the row declares; see
 :mod:`ai_os_kernel.workflow_engine.entrypoint_loader` for the loader's
 own, deliberately narrow boundary and
 :mod:`ai_os_kernel.workflow_engine.pack_state` for the lifecycle this
@@ -78,15 +99,20 @@ module now reads one value from.
 """
 
 import asyncio
-from collections.abc import Mapping
-from typing import Protocol
+from collections.abc import Collection, Mapping
+from typing import Any, Protocol
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
 from ai_os_kernel.persistence.catalog_schema import agents as agents_table
 from ai_os_kernel.persistence.catalog_schema import packs as packs_table
 from ai_os_kernel.persistence.catalog_schema import tools as tools_table
+from ai_os_kernel.prompt_engine.renderer import PromptEngine
+from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
+from ai_os_kernel.sandbox.executor import SandboxExecutor
+from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.workflow_engine.agent import Agent
 from ai_os_kernel.workflow_engine.entrypoint_loader import EntrypointLoader
 from ai_os_kernel.workflow_engine.errors import (
@@ -98,6 +124,7 @@ from ai_os_kernel.workflow_engine.errors import (
 )
 from ai_os_kernel.workflow_engine.pack_state import PackState
 from ai_os_kernel.workflow_engine.tool import Tool, TrustTier
+from ai_os_sdk.contracts.entrypoint_context import PackContextReceiver
 
 
 def _require_activated_pack(
@@ -126,6 +153,55 @@ def _require_activated_pack(
             f"{kind} '{declared_id}' declares pack_id={pack_id!r}, whose state is "
             f"{state!r}, not {PackState.ACTIVATED.value!r}"
         )
+
+
+def _bind_pack_context_if_receiver(
+    loaded: Any,
+    *,
+    kind: str,
+    declared_id: str,
+    pack_id: str,
+    pack_version: str,
+    required_permissions: Collection[str],
+    llm_gateway: KernelLLMGatewayProtocol | None,
+    prompt_engine: PromptEngine | None,
+    sandbox: SandboxExecutor | None,
+) -> None:
+    """Shared by :class:`SqlAgentRegistry`/:class:`SqlToolRegistry`: if
+    ``loaded`` implements
+    :class:`~ai_os_sdk.contracts.entrypoint_context.PackContextReceiver`,
+    build it a real, permission-gated ``PackContext`` from *its own row's*
+    ``required_permissions`` and inject it before ``loaded`` is ever
+    returned to a caller. A no-op for anything that does not implement
+    the Protocol (every not-yet-migrated entrypoint, today).
+
+    Raises :class:`AgentRegistryError`/:class:`ToolRegistryError` (via
+    ``kind``) if ``required_permissions`` declares a capability this
+    registry was not itself given a real backing object for —
+    :func:`~ai_os_kernel.sdk_adapters.pack_context.build_pack_context`'s
+    own ``ValueError``, wrapped so every failure this class raises shares
+    one error family.
+    """
+    if not isinstance(loaded, PackContextReceiver):
+        return
+
+    try:
+        context = build_pack_context(
+            pack_id=pack_id,
+            pack_version=pack_version,
+            permissions=required_permissions,
+            llm_gateway=llm_gateway,
+            prompt_engine=prompt_engine,
+            sandbox=sandbox,
+        )
+    except ValueError as exc:
+        error_type = AgentRegistryError if kind == "agent" else ToolRegistryError
+        raise error_type(
+            f"{kind} '{declared_id}' could not be granted its own declared "
+            f"required_permissions {list(required_permissions)!r}: {exc}"
+        ) from exc
+
+    loaded.bind_pack_context(context)
 
 
 class AgentRegistry(Protocol):
@@ -186,9 +262,28 @@ class SqlAgentRegistry:
     validation applied to the result.
     """
 
-    def __init__(self, engine: AsyncEngine, loader: EntrypointLoader | None = None) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        loader: EntrypointLoader | None = None,
+        *,
+        llm_gateway: KernelLLMGatewayProtocol | None = None,
+        prompt_engine: PromptEngine | None = None,
+        sandbox: SandboxExecutor | None = None,
+    ) -> None:
         self._engine = engine
         self._loader = loader or EntrypointLoader()
+        # llm_gateway/prompt_engine have no equivalent real-default
+        # builder (unlike sandbox) -- each currently needs config-file
+        # and secret composition no caller of this class does today
+        # (bootstrap.py does not construct this class at all yet). Left
+        # None until a real caller supplies them; build_pack_context
+        # raises a clear error if a resolved entrypoint's own permissions
+        # actually need one that is missing, rather than silently
+        # proceeding.
+        self._llm_gateway = llm_gateway
+        self._prompt_engine = prompt_engine
+        self._sandbox = sandbox or build_default_sandbox_executor()
 
     async def resolve_agent(self, agent_id: str) -> Agent:
         try:
@@ -197,7 +292,9 @@ class SqlAgentRegistry:
                     sa.select(
                         agents_table.c.pack_id,
                         agents_table.c.entrypoint,
+                        agents_table.c.required_permissions,
                         packs_table.c.state,
+                        packs_table.c.version,
                     )
                     .select_from(
                         agents_table.outerjoin(
@@ -225,6 +322,18 @@ class SqlAgentRegistry:
                 "valid Agent (missing output_schema/execute)"
             )
 
+        _bind_pack_context_if_receiver(
+            loaded,
+            kind="agent",
+            declared_id=agent_id,
+            pack_id=row.pack_id,
+            pack_version=row.version,
+            required_permissions=row.required_permissions,
+            llm_gateway=self._llm_gateway,
+            prompt_engine=self._prompt_engine,
+            sandbox=self._sandbox,
+        )
+
         return loaded
 
 
@@ -240,9 +349,22 @@ class SqlToolRegistry:
     agreement check.
     """
 
-    def __init__(self, engine: AsyncEngine, loader: EntrypointLoader | None = None) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        loader: EntrypointLoader | None = None,
+        *,
+        llm_gateway: KernelLLMGatewayProtocol | None = None,
+        prompt_engine: PromptEngine | None = None,
+        sandbox: SandboxExecutor | None = None,
+    ) -> None:
         self._engine = engine
         self._loader = loader or EntrypointLoader()
+        # See SqlAgentRegistry.__init__'s own comment for why llm_gateway/
+        # prompt_engine default to None rather than a real-default builder.
+        self._llm_gateway = llm_gateway
+        self._prompt_engine = prompt_engine
+        self._sandbox = sandbox or build_default_sandbox_executor()
 
     async def resolve_tool(self, tool_id: str) -> Tool:
         try:
@@ -252,7 +374,9 @@ class SqlToolRegistry:
                         tools_table.c.pack_id,
                         tools_table.c.entrypoint,
                         tools_table.c.trust_tier,
+                        tools_table.c.required_permissions,
                         packs_table.c.state,
+                        packs_table.c.version,
                     )
                     .select_from(
                         tools_table.outerjoin(
@@ -287,5 +411,17 @@ class SqlToolRegistry:
                 f"{loaded.trust_tier.value!r}, but catalog.tools records "
                 f"{declared_trust_tier.value!r} for it — refusing to trust either value alone"
             )
+
+        _bind_pack_context_if_receiver(
+            loaded,
+            kind="tool",
+            declared_id=tool_id,
+            pack_id=row.pack_id,
+            pack_version=row.version,
+            required_permissions=row.required_permissions,
+            llm_gateway=self._llm_gateway,
+            prompt_engine=self._prompt_engine,
+            sandbox=self._sandbox,
+        )
 
         return loaded
