@@ -50,6 +50,7 @@ from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import PromptedCompletionService
 from ai_os_kernel.sandbox.docker_executor import DockerSandbox
+from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
@@ -61,12 +62,33 @@ from ai_os_pack_software_engineering.agents.verification import TestAgentEntrypo
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 
+_PACK_ID = "software-engineering"
+_PACK_VERSION = "0.1.0"
+
 _AGENT_IDS = {
     "architecture": "software-engineering/architecture",
     "build": "software-engineering/build",
     "test": "software-engineering/qa-test",
     "documentation": "software-engineering/documentation",
 }
+
+
+def _test_agent_with_sandbox(sandbox: DockerSandbox) -> TestAgentEntrypoint:
+    """qa-test is migrated onto the Platform SDK (step 9) — no more
+    ``sandbox=`` constructor override. Construct zero-arg, exactly as
+    ``EntrypointLoader`` does, then bind the real ``PackContext`` a real
+    caller would inject, granting exactly ``sandbox:execute``."""
+    agent = TestAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["sandbox:execute"],
+            sandbox=sandbox,
+        )
+    )
+    return agent
+
 
 # The generated file the pipeline itself writes and runs — real code
 # taking the real, deterministic Build completion path, not a command
@@ -164,7 +186,7 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
                 working_directory=tmp_path,
                 sandbox=DockerSandbox(),
             ),
-            _AGENT_IDS["test"]: TestAgentEntrypoint(sandbox=DockerSandbox()),
+            _AGENT_IDS["test"]: _test_agent_with_sandbox(DockerSandbox()),
             _AGENT_IDS["documentation"]: DocumentationAgentEntrypoint(
                 service_factory=documentation_service, sandbox=DockerSandbox()
             ),

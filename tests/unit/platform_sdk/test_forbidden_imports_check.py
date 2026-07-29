@@ -108,7 +108,11 @@ class TestRealSoftwareEngineeringPackScan:
         """Guards the waiver file's own `modules` list against silent
         drift -- if a module is migrated (steps 9-14) or a new one
         starts importing ai_os_kernel, this test fails until the waiver
-        file is updated to match, which is exactly the point."""
+        file is updated to match, which is exactly the point.
+
+        Five modules, not six, as of step 9: qa-test
+        (`agents.verification`) migrated onto the Platform SDK and is no
+        longer in this set at all."""
         violations = scan_pack_source(_SE_PACK_SRC, own_pack_package=_SE_PACK_PACKAGE)
         modules = {v.module for v in violations}
         assert modules == {
@@ -116,9 +120,14 @@ class TestRealSoftwareEngineeringPackScan:
             f"{_SE_PACK_PACKAGE}.agents.build",
             f"{_SE_PACK_PACKAGE}.agents.documentation",
             f"{_SE_PACK_PACKAGE}.agents.requirements_analyst",
-            f"{_SE_PACK_PACKAGE}.agents.verification",
             f"{_SE_PACK_PACKAGE}.pack",
         }
+
+    def test_qa_test_is_migrated_and_contributes_zero_violations(self) -> None:
+        """Step 9's own real proof, at the scanner level: the migrated
+        module imports nothing ai_os_kernel imports at all."""
+        violations = scan_pack_source(_SE_PACK_SRC, own_pack_package=_SE_PACK_PACKAGE)
+        assert not any(v.module == f"{_SE_PACK_PACKAGE}.agents.verification" for v in violations)
 
     def test_pipeline_py_is_gone_so_it_contributes_no_violations(self) -> None:
         """Step 7 relocated pipeline.py out of this tree entirely -- if

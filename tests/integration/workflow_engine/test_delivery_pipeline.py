@@ -78,6 +78,7 @@ from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import PromptedCompletionService
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
+from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry, SqlAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
@@ -112,6 +113,23 @@ _AGENT_ENTRYPOINTS = {
         "ai_os_pack_software_engineering.agents.documentation:DocumentationAgentEntrypoint"
     ),
 }
+
+
+def _test_agent_with_sandbox(sandbox: LocalSubprocessSandbox) -> TestAgentEntrypoint:
+    """qa-test is migrated onto the Platform SDK (step 9) — no more
+    ``sandbox=`` constructor override. Construct zero-arg, exactly as
+    ``EntrypointLoader`` does, then bind the real ``PackContext`` a real
+    caller would inject, granting exactly ``sandbox:execute``."""
+    agent = TestAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["sandbox:execute"],
+            sandbox=sandbox,
+        )
+    )
+    return agent
 
 
 @pytest.fixture(scope="module")
@@ -189,7 +207,7 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
                 working_directory=tmp_path,
                 sandbox=LocalSubprocessSandbox(),
             ),
-            _AGENT_IDS["test"]: TestAgentEntrypoint(sandbox=LocalSubprocessSandbox()),
+            _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: DocumentationAgentEntrypoint(
                 service_factory=documentation_service, sandbox=LocalSubprocessSandbox()
             ),

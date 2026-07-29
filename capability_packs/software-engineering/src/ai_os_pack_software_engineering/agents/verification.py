@@ -6,6 +6,50 @@ real outcome. No Documentation Agent, no automatic Build -> Test
 pipeline, no test-framework detection — exactly this step's own
 approved scope.
 
+**Migrated onto the real Platform SDK (``platform_sdk_v1_scope.md``
+step 9) — the first of the six migration steps, chosen first for
+exactly the reason it has no LLM call and only one real Kernel
+dependency (the sandbox) to replace.** This entrypoint now implements
+:class:`~ai_os_sdk.contracts.Agent` and
+:class:`~ai_os_sdk.contracts.entrypoint_context.PackContextReceiver`
+only — it imports nothing from ``ai_os_kernel`` at all. Where it used to
+construct a real :class:`~ai_os_kernel.workflow_engine.sandboxed_tool.
+SandboxedCommandTool` directly over a Kernel ``SandboxExecutor``, it now
+calls :meth:`~ai_os_sdk.contracts.ToolInvoker.invoke` on
+``self._context.tools`` — the real
+:class:`~ai_os_kernel.sdk_adapters.tool_invoker_adapter.ToolInvokerAdapter`
+a caller injects via :meth:`bind_pack_context`, per the step 6b
+mechanism this migration is the first real (non-test-entrypoint) user
+of. See ``platform_sdk_v1_scope.md`` §6k for two real, discovered
+findings from being that first real user — neither a defect in the
+mechanism itself, both resolved here:
+
+1. **The mechanism itself needed no change.** Zero-arg construction,
+   then a caller-side ``bind_pack_context()`` call before first
+   ``execute()``, worked exactly as step 6b's test entrypoint proved —
+   the only real-world addition is that *this* entrypoint now raises a
+   clear, named error (:class:`TestInstructionError`) if ``execute()``
+   is ever called before binding, since a real caller forgetting to
+   bind is a real mistake worth a clear message, not an ``AttributeError``
+   two frames deep.
+2. **The real ``inputs["context"]`` object is not, and cannot yet be,
+   an instance of :class:`ai_os_sdk.models.context.AssembledContext`.**
+   ``AgentStepExecutor`` (unmigrated Kernel code, out of this step's own
+   scope) still constructs and passes through a real
+   :class:`ai_os_kernel.context_manager.models.AssembledContext` — a
+   different, unrelated Python class from the SDK's own boundary model,
+   even though step 7 narrowed the two to identical fields. A migrated
+   agent cannot import the Kernel class to ``isinstance``-check against
+   it (that import is exactly what this migration removes), and
+   ``isinstance`` against the SDK's own model would always be ``False``
+   against the real object the Workflow Engine actually sends. This
+   module therefore duck-types the context object (checks for a real,
+   non-empty ``.items`` attribute, then reads each item's own
+   ``.content``) instead of a nominal ``isinstance`` check — not a
+   workaround, but the correct, real answer given the SDK's own
+   ``Agent`` Protocol already documents ``inputs`` as carrying "rich
+   objects, not only strings" without naming their concrete types.
+
 **Deliberately not ``PromptedAgent``-backed — this agent makes no LLM
 call at all, and that is the point, not an oversight.** This step's own
 approved framing states the constraint plainly: "pass/fail must come
@@ -94,10 +138,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ai_os_kernel.context_manager.models import AssembledContext
-from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
-from ai_os_kernel.sandbox.executor import SandboxExecutor
-from ai_os_kernel.workflow_engine.sandboxed_tool import SandboxedCommandTool
+from ai_os_sdk.contracts.tool_invoker import PLATFORM_SANDBOX_RUN_COMMAND
 
 # Named, documented first-cut values — the same "placeholder safety
 # limit, not yet tuned" carve-out already used throughout this
@@ -196,13 +237,23 @@ def _extract_payload(inputs: dict[str, Any]) -> tuple[str, str, list[str]]:
         payload = {field: inputs[field] for field in _REQUIRED_FIELDS}
     else:
         context = inputs.get("context")
-        if not isinstance(context, AssembledContext) or not context.items:
+        # Duck-typed, not `isinstance(context, AssembledContext)` — the
+        # real object the Workflow Engine sends here is still
+        # ai_os_kernel.context_manager.models.AssembledContext (unmigrated
+        # Kernel code, out of this step's scope), a different Python
+        # class from the SDK's own boundary model even though step 7
+        # narrowed the two to identical fields. This agent no longer
+        # imports ai_os_kernel at all, so a nominal isinstance check
+        # against either class is unavailable or always false — see this
+        # module's own docstring for the full reasoning.
+        items = getattr(context, "items", None)
+        if not items:
             raise TestInstructionError(
                 "TestAgentEntrypoint requires 'workingDirectory', 'filePath', and "
                 "'runCommand' — either directly in inputs, or as a JSON object in "
                 "the assembled context"
             )
-        raw = "\n\n".join(item.content for item in context.items)
+        raw = "\n\n".join(item.content for item in items)
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError as exc:
@@ -228,12 +279,19 @@ class TestAgentEntrypoint:
     zero-argument-constructible like every other agent in this pack,
     though trivially so here: nothing is built lazily, since this agent
     needs no LLM composition at all. See this module's own docstring
-    for the full reasoning.
+    for the full reasoning, including the step 9 migration onto
+    :class:`~ai_os_sdk.contracts.Agent` +
+    :class:`~ai_os_sdk.contracts.entrypoint_context.PackContextReceiver`.
 
-    ``sandbox``/``timeout_seconds``/``max_output_bytes`` are optional
-    constructor overrides — always their defaults in production
-    (``EntrypointLoader`` only ever calls ``cls()``), and how a test
-    substitutes a fake/inspectable sandbox or tighter limits.
+    ``timeout_seconds``/``max_output_bytes`` are optional constructor
+    overrides — always their defaults in production (``EntrypointLoader``
+    only ever calls ``cls()``), and how a test tightens the limits. There
+    is no ``sandbox`` constructor override any more: the real sandbox now
+    arrives exclusively through :meth:`bind_pack_context`'s own
+    ``context.tools`` (a real :class:`~ai_os_sdk.contracts.ToolInvoker`),
+    per the step 6b injection mechanism — a test substitutes a
+    fake/inspectable sandbox by binding a ``PackContext`` built over one,
+    not by passing it to this constructor.
     """
 
     output_schema: dict[str, Any] = _OUTPUT_SCHEMA
@@ -241,15 +299,24 @@ class TestAgentEntrypoint:
     def __init__(
         self,
         *,
-        sandbox: SandboxExecutor | None = None,
         timeout_seconds: float = _RUN_TIMEOUT_SECONDS,
         max_output_bytes: int = _RUN_MAX_OUTPUT_BYTES,
     ) -> None:
-        self.sandbox = sandbox or build_default_sandbox_executor()
         self._timeout_seconds = timeout_seconds
         self._max_output_bytes = max_output_bytes
+        self._context: Any | None = None
+
+    def bind_pack_context(self, context: Any) -> None:
+        self._context = context
 
     async def execute(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        if self._context is None or self._context.tools is None:
+            raise TestInstructionError(
+                "TestAgentEntrypoint.execute() called before bind_pack_context() bound a "
+                "PackContext granting the sandbox:execute permission (context.tools) — a "
+                "real caller must inject one before first use"
+            )
+
         working_directory_raw, file_path_raw, run_command = _extract_payload(inputs)
 
         working_directory = Path(working_directory_raw)
@@ -262,17 +329,18 @@ class TestAgentEntrypoint:
             )
         await asyncio.to_thread(_resolve_existing_file, working_directory, file_path_raw)
 
-        runner = SandboxedCommandTool(
-            self.sandbox,
-            command=run_command,
-            working_directory=working_directory,
-            timeout_seconds=self._timeout_seconds,
-            max_output_bytes=self._max_output_bytes,
+        result = await self._context.tools.invoke(
+            PLATFORM_SANDBOX_RUN_COMMAND,
+            {
+                "command": run_command,
+                "working_directory": str(working_directory),
+                "timeout_seconds": self._timeout_seconds,
+                "max_output_bytes": self._max_output_bytes,
+            },
         )
-        run_outputs = await runner.execute({})
 
         return {
-            "passed": run_outputs["exitCode"] == 0 and not run_outputs["timedOut"],
-            "exitCode": run_outputs["exitCode"],
-            "output": run_outputs["stdout"] + run_outputs["stderr"],
+            "passed": result.exit_code == 0 and not result.timed_out,
+            "exitCode": result.exit_code,
+            "output": result.stdout + result.stderr,
         }

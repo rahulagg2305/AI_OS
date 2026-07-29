@@ -12,6 +12,33 @@ so unlike `test_architecture_agent_pack.py`/`test_build_agent_pack.py`,
 there is no opt-in-live tier gated on `AIOS_SECRET_LLM_ANTHROPIC_API_KEY`
 here — every test in this file needs only a real Postgres container
 (ADR-0015) and runs unconditionally once Docker Desktop is available.
+
+**A real, discovered gap from step 9's migration, resolved here, not
+silently worked around.** `SqlAgentRegistry.resolve_agent()` resolves
+this agent through the real, unmodified `EntrypointLoader` — zero-arg
+`cls()`, exactly as before — but nothing in `SqlAgentRegistry` itself
+calls `bind_pack_context()` afterward (wiring that is explicitly
+deferred past this migration step; see
+`platform_sdk_v1_scope.md`'s own step 9 record). This file is therefore
+the first *unconditionally-run* real exercise of the fact that a
+migrated agent resolved through the real production registry path is
+not yet usable without a caller doing that binding by hand — this test
+now does it explicitly, immediately after resolution, standing in for
+the production wiring that does not exist yet.
+
+**A second, related, real capability loss, also discovered and worked
+around here, not hidden.** The pre-migration agent exposed its own
+resolved `sandbox: SandboxExecutor` as a public attribute, letting a
+caller introspect `resolved.sandbox.python_command` to discover which
+backend `AIOS_SANDBOX_BACKEND` actually selected. The migrated agent's
+only sandbox access is through the injected `context.tools`, an opaque
+`ToolInvoker` with no such introspection capability — by design, the
+Protocol grants only `invoke()`/`available_tools()`. This test now
+builds its own `SandboxExecutor` first (via the identical
+`build_default_sandbox_executor()` the agent used to call internally),
+reads `python_command` from that reference directly, and injects the
+same instance — the caller already holds the one reference it needs;
+the agent never needed to re-expose it.
 """
 
 import asyncio
@@ -29,12 +56,15 @@ from alembic.config import Config
 from ai_os_kernel.capability_manager.errors import CapabilityManagerError
 from ai_os_kernel.capability_manager.repository import SqlPackLifecycleRepository
 from ai_os_kernel.persistence.engine import build_engine
+from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
+from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.workflow_engine.agent import Agent
 from ai_os_kernel.workflow_engine.registry import SqlAgentRegistry
 from ai_os_pack_software_engineering.agents.verification import (
     TestAgentEntrypoint,
     TestAgentOutput,
 )
+from ai_os_sdk.contracts import PackContextReceiver
 from tests.integration._postgres_fixture import postgres_container
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -129,6 +159,7 @@ def test_sql_agent_registry_genuinely_resolves_the_test_agent(database_url: str)
             resolved = await registry.resolve_agent(_AGENT_ID)
 
             assert isinstance(resolved, Agent)
+            assert isinstance(resolved, PackContextReceiver)
             assert isinstance(resolved, TestAgentEntrypoint)
             assert resolved.output_schema["required"] == ["passed", "exitCode", "output"]
         finally:
@@ -163,15 +194,30 @@ def test_a_real_workflow_step_genuinely_runs_a_real_file_via_sql_agent_registry(
             registry = SqlAgentRegistry(engine)
             resolved = await registry.resolve_agent(_AGENT_ID)
             assert isinstance(resolved, TestAgentEntrypoint)
-            # Derived from the agent's own *actually-resolved* sandbox,
-            # not a hardcoded `sys.executable` — `resolved` was
-            # constructed by `EntrypointLoader`'s own zero-argument
-            # `cls()` call, so its `sandbox` is whichever backend
-            # `AIOS_SANDBOX_BACKEND` currently names (real `DockerSandbox`
-            # by default), never necessarily this host's own interpreter
-            # path. See `pipeline.py`'s own docstring for the identical
-            # bug this mirrors and fixes.
-            python_command = list(resolved.sandbox.python_command)
+            assert isinstance(resolved, PackContextReceiver)
+
+            # Built once, here, by the caller — the same real sandbox
+            # this agent used to build for itself internally before step
+            # 9's migration. `AIOS_SANDBOX_BACKEND` still governs which
+            # real backend this resolves to (DockerSandbox by default);
+            # only *who* constructs it moved, from the agent's own
+            # __init__ to whoever now injects its PackContext. See this
+            # module's own docstring for why `python_command` is read
+            # from this reference directly rather than reintrospected
+            # out of `resolved` afterward — the identical
+            # "derive it once, from whoever actually knows" discipline
+            # `_delivery_pipeline.py`'s own docstring already established
+            # for this exact bug shape.
+            sandbox = build_default_sandbox_executor()
+            resolved.bind_pack_context(
+                build_pack_context(
+                    pack_id=_PACK_ID,
+                    pack_version=_PACK_VERSION,
+                    permissions=["sandbox:execute"],
+                    sandbox=sandbox,
+                )
+            )
+            python_command = list(sandbox.python_command)
 
             passing = await resolved.execute(
                 {

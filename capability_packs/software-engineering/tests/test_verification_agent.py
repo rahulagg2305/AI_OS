@@ -5,11 +5,16 @@ real ``LocalSubprocessSandbox``/real OS subprocess, so a passing test
 means a real process genuinely exited with a real code, not an
 assertion about a mock's call arguments.
 
-**``sandbox=LocalSubprocessSandbox()`` is now passed explicitly
-(2026-07-28)** — see ``test_build_agent.py``'s own docstring for why:
-this agent's own bare default is now config-driven and defaults to
-`DockerSandbox`, and this file deliberately opts back into the fast,
-Docker-independent backend.
+**Migrated onto the Platform SDK (step 9) — this agent no longer takes
+a ``sandbox=`` constructor override.** ``_agent_with_sandbox`` below is
+this file's own real substitute: construct the agent with zero
+arguments (exactly as ``EntrypointLoader`` does), then bind it a real
+``PackContext`` built over the sandbox a test wants, via the exact
+``build_pack_context``/``bind_pack_context`` mechanism a real caller
+uses. This file still freely imports ``ai_os_kernel`` for the
+``AgentStepExecutor``/``DefaultContextManager`` proof below — pack-local
+tests are not subject to `pack_contract_suite` check 7, which scans a
+pack's own ``src/`` tree only.
 """
 
 from __future__ import annotations
@@ -28,7 +33,8 @@ from ai_os_kernel.context_manager.models import (
     SourceRef,
     SourceType,
 )
-from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
+from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox, SandboxExecutor
+from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.step_executor import AgentStepExecutor
@@ -39,9 +45,30 @@ from ai_os_pack_software_engineering.agents.verification import (
     TestInstructionError,
     _resolve_existing_file,
 )
+from ai_os_sdk.contracts import Agent as SdkAgent
+from ai_os_sdk.contracts import PackContextReceiver
 
 _AGENT_ID = "qa-test"
+_PACK_ID = "software-engineering"
+_PACK_VERSION = "0.1.0"
 _PYTHON = sys.executable
+
+
+def _agent_with_sandbox(sandbox: SandboxExecutor) -> TestAgentEntrypoint:
+    """The real, zero-arg-constructed entrypoint, bound to a real
+    ``PackContext`` granting exactly ``sandbox:execute`` over
+    ``sandbox`` — the same construction+injection sequence a real
+    ``SqlAgentRegistry``-backed caller would perform."""
+    agent = TestAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["sandbox:execute"],
+            sandbox=sandbox,
+        )
+    )
+    return agent
 
 
 class _FixedPayloadResolver:
@@ -91,7 +118,7 @@ async def test_test_agent_reports_a_genuine_passing_case_via_direct_execute(
     tmp_path: Path,
 ) -> None:
     _write(tmp_path / "ok.py", "print('all good')\n")
-    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_sandbox(LocalSubprocessSandbox())
 
     outputs = await agent.execute(
         {
@@ -112,7 +139,7 @@ async def test_test_agent_reports_a_genuine_failing_case_via_direct_execute(
     tmp_path: Path,
 ) -> None:
     _write(tmp_path / "broken.py", "raise SystemExit(1)\n")
-    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_sandbox(LocalSubprocessSandbox())
 
     outputs = await agent.execute(
         {
@@ -129,7 +156,7 @@ async def test_test_agent_reports_a_genuine_failing_case_via_direct_execute(
 
 @pytest.mark.asyncio
 async def test_test_agent_rejects_a_missing_file(tmp_path: Path) -> None:
-    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_sandbox(LocalSubprocessSandbox())
 
     with pytest.raises(TestInstructionError, match="does not exist"):
         await agent.execute(
@@ -145,7 +172,7 @@ async def test_test_agent_rejects_a_missing_file(tmp_path: Path) -> None:
 async def test_test_agent_rejects_a_path_that_escapes_the_working_directory(
     tmp_path: Path,
 ) -> None:
-    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_sandbox(LocalSubprocessSandbox())
 
     with pytest.raises(TestInstructionError, match="resolves outside"):
         await agent.execute(
@@ -159,7 +186,7 @@ async def test_test_agent_rejects_a_path_that_escapes_the_working_directory(
 
 @pytest.mark.asyncio
 async def test_test_agent_rejects_missing_required_fields() -> None:
-    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_sandbox(LocalSubprocessSandbox())
 
     with pytest.raises(TestInstructionError, match="requires"):
         await agent.execute({"filePath": "ok.py"})
@@ -167,7 +194,7 @@ async def test_test_agent_rejects_missing_required_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_test_agent_rejects_a_nonexistent_working_directory(tmp_path: Path) -> None:
-    agent = TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_sandbox(LocalSubprocessSandbox())
     missing = tmp_path / "does-not-exist"
 
     with pytest.raises(TestInstructionError, match="does not exist or is not a directory"):
@@ -202,9 +229,7 @@ async def test_test_agent_genuinely_dispatches_through_agent_step_executor_passi
         "runCommand": [_PYTHON, "ok.py"],
     }
     context_manager = DefaultContextManager([_FixedPayloadResolver(payload)])
-    registry = InMemoryAgentRegistry(
-        {_AGENT_ID: TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())}
-    )
+    registry = InMemoryAgentRegistry({_AGENT_ID: _agent_with_sandbox(LocalSubprocessSandbox())})
     executor = AgentStepExecutor(registry, context_manager)
 
     outputs = await executor.execute(_step(), workflow_id="wf_test")
@@ -231,9 +256,7 @@ async def test_test_agent_genuinely_dispatches_through_agent_step_executor_faili
         "runCommand": [_PYTHON, "broken.py"],
     }
     context_manager = DefaultContextManager([_FixedPayloadResolver(payload)])
-    registry = InMemoryAgentRegistry(
-        {_AGENT_ID: TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())}
-    )
+    registry = InMemoryAgentRegistry({_AGENT_ID: _agent_with_sandbox(LocalSubprocessSandbox())})
     executor = AgentStepExecutor(registry, context_manager)
 
     outputs = await executor.execute(_step(), workflow_id="wf_test")
@@ -248,9 +271,7 @@ async def test_test_agent_via_agent_step_executor_rejects_a_malformed_context_pa
     tmp_path: Path,
 ) -> None:
     context_manager = DefaultContextManager([_FixedPayloadResolver({"filePath": "ok.py"})])
-    registry = InMemoryAgentRegistry(
-        {_AGENT_ID: TestAgentEntrypoint(sandbox=LocalSubprocessSandbox())}
-    )
+    registry = InMemoryAgentRegistry({_AGENT_ID: _agent_with_sandbox(LocalSubprocessSandbox())})
     executor = AgentStepExecutor(registry, context_manager)
 
     with pytest.raises(TestInstructionError, match="missing"):
@@ -261,3 +282,31 @@ def test_test_agent_input_documents_the_agent_contract() -> None:
     TestAgentInput.model_validate(
         {"workingDirectory": "workspace", "filePath": "a.py", "runCommand": ["python", "a.py"]}
     )
+
+
+@pytest.mark.asyncio
+async def test_execute_before_bind_pack_context_raises_a_clear_error(tmp_path: Path) -> None:
+    """The one real, new behavior this migration adds: a caller that
+    forgets to inject a PackContext gets a clear, named error, not a
+    confusing AttributeError two frames into a None.tools.invoke() call."""
+    _write(tmp_path / "ok.py", "print('ok')\n")
+    agent = TestAgentEntrypoint()
+
+    with pytest.raises(TestInstructionError, match="bind_pack_context"):
+        await agent.execute(
+            {
+                "workingDirectory": str(tmp_path),
+                "filePath": "ok.py",
+                "runCommand": [_PYTHON, "ok.py"],
+            }
+        )
+
+
+def test_the_migrated_entrypoint_satisfies_both_sdk_protocols() -> None:
+    """Step 9's own real proof: this entrypoint is a real
+    ai_os_sdk.contracts.Agent and PackContextReceiver, not merely an
+    object that happens to still work."""
+    agent = TestAgentEntrypoint()
+
+    assert isinstance(agent, SdkAgent)
+    assert isinstance(agent, PackContextReceiver)
