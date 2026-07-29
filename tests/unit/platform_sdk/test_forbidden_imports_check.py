@@ -97,45 +97,37 @@ class TestEachForbiddenCategoryIsDetected:
 
 class TestRealSoftwareEngineeringPackScan:
     """The exact, current, real state of the one real pack's own source
-    tree — re-scanned fresh, not assumed from a prior run."""
+    tree — re-scanned fresh, not assumed from a prior run.
 
-    def test_every_violation_found_is_a_kernel_import(self) -> None:
+    **Step 14 migrated the last remaining module (`pack.py`) — this
+    pack now has zero `ai_os_kernel` imports anywhere, the first time
+    that has been true in this project's history.** `pack_contract_waiver.yaml`
+    is deleted outright (not merely emptied); see `pack.py`'s own
+    docstring and `platform_sdk_v1_scope.md` §6r for the full record.
+    """
+
+    def test_the_pack_has_zero_forbidden_imports_at_all(self) -> None:
+        """Guards this pack's own fully-migrated state against silent
+        drift -- if any module ever starts importing ai_os_kernel (or
+        any other forbidden category) again, this test fails
+        immediately, with no waiver anywhere in this pack to catch it."""
         violations = scan_pack_source(_SE_PACK_SRC, own_pack_package=_SE_PACK_PACKAGE)
-        categories = {v.category for v in violations}
-        assert categories == {ForbiddenImportCategory.KERNEL}
+        assert violations == []
 
-    def test_the_exact_one_module_with_violations(self) -> None:
-        """Guards the waiver file's own `modules` list against silent
-        drift -- if a module is migrated (steps 9-14) or a new one
-        starts importing ai_os_kernel, this test fails until the waiver
-        file is updated to match, which is exactly the point.
-
-        One module, not two, as of step 13: all 5 real agents (qa-test,
-        requirements-analyst, architecture, build, documentation) are
-        now migrated onto the Platform SDK. Only `pack.py` (this pack's
-        own CapabilityPack entry point, step 14's own explicitly scoped
-        job) remains -- a real, deliberate fact, not an oversight; see
-        `pack_contract_waiver.yaml`'s own docstring for why this waiver
-        is not yet empty even though every agent is done."""
+    def test_every_agent_and_the_pack_entry_point_are_migrated(self) -> None:
+        """Steps 9-14's own real proof, at the scanner level: every
+        module this pack ships -- all five agents and the CapabilityPack
+        entry point itself -- imports nothing ai_os_kernel at all."""
         violations = scan_pack_source(_SE_PACK_SRC, own_pack_package=_SE_PACK_PACKAGE)
-        modules = {v.module for v in violations}
-        assert modules == {f"{_SE_PACK_PACKAGE}.pack"}
-
-    def test_all_five_agents_are_migrated_and_contribute_zero_violations(
-        self,
-    ) -> None:
-        """Steps 9, 10, 11, 12, and 13's own real proof, at the scanner
-        level: all five migrated agent modules import nothing
-        ai_os_kernel imports at all."""
-        violations = scan_pack_source(_SE_PACK_SRC, own_pack_package=_SE_PACK_PACKAGE)
-        migrated_modules = {
+        fully_migrated_modules = {
             f"{_SE_PACK_PACKAGE}.agents.verification",
             f"{_SE_PACK_PACKAGE}.agents.requirements_analyst",
             f"{_SE_PACK_PACKAGE}.agents.architecture",
             f"{_SE_PACK_PACKAGE}.agents.build",
             f"{_SE_PACK_PACKAGE}.agents.documentation",
+            f"{_SE_PACK_PACKAGE}.pack",
         }
-        assert not any(v.module in migrated_modules for v in violations)
+        assert not any(v.module in fully_migrated_modules for v in violations)
 
     def test_pipeline_py_is_gone_so_it_contributes_no_violations(self) -> None:
         """Step 7 relocated pipeline.py out of this tree entirely -- if

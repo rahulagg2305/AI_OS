@@ -156,6 +156,6 @@ Order of precedence:
 ## 10. Related Documents
 
 - [`agents.md`](agents.md) · [`workflows.md`](workflows.md) — the detailed catalogs, each with its own "Currently Implemented Subset" section
-- [`../../03_architecture/capability_framework/capability_pack_contract.md`](../../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK growth gate blocking this pack's further expansion
-- [`../../process/standing_rules.md`](../../process/standing_rules.md) — the standing hard blocker
+- [`../../03_architecture/capability_framework/capability_pack_contract.md`](../../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK growth gate that used to block this pack's further expansion, now lifted (this pack is fully SDK-compliant, step 14)
+- [`../../process/standing_rules.md`](../../process/standing_rules.md) — the standing rule recording the gate's lift
 - [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status

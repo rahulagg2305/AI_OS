@@ -3,9 +3,22 @@
 
 Covers the pure loading/matching/rendering logic with synthetic data
 (no real filesystem I/O needed there), plus one real proof against the
-actual, checked-in
-``capability_packs/software-engineering/pack_contract_waiver.yaml`` —
-the exact file CI reads.
+real ``capability_packs/software-engineering/`` pack root — the exact
+path CI reads.
+
+**Step 14 deleted this pack's own ``pack_contract_waiver.yaml``
+outright, not merely emptied it** — the pack's own real scanner result
+is now zero violations, pack-wide, for the first time in this project's
+history, so there is nothing left to waive (see `pack.py`'s own
+docstring and ``platform_sdk_v1_scope.md`` §6r for the full record).
+``TestRealCheckedInWaiverFile`` below used to prove the real, checked-in
+waiver file loaded and validated; it now proves the mechanism's own
+documented "no waiver -> full, unwaived enforcement" default holds for
+real against this exact, now-absent path — the mechanism itself
+(``load_waiver``/``apply_waiver``/``render_report``) remains fully
+intact, real, reusable infrastructure for a future pack's own genuine
+transition period, per this step's own constraint; only this one pack's
+own waiver *usage* is retired.
 """
 
 from __future__ import annotations
@@ -161,18 +174,32 @@ class TestRenderReport:
 
 
 class TestRealCheckedInWaiverFile:
-    def test_the_real_waiver_file_loads_and_validates(self) -> None:
-        waiver = load_waiver(_REAL_WAIVER_PATH)
+    """Step 14 deleted this pack's own real waiver file outright — these
+    tests now prove the mechanism's own documented "no waiver -> full,
+    unwaived enforcement" default holds for real against that exact,
+    now-absent path, not against a synthetic stand-in."""
 
-        assert waiver is not None
-        assert waiver.check == 7
-        assert waiver.expires_at_step == 14
-        assert "ai_os_pack_software_engineering.pack" in waiver.modules
+    def test_the_real_pack_has_no_waiver_file_at_all(self) -> None:
+        assert not _REAL_WAIVER_PATH.is_file()
 
-    def test_the_real_waiver_report_is_plain_ascii(self) -> None:
-        """Proves the actual, checked-in reason text -- not a synthetic
-        stand-in -- also survives an ASCII-only console, the exact
-        failure mode this step discovered and fixed."""
+    def test_the_absent_real_waiver_path_yields_no_waiver(self) -> None:
+        assert load_waiver(_REAL_WAIVER_PATH) is None
+
+    def test_a_hypothetical_violation_against_the_real_pack_path_is_genuinely_unwaived(
+        self,
+    ) -> None:
+        """The real, load-bearing consequence of the file being gone:
+        any future forbidden import in this pack now fails check 7
+        immediately, with no waiver to catch it — enforced
+        unconditionally, with zero exceptions, for the first time in
+        this project's history."""
         waiver = load_waiver(_REAL_WAIVER_PATH)
-        application = apply_waiver([_violation("ai_os_pack_software_engineering.pack")], waiver)
-        render_report(application).encode("ascii")
+        violation = _violation("ai_os_pack_software_engineering.pack")
+
+        application = apply_waiver([violation], waiver)
+
+        assert application.unwaived == [violation]
+        assert application.waived == []
+        report = render_report(application)
+        assert "[FAIL]" in report
+        report.encode("ascii")

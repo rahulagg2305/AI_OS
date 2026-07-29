@@ -140,7 +140,7 @@ Minimum documentation:
 
 ## 10. Current Status
 
-This guide provides the baseline process for developing Capability Packs. See the Implementation Status section near the top: the Manifest Loader and Capability Manager it assumes are real, but the Platform SDK is not, and the Platform SDK growth gate currently blocks any *new* pack or agent from being built by following this guide.
+This guide provides the baseline process for developing Capability Packs. See the Implementation Status section near the top: the Manifest Loader and Capability Manager it assumes are real, and the Platform SDK is now real and fully adopted by the one real pack (`platform_sdk_v1_scope.md` step 14, 2026-07-29) — the Platform SDK growth gate that used to block any *new* pack or agent from being built by following this guide is lifted (`docs/process/standing_rules.md`).
 
 It will evolve as the Platform SDK and tooling mature.
 
