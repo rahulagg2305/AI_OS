@@ -86,6 +86,8 @@ Contract-level specifications (I/O schemas, tools, prompts, permissions, behavio
 
 ## Currently Implemented Subset (2026-07-28)
 
+*(This is this document's `## Implementation Status` section — kept under its established name rather than renamed, because the exact phrase "Currently Implemented Subset" is a cross-reference target from several other live documents. Formally recorded as a permitted variant in `docs/process/standing_rules.md`.)*
+
 This document describes the full, intended agent catalog for this pack's mature design. As of this date, a much smaller, real slice actually exists in `capability_packs/software-engineering/`, built under a separate product-owner reprioritization toward "the shortest real path to a working multi-agent software-engineering pipeline" (see `docs/19_roadmap/implementation_status.md`'s own header for the full framing). This section exists so a reader of this document is never misled about the gap between the two.
 
 **Real today: 5 of the 16 agents listed above.**

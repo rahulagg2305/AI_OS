@@ -14,7 +14,11 @@ AI_OS uses several terms that are close in meaning and easy to conflate — Know
 
 Every term below has exactly one meaning in AI_OS. Where a term is commonly used differently elsewhere, that is noted.
 
-**A note on implementation status.** This glossary defines the platform's intended vocabulary — it does not track what is built. Several terms below name concepts with no working implementation yet as of 2026-07-28, verified against source during this audit: **Platform SDK** (§2, 5% built — schema only, no `ai-os-sdk` package); **Trust tag** (§3 — no `trust` field exists anywhere in the Context Manager's `ContextItem`/`SourceRef`); **Monotonic narrowing** (§6 — only the principal term of the intersection is computed; workflow/agent/tool declared permissions are not yet read at authorization time); **Speech Gateway**, **Event Bus**, **Traceability Link**/**Impact analysis** infrastructure, and **Outbox** consumption (all 0% or schema-only). Do not infer a term is built from its presence here. See `../19_roadmap/feature_inventory.md` for per-module status.
+---
+
+## 1a. Implementation Status (2026-07-28)
+
+This glossary defines the platform's intended vocabulary — it does not track what is built. Several terms below name concepts with no working implementation yet as of 2026-07-28, verified against source during the 2026-07-28 documentation audit: **Platform SDK** (§2, 5% built — schema only, no `ai-os-sdk` package); **Trust tag** (§3 — no `trust` field exists anywhere in the Context Manager's `ContextItem`/`SourceRef`); **Monotonic narrowing** (§6 — only the principal term of the intersection is computed; workflow/agent/tool declared permissions are not yet read at authorization time); **Speech Gateway**, **Event Bus**, **Traceability Link**/**Impact analysis** infrastructure, and **Outbox** consumption (all 0% or schema-only). Do not infer a term is built from its presence here. See `../19_roadmap/feature_inventory.md` for per-module status.
 
 ---
 

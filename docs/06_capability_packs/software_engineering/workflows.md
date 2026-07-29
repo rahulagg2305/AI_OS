@@ -43,6 +43,8 @@ Step type vocabulary: `agent`, `tool`, `decision`, `parallel`, `foreach`, `sub_w
 
 ## Currently Implemented Subset (2026-07-28)
 
+*(This is this document's `## Implementation Status` section — kept under its established name rather than renamed, because the exact phrase "Currently Implemented Subset" is a cross-reference target from several other live documents. Formally recorded as a permitted variant in `docs/process/standing_rules.md`.)*
+
 §§3–9 below describe this pack's full, intended workflow design. As of this date, exactly **one** real, declared workflow exists — `se.delivery_pipeline` — built under a separate product-owner reprioritization toward "the shortest real path to a working multi-agent software-engineering pipeline" (see `docs/19_roadmap/implementation_status.md`'s own header). It is **not** an implementation of `se.implement_task` (§4) — that document was checked directly against the real, shipped shape below during this reconciliation, and the two diverge on purpose, structure, and even which agents participate. This section records the real shape here, rather than force-renaming it into a fork of `se.implement_task` or leaving it undocumented.
 
 ### `se.delivery_pipeline` — Reprioritization Proof-of-Concept Pipeline
