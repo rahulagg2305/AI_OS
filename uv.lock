@@ -15,6 +15,7 @@ name = "ai-os-kernel"
 version = "0.1.0"
 source = { editable = "kernel" }
 dependencies = [
+    { name = "ai-os-sdk" },
     { name = "alembic" },
     { name = "anthropic" },
     { name = "asyncpg" },
@@ -37,6 +38,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "ai-os-sdk", editable = "platform_sdk" },
     { name = "alembic", specifier = ">=1.13,<2.0" },
     { name = "anthropic", specifier = ">=0.69,<1.0" },
     { name = "asyncpg", specifier = ">=0.29,<1.0" },

@@ -8,6 +8,12 @@ requires-python = ">=3.12,<3.14"
 # Do not add a `license` field here until the project owner chooses one
 # (Constitution: AI models must not invent business/legal decisions).
 dependencies = [
+    # The Kernel implements the Platform SDK's Protocols (platform_sdk.md
+    # §2 rule 1 makes ai-os-sdk the dependency floor — it depends on
+    # nothing else, and everything else may depend on it). See
+    # ai_os_kernel.sdk_adapters for the implementing adapters
+    # (platform_sdk_v1_scope.md step 6a).
+    "ai-os-sdk",
     "fastapi>=0.115,<1.0",
     "uvicorn[standard]>=0.30,<1.0",
     "pydantic>=2.7,<3.0",
