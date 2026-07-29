@@ -3,121 +3,89 @@
 slice this step approves: given a Build Agent result and its Test
 Agent outcome, genuinely call an LLM to produce a Markdown record and
 write it through the sandbox — the pipeline's fourth and, for this
-phase, final named role. No automatic Architecture -> Build -> Test ->
-Documentation pipeline, no new persistence/templating system — exactly
-this step's own approved scope.
+phase, final named role.
 
-**``PromptedAgent``-backed, like Architecture/Build — unlike the Test
-Agent, this role genuinely needs a model call.** Test's own docstring
-explains why *it* makes none ("verifying an exit code needs no model
-call"); describing what was built, why, and how it was verified is
-exactly the kind of free-text synthesis an LLM is the right tool for.
-This agent therefore composes a real, internally-built
-:class:`~ai_os_kernel.workflow_engine.prompted_agent.PromptedAgent` on
-first use — the identical lazy-build/zero-arg pattern
-:class:`~ai_os_pack_software_engineering.agents.architecture.
-ArchitectureAgentEntrypoint`/:class:`~ai_os_pack_software_engineering.
-agents.build.BuildAgentEntrypoint` already establish, reused, not
-reinvented.
+**Migrated onto the real Platform SDK (``platform_sdk_v1_scope.md``
+step 13) — the fifth and final agent migration.** This entrypoint now
+implements :class:`~ai_os_sdk.contracts.Agent` and
+:class:`~ai_os_sdk.contracts.entrypoint_context.PackContextReceiver`
+only. It imports nothing from ``ai_os_kernel`` at all. Its LLM call is
+the identical render-then-complete replication
+``requirements_analyst.py``/``architecture.py``/``build.py`` already
+use; its write now calls
+``self._context.tools.invoke(PLATFORM_SANDBOX_RUN_COMMAND, ...)`` with
+:data:`~ai_os_sdk.contracts.tool_invoker.PLATFORM_PYTHON_INTERPRETER`
+as the interpreter token — the step 12a fix, used here from the start
+rather than repeating step 12's own now-closed regression (a
+constructor-time ``python_command`` default this module never needed to
+invent in the first place).
 
-**Combines two already-real pieces this pack already owns; invents
-neither.** The write path is exactly Build's own: content delivered to
-the identical portable, no-shell write script via the Sandbox
-Executor's own ``stdin`` parameter, through a real
-:class:`~ai_os_kernel.workflow_engine.sandboxed_tool.SandboxedCommandTool`
-— reusing that Tool exactly as this step's own approved framing names
-it ("reuse SandboxedCommandTool/stdin delivery exactly as the Build
-Agent already established, do not invent a second file-write path").
+**No lock at all — a real, further data point on the lock-obsolescence
+finding, not a new one.** Unlike ``BuildAgentEntrypoint`` (which kept a
+narrower lock guarding lazy working-directory creation, a concern
+unrelated to LLM composition), this agent lazily builds and creates
+nothing: it reuses the caller-supplied ``workingDirectory`` directly
+(see below) and, post-migration, has no ``PromptedAgent``/service to
+lazily construct either. There is genuinely nothing left for a lock to
+guard, confirming steps 10/11's own finding generalizes fully to the
+one agent in this pack with the least internal state.
 
 **No completion-text parsing at all — simpler than Build, and
-deliberately so.** Build's own completion must be split into a file
-path (chosen by the model) and content; this agent's own target path is
-never the model's to choose — it is derived deterministically from the
-Build Agent's own ``filePath`` (``"<filePath>.md"``, written alongside
-the source file, inside the same ``workingDirectory``). The model's
-entire completion is therefore used verbatim as the documentation
-file's content — this agent's own prompt (``prompts/
-documentation_record_artifact.md``) instructs the model to respond with
-the Markdown document and nothing else, the same "exactly this format,
-nothing else" discipline Build's own prompt already establishes, just
-without any delimiters to parse back out.
+deliberately so.** This agent's own target path is never the model's to
+choose — it is derived deterministically from the Build Agent's own
+``filePath`` (``"<filePath>.md"``, written alongside the source file,
+inside the same ``workingDirectory``). The model's entire completion is
+therefore used verbatim as the documentation file's content.
 
 **Reuses the caller-supplied ``workingDirectory`` directly — like the
 Test Agent, unlike the Build Agent.** This agent writes *into* the same
 directory the Build Agent's own file already lives in (so the resulting
 ``<filePath>.md`` sits beside it), not a private temporary directory of
-its own; there is nothing for this agent to lazily create. Absent a
-real per-workflow workspace (security_architecture.md §5.3, still Stage
-C — the identical gap Build/Test's own docstrings already record),
-that shared directory is still whatever the Build Agent itself created.
+its own.
 
-**A genuine, discovered need to extend the Test Agent's own
-``context``-JSON dual-path resolution — not a new mechanism, a second
-real use of the one this pack already built.**
-:mod:`~ai_os_pack_software_engineering.agents.verification`'s own
-docstring already documents why :class:`~ai_os_kernel.workflow_engine.
-step_executor.AgentStepExecutor` has no per-step mechanism for
-arbitrary structured fields, and resolved it for a *non-prompted* agent
-by JSON-encoding the payload inside the Context Manager's own
-``context`` channel. This agent needs the identical resolution for the
-identical reason (its own real input — a Build result plus a Test
-outcome — is six structured fields, not the one free-text string
-Build/Architecture's own inputs are), but for a *prompted* agent: once
-:func:`_extract_payload` recovers the six fields (directly from
-``inputs``, or from JSON-encoded ``context``, mirroring
-:mod:`~ai_os_pack_software_engineering.agents.verification` exactly),
-they are placed into a ``variables`` dict this module builds itself and
-forwards, alongside the caller's own ``promptId``/``promptVersion``/
-``modelAlias``/trace fields, into the internal ``PromptedAgent.execute()``
-call — :meth:`~ai_os_kernel.workflow_engine.prompted_agent.PromptedAgent.
-_build_variables` already reads ``inputs.get("variables")`` as a direct,
-unmodified passthrough (its own docstring: "No new input-mapping
-system"), so this is that existing seam, used, not extended. The
-original ``context`` key is popped before forwarding, since this
-module has already consumed it — leaving it in would otherwise also
-have ``PromptedAgent`` redundantly re-flatten it into a ``context``
-prompt variable this agent's own template never references.
+**The same real, discovered need to duck-type the assembled context as
+every other migrated agent in this pack.** :func:`_extract_payload`
+recovers this agent's own six required fields directly from ``inputs``
+or, when absent, from JSON-encoded ``context`` — the identical
+resolution :mod:`~ai_os_pack_software_engineering.agents.verification`
+already established for its own three-field payload. The real object
+``AgentStepExecutor`` sends is still Kernel-typed
+(``ai_os_kernel.context_manager.models.AssembledContext``), a different
+class from the SDK's own boundary model even after step 7's narrowing —
+resolved by duck-typing (``getattr(context, "items", None)``) instead of
+an ``isinstance`` check that would always be ``False`` against the real
+object, exactly as ``requirements_analyst.py``/``verification.py``
+already document.
+
+**The identical, already-recorded ``evaluation.llm_calls`` capability
+loss applies here too — the fourth and final occurrence, closing out
+the full set of LLM-calling agents this pack has.** No new finding —
+see ``requirements_analyst.py``'s own docstring for the full reasoning.
 
 **``filePath`` is independently checked before any sandbox call or LLM
 call, the same defensive discipline Test's own ``_resolve_existing_file``
 and Build's own ``_resolve_safe_relative_path`` already establish —
-both duplicated here, not imported from either.** Small, already-
-minimal, single-real-caller-each functions — the identical "no shared
-module needed for a single real caller each" reasoning (ADR-0004)
-every agent module in this pack already applies to its own copy of
-``_build_real_service`` and path-safety checks. Checking before the LLM
-call specifically also avoids spending a real model call on an input
-this agent cannot safely act on regardless of what the model returns.
+both duplicated here, not imported from either.** Checking before the
+LLM call specifically also avoids spending a real model call on an
+input this agent cannot safely act on regardless of what the model
+returns.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Awaitable, Callable
+import uuid
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from pydantic import BaseModel, Field
 
-from ai_os_kernel.context_manager.models import AssembledContext
-from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import PROVIDER_NAME
-from ai_os_kernel.llm_gateway.adapters.model_config import load_provider_config
-from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
-from ai_os_kernel.persistence.engine import build_engine
-from ai_os_kernel.persistence.settings import DatabaseSettings
-from ai_os_kernel.prompted_completion import (
-    PromptedCompletionService,
-    build_anthropic_prompted_completion_service,
+from ai_os_sdk.contracts.tool_invoker import (
+    PLATFORM_PYTHON_INTERPRETER,
+    PLATFORM_SANDBOX_RUN_COMMAND,
 )
-from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
-from ai_os_kernel.sandbox.executor import SandboxExecutor
-from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
-from ai_os_kernel.workflow_engine.prompted_agent import PromptedAgent
-from ai_os_kernel.workflow_engine.sandboxed_tool import SandboxedCommandTool
-
-# Mirrors architecture.py's/build.py's own identical constant exactly.
-_API_KEY_SECRET_REFERENCE = "secret://env/llm/anthropic-api-key"  # noqa: S105 — a reference URI, not a credential
+from ai_os_sdk.models import LLMRequest, Message, MessageRole, TraceContext
 
 # Named, documented first-cut values — the same "placeholder safety
 # limit, not yet tuned" carve-out already used throughout this
@@ -128,7 +96,7 @@ _MAX_OUTPUT_TOKENS = 2048
 _WRITE_TIMEOUT_SECONDS = 10.0
 _WRITE_MAX_OUTPUT_BYTES = 65536
 
-_CONFIG_PATH = Path.cwd() / "config" / "llm.yaml"
+_REQUIRED_INVOCATION_FIELDS = ("promptId", "promptVersion", "modelAlias")
 
 # Identical to build.py's own script — duplicated, not imported, per
 # this module's own docstring. Portable (pathlib/sys.stdin only, no
@@ -156,10 +124,13 @@ _OUTPUT_SCHEMA: dict[str, Any] = {
 
 
 class DocumentationInstructionError(Exception):
-    """This agent's input could not be turned into a safe documentation
-    write — a required field was missing or malformed, or ``filePath``
-    does not resolve to a real, existing file inside ``workingDirectory``.
-    Raised clearly, before any LLM or sandbox call is attempted."""
+    """Either this entrypoint's own invocation contract was violated
+    (called before :meth:`bind_pack_context`, or missing a required
+    ``promptId``/``promptVersion``/``modelAlias`` field), or this
+    agent's input could not be turned into a safe documentation write —
+    a required field was missing or malformed, or ``filePath`` does not
+    resolve to a real, existing file inside ``workingDirectory``. Raised
+    clearly, before any LLM or sandbox call is attempted."""
 
 
 class DocumentationAgentInput(BaseModel):
@@ -219,22 +190,25 @@ def _extract_payload(inputs: dict[str, Any]) -> _BuildTestPayload:
     directly, or, when absent, parsed as JSON from the Context
     Manager's own assembled ``context`` — see this module's own
     docstring's "genuine, discovered need" section for why both paths
-    exist (the identical resolution
-    :mod:`~ai_os_pack_software_engineering.agents.verification` already
-    established, reused here for a six-field payload instead of three).
-    Raises :class:`DocumentationInstructionError` with a clear reason if
+    exist. Duck-typed rather than ``isinstance(context, AssembledContext)``
+    — see this module's own docstring for why: the real object the
+    Workflow Engine sends here is still Kernel-typed, a different
+    Python class from the SDK's own boundary model, so a nominal check
+    would always be ``False`` against it. Raises
+    :class:`DocumentationInstructionError` with a clear reason if
     neither yields a complete, well-typed payload."""
     if all(field in inputs for field in _REQUIRED_FIELDS):
         payload = {field: inputs[field] for field in _REQUIRED_FIELDS}
     else:
         context = inputs.get("context")
-        if not isinstance(context, AssembledContext) or not context.items:
+        items = getattr(context, "items", None)
+        if not items:
             raise DocumentationInstructionError(
                 "DocumentationAgentEntrypoint requires 'workingDirectory', 'filePath', "
                 "'instruction', 'passed', 'exitCode', and 'output' — either directly in "
                 "inputs, or as a JSON object in the assembled context"
             )
-        raw = "\n\n".join(item.content for item in context.items)
+        raw = "\n\n".join(item.content for item in items)
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError as exc:
@@ -312,63 +286,35 @@ def _resolve_safe_relative_path(working_directory: Path, raw_path: str) -> Path:
     return resolved_target.relative_to(resolved_root)
 
 
-async def _build_real_service() -> PromptedCompletionService:
-    """The real, production composition — this is now the last surviving
-    copy in this pack (architecture.py's own copy was removed in step
-    11's migration, build.py's own in step 12's; see each module's own
-    docstring and `platform_sdk_v1_scope.md` §6m/§6n/§6o). Not shared as
-    a common helper even while three copies existed — the "no shared
-    module needed for a single real caller each" reasoning ADR-0004
-    already applies elsewhere in this codebase.
-    """
-    provider_config = load_provider_config(_CONFIG_PATH)
-    router = StaticRouter(
-        routes={
-            alias: RoutingDecision(
-                provider=provider_config.providers.get(alias, PROVIDER_NAME), model_id=model_id
-            )
-            for alias, model_id in provider_config.model_ids.items()
-        }
-    )
-    engine = build_engine(DatabaseSettings().database_url)
-    return await build_anthropic_prompted_completion_service(
-        engine=engine,
-        secret_provider=EnvSecretProvider(),
-        api_key_secret_reference=_API_KEY_SECRET_REFERENCE,
-        router=router,
-        pricing=provider_config.pricing,
-    )
-
-
 class DocumentationAgentEntrypoint:
     """The manifest's own ``agents[].entrypoint`` for the Documentation
-    Agent — zero-argument-constructible, lazily building a real
-    ``PromptedAgent`` on first :meth:`execute` call, the identical
-    pattern ``ArchitectureAgentEntrypoint``/``BuildAgentEntrypoint``
-    already establish. Unlike ``BuildAgentEntrypoint``, this agent
-    creates no working directory of its own — see this module's own
-    docstring for why it always reuses the caller-supplied one.
-
-    ``service_factory``/``sandbox`` are optional constructor overrides
-    — always their defaults in production (``EntrypointLoader`` only
-    ever calls ``cls()``), and how a test substitutes a deterministic
-    completion service or a fake/inspectable sandbox.
+    Agent — zero-argument-constructible. See this module's own
+    docstring for why it needs no lock at all: unlike every other
+    LLM-calling agent in this pack, it lazily builds or creates nothing.
     """
 
     output_schema: dict[str, Any] = _OUTPUT_SCHEMA
 
-    def __init__(
-        self,
-        *,
-        service_factory: Callable[[], Awaitable[PromptedCompletionService]] | None = None,
-        sandbox: SandboxExecutor | None = None,
-    ) -> None:
-        self._service_factory = service_factory or _build_real_service
-        self.sandbox = sandbox or build_default_sandbox_executor()
-        self._agent: PromptedAgent | None = None
-        self._setup_lock = asyncio.Lock()
+    def __init__(self) -> None:
+        self._context: Any | None = None
+
+    def bind_pack_context(self, context: Any) -> None:
+        self._context = context
 
     async def execute(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        if (
+            self._context is None
+            or self._context.llm is None
+            or self._context.prompts is None
+            or self._context.tools is None
+        ):
+            raise DocumentationInstructionError(
+                "DocumentationAgentEntrypoint.execute() called before bind_pack_context() "
+                "bound a PackContext granting both the llm:invoke and sandbox:execute "
+                "permissions (context.llm/context.prompts/context.tools) — a real caller "
+                "must inject one before first use"
+            )
+
         payload = _extract_payload(inputs)
 
         working_directory = Path(payload.working_directory)
@@ -385,45 +331,78 @@ class DocumentationAgentEntrypoint:
             _resolve_safe_relative_path, working_directory, f"{payload.file_path}.md"
         )
 
-        agent = await self._ensure_ready()
-        prompted_inputs = dict(inputs)
-        prompted_inputs.pop("context", None)
-        prompted_inputs["variables"] = {
+        prompt_id = inputs.get("promptId")
+        prompt_version = inputs.get("promptVersion")
+        model_alias = inputs.get("modelAlias")
+        missing = [
+            name
+            for name, value in zip(
+                _REQUIRED_INVOCATION_FIELDS,
+                (prompt_id, prompt_version, model_alias),
+                strict=True,
+            )
+            if not isinstance(value, str) or not value
+        ]
+        if missing:
+            raise DocumentationInstructionError(
+                "DocumentationAgentEntrypoint requires 'promptId', 'promptVersion', and "
+                f"'modelAlias' in its inputs — missing: {', '.join(missing)}"
+            )
+
+        variables = {
             "filePath": payload.file_path,
             "instruction": payload.instruction,
             "passed": "true" if payload.passed else "false",
             "exitCode": "none" if payload.exit_code is None else str(payload.exit_code),
             "output": payload.output,
         }
-        completion_outputs = await agent.execute(prompted_inputs)
-        content = completion_outputs["content"]
+        rendered = await self._context.prompts.render(prompt_id, variables, version=prompt_version)
 
-        writer = SandboxedCommandTool(
-            self.sandbox,
-            command=[
-                *self.sandbox.python_command,
-                "-c",
-                _WRITE_FILE_SCRIPT,
-                str(doc_relative_path),
-            ],
-            working_directory=working_directory,
-            timeout_seconds=_WRITE_TIMEOUT_SECONDS,
-            max_output_bytes=_WRITE_MAX_OUTPUT_BYTES,
-            stdin=content.encode("utf-8"),
+        workflow_id = inputs.get("workflowId")
+        step_id = inputs.get("stepId")
+        agent_id = inputs.get("agentId")
+        metadata = (
+            TraceContext(
+                trace_id=uuid.uuid4().hex,
+                span_id=uuid.uuid4().hex,
+                workflow_id=workflow_id,
+                step_id=step_id,
+                agent_id=agent_id,
+            )
+            if workflow_id is not None or step_id is not None
+            else None
         )
-        write_outputs = await writer.execute({})
+
+        response = await self._context.llm.complete(
+            LLMRequest(
+                model_alias=model_alias,
+                messages=[Message(role=MessageRole.USER, content=rendered.content)],
+                max_output_tokens=_MAX_OUTPUT_TOKENS,
+                metadata=metadata,
+            )
+        )
+        content = response.content
+
+        result = await self._context.tools.invoke(
+            PLATFORM_SANDBOX_RUN_COMMAND,
+            {
+                "command": [
+                    PLATFORM_PYTHON_INTERPRETER,
+                    "-c",
+                    _WRITE_FILE_SCRIPT,
+                    str(doc_relative_path),
+                ],
+                "working_directory": str(working_directory),
+                "timeout_seconds": _WRITE_TIMEOUT_SECONDS,
+                "max_output_bytes": _WRITE_MAX_OUTPUT_BYTES,
+                "stdin": content,
+            },
+        )
 
         return {
             "workingDirectory": str(working_directory),
             "documentationPath": str(doc_relative_path),
-            "written": write_outputs["exitCode"] == 0 and not write_outputs["timedOut"],
-            "exitCode": write_outputs["exitCode"],
+            "written": result.exit_code == 0 and not result.timed_out,
+            "exitCode": result.exit_code,
             "content": content,
         }
-
-    async def _ensure_ready(self) -> PromptedAgent:
-        async with self._setup_lock:
-            if self._agent is None:
-                service = await self._service_factory()
-                self._agent = PromptedAgent(service=service, max_output_tokens=_MAX_OUTPUT_TOKENS)
-        return self._agent

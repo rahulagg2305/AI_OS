@@ -32,14 +32,17 @@ need Docker; `postgres_container()`'s own skip already covers "Docker is
 unreachable" for both needs at once — no second, redundant Docker check
 is added here.
 
-**qa-test (step 9), architecture (step 11), and build (step 12) are
-migrated onto the Platform SDK** — this file's own `InMemoryAgentRegistry`
-construction was updated to match, mirroring `test_delivery_pipeline.py`'s
-own identical fix: `_test_agent_with_sandbox`/`_architecture_agent_with_prompt`/
-`_build_agent_with_prompt` construct each zero-arg (aside from build's
-own `working_directory`) and `bind_pack_context()` it instead of passing
-a `sandbox=`/`service_factory=` constructor override that no longer
-exists. Build's own write now happens through `context.tools.invoke`
+**All four agents this pipeline chains — qa-test (step 9), architecture
+(step 11), build (step 12), and now documentation (step 13) — are
+migrated onto the Platform SDK. This pipeline is now fully migrated.**
+This file's own `InMemoryAgentRegistry` construction was updated to
+match, mirroring `test_delivery_pipeline.py`'s own identical fix:
+`_test_agent_with_sandbox`/`_architecture_agent_with_prompt`/
+`_build_agent_with_prompt`/`_documentation_agent_with_prompt` construct
+each zero-arg (aside from build's own `working_directory`) and
+`bind_pack_context()` it instead of passing a `sandbox=`/`service_factory=`
+constructor override that no longer exists. Build's and Documentation's
+own writes now happen through `context.tools.invoke`
 (`platform.sandbox.run_command`) against a real `DockerSandbox`, not a
 directly constructed `SandboxedCommandTool` — this test is this pack's
 most important real proof of that path, since the generated probe
@@ -48,8 +51,7 @@ fail when written and run this way. **Step 12a (inserted, 2026-07-29)**
 removed `BuildAgentEntrypoint`'s own `python_command` constructor
 parameter entirely — `ToolInvokerAdapter` now resolves the real
 interpreter command (`python3`, correct for this real `DockerSandbox`)
-itself, so this test's own `_build_agent_with_prompt` no longer passes
-one.
+itself for both Build and Documentation, neither of which passes one.
 """
 
 from __future__ import annotations
@@ -67,7 +69,6 @@ from tests.integration._postgres_fixture import postgres_container
 from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
-from ai_os_kernel.prompted_completion import PromptedCompletionService
 from ai_os_kernel.sandbox.docker_executor import DockerSandbox
 from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
@@ -156,6 +157,31 @@ def _build_agent_with_prompt(
     return agent
 
 
+def _documentation_agent_with_prompt(template: str, prompt_id: str) -> DocumentationAgentEntrypoint:
+    """documentation is migrated onto the Platform SDK (step 13) — the
+    fifth and final migration. Construct zero-arg (this agent needs no
+    ``working_directory`` override — it always reuses the caller-supplied
+    one), then bind the real ``PackContext`` a real caller would inject,
+    granting both ``llm:invoke`` and ``sandbox:execute`` over a real
+    ``DockerSandbox`` — mirrors `test_delivery_pipeline.py`'s own
+    identical helper. No ``python_command`` to supply (step 12a) —
+    ``ToolInvokerAdapter`` resolves the real, portable interpreter
+    invocation itself, from the same ``DockerSandbox`` instance passed
+    to ``build_pack_context`` below, automatically."""
+    agent = DocumentationAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke", "sandbox:execute"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
+            sandbox=DockerSandbox(),
+        )
+    )
+    return agent
+
+
 # The generated file the pipeline itself writes and runs — real code
 # taking the real, deterministic Build completion path, not a command
 # this test file hands directly to a sandbox. Both checks attempt
@@ -198,13 +224,6 @@ def database_url() -> Generator[str, None, None]:
                 os.environ["AIOS_DATABASE_URL"] = previous
 
 
-async def _deterministic_service(template: str, prompt_id: str) -> PromptedCompletionService:
-    return PromptedCompletionService(
-        prompt_engine=InMemoryPromptEngine({(prompt_id, "0.1.0"): template}),
-        llm_gateway=EchoLLMGateway(),
-    )
-
-
 @pytest.mark.asyncio
 async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_generated_code(
     tmp_path: Path, database_url: str
@@ -225,14 +244,12 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
         "FILE_CONTENT_END"
     )
 
-    async def documentation_service() -> PromptedCompletionService:
-        return await _deterministic_service(
-            "# {{filePath}}\n\n"
-            "Instruction: {{instruction}}\n"
-            "Passed: {{passed}} (exit {{exitCode}})\n"
-            "Output: {{output}}",
-            "documentation.record_artifact",
-        )
+    documentation_template = (
+        "# {{filePath}}\n\n"
+        "Instruction: {{instruction}}\n"
+        "Passed: {{passed}} (exit {{exitCode}})\n"
+        "Output: {{output}}"
+    )
 
     registry = InMemoryAgentRegistry(
         {
@@ -245,8 +262,8 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
                 build_template, "build.write_file", working_directory=tmp_path
             ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(DockerSandbox()),
-            _AGENT_IDS["documentation"]: DocumentationAgentEntrypoint(
-                service_factory=documentation_service, sandbox=DockerSandbox()
+            _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
+                documentation_template, "documentation.record_artifact"
             ),
         }
     )

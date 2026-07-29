@@ -6,11 +6,17 @@ subprocess, so a passing test means a real Markdown file genuinely
 exists on disk afterward, not an assertion about a mock's call
 arguments.
 
-**``sandbox=LocalSubprocessSandbox()`` is now passed explicitly
-(2026-07-28)** — see ``test_build_agent.py``'s own docstring for why:
-this agent's own bare default is now config-driven and defaults to
-`DockerSandbox`, and this file deliberately opts back into the fast,
-Docker-independent backend.
+**Migrated onto the Platform SDK (step 13) — the fifth and final agent
+migration. This agent no longer takes ``service_factory``/``sandbox``
+constructor overrides, and needs no lock at all** (see the agent's own
+module docstring for why: it lazily builds/creates nothing, unlike
+every other LLM-calling agent in this pack). ``_agent_with_prompt``
+below is this file's own real substitute: construct the agent with zero
+arguments (exactly as ``EntrypointLoader`` does), then bind it a real
+``PackContext`` built over whichever ``LLMGateway``/``PromptEngine``/
+sandbox a test wants, via the exact ``build_pack_context``/
+``bind_pack_context`` mechanism a real caller uses — the identical
+pattern steps 9-12 already established.
 
 The opt-in live proof (a real LLM producing real documentation content)
 lives under the Kernel's own
@@ -34,8 +40,8 @@ from ai_os_kernel.context_manager.models import (
 )
 from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
-from ai_os_kernel.prompted_completion import PromptedCompletionService
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
+from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.step_executor import AgentStepExecutor
@@ -47,8 +53,12 @@ from ai_os_pack_software_engineering.agents.documentation import (
     _resolve_existing_file,
     _resolve_safe_relative_path,
 )
+from ai_os_sdk.contracts import Agent as SdkAgent
+from ai_os_sdk.contracts import PackContextReceiver
 
 _AGENT_ID = "documentation"
+_PACK_ID = "software-engineering"
+_PACK_VERSION = "0.1.0"
 _PROMPT_ID = "documentation.record_artifact"
 _PROMPT_VERSION = "0.1.0"
 _TEMPLATE = (
@@ -83,11 +93,25 @@ class _FixedPayloadResolver:
         ]
 
 
-async def _deterministic_service(template: str) -> PromptedCompletionService:
-    return PromptedCompletionService(
-        prompt_engine=InMemoryPromptEngine({(_PROMPT_ID, _PROMPT_VERSION): template}),
-        llm_gateway=EchoLLMGateway(),
+def _agent_with_prompt(template: str) -> DocumentationAgentEntrypoint:
+    """The real, zero-arg-constructed entrypoint, bound to a real
+    ``PackContext`` granting exactly ``llm:invoke`` + ``sandbox:execute``
+    over a real, Echo-backed gateway, an in-memory prompt engine seeded
+    with ``template``, and a real ``LocalSubprocessSandbox`` — the same
+    construction+injection sequence a real ``SqlAgentRegistry``-backed
+    caller would perform."""
+    agent = DocumentationAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke", "sandbox:execute"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(_PROMPT_ID, _PROMPT_VERSION): template}),
+            sandbox=LocalSubprocessSandbox(),
+        )
     )
+    return agent
 
 
 def _step() -> WorkflowStep:
@@ -117,6 +141,32 @@ def test_documentation_agent_entrypoint_constructs_with_zero_arguments() -> None
     ]
 
 
+def test_the_migrated_entrypoint_satisfies_both_sdk_protocols() -> None:
+    """Step 13's own real proof: this entrypoint is a real
+    ai_os_sdk.contracts.Agent and PackContextReceiver, not merely an
+    object that happens to still work."""
+    agent = DocumentationAgentEntrypoint()
+
+    assert isinstance(agent, SdkAgent)
+    assert isinstance(agent, PackContextReceiver)
+
+
+@pytest.mark.asyncio
+async def test_execute_before_bind_pack_context_raises_a_clear_error() -> None:
+    """The one real, new behavior this migration adds: a caller that
+    forgets to inject a PackContext gets a clear, named error."""
+    agent = DocumentationAgentEntrypoint()
+
+    with pytest.raises(DocumentationInstructionError, match="bind_pack_context"):
+        await agent.execute(
+            {
+                "promptId": _PROMPT_ID,
+                "promptVersion": _PROMPT_VERSION,
+                "modelAlias": "coding-strong",
+            }
+        )
+
+
 @pytest.mark.asyncio
 async def test_documentation_agent_genuinely_writes_a_real_doc_file_through_agent_step_executor(
     tmp_path: Path,
@@ -126,7 +176,9 @@ async def test_documentation_agent_genuinely_writes_a_real_doc_file_through_agen
     real (fake-resolver-backed) Context Manager, genuinely results in a
     real Markdown documentation file existing in the sandbox working
     directory afterward, with content traceable to the model's own
-    completion."""
+    completion, written through the new ToolInvoker sandbox path
+    (context.tools.invoke), not a directly constructed
+    SandboxedCommandTool."""
     _write(tmp_path / "ok.py", "print('all good')\n")
     payload = {
         "workingDirectory": str(tmp_path),
@@ -137,10 +189,7 @@ async def test_documentation_agent_genuinely_writes_a_real_doc_file_through_agen
         "output": "all good\n",
     }
 
-    async def factory() -> PromptedCompletionService:
-        return await _deterministic_service(_TEMPLATE)
-
-    agent = DocumentationAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_prompt(_TEMPLATE)
     context_manager = DefaultContextManager([_FixedPayloadResolver(payload)])
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry, context_manager)
@@ -175,10 +224,7 @@ async def test_documentation_agent_records_a_genuine_failing_test_outcome(tmp_pa
         "output": "Traceback (most recent call last):\nSystemExit: 1\n",
     }
 
-    async def factory() -> PromptedCompletionService:
-        return await _deterministic_service(_TEMPLATE)
-
-    agent = DocumentationAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_prompt(_TEMPLATE)
     context_manager = DefaultContextManager([_FixedPayloadResolver(payload)])
     registry = InMemoryAgentRegistry({_AGENT_ID: agent})
     executor = AgentStepExecutor(registry, context_manager)
@@ -197,10 +243,7 @@ async def test_documentation_agent_via_direct_execute_with_inputs_supplied_direc
 ) -> None:
     _write(tmp_path / "ok.py", "print('direct call')\n")
 
-    async def factory() -> PromptedCompletionService:
-        return await _deterministic_service(_TEMPLATE)
-
-    agent = DocumentationAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_prompt(_TEMPLATE)
 
     outputs = await agent.execute(
         {
@@ -223,10 +266,7 @@ async def test_documentation_agent_via_direct_execute_with_inputs_supplied_direc
 
 @pytest.mark.asyncio
 async def test_documentation_agent_rejects_a_missing_file(tmp_path: Path) -> None:
-    async def factory() -> PromptedCompletionService:
-        return await _deterministic_service(_TEMPLATE)
-
-    agent = DocumentationAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_prompt(_TEMPLATE)
 
     with pytest.raises(DocumentationInstructionError, match="does not exist"):
         await agent.execute(
@@ -246,10 +286,7 @@ async def test_documentation_agent_rejects_a_missing_file(tmp_path: Path) -> Non
 
 @pytest.mark.asyncio
 async def test_documentation_agent_rejects_a_nonexistent_working_directory(tmp_path: Path) -> None:
-    async def factory() -> PromptedCompletionService:
-        return await _deterministic_service(_TEMPLATE)
-
-    agent = DocumentationAgentEntrypoint(service_factory=factory, sandbox=LocalSubprocessSandbox())
+    agent = _agent_with_prompt(_TEMPLATE)
     missing = tmp_path / "does-not-exist"
 
     with pytest.raises(DocumentationInstructionError, match="does not exist or is not a"):
@@ -270,10 +307,29 @@ async def test_documentation_agent_rejects_a_nonexistent_working_directory(tmp_p
 
 @pytest.mark.asyncio
 async def test_documentation_agent_rejects_missing_required_fields() -> None:
-    agent = DocumentationAgentEntrypoint()
+    agent = _agent_with_prompt(_TEMPLATE)
 
     with pytest.raises(DocumentationInstructionError, match="requires"):
         await agent.execute({"filePath": "ok.py"})
+
+
+@pytest.mark.asyncio
+async def test_missing_required_invocation_fields_raise_a_clear_error(tmp_path: Path) -> None:
+    _write(tmp_path / "ok.py", "print('ok')\n")
+    agent = _agent_with_prompt(_TEMPLATE)
+
+    with pytest.raises(DocumentationInstructionError, match="promptId"):
+        await agent.execute(
+            {
+                "modelAlias": "coding-strong",
+                "workingDirectory": str(tmp_path),
+                "filePath": "ok.py",
+                "instruction": "irrelevant",
+                "passed": True,
+                "exitCode": 0,
+                "output": "",
+            }
+        )
 
 
 @pytest.mark.asyncio
@@ -281,7 +337,7 @@ async def test_documentation_agent_via_agent_step_executor_rejects_a_malformed_c
     tmp_path: Path,
 ) -> None:
     context_manager = DefaultContextManager([_FixedPayloadResolver({"filePath": "ok.py"})])
-    registry = InMemoryAgentRegistry({_AGENT_ID: DocumentationAgentEntrypoint()})
+    registry = InMemoryAgentRegistry({_AGENT_ID: _agent_with_prompt(_TEMPLATE)})
     executor = AgentStepExecutor(registry, context_manager)
 
     with pytest.raises(DocumentationInstructionError, match="missing"):

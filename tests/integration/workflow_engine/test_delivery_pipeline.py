@@ -58,28 +58,25 @@ agents in the same run instead of one at a time.
    exercises the real, config-driven `DockerSandbox` default too, on top
    of the real LLM call.
 
-**qa-test (step 9), architecture (step 11), and build (step 12) are now
-migrated onto the Platform SDK — all tiers were updated to match, not
-left to bit-rot.** The deterministic tier's `InMemoryAgentRegistry` no
-longer constructs any of the three with a `service_factory`/`sandbox=`
-override; `_test_agent_with_sandbox`/`_architecture_agent_with_prompt`/
-`_build_agent_with_prompt` construct each zero-arg (aside from build's
-own `working_directory`) and `bind_pack_context()` it, mirroring the
-exact real caller sequence `SqlAgentRegistry` itself performs (step 9a).
-The live tier's `SqlAgentRegistry(engine)` call already supplies real
+**All four agents this pipeline chains — qa-test (step 9), architecture
+(step 11), build (step 12), and now documentation (step 13) — are
+migrated onto the Platform SDK. This pipeline is now fully migrated.**
+The deterministic tier's `InMemoryAgentRegistry` no longer constructs
+any of the four with a `service_factory`/`sandbox=` override;
+`_test_agent_with_sandbox`/`_architecture_agent_with_prompt`/
+`_build_agent_with_prompt`/`_documentation_agent_with_prompt` construct
+each zero-arg (aside from build's own `working_directory`) and
+`bind_pack_context()` it, mirroring the exact real caller sequence
+`SqlAgentRegistry` itself performs (step 9a). The live tier's
+`SqlAgentRegistry(engine)` call already supplies real
 `llm_gateway`/`prompt_engine` objects (`_build_real_llm_gateway_and_prompt_engine`
-below) — build's own declared `llm:invoke` permission needs the
-identical backing pair architecture's own migration (step 11) already
-required, so no further change was needed there; its own `sandbox:execute`
+below) — documentation's own declared `llm:invoke` permission needs the
+identical backing pair the other three migrations already required, so
+no further change was needed there; its own `sandbox:execute`
 permission is backed by `SqlAgentRegistry`'s own default sandbox
-(step 9a). **Step 12a (inserted, 2026-07-29)** removed `BuildAgentEntrypoint`'s
-own `python_command` constructor parameter entirely — `ToolInvokerAdapter`
-now resolves the real interpreter command itself from whichever sandbox
-it actually wraps, so this test's own `_build_agent_with_prompt` no
-longer needs to pass one either. Documentation remains unmigrated
-(step 13) and is unaffected by any of this — `_bind_pack_context_if_receiver`
-is a genuine no-op for any entrypoint that does not implement
-`PackContextReceiver`.
+(step 9a), and (step 12a) its write uses `PLATFORM_PYTHON_INTERPRETER`,
+resolved automatically by `ToolInvokerAdapter` — no `python_command` to
+supply at all, unlike build's own `working_directory`-only override.
 """
 
 import asyncio
@@ -108,7 +105,6 @@ from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine, PromptEngine
-from ai_os_kernel.prompted_completion import PromptedCompletionService
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
@@ -246,6 +242,32 @@ def _build_agent_with_prompt(
     return agent
 
 
+def _documentation_agent_with_prompt(template: str, prompt_id: str) -> DocumentationAgentEntrypoint:
+    """documentation is migrated onto the Platform SDK (step 13) — the
+    fifth and final migration. Construct zero-arg, exactly as
+    ``EntrypointLoader`` does (this agent needs no ``working_directory``
+    override at all — see its own module docstring for why it always
+    reuses the caller-supplied one), then bind the real ``PackContext``
+    a real caller would inject, granting both ``llm:invoke`` and
+    ``sandbox:execute`` — the identical permission shape ``build`` (step
+    12) already proved. No ``python_command`` to supply (step 12a) —
+    ``ToolInvokerAdapter`` resolves the real, portable interpreter
+    invocation itself, from the same ``LocalSubprocessSandbox`` instance
+    passed to ``build_pack_context`` below, automatically."""
+    agent = DocumentationAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke", "sandbox:execute"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
+            sandbox=LocalSubprocessSandbox(),
+        )
+    )
+    return agent
+
+
 @pytest.fixture(scope="module")
 def database_url() -> Generator[str, None, None]:
     with postgres_container() as postgres:
@@ -260,13 +282,6 @@ def database_url() -> Generator[str, None, None]:
                 os.environ.pop("AIOS_DATABASE_URL", None)
             else:
                 os.environ["AIOS_DATABASE_URL"] = previous
-
-
-async def _deterministic_service(template: str, prompt_id: str) -> PromptedCompletionService:
-    return PromptedCompletionService(
-        prompt_engine=InMemoryPromptEngine({(prompt_id, "0.1.0"): template}),
-        llm_gateway=EchoLLMGateway(),
-    )
 
 
 @pytest.mark.asyncio
@@ -296,14 +311,12 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
         "FILE_CONTENT_END"
     )
 
-    async def documentation_service() -> PromptedCompletionService:
-        return await _deterministic_service(
-            "# {{filePath}}\n\n"
-            "Instruction: {{instruction}}\n"
-            "Passed: {{passed}} (exit {{exitCode}})\n"
-            "Output: {{output}}",
-            "documentation.record_artifact",
-        )
+    documentation_template = (
+        "# {{filePath}}\n\n"
+        "Instruction: {{instruction}}\n"
+        "Passed: {{passed}} (exit {{exitCode}})\n"
+        "Output: {{output}}"
+    )
 
     registry = InMemoryAgentRegistry(
         {
@@ -314,8 +327,8 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
                 build_template, "build.write_file", working_directory=tmp_path
             ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
-            _AGENT_IDS["documentation"]: DocumentationAgentEntrypoint(
-                service_factory=documentation_service, sandbox=LocalSubprocessSandbox()
+            _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
+                documentation_template, "documentation.record_artifact"
             ),
         }
     )
