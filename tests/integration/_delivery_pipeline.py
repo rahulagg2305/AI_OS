@@ -1,13 +1,32 @@
-"""Chains this pack's own four independently-proven agents —
-Architecture, Build, Test, Documentation — into one real, declared
-Workflow Engine pipeline: ``workflows/delivery_pipeline.yaml``, loaded
-through the already-real, previously-unused
+"""Chains the Software Engineering pack's own four independently-proven
+agents — Architecture, Build, Test, Documentation — into one real,
+declared Workflow Engine pipeline:
+``capability_packs/software-engineering/workflows/delivery_pipeline.yaml``,
+loaded through the already-real, previously-unused
 :class:`~ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader`.
 Not a new orchestration mechanism, no new Workflow Engine capability —
 composition only, the identical shape
 :func:`~ai_os_kernel.bootstrap._build_workflow_trigger` already
 establishes for the Kernel's own demo workflow, reused here for a real
 pack-owned one.
+
+**Relocated from ``capability_packs/software-engineering/src/
+ai_os_pack_software_engineering/pipeline.py`` into ``tests/integration/``
+(``platform_sdk_v1_scope.md`` step 7, resolving finding P4).** This
+module is test-harness composition, not pack-facing capability — it
+constructs the Workflow Engine's own lease service, repository, instance
+service, and step executors by hand, work a real Capability Manager
+would do once, generically, for every pack (see below). Verified before
+moving: **zero pack source modules import it** — its only two importers
+are ``tests/integration/workflow_engine/test_delivery_pipeline.py`` and
+``tests/integration/sandbox/test_delivery_pipeline_docker.py``, both
+already inside this tree. Leaving it inside the pack's own shipped wheel
+meant ``pack_contract_suite`` check 7 (forbidden imports — no
+``ai_os_kernel``, no database driver) could never pass on this pack, at
+any point, ever, since this module imports both. Named with a leading
+underscore, matching ``tests/integration/_postgres_fixture.py``'s own
+convention, so pytest never tries to collect it as a test module in its
+own right — every caller imports its functions explicitly.
 
 **The one genuinely missing piece this step builds: a real
 step-output-to-next-step-input hand-off.** Each of this pack's four
@@ -133,7 +152,17 @@ from ai_os_kernel.workflow_engine.step_executor import (
 )
 
 _PACK_ID = "software-engineering"
-_DEFINITION_PATH = Path(__file__).resolve().parents[2] / "workflows" / "delivery_pipeline.yaml"
+# Repo root is parents[2] from tests/integration/_delivery_pipeline.py
+# (integration -> tests -> root) — recomputed for this step's relocation
+# out of the pack's own source tree, which used to make this a
+# same-directory sibling of `workflows/` two levels up instead.
+_DEFINITION_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "capability_packs"
+    / "software-engineering"
+    / "workflows"
+    / "delivery_pipeline.yaml"
+)
 
 # Deliberately generous, not tuned — four real steps plus one final
 # completion transition need five `advance()` calls; the identical

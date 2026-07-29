@@ -89,7 +89,7 @@ plugins = ["pydantic.mypy"]
 # Only real code is checked. Empty component stubs (docstring-only
 # __init__.py files awaiting later Implementation Roadmap stages) still
 # type-check cleanly since they contain no statements.
-files = ["kernel/src", "kernel/alembic", "tests", "platform_sdk/src", "platform_sdk/tests", "capability_packs/software-engineering/src", "capability_packs/software-engineering/tests"]
+files = ["kernel/src", "kernel/alembic", "tests", "platform_sdk/src", "platform_sdk/tests", "capability_packs/software-engineering/src", "capability_packs/software-engineering/tests", "scripts"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"

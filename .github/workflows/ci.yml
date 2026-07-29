@@ -103,7 +103,15 @@ jobs:
       - name: Pack contract suite and Protocol conformance
         if: hashFiles('tests/contract/**') != ''
         run: uv run pytest tests/contract -v
-      # Gated: the import-boundary checker script does not exist yet.
+      # Real as of platform_sdk_v1_scope.md step 8: pack_contract_suite
+      # check 7 (forbidden imports), applying each pack's own dated,
+      # expiring pack_contract_waiver.yaml if one exists. The gate
+      # condition is now always true — kept, not simplified to an
+      # unconditional step, since the "gated on the file existing"
+      # convention is this workflow's own established shape for every
+      # not-yet-existing prerequisite, and removing it here would be an
+      # inconsistent, unforced style change for a step that still
+      # legitimately depends on the file's presence.
       - name: Import boundary check
         if: hashFiles('scripts/check_import_boundaries.py') != ''
         run: uv run python scripts/check_import_boundaries.py

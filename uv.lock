@@ -80,10 +80,14 @@ version = "0.1.0"
 source = { editable = "platform_sdk" }
 dependencies = [
     { name = "pydantic" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydantic", specifier = ">=2.7,<3.0" }]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.7,<3.0" },
+    { name = "pyyaml", specifier = ">=6.0,<7.0" },
+]
 
 [[package]]
 name = "ai-os-workspace"

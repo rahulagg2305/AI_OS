@@ -1,6 +1,6 @@
 # Folder Structure (Actual, Not Aspirational) – AI_OS
 
-**Status:** Active | **Last Updated:** 2026-07-28 (consolidation audit — verified against `git ls-files`, not just the local filesystem)
+**Status:** Active | **Last Updated:** 2026-07-29 (Platform SDK v1.0.0 steps 1–8: `platform_sdk/` and `scripts/` both moved from Planned to real, tracked content)
 
 `PROJECT_INDEX.md`'s own "Repository Structure" table lists the full, intended repository layout. This document records what actually has real content right now, so a fresh session doesn't waste time exploring an empty directory expecting to find something, or miss real content because a folder's name sounded aspirational.
 
@@ -22,9 +22,10 @@ Practical consequence: if you are working in a fresh clone and a document refere
 | `tests/` | **Yes** | `unit/` and `integration/` — real Postgres/Docker-backed tests (see `coding_standards.md` on the one recorded mock exception). 849 passing, 11 skipped. |
 | `config/` | Minimal | `llm.yaml`, `platform.yaml` — real, small, checked-in configuration |
 | `infra/` | Minimal | `docker-compose.yml` + `environments/{local,dev,staging,production}.yaml`. **`infra/kubernetes/`, `infra/terraform/`, `infra/docker/` have no tracked content, and there is no Dockerfile anywhere in the repository.** |
-| `platform_sdk/` | **Stub-level** | Exactly one real file: `schemas/manifest.schema.json`. No `ai-os-sdk` Python package exists — this is why Capability Packs still import Kernel internals directly (a documented, dated exception; see `../03_architecture/capability_framework/capability_pack_contract.md`). `contracts/`, `models/`, `sdk/`, `utilities/`, `prompts/` have no tracked content. |
+| `platform_sdk/` | **Yes, as of Platform SDK v1.0.0 steps 1–8** | The real, installable `ai-os-sdk` package: `schemas/manifest.schema.json`; `errors/` (the `AiOsError` hierarchy); `models/` (`common`, `llm`, `prompt`, `tool`, `context` boundary models); `contracts/` (`Agent`, `Tool`, `LLMGateway`, `PromptRegistry`, `ToolInvoker`, `PackContextReceiver`, `ContextService`, `CapabilityPack`/`PackContext`/`PackRegistration`/`HealthReport`); `testing/` (`forbidden_imports`, `waiver` — `pack_contract_suite` check 7). Capability Packs still import Kernel internals directly today (a documented, dated, now-waived exception; see `../03_architecture/capability_framework/capability_pack_contract.md` and the pack's own `pack_contract_waiver.yaml`) — migrating onto these real types is `platform_sdk_v1_scope.md` steps 9–14. `sdk/`, `utilities/`, `prompts/` still have no tracked content. |
+| `scripts/` | **Yes, as of Platform SDK v1.0.0 step 8** | `check_import_boundaries.py` — the CI entry point for `pack_contract_suite` check 7, discovering every real Capability Pack and applying its own waiver file if one exists. |
 | `workspace/` | Placeholder | `scratch/`/`temp/` with `.gitkeep` only — prototype scratch space, exempt from documentation-first (ADR-0003) |
-| `.github/` | **Yes** | `workflows/ci.yml` — real CI (lint/types/unit/integration run for real; contract/security/image/frontend stages deliberately gated to no-ops pending prerequisites) |
+| `.github/` | **Yes** | `workflows/ci.yml` — real CI (lint/types/unit/integration run for real; the `contract` job's import-boundary-check step is real as of step 8; the pack-contract-suite-pytest/security/image/frontend stages remain deliberately gated to no-ops pending prerequisites) |
 
 ## Planned — no tracked content, absent from a fresh clone
 
@@ -37,7 +38,7 @@ Practical consequence: if you are working in a fresh clone and a document refere
 | `knowledge/` | `../knowledge/knowledge_base_structure.md` | Structure fully specified; zero content |
 | `traceability/` | `../03_architecture/traceability/traceability_model.md` | No Traceability Engine exists to produce mappings |
 | `experiments/` | `../06_capability_packs/benchmarking/overview.md` | No Evaluation Engine and no Benchmarking pack exist to produce artifacts |
-| `specs/`, `manifests/`, `governance/`, `projects/`, `scripts/`, `assets/` | `PROJECT_INDEX.md` | Intended artifact areas, not yet started |
+| `specs/`, `manifests/`, `governance/`, `projects/`, `assets/` | `PROJECT_INDEX.md` | Intended artifact areas, not yet started |
 | `tests/security/`, `tests/performance/`, `tests/regression/`, `tests/benchmarks/` | `../10_testing/test_strategy.md` | Named in the test strategy and referenced by CI's gated stages; no tests written. **There is no `tests/contract/` directory at all.** |
 | `capability_packs/{benchmarking,project_intelligence,voice_jarvis}/` | `../06_capability_packs/` | Three planned packs, all 0% built |
 | `docs/01_product_definition/`, `docs/04_design/`, `docs/15_benchmarking/`, `docs/17_governance/`, `docs/03_architecture/diagrams/`, `docs/03_architecture/integrations/` | — | Numbered doc slots reserved by the original documentation plan that were never filled. Their content lives elsewhere: product definition in `PROJECT_INDEX.md`/`README.md`, benchmarking in `../06_capability_packs/benchmarking/overview.md`, governance in `../00_constitution/ai_governance_framework.md` and `../03_architecture/governance/`. **Do not create documents in these slots without a reason** — prefer the existing homes. |

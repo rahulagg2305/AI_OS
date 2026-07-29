@@ -114,7 +114,7 @@ Live, more detailed version of this same table: `docs/process/folder_structure.m
 | `tests/` | **Real** | `unit/` and `integration/` are real and substantial. `security/`, `performance/`, `regression/`, `benchmarks/` are planned/empty; there is no `contract/` directory yet. |
 | `config/` | **Real** | Platform configuration — `platform.yaml`, `llm.yaml` |
 | `infra/` | **Partial** | `docker-compose.yml` + `environments/*.yaml` are real. `kubernetes/`, `terraform/`, `docker/` are planned/empty. **There is no Dockerfile yet.** |
-| `platform_sdk/` | **Stub** | Contains exactly one real file: `schemas/manifest.schema.json`. **There is no `ai-os-sdk` Python package** — no contracts, models, or testing suite. This is precisely why Capability Packs currently import Kernel internals directly (a documented, dated exception in `docs/03_architecture/capability_framework/capability_pack_contract.md`). |
+| `platform_sdk/` | **Real, as of Platform SDK v1.0.0 steps 1–8** | A real, installable `ai-os-sdk` package: `schemas/manifest.schema.json`, `errors/`, `models/`, `contracts/` (`Agent`/`Tool`/`LLMGateway`/`PromptRegistry`/`ToolInvoker`/`PackContextReceiver`/`ContextService`/`CapabilityPack`), and `testing/` (`pack_contract_suite` check 7). Capability Packs still import Kernel internals directly today (a documented, dated, now-waived exception in `docs/03_architecture/capability_framework/capability_pack_contract.md`) — migrating onto these real types is steps 9–14. |
 | `workspace/` | **Real** | Scratch space (`scratch/`, `temp/`); prototypes are exempt from documentation-first (ADR-0003) |
 | `platform_services/` | *Planned* | Shared platform services (`ai-os-services`) — Storage, Notification, Caching, Search, Indexing, Scheduling. **None built.** |
 | `dashboard/` | *Planned* | Mission Control dashboard (TypeScript/React) — **no frontend project scaffolded** |
@@ -126,7 +126,7 @@ Live, more detailed version of this same table: `docs/process/folder_structure.m
 | `governance/` | *Planned* | Governance and policy assets |
 | `projects/` | *Planned* | Generated customer projects |
 | `experiments/` | *Planned* | LLM benchmarking artifacts. **No Evaluation Engine or Benchmarking pack exists** to produce them. |
-| `scripts/` | *Planned* | Automation scripts |
+| `scripts/` | **Real** | `check_import_boundaries.py` — CI entry point for `pack_contract_suite` check 7 (forbidden imports), `platform_sdk_v1_scope.md` step 8 |
 | `tools/` | *Planned* | Internal development tools, including the CLI. **No `aios` CLI exists** (`docs/07_api/cli_design.md` is a design spec only). |
 | `assets/` | *Planned* | Images, icons, fonts |
 
