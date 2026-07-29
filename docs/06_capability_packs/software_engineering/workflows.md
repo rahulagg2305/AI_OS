@@ -334,3 +334,13 @@ Order of precedence:
 4. Architecture Decision Records
 5. Software Engineering Pack – Workflows (this document)
 6. Source Code
+
+---
+
+## 15. Related Documents
+
+- [`overview.md`](overview.md) · [`agents.md`](agents.md) — the pack overview and the 5 real agents `se.delivery_pipeline` draws 4 of its 4 steps from
+- [`tools_quality_gates.md`](tools_quality_gates.md) — the gate definitions referenced in §10, none of which `se.delivery_pipeline` currently declares
+- [`../../03_architecture/workflow/workflow_architecture.md`](../../03_architecture/workflow/workflow_architecture.md) · [`../../03_architecture/kernel/workflow_engine.md`](../../03_architecture/kernel/workflow_engine.md) — the platform engine executing `se.delivery_pipeline`, including which of the 9 step types it actually runs
+- [`../../03_architecture/kernel/context_manager.md`](../../03_architecture/kernel/context_manager.md) — `WorkflowStepOutputResolver`, the real step-output hand-off mechanism cited in the Currently Implemented Subset section
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status

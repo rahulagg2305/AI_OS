@@ -26,6 +26,24 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Of the 13 components in §4's internal structure, 3 are real, 1 is real-but-narrower-than-named, and the other 9 do not exist as classes.** Verified directly against `kernel/src/ai_os_kernel/workflow_engine/`:
+
+- **Real:** Workflow Definition Loader, Workflow Instance Manager, State Store (event log + snapshot, per [ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md)), Lease Manager (`SELECT … FOR UPDATE SKIP LOCKED`, heartbeat, expiry reclaim — tested).
+- **Real but narrower than documented:** §5.6/§5.7's "Agent Invoker"/"Tool Invoker" are not separate invoker classes — they are `AgentStepExecutor` and `ToolStepExecutor` in `step_executor.py`, composed directly by a `DispatchingStepExecutor`.
+- **Not built at all** (no matching class anywhere in the Kernel): Gate Coordinator (§5.8), Human Approval Manager (§5.9), Failure & Retry Manager (§5.10), Event Publisher (§5.11), Scheduler (§5.13). A failing step today raises an exception; nothing decides retry/compensate/escalate, no gate is evaluated, no human pause happens, no event is published, and no delayed/scheduled start exists.
+
+**§5.5 Step Executor / §7.1's step types:** `StepType` declares exactly the 7 values this document expects (`agent`, `tool`, `decision`, `parallel`, `sub_workflow`, `quality_gate`, `human_approval`), but `DispatchingStepExecutor` only routes `agent` and `tool` to a real executor — the other 5 all fall through to `NoOpStepExecutor`, which "always succeeds immediately with empty outputs" per its own docstring. Decision branching, parallel/foreach joins, sub-workflows, quality gates, and human approval are declared step types with no executed behavior today.
+
+**§7 State Model:** verified against `workflow_engine/instance.py` — the 9-state list is real as an enum, but only `created`, `running`, `completed` are ever written; see `../workflow/state_management.md`'s own Implementation Status for the full breakdown (`waiting_for_human`, `waiting_for_retry`, `quality_gate_failed`, `compensating`, `failed`, `cancelled` are all declared, unreached).
+
+**§7.1 Concurrency, leasing, and idempotency is real and tested**: the lease claim/heartbeat/reclaim cycle and the `(workflow_id, step_name, attempt)` uniqueness constraint both exist and are exercised by the test suite. Parallel join policies (`all`/`any`/`collect`) and `foreach`/`max_fanout` bounds are declared in the data model but have no executor to enforce them, since `parallel` and `foreach` are both currently `NoOpStepExecutor`-handled.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 5, Workflow Engine) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/003_workflow_engine_core.md`.
+
+---
+
 ## 2. Responsibilities
 
 The Workflow Engine shall:
@@ -228,9 +246,7 @@ The system must support later replay of the execution.
 
 ## 11. Current Status
 
-This document defines the detailed architecture of the Workflow Engine.
-
-Implementation-level design (interfaces, data models, storage technology choices, etc.) will be refined during actual development.
+This document defines the detailed architecture of the Workflow Engine. Storage technology is no longer an open question (PostgreSQL, per [ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md)) — see the Implementation Status section near the top for exactly which of §4's 13 components exist, which of §7's 9 states are reachable, and which of §7's 7 step types execute real logic today.
 
 ---
 
@@ -245,3 +261,14 @@ Order of precedence:
 5. Workflow Architecture  
 6. Workflow Engine Architecture  
 7. Source Code
+
+---
+
+## 13. Related Documents
+
+- [`../workflow/workflow_architecture.md`](../workflow/workflow_architecture.md) · [`../workflow/state_management.md`](../workflow/state_management.md) — the architecture this document implements and the state-persistence detail underneath it
+- [`../workflow/error_handling_retry.md`](../workflow/error_handling_retry.md) — the retry/compensation ownership this document's §5.10/§8 assign to the (unbuilt) Failure & Retry Manager
+- [`../quality/quality_gates_framework.md`](../quality/quality_gates_framework.md) — the Quality Gate Engine the (unbuilt) Gate Coordinator is meant to call
+- [`../agents/agent_communication.md`](../agents/agent_communication.md) — the Agent Invoker's real counterpart, `AgentStepExecutor`
+- [ADR-0006](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) · [ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) — the two decisions §4 and §7 cite directly
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status

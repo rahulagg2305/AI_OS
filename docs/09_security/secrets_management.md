@@ -24,6 +24,18 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Exactly one of the four §5 backend adapters exists.** Verified against `kernel/src/ai_os_kernel/secrets_manager/`: only `env_provider.py` (`EnvSecretProvider`) is implemented, and its own docstring states plainly — "Vault, the encrypted-file backend, and cloud secret managers are not yet implemented." It reads `AIOS_SECRET_*`-prefixed environment variables only, exactly the ADR-0024-scoped "local development only" backend. **There is no backend-selection factory that reads `AIOS_SECRET_BACKEND`** — the variable is referenced only as a naming analogy in an unrelated module's docstring (`sandbox/default_executor.py`), not implemented as a real switch anywhere.
+
+**Real:** the `secret://<provider>/<name>[#version]` reference format and its parser (`reference.py`, regex-validated); the `SecretValue` wrapper (`value.py`) — its `__str__`/`__repr__` do return `"***"` exactly as §5 and §6 describe.
+
+**Not built:** the Access Broker, the TTL cache + rotation-invalidation layer, and the Audit Logger in §5's structure diagram — none exist in `secrets_manager/` today (confirmed by grep: zero files reference caching, TTL, rotation, or an audit logger). `env_provider.py`'s own docstring is explicit about this too: "No rotation, no audit trail beyond what the caller does with the result." §8's "must record who/what requested a secret" is therefore not implemented at the point of access — no secret-access event is written to `governance.audit_log` or anywhere else by this module today.
+
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`.
+
+---
+
 ## 2. Design Goals
 
 Secrets Management must:
@@ -123,9 +135,7 @@ Never record the secret value itself.
 
 ## 9. Current Status
 
-This document defines the design baseline for Secrets Management.
-
-Concrete backend selection, injection mechanisms, and rotation procedures will be refined during implementation.
+This document defines the design baseline for Secrets Management. See the Implementation Status section near the top: the reference format and `SecretValue` wrapper are real; the `env` backend is the only one of four implemented; the Access Broker, TTL cache/rotation, and Audit Logger are all unbuilt.
 
 ---
 
@@ -138,3 +148,12 @@ Order of precedence:
 3. Security Manager Design  
 4. Secrets Management  
 5. Source Code
+
+---
+
+## 11. Related Documents
+
+- [`security_architecture.md`](security_architecture.md) §7 — the security-relevant invariants this document is the detail behind
+- [`authentication_authorization.md`](authentication_authorization.md) — the identity/permission system that governs who may request a secret
+- [ADR-0024](../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — the backend decision this document implements (currently `env` only)
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status

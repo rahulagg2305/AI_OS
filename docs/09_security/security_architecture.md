@@ -24,6 +24,22 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Real, verified against source:** the Tier 1/Tier 2 sandbox split (§5) — `SandboxExecutor`, network-disabled containers, non-root, capability-dropped, per ADR-0016; per-workflow workspace isolation (§5.3); the hash-chained, `UPDATE`/`DELETE`-revoked `governance.audit_log` (§12, migration `0004_governance_audit_log`); the `SecretValue` wrapper and `secret://` reference format (§7); `StepBudget`/`BudgetExceededError` cost ceilings in the LLM Gateway (§13); `ruff`'s `S` (security) rule set, `pip-audit --strict`, and `gitleaks/gitleaks-action` all genuinely wired into `.github/workflows/ci.yml` (§15).
+
+**Not real, despite being stated as mitigated controls:**
+- **§9's monotonic-narrowing chain (T5's primary control) only computes the first term.** `security_manager/models.py`'s own docstring: the principal ∩ workflow ∩ agent ∩ tool intersection is not implemented — only principal-level permissions are computed today, since no code reads workflow/agent/tool declared permissions at authorization time. See `authentication_authorization.md`'s own Implementation Status for the full detail. T5 is therefore only partially mitigated, not resolved as §4's table implies.
+- **`tests/security/` — the directory §15 cites as proof of per-threat coverage — contains zero files.** "Tests exist for each numbered threat's primary control" is not currently true for any of the 12 threats; the directory exists but is empty.
+- **§8 point 3's "contract suite verifies no forbidden imports" does not exist.** No `pack_contract_suite` or equivalent forbidden-import checker exists anywhere in the Kernel — consistent with the Platform SDK's own 5%-built status (`../03_architecture/capability_framework/capability_pack_contract.md`). Forbidden-import enforcement for T4 is aspirational today.
+- **§14 Git Safety has no enforcing component.** No Git Integration Service, and no `git.*` tool (`git.create_pull_request`, `git.clone_or_fetch`, etc.) exists anywhere in the Kernel or the Software Engineering pack. The force-push prohibition, protected-branch policy, and mutating-operation audit trail this section describes have nothing to enforce them yet — T11 is entirely unmitigated in code, though no workflow currently performs a Git write either, so the exposure is latent rather than active.
+- **Secrets backend (§7, detailed in `secrets_management.md`): only the `env` backend exists**, not the four this document's threat table assumes are interchangeable.
+- **§6's provenance tagging (T2's #2 primary control) does not exist.** `context_manager/models.py`'s `ContextItem`/`SourceRef` has no `trust` field at all — only `source_type` (an enum with exactly one real value, `workflow_state`) and `identifier`. There is no `trusted`/`untrusted` label anywhere in the Context Manager today. This is lower-risk than it sounds only because no ingestion resolver exists yet either (`KNOWLEDGE`, `AI_CONTEXT_PACK`, and the others are explicitly not built, per that enum's own comment) — so no untrusted content currently reaches an agent's context to be mislabeled. The moment a repository- or document-ingesting resolver is built, this becomes a real, live gap, not a latent one.
+
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`.
+
+---
+
 ## 2. Assets
 
 | Asset | Why it matters |
@@ -263,7 +279,9 @@ Runbook detail: `../12_operations/operations_runbook.md`.
 
 ## 17. Current Status
 
-This document establishes the security architecture and threat model for v1. Known accepted gaps: manifest signing (§8), multi-tenant isolation (§4), and gVisor as a non-default sandbox runtime (§5.1). Each is recorded in the Decision Log's open decision points with a trigger for revisiting.
+This document establishes the security architecture and threat model for v1. Known accepted gaps, as originally recorded: manifest signing (§8), multi-tenant isolation (§4), and gVisor as a non-default sandbox runtime (§5.1). Each is recorded in the Decision Log's open decision points with a trigger for revisiting.
+
+**As of 2026-07-28, four further gaps were found during verification against source** (see Implementation Status near the top) that are not yet in that accepted-gaps list because they were not previously known: the monotonic-narrowing chain only computes the principal term (T5 partially mitigated, not resolved); `tests/security/` is empty despite §15's claim of per-threat coverage; no forbidden-import contract suite exists (T4's control #3 aspirational); no Git Integration Service or `git.*` tool exists (T11 unmitigated in code, currently latent since no workflow performs a Git write); and the Context Manager has no `trust` field at all (T2's provenance-tagging control does not exist, currently latent since no untrusted-content resolver is built either). These should be added to this document's own accepted-gaps list and the Decision Log's open decision points in a future step — this audit step is docs-only and does not itself edit the Decision Log.
 
 ---
 
@@ -278,3 +296,14 @@ Order of precedence:
 5. Security Architecture (this document)
 6. Authentication & Authorization / Secrets Management
 7. Source Code
+
+---
+
+## 19. Related Documents
+
+- [`authentication_authorization.md`](authentication_authorization.md) — the §9 monotonic-narrowing detail, including the module docstring disclosing the real gap
+- [`secrets_management.md`](secrets_management.md) — the §7 secrets detail, including the real single-backend status
+- [`../03_architecture/kernel/context_manager.md`](../03_architecture/kernel/context_manager.md) — the §6 provenance-tagging component, with no `trust` field yet
+- [`../03_architecture/capability_framework/capability_pack_contract.md`](../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK gate underlying the missing §8 contract suite
+- [ADR-0016](../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md) · [ADR-0023](../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) · [ADR-0024](../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — the three decisions this document implements
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status

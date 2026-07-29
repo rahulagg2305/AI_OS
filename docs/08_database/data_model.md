@@ -16,6 +16,18 @@ Governing decisions: [ADR-0011](../18_decision_log/adr/ADR-0011-persistence-and-
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**This document is unusually accurate already** — most non-obvious gaps (the `EchoAgent`/`EchoTool` dispatch note in §4.3, the schema-only `entrypoint` column in §5, the deferred/retrofitted foreign keys in §5–§6) are already documented inline at the point they matter, a pattern this audit did not need to correct. Two things verified this step are worth stating explicitly because they are not yet inline:
+
+- **All 29 Alembic migrations are real** (`kernel/alembic/versions/0001…0029`) and every schema in §3 (`workflow`, `catalog`, `evaluation`, `trace`, `governance`, `platform`) has a corresponding migration. **`knowledge` (§7) is the newest**, added by migration `0029_knowledge_schema` (2026-07-27) — schema and tables only, per that migration's own docstring: no reader, no Retrieval Service, and no Knowledge/Memory Manager exist to query them. A narrow, real write path exists for two of the four tables — `persistence/knowledge_writer.py` writes `knowledge.documents` and `knowledge.chunks` only (already-chunked input, no chunking/hashing/fetching of its own) — but `embeddings` and `memory_items` have no writer at all yet, and the documented HNSW index on `embeddings.embedding` is deliberately not created (no fixed vector dimension has been decided).
+- **§13's SQLite development mode is not real.** A repo-wide, case-insensitive search for `sqlite` inside `kernel/` returns **zero matches** — there is no SQLite dialect wiring, no conditional repository implementation, and no test fixture using it anywhere. Every real repository and every integration test targets PostgreSQL only (via `tests/integration/_postgres_fixture.py`). This section's capability-gap table is accurate in spirit (Postgres-only features would indeed be absent) but the premise — that SQLite is "supported... through the same repository interfaces" today — is not true; it describes a target, not a working mode.
+- **§11 Retention is policy only, exactly as its own text says** ("Retention values are configuration, not code") — but no archival or pruning job exists for any listed table yet (`workflow_events`, `audit_log`, `llm_calls`, etc. all grow unbounded today); this is a documented future capability, not a gap this document was overstating.
+
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`.
+
+---
+
 ## 2. Conventions
 
 | Rule | Detail |
@@ -273,3 +285,12 @@ Order of precedence:
 3. Data Model (this document)
 4. Alembic migrations
 5. Source Code
+
+---
+
+## 15. Related Documents
+
+- [`../03_architecture/workflow/state_management.md`](../03_architecture/workflow/state_management.md) — the §4 workflow-state design this table set implements; only 3 of the 9 `status` values are ever written
+- [`../03_architecture/kernel/knowledge_manager.md`](../03_architecture/kernel/knowledge_manager.md) — the intended owner of §7's tables, currently an untouched stub
+- [ADR-0011](../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) · [ADR-0013](../18_decision_log/adr/ADR-0013-search-and-vector-store.md) · [ADR-0017](../18_decision_log/adr/ADR-0017-observability-stack.md) — the three decisions this document implements
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status

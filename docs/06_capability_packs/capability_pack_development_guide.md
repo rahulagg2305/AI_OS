@@ -24,6 +24,18 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**The platform mechanics this guide assumes are real; one is not.** Verified against `kernel/src/ai_os_kernel/`: the Manifest Loader (`manifest_loader/loader.py`) and Capability Manager (`capability_manager/` — `SqlPackLifecycleRepository`, `PackRegistration`, `HealthReport`, the `CapabilityPack` Protocol) both exist and are real, so §5's "the Manifest Loader will reject packs with invalid or incomplete manifests" and §3 step 13's "register and test activation" are accurate. **§2's "depend only on published Kernel interfaces and the Platform SDK" is not achievable today** — there is no Platform SDK (`ai-os-sdk`) package; the one real pack (Software Engineering) imports Kernel internals directly, a documented exception (`../03_architecture/capability_framework/capability_pack_contract.md`).
+
+**🛑 This guide's own practical relevance is currently gated**: per the hard blocker recorded 2026-07-28 (`../process/standing_rules.md`), no new agent may be added to any Capability Pack and no new Capability Pack may be added until the Platform SDK exists — so a developer reading this guide today to build a *new* pack or a *sixth* SE-pack agent is out of scope regardless of how well they follow it. The guide remains accurate for maintaining the existing, grandfathered Software Engineering pack.
+
+**§4 Mandatory Artifacts is satisfied by the real pack**: `capability_packs/software-engineering/` has `manifest.yaml`, `README.md`, `CHANGELOG.md`, agent implementations, workflow definitions, and tests — matching this checklist exactly.
+
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` (module 27, Platform SDK; module 29, SE Pack) and `../19_roadmap/implementation_status.md`.
+
+---
+
 ## 2. Development Principles
 
 When creating a Capability Pack you must:
@@ -128,7 +140,7 @@ Minimum documentation:
 
 ## 10. Current Status
 
-This guide provides the baseline process for developing Capability Packs.
+This guide provides the baseline process for developing Capability Packs. See the Implementation Status section near the top: the Manifest Loader and Capability Manager it assumes are real, but the Platform SDK is not, and the Platform SDK growth gate currently blocks any *new* pack or agent from being built by following this guide.
 
 It will evolve as the Platform SDK and tooling mature.
 
@@ -143,3 +155,12 @@ Order of precedence:
 3. Manifest Schema  
 4. Capability Pack Development Guide  
 5. Source Code
+
+---
+
+## 12. Related Documents
+
+- [`../03_architecture/capability_framework/capability_pack_contract.md`](../03_architecture/capability_framework/capability_pack_contract.md) — the contract this guide operationalizes, and the Platform SDK growth gate's primary home
+- [`../process/standing_rules.md`](../process/standing_rules.md) — the hard blocker gating any new pack/agent this guide would otherwise help build
+- [`software_engineering/overview.md`](software_engineering/overview.md) · [`software_engineering/agents.md`](software_engineering/agents.md) · [`software_engineering/workflows.md`](software_engineering/workflows.md) — the one real pack built against this guide
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status

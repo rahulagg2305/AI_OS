@@ -31,6 +31,7 @@ This project is documentation-first (ADR-0003), so **most architecture documents
 - `docs/19_roadmap/feature_inventory.md` is the authority on how complete any module is. Update it every step (standing rule above).
 - **Folders named in the docs frequently do not exist.** Git does not track empty directories, so every "planned" folder (`dashboard/`, `platform_services/`, `ai_context/`, `knowledge/`, `traceability/`, `specs/`, `manifests/`, `tools/`, and others) is absent from a fresh clone. `docs/process/folder_structure.md` is the definitive real-vs-planned list. Do not create a planned folder speculatively; it arrives with the step that fills it.
 - `platform_sdk/` holds exactly one real file (`schemas/manifest.schema.json`). There is **no `ai-os-sdk` package**, which is why Capability Packs import Kernel internals directly — a documented, dated exception, not a pattern to copy.
+- **🛑 HARD GATE (product-owner decision, 2026-07-28): no new agent may be added to any Capability Pack, and no new Capability Pack may be added, until the Platform SDK exists.** The five existing Software Engineering pack agents are grandfathered. Full statement: `docs/process/standing_rules.md`. Before scoping any step that adds an agent or pack, check this gate first.
 
 ## Process docs (read as needed, not all at once)
 

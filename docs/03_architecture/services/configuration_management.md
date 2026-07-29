@@ -24,6 +24,21 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built — the mechanics that exist match this document; several sections describe layers or features with no code behind them yet.** Verified against `kernel/src/ai_os_kernel/configuration_manager/`:
+
+- **§3.1 File layout:** `config/platform.yaml` and `config/llm.yaml` exist; **`config/quality_gates.yaml` and `config/retention.yaml` do not exist on disk.** All four `infra/environments/*.yaml` files (`local`, `dev`, `staging`, `production`) exist, matching the document exactly.
+- **§3.2 Format and typing is real but narrower than stated:** `ConfigurationManager.load()` (`configuration_manager/loader.py`) reads YAML with `yaml.safe_load` and validates the merged result against one Pydantic model, `PlatformConfig` — there is no per-section Pydantic model system yet, and `PlatformConfig` itself has exactly 7 fields (`env`, `role`, `host`, `port`, `log_level`, `capability_pack_dirs`, `manifest_schema_path`), none of them LLM, quality-gate, or retention settings, so `config/llm.yaml`'s existence does not mean its contents are consumed through this path today.
+- **Only 3 of the 7 declared layers are implemented**, per the loader module's own docstring: built-in defaults (1), platform config file (3), environment config file (4). Pack defaults (2), runtime overrides (5), experiment overrides (6), and secret resolution (7) are not implemented — there is no code path for any of them yet.
+- **§3.3 Environment variables:** `AIOS_ENV`, `AIOS_ROLE`, `AIOS_DATABASE_URL` are real and read directly from the environment, exactly as documented (`configuration_manager/bootstrap_env.py`, `persistence/settings.py`). **`AIOS_REDIS_URL` and `OTEL_EXPORTER_OTLP_ENDPOINT` are not read anywhere in the Kernel** — no Redis or OpenTelemetry-exporter integration exists yet. **`AIOS_SECRET_BACKEND` is not implemented as a selector**: only one Secrets Manager backend exists (`secrets_manager/env_provider.py`), and no factory reads this variable to choose among `file`/`vault`/`aws`/`gcp`/`azure` — those five backends do not exist.
+- **§4 Feature flags and §5 Experiment overrides are entirely unbuilt** — no feature-flag type or field exists anywhere in the Kernel, and the Experiment Manager they'd feed is 0% built.
+- **§6 Validation is real**: an unknown key or wrong type in `platform.yaml`/an environment file raises `ConfigurationError` at `load()` time via `PlatformConfig.model_validate`, matching "invalid configuration should prevent startup."
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 4, Configuration Manager) and `../../19_roadmap/implementation_status.md`.
+
+---
+
 ## 2. Design Goals
 
 Configuration Management must:
@@ -142,9 +157,7 @@ Significant configuration changes and the configuration set used by a workflow/e
 
 ## 10. Current Status
 
-This document deepens the Configuration Management design.
-
-Concrete file formats, schema languages, environment layouts, and override mechanisms will be refined during implementation.
+This document deepens the Configuration Management design. File formats and environment layout are settled and real (YAML, `config/` + `infra/environments/`) — see the Implementation Status section near the top for exactly which layers, files, and env vars exist versus which (pack defaults, runtime/experiment overrides, secret resolution, feature flags) remain unbuilt.
 
 ---
 
@@ -158,3 +171,12 @@ Order of precedence:
 4. Configuration Manager Design  
 5. Configuration Management Deep Dive  
 6. Source Code
+
+---
+
+## 12. Related Documents
+
+- [`../kernel/configuration_manager.md`](../kernel/configuration_manager.md) — the parent design this document deepens; defines the canonical 7-layer precedence order
+- [`../../09_security/secrets_management.md`](../../09_security/secrets_management.md) — the secrets layer (§7) this document defers to, itself only partially built (env backend only)
+- [`../platform/technology_stack.md`](../platform/technology_stack.md) — confirms `pydantic-settings`/Pydantic as the validation technology
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status

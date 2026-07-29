@@ -2,7 +2,7 @@
 
 **Status:** Active — Living Document
 **Created:** 2026-07-28
-**Last Updated:** 2026-07-28 (documentation consolidation audit — module 35 removed, module rows 20/29/41 refreshed, and the documentation-accuracy note below added. See `history/025_documentation_consolidation_audit.md`.)
+**Last Updated:** 2026-07-28 (product-owner decision recorded: module 27, Platform SDK, is now a **hard gate** blocking any new agent (module 29) or new pack (modules 32–34) until it is built. Completed the documentation audit's remaining ~20 files. See `history/026_platform_sdk_gate_and_audit_completion.md`.)
 
 > **This document is now cross-referenced from every architecture document.** As of the 2026-07-28 consolidation audit, 82 documents carry an `## Implementation Status` section pointing here as the authority on per-module completion. When you change a module's percentage here, that document's own section may also need updating — `docs/process/standing_rules.md` covers the discipline.
 
@@ -287,14 +287,14 @@ Percentages are against each module's own **documented** v1 scope (Section 2), b
 | 24 | Git Integration Service | C | 0% | not started | No code; the Build Agent writes files via the sandbox but performs no Git operations. |
 | 25 | Speech Gateway | F | 0% | not started | No code. |
 | 26 | Document Processing | E | 0% | not started | No parser adapters; the Knowledge writer accepts only already-chunked input — no chunking pipeline exists. |
-| 27 | Platform SDK (`ai-os-sdk` package) | B | 5% | schema-only | `contracts/`, `models/`, `sdk/`, `utilities/` directories are all empty. Packs currently import Kernel internals directly as a documented, temporary compromise (`capability_pack_contract.md`'s dated exception note). |
+| 27 | Platform SDK (`ai-os-sdk` package) | B | 5% | schema-only | **🛑 HARD GATE (product-owner decision, 2026-07-28): no new agent may be added to any Capability Pack, and no new Capability Pack may be added, until this module is built.** `contracts/`, `models/`, `sdk/`, `utilities/` directories are all empty. Packs currently import Kernel internals directly as a documented, temporary compromise (`capability_pack_contract.md`'s dated exception note, now bounded by this gate). The five existing SE pack agents (module 29) are grandfathered and unaffected. Scoping the SDK build as its own dedicated step is the explicit next recommendation in `implementation_status.md` §6. |
 | 28 | Manifest Schema (JSON Schema) | A | 95% | functionally complete | The schema itself is real, versioned, and actively enforced. Only documented v1 exclusions (signed manifests, marketplace metadata) remain, by design. |
-| 29 | SE Pack — Agents | C | 30% | minimal slice | **Updated 2026-07-28**: 5 of 16 documented agents real (`requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`) — `requirements-analyst` proven independently, not yet chained into `se.delivery_pipeline`. 11 remain, including `technical-planner`/`code-reviewer` named explicitly in Stage C's own exit criteria. |
+| 29 | SE Pack — Agents | C | 30% | minimal slice | 5 of 16 documented agents real (`requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`) — `requirements-analyst` proven independently, not yet chained into `se.delivery_pipeline`. **Frozen at 5 by the module-27 hard gate** — no 6th agent (`technical-planner`/`code-reviewer`/etc.) may be added until the Platform SDK exists. The 5 built agents are grandfathered and unaffected. |
 | 30 | SE Pack — Workflows | C | 15% | minimal slice | 1 real workflow (`se.delivery_pipeline`) — a narrower, different shape than either of Stage C's own named targets (`se.product_creation`, `se.implement_task`), both still 0%. 5 other documented workflows (Feature Addition, Bug Fix, Refactoring, Code Review, Release) not started. |
 | 31 | SE Pack — Tools & Quality Gates | C | 10% | minimal slice | One internal, non-manifest-declared tool (`SandboxedCommandTool`) real; no manifest-declared Tool; 0 of 7 documented gate categories implemented (blocked on Quality Gate Engine itself being 0%). |
-| 32 | Project Intelligence Pack | E | 0% | not started | Directory empty; docs exist, no code. |
-| 33 | Voice (Jarvis) Pack | F | 0% | not started | Directory empty; docs exist, no code. |
-| 34 | Benchmarking Pack | D | 0% | not started | Directory empty; docs exist, no code. |
+| 32 | Project Intelligence Pack | E | 0% | not started | Directory empty; docs exist, no code. **Blocked from starting by the module-27 hard gate** — this would be a *new* Capability Pack, explicitly prohibited until the Platform SDK exists. |
+| 33 | Voice (Jarvis) Pack | F | 0% | not started | Directory empty; docs exist, no code. **Blocked from starting by the module-27 hard gate**, same reasoning as module 32. |
+| 34 | Benchmarking Pack | D | 0% | not started | Directory empty; docs exist, no code. **Blocked from starting by the module-27 hard gate**, same reasoning as module 32. |
 | 35 | ~~Analytics Pack~~ | — | N/A | **removed** | Investigated and deleted 2026-07-28 — confirmed stale, undocumented, never git-tracked. Excluded from Section 6's weighted total. See Section 3 note and `history/023`. |
 | 36 | API (HTTP surface) | B/F | 15% | minimal slice | 9 real authenticated routes vs. ~45 documented across 9 resource groups; no OpenAPI generation/snapshot test, no RFC 9457 error shape (FastAPI default in use), no rate limiting, no `Idempotency-Key` handling. |
 | 37 | WebSocket stream | F | 0% | not started | No `/api/v1/stream` route exists. |

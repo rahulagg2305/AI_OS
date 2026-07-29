@@ -241,3 +241,13 @@ This document establishes the baseline Software Engineering Capability Pack agen
 4. Software Engineering Pack – Overview  
 5. Software Engineering Pack – Agents  
 6. Source Code
+
+---
+
+## Related Documents
+
+- [`overview.md`](overview.md) · [`workflows.md`](workflows.md) — the pack overview and the one workflow (`se.delivery_pipeline`) that chains 4 of these 5 real agents
+- [`../../05_agents/agent_specifications.md`](../../05_agents/agent_specifications.md) — contract-level I/O schemas for each catalog entry
+- [`../../03_architecture/agents/agent_communication.md`](../../03_architecture/agents/agent_communication.md) · [`../../03_architecture/agents/agent_architecture.md`](../../03_architecture/agents/agent_architecture.md) — the platform rules every agent here follows
+- [`../../03_architecture/capability_framework/capability_pack_contract.md`](../../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK growth gate freezing this catalog at 5 real agents
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status

@@ -24,6 +24,18 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**The identity and role layer is real; the permission-narrowing chain it composes into is not — yet, and the gap is disclosed by the implementing module's own docstring, not glossed over.** Verified against `kernel/src/ai_os_kernel/security_manager/models.py`: `Principal` (id, type, roles) and `SecurityContext` (principal + computed `permissions: frozenset[str]`) both exist and are used at the API boundary — §4.2's roles and §3.2's "Security Context" are real.
+
+**§4.4's "Monotonic Narrowing — the core rule" is not implemented as described.** The module's own docstring states it directly: *"Deliberately excludes the full ADR-0023 monotonic-narrowing chain (principal ∩ workflow ∩ agent ∩ tool declared permissions) — that needs manifest-declared permissions on workflows/agents/tools, which is Capability Manager territory not yet built. This models only the first term of that intersection."* Concretely: `SecurityContext.permissions` today reflects only the authenticated principal's role-derived permissions — there is no code that intersects it against a workflow's, agent's, or tool's declared permissions, because nothing yet reads those declarations at authorization time. §4.4's "There is no runtime elevation path" is true only in the narrow sense that nothing elevates a principal's own permission set; it is not yet true in the fuller sense the intersection chain implies, because the chain that would narrow permissions per-step doesn't run.
+
+**§4.3 Permission Model's closed vocabulary is real**: `platform_sdk/schemas/manifest.schema.json` does enumerate and validate the permission strings a manifest may request.
+
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`.
+
+---
+
 ## 2. Design Goals
 
 Authentication & Authorization must:
@@ -135,7 +147,7 @@ Must record:
 
 ## 8. Current Status
 
-This document deepens the Authentication & Authorization design.
+This document deepens the Authentication & Authorization design. See the Implementation Status section near the top: `Principal`/`SecurityContext` and the closed permission vocabulary are real; the full workflow/agent/tool monotonic-narrowing chain (§4.4) is not yet implemented, by the implementing module's own explicit admission.
 
 Concrete identity providers, token formats, permission catalogs, and policy engines will be refined during implementation.
 
@@ -150,3 +162,12 @@ Order of precedence:
 3. Security Manager Design  
 4. Authentication & Authorization Deep Dive  
 5. Source Code
+
+---
+
+## 10. Related Documents
+
+- [`security_architecture.md`](security_architecture.md) §9 — restates the same monotonic-narrowing chain as an already-mitigated threat control (T5); read alongside this document's Implementation Status for the real gap
+- [`secrets_management.md`](secrets_management.md) — the secret-access authorization this system is meant to gate
+- [ADR-0023](../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) — the decision this document implements
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status

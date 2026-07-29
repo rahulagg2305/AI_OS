@@ -23,6 +23,18 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built.** The storage technology and schema this document's own §9 once deferred are **not open questions** — they were decided by [ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) and are real: PostgreSQL, an append-only `workflow.workflow_events` log plus a materialized `workflow_instances` snapshot updated in the same transaction, with per-step state additionally materialized in `workflow.workflow_steps` (§4.2's "Status of individual steps").
+
+**What §4.1's "current status" concretely is, verified against `kernel/src/ai_os_kernel/workflow_engine/instance.py`:** the canonical list is 9 states, but **only 3 are ever written** — `created`, `running`, `completed`. `waiting_for_human`, `waiting_for_retry`, `quality_gate_failed`, and `compensating` are declared in the enum with no code path that transitions an instance into any of them; `failed` and `cancelled` are likewise declared and unused today (a failing step currently propagates as a raised exception, not a persisted terminal state). §5's "Idempotency of steps is strongly preferred" is real and enforced — `(workflow_id, step_name, attempt)` is a unique constraint on `workflow_steps`.
+
+**Durability and recovery (§6) are real**: lease-based crash recovery (`SELECT ... FOR UPDATE SKIP LOCKED`, heartbeat renewal, an expiry reaper) lets another worker resume an instance after a crash, tested directly. **Not built**: the Context Manager relationship in §7 is only partly true — it reads a workflow's declared inputs and a named prior step's output, but has no first-class Filter/Ranker; the Evaluation Engine and Dashboard relationships are entirely unbuilt (both subsystems are 0%).
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 5, Workflow Engine) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/003_workflow_engine_core.md`.
+
+---
+
 ## 2. Design Goals
 
 State management must:
@@ -108,9 +120,7 @@ Every significant state transition must be recorded with:
 
 ## 9. Current Status
 
-This document establishes the baseline rules for state management in workflows.
-
-Concrete storage technology, schema, and recovery procedures will be refined during implementation of the Workflow Engine.
+This document establishes the baseline rules for state management in workflows. **Storage technology, schema, and recovery procedures are no longer open** — see the Implementation Status section near the top of this document for exactly what is decided (PostgreSQL, event log + snapshot, lease-based recovery, per [ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md)) and what remains genuinely unbuilt (6 of 9 canonical states are declared but never reached).
 
 ---
 
@@ -123,3 +133,13 @@ Order of precedence:
 3. Workflow Engine Architecture  
 4. State Management in Workflows  
 5. Source Code
+
+---
+
+## 11. Related Documents
+
+- [`workflow_architecture.md`](workflow_architecture.md) · [`../kernel/workflow_engine.md`](../kernel/workflow_engine.md) — the architecture and Kernel component this document specializes
+- [`error_handling_retry.md`](error_handling_retry.md) — how retry counters and error history (§4.1) are meant to be populated
+- [ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) — the persistence/workflow-state decision this document's §9 now cites as settled
+- [`../../08_database/data_model.md`](../../08_database/data_model.md) §4 — the real `workflow.*` schema (`workflow_instances`, `workflow_events`, `workflow_steps`, `workflow_leases`)
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status

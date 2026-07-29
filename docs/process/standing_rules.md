@@ -1,8 +1,21 @@
 # Standing Rules – AI_OS
 
-**Status:** Active | **Last Updated:** 2026-07-28
+**Status:** Active | **Last Updated:** 2026-07-28 (added the Platform SDK growth gate, a hard product-owner blocker)
 
 The process rules this project has actually operated under, distilled from how every step so far has actually been approved and executed. These are binding unless the product owner explicitly says otherwise for a given step.
+
+---
+
+## 🛑 Capability Pack growth gate (hard blocker, recorded 2026-07-28)
+
+**No new agent may be added to any Capability Pack, and no new Capability Pack may be added, until a real Platform SDK package (`ai-os-sdk`) exists.**
+
+- This is a **product-owner decision**, not an engineering guideline — it does not bend for "just this once," a small agent, or a step that seems otherwise well-scoped.
+- **Why:** the Software Engineering pack's direct-Kernel-import compromise (documented as a "dated exception" in `docs/03_architecture/capability_framework/capability_pack_contract.md`) was tolerable as a bounded, one-time exception for the pack that already exists. It stops being bounded the moment a *second* pack or a *sixth* agent repeats it — at that point the "temporary" exception has quietly become the load-bearing pattern, with no SDK ever built to replace it.
+- **What is grandfathered, unaffected by this gate:** the five existing Software Engineering pack agents (`requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`) and the pack itself. Nothing about them needs to change today, and this gate does not require retrofitting them before the SDK exists.
+- **What is blocked:** a sixth SE-pack agent; any code for `project_intelligence/`, `voice_jarvis/`, or `benchmarking/` (all currently empty); any other new pack.
+- **Before starting any step that would add an agent or a pack**, check `docs/03_architecture/capability_framework/capability_pack_contract.md`'s Platform Interaction Rules and `docs/19_roadmap/feature_inventory.md` module 27 (Platform SDK) first — if module 27 is still not built, that step is out of scope regardless of what else was approved.
+- **What lifts this gate:** a real Platform SDK package. Building it is itself a future step requiring its own scope fence (see `implementation_status.md` §6 for what that scoping should decide) — this rule does not authorize starting that build casually either.
 
 ---
 

@@ -14,6 +14,8 @@ AI_OS uses several terms that are close in meaning and easy to conflate — Know
 
 Every term below has exactly one meaning in AI_OS. Where a term is commonly used differently elsewhere, that is noted.
 
+**A note on implementation status.** This glossary defines the platform's intended vocabulary — it does not track what is built. Several terms below name concepts with no working implementation yet as of 2026-07-28, verified against source during this audit: **Platform SDK** (§2, 5% built — schema only, no `ai-os-sdk` package); **Trust tag** (§3 — no `trust` field exists anywhere in the Context Manager's `ContextItem`/`SourceRef`); **Monotonic narrowing** (§6 — only the principal term of the intersection is computed; workflow/agent/tool declared permissions are not yet read at authorization time); **Speech Gateway**, **Event Bus**, **Traceability Link**/**Impact analysis** infrastructure, and **Outbox** consumption (all 0% or schema-only). Do not infer a term is built from its presence here. See `../19_roadmap/feature_inventory.md` for per-module status.
+
 ---
 
 ## 2. Core Platform
@@ -180,3 +182,11 @@ To prevent ambiguity, these are **not** used as AI_OS terms:
 ## 10. Maintenance
 
 Add a term here whenever a new concept enters the architecture. If two documents use one word for two things, that is a defect to be resolved here first, then in those documents.
+
+---
+
+## 11. Related Documents
+
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — per-module build status for the concepts defined here
+- [`../09_security/security_architecture.md`](../09_security/security_architecture.md) · [`../09_security/authentication_authorization.md`](../09_security/authentication_authorization.md) — the real gap behind §6's "Monotonic narrowing" and §3's "Trust tag"
+- [`../03_architecture/capability_framework/capability_pack_contract.md`](../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK gate behind §2's "Platform SDK" entry

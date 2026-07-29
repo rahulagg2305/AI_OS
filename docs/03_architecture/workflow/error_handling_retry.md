@@ -24,6 +24,22 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built — real inside the LLM Gateway; absent everywhere else.**
+
+**Built:** the LLM Gateway's own `ai_os_kernel.llm_gateway.error_taxonomy.ErrorCategory` implements **4 of this document's 6 categories** — `transient`, `permanent`, `infrastructure`, `budget`. Its own docstring states plainly why `quality` and `security` are excluded: a provider call failure can never actually be either. `classify_http_status()` and `parse_retry_after_seconds()` (numeric-seconds form only, not the HTTP-date form) are real and drive the Gateway's retry/circuit-breaker/backoff logic exactly as §4's "LLM Gateway owns retry/fallback" describes.
+
+**Not built:**
+- **The `AiOsError` exception hierarchy (§8) does not exist anywhere in the codebase.** `LLMProviderError`/`LLMRefusalError` (`kernel/src/ai_os_kernel/llm_gateway/errors.py`) inherit from plain `Exception`, not from any shared base — confirmed by the Gateway's own `error_taxonomy.py` docstring, which states outright that it does not build the hierarchy this section describes. The `StructuredError` contract (§8) and the `error_code` catalogue (§3, supposedly at `platform_sdk/errors/`) have no code shape; that path does not exist because no `ai-os-sdk` package exists.
+- **The Workflow Engine's own retry ownership (§4, §9) is unimplemented.** `RetryPolicy` is declared on `WorkflowStep`/`WorkflowDefinition` and validated at load time (bounded attempts + duration, per §5's own rule), but is **never read** by `service.py`, `advance_runner.py`, or `step_executor.py` — a failing step propagates as a raised exception, not a governed retry. Compensation/rollback (§6) and human escalation (§7) do not exist; `quality` and `security` errors have no producer, since the Quality Gate Engine and the Security Manager's own audit path are both largely unbuilt.
+
+Consequence: this document's "single platform error taxonomy" is, in practice, two things — a real, narrower taxonomy inside the Gateway, and a specification for a platform-wide hierarchy nothing implements yet.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 6, LLM Gateway; module 44, `AiOsError` hierarchy) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/006_llm_gateway_and_prompt_engine_foundation.md`, `history/011_llm_gateway_advanced_router_retry_budget.md`.
+
+---
+
 ## 2. Design Goals
 
 Error handling must:
@@ -142,9 +158,7 @@ The Python exception hierarchy mirrors this exactly: `AiOsError` → `TransientE
 
 ## 10. Current Status
 
-This document establishes the baseline error handling and retry strategy.
-
-Concrete policy values, error code catalogs, and implementation details will be refined during development.
+This document establishes the baseline error handling and retry strategy. See the Implementation Status section near the top for exactly what exists: a real, narrower 4-category taxonomy inside the LLM Gateway, and no platform-wide `AiOsError` hierarchy, error-code catalogue, or Workflow-Engine-level retry enforcement anywhere yet. Concrete policy values for whichever retry mechanism is eventually built (backoff base/max, attempt ceilings) remain a genuinely open implementation decision — the Gateway's own hardcoded constants (`kernel/bootstrap.py`) are a documented, temporary carve-out, not a settled policy.
 
 ---
 
@@ -157,3 +171,14 @@ Order of precedence:
 3. Workflow Architecture  
 4. Error Handling & Retry Strategies  
 5. Source Code
+
+---
+
+## 12. Related Documents
+
+- [`../kernel/llm_gateway.md`](../kernel/llm_gateway.md) — owns the one real implementation of this taxonomy today
+- [`workflow_architecture.md`](workflow_architecture.md) · [`../kernel/workflow_engine.md`](../kernel/workflow_engine.md) — the intended (not yet built) step-level retry owner
+- [`../platform/platform_sdk.md`](../platform/platform_sdk.md) §4.4 — the `AiOsError` hierarchy specification, and confirmation no `ai-os-sdk` package exists to hold it
+- [`../quality/quality_gates_framework.md`](../quality/quality_gates_framework.md) — the `quality` category's intended (unbuilt) producer
+- [`../../09_security/security_architecture.md`](../../09_security/security_architecture.md) — the `security` category's intended producer
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status

@@ -29,6 +29,23 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**Partially built — the core loop is real; most of the declared surface is not.**
+
+**Built:** definition loading/validation (`WorkflowDefinitionLoader`), instance creation and lease acquisition, per-step context preparation → agent/tool execution → output validation → state append (one transaction), completion, and the Step Contract's five invocation fields exactly as specified. `se.delivery_pipeline` is a real, running instance of this lifecycle.
+
+**Not built, and in two cases structurally blocked rather than merely unwritten:**
+- **Only 2 of the 7 Supported Step Types genuinely execute.** `agent` and `tool` steps dispatch to real executors; `decision`, `parallel`, `sub_workflow`, `quality_gate`, and `human_approval` all route to `NoOpStepExecutor` and complete having done nothing. A workflow declaring any of the latter five validates and runs, but silently no-ops at those steps.
+- **Only 3 of `state_management.md`'s 9 canonical instance states are ever written**: `created`, `running`, `completed`. `waiting_for_human`, `waiting_for_retry`, `quality_gate_failed`, and `compensating` are declared in the `WorkflowInstanceStatus` enum but no code path transitions an instance into any of them — verified by searching every reference to each in `kernel/src/ai_os_kernel/workflow_engine/`. `failed` and `cancelled` are likewise declared but unused; a failing step currently propagates as a raised exception rather than a persisted terminal state.
+- **Quality Gates** (Quality Gate Engine 0% built) and **Human-in-the-Loop** (`approvals` table has no writer) are both fully unenforced — the sections below describing them are specification only.
+- **Failure Handling**: retries are not implemented at the Workflow Engine level. `RetryPolicy` is declared on `WorkflowStep`/`WorkflowDefinition` and validated at load time (bounded attempts + duration), but is **never read** by `service.py`, `advance_runner.py`, or `step_executor.py` — a failing step is not automatically retried. No rollback/compensation and no human escalation path exist.
+- **Observability**: Quality Gate results, human decisions, and token/cost metrics are not emitted (their producing subsystems don't exist); the rest of the documented telemetry is real.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 5, Workflow Engine) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/003_workflow_engine_core.md` and `history/INDEX.md`.
+
+---
+
 ## Objectives
 
 Workflows shall be:
@@ -322,3 +339,20 @@ Order of precedence:
 6. Agent Architecture & Agent Contract  
 7. Workflow Architecture  
 8. Source Code
+
+---
+
+## Related Documents
+
+- [`../kernel/workflow_engine.md`](../kernel/workflow_engine.md) — the Kernel component implementing this architecture; owns the canonical state list and lease mechanics
+- [`workflow_patterns.md`](workflow_patterns.md) — the 8 reusable orchestration patterns built on this architecture (1 of 8 real)
+- [`state_management.md`](state_management.md) — the state-ownership rules this document's own "State Management" section summarizes
+- [`error_handling_retry.md`](error_handling_retry.md) — the failure-handling model referenced above
+- [`../governance/human_approval_points.md`](../governance/human_approval_points.md) — the Human-in-the-Loop contract (0% built)
+- [`../quality/quality_gates_framework.md`](../quality/quality_gates_framework.md) — the Quality Gates contract (0% built)
+- [`../agents/agent_architecture.md`](../agents/agent_architecture.md) · [`../agents/agent_communication.md`](../agents/agent_communication.md) — the Agent side of every agent-step invocation
+- [ADR-0021](../../18_decision_log/adr/ADR-0021-declarative-workflows-no-dynamic-task-planner.md) — declarative workflows, no runtime task planner
+- [ADR-0022](../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md) — the Objectives' reproducibility requirement
+- [ADR-0002](../../18_decision_log/adr/ADR-0002-llm-gateway-single-entry-point.md) — governs the Step Contract's `modelAlias` field
+- [`../../06_capability_packs/software_engineering/workflows.md`](../../06_capability_packs/software_engineering/workflows.md) — the one pack currently declaring real workflows against this contract
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status

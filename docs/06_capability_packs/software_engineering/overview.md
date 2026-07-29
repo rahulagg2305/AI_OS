@@ -23,6 +23,18 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**A small, real slice exists inside the much larger design this document describes.** Per `agents.md`'s own "Currently Implemented Subset": **5 of the 15 agents listed in §4 are real** (`requirements-analyst`, `architecture`, `build` — not in §4's original list, added during the 2026-07-28 reconciliation — `qa-test`, `documentation`); the other 10 (`technical-planner`, `backend-developer`, `frontend-developer`, `database`, `api-designer`, `devops`, `security`, `code-reviewer`, `release`, `refactoring`, `performance`) have no code. Per `workflows.md`'s own "Currently Implemented Subset": **1 of §5's 6 listed workflow categories is real** — `se.delivery_pipeline`, a standalone 4-step proof-of-concept pipeline, not an implementation of any of §5's named workflows. §6's Quality Gates are declared as a specification (`tools_quality_gates.md`) with no Quality Gate Engine to execute them (0% built).
+
+**🛑 Growth is currently blocked**: per the hard blocker recorded 2026-07-28 (`../process/standing_rules.md`), no 6th agent may be added to this pack until the Platform SDK (`ai-os-sdk`) exists. The 5 real agents are grandfathered and unaffected.
+
+**§7's "must not call LLM providers directly or bypass the Workflow Engine" is upheld** — all 5 real agents are invoked exclusively through the Workflow Engine's `AgentStepExecutor`, and the 4 `PromptedAgent`-backed ones (`qa-test` is the exception, making no LLM call at all) go through the real LLM Gateway.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 29) and `../../19_roadmap/implementation_status.md`.
+
+---
+
 ## 2. Goals of the Pack
 
 The Software Engineering Pack shall enable AI_OS to:
@@ -119,13 +131,13 @@ The pack will contribute and require a strong set of Quality Gates, including:
 
 ## 8. Current Status
 
-This document provides the high-level overview.
+This document provides the high-level overview. See the Implementation Status section near the top for the real vs. designed gap: 5 of 15 agents, 1 proof-of-concept workflow of 6 documented categories.
 
-Subsequent documents in Phase 3 will detail:
+Subsequent documents detail:
 
-- Agents of this pack
-- Workflows of this pack
-- Tools and Quality Gates of this pack
+- Agents of this pack (`agents.md`)
+- Workflows of this pack (`workflows.md`)
+- Tools and Quality Gates of this pack (`tools_quality_gates.md`)
 
 ---
 
@@ -138,3 +150,12 @@ Order of precedence:
 3. Software Engineering Pack – Overview  
 4. Detailed pack documents  
 5. Source Code
+
+---
+
+## 10. Related Documents
+
+- [`agents.md`](agents.md) · [`workflows.md`](workflows.md) — the detailed catalogs, each with its own "Currently Implemented Subset" section
+- [`../../03_architecture/capability_framework/capability_pack_contract.md`](../../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK growth gate blocking this pack's further expansion
+- [`../../process/standing_rules.md`](../../process/standing_rules.md) — the standing hard blocker
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status

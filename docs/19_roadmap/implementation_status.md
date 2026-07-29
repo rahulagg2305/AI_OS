@@ -4,7 +4,7 @@
 **Document:** Implementation Status
 **Version:** 2.0 (restructured short form)
 **Status:** Active
-**Last Updated:** 2026-07-28 (documentation consolidation audit — 100 files, docs/structure only, no code behaviour changed. Corrected badly stale stage status in `PROJECT_INDEX.md`/`README.md`/`implementation_roadmap.md`; added honest Implementation Status sections to 82 documents; annotated all 25 ADRs append-only; discovered that ~70 documented directories have zero tracked files and are absent from a fresh clone; removed the dead `capability_packs/software_engineering/` duplicate. See `history/025_documentation_consolidation_audit.md`.)
+**Last Updated:** 2026-07-28 (product-owner decision recorded: **the direct-Kernel-import exception is now a hard gate — no new agent or Capability Pack may be added until the Platform SDK exists**; completed the documentation audit's remaining ~20 unreviewed files. See §4 and `history/026_platform_sdk_gate_and_audit_completion.md`.)
 
 ---
 
@@ -24,7 +24,9 @@ This document is deliberately **short** — current stage, what exists, current 
 
 As of this step: **849 tests passed** (unit + integration + pack, combined), **11 skipped** (opt-in-live, no API key — expected), **0 failed**. `mypy --strict` (283 source files) and `ruff` clean throughout. This is the first genuinely real-Docker-verified pass of the entire integration suite since `DockerSandbox` became the default.
 
-Three prior steps (2026-07-28) were documentation/infrastructure-only. This step is real feature development plus real-environment verification.
+Three prior steps (2026-07-28) were documentation/infrastructure-only. This step closes the documentation audit and records a hard product-owner gate (see §4, first item) — no code changed.
+
+> **🛑 HARD GATE (product-owner decision, 2026-07-28): no new agent or Capability Pack may be added until the Platform SDK (`ai-os-sdk`) exists.** This is the single most important thing for the next session to know before touching the Software Engineering pack or any other pack. See §4 for the full statement and §6 for what happens next.
 
 ---
 
@@ -56,6 +58,7 @@ Three prior steps (2026-07-28) were documentation/infrastructure-only. This step
 
 Full detail (every gap, every reasoning) is preserved verbatim in `history/022_gap_analysis_and_blockers_snapshot.md`. The load-bearing ones, distilled:
 
+- **🛑 HARD GATE, recorded 2026-07-28 (product-owner decision): the direct-Kernel-import exception documented in `docs/03_architecture/capability_framework/capability_pack_contract.md`'s Platform Interaction Rules is now a hard blocker on further pack growth, not a soft "temporary" note.** No new agent may be added to any Capability Pack, and no new Capability Pack may be added, **until a real Platform SDK package (`ai-os-sdk`) exists.** The five existing Software Engineering pack agents (`requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`) are grandfathered as-is and need no change — this gate blocks only the *next* addition. Recorded in three places: `capability_pack_contract.md` (the gate itself), `feature_inventory.md` module 27 (tracked as the blocking item), and `docs/process/standing_rules.md` (the standing rule preventing a future step from accidentally violating it). **The Platform SDK build is not started by this step** — it is explicitly scoped as its own dedicated future step (see §6).
 - **Requirements Analyst is proven but not chained into `se.delivery_pipeline`** — the pipeline still starts at Architecture; wiring Requirements Analyst in as its own first step is a distinct, later increment (would need `delivery_pipeline.yaml`/`pipeline.py`'s own `_STEP_SOURCES` updated, plus re-verification of the existing chained tests).
 - **Only one LLM provider (`anthropic`) is registered by default**; `LocalAdapter`/cross-provider fallback exist but are commented out in checked-in config.
 - **Security Manager is pre-shared-secret JWT, not real OIDC** — not production-credible as-is.
@@ -78,13 +81,17 @@ Per standing rule (`docs/process/standing_rules.md`), every step from now on end
 
 ## 6. Recommended Next Small Step
 
-The documentation consolidation audit is done. Recommendation: **wire the Requirements Analyst Agent into `se.delivery_pipeline` as its own first step** — extending the real hand-off chain from four steps to five (`requirements-analyst` → `architecture` → `build` → `qa-test` → `documentation`), so the pipeline starts from a raw requirement rather than one already shaped as a design brief.
+**The next session should scope the Platform SDK v1.0.0 build as its own dedicated step — do not start SDK design work inside whatever step reads this next.** This step deliberately did not begin that design; it only recorded the gate and confirmed the documentation audit is complete, so scoping starts from accurate ground truth.
 
-Preferred over building a sixth agent (`code-reviewer`) because it converts an already-built-but-unused agent into delivered value, exercises the existing `WorkflowStepOutputResolver` hand-off once more without inventing any mechanism, and keeps the pack's breadth honest — five agents of which five are used, rather than six of which four are.
+**Why this is next, ahead of both previously-live candidates** (wiring Requirements Analyst into `se.delivery_pipeline`, or building a sixth agent): the hard gate recorded this step blocks any further pack growth until the SDK exists. Wiring an *existing* agent into an *existing* workflow is arguably not "adding a new agent" and may not be strictly blocked by the gate's letter — but building a sixth agent (`code-reviewer` or otherwise) unambiguously is. Rather than spend a step on the one growth path that might be a grey area, the higher-value move is closing the gate itself.
 
-Concretely: add the step to `capability_packs/software-engineering/workflows/delivery_pipeline.yaml`, extend `pipeline.py`'s `_STEP_SOURCES`/`_FIELD_SELECTORS` for the new first hand-off, move `_StepScopedResolver`'s `WorkflowStateResolver` scope from `architecture` to `requirements-analyst`, and re-verify both delivery-pipeline integration tests (deterministic and Docker-gated).
+**What scoping that step should decide, concretely** (do not decide these now — this is next session's own scope fence):
+- Which of the 15 documented Protocol interfaces (`platform_sdk.md` §5) are genuinely needed by the *existing* five agents' real usage, vs. which can stay deferred (a full 15-interface build is almost certainly more than the current pack needs).
+- Whether the existing five agents get migrated onto the new SDK as part of that same step, or in an immediately-following step — either is defensible, but it should be a decision, not a default.
+- Whether `pack_contract_suite` (the 9-check compliance suite) is built alongside the SDK or deferred again.
+- How `platform_sdk/contracts/`, `models/`, `sdk/`, `utilities/` (currently all empty) get their first real content — package layout, not just interface signatures.
 
-A separate, small follow-up worth scheduling: complete the ~20 documents this audit did not line-by-line audit (listed in `history/025_documentation_consolidation_audit.md`'s "honest note on completeness"). None is misleading today, but each still lacks its own Implementation Status and Related Documents sections.
+A separate, smaller, non-blocking follow-up: this step completed the full documentation audit (see §7 and `history/026`), so there is no remaining doc-completeness debt to schedule.
 
 ---
 

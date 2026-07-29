@@ -24,6 +24,18 @@ This document is subordinate to:
 
 ---
 
+## Implementation Status (2026-07-28)
+
+**The fundamental rule (§2) is genuinely upheld — structurally, not just by convention.** No agent-to-agent call path exists anywhere in the codebase; every real agent (`requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`) is invoked only through `AgentStepExecutor`, and `se.delivery_pipeline`'s own step hand-offs go through a real Context Manager resolver (`WorkflowStepOutputResolver`), never a direct call. This is the one document in this audit's remaining-20 list whose central claim is fully real.
+
+**Of the 5 Allowed Communication Paths (§3):** paths 1 and 2 (Workflow Engine input/output) are real and exercised by every agent. Path 4 (LLM Gateway) is real for the four `PromptedAgent`-backed agents. **Path 3 (Tool Invocation via "the Tool Invoker") does not exist as described** — there is no `ToolInvoker` class or Protocol anywhere; the real, narrower mechanism is `ToolStepExecutor` + `SandboxedCommandTool`, and it is composed *internally* by three agents rather than called by an agent through a documented invoker interface. **Path 5 (Event Publication) is entirely unbuilt** — the Event Bus is a docstring-only stub, so no agent publishes any event.
+
+**§6 Data Passing Rules are real**: inter-agent data travels through Workflow State (`workflow_steps.outputs`) and is made visible via the Context Manager, exactly as specified — this is the same real mechanism cited above. **§7 Error and Retry Coordination is not built**: see `../workflow/error_handling_retry.md`'s own Implementation Status — the Workflow Engine does not yet act on a step failure per any policy; there is no retry, compensate, or escalate decision made anywhere today, only an unhandled exception.
+
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/019_delivery_pipeline.md`.
+
+---
+
 ## 2. Fundamental Rule
 
 **Agents never communicate directly with each other.**

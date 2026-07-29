@@ -2,11 +2,11 @@
 
 **Project:** AI_OS (AI Operating System)  
 **Document:** Capability Pack Contract  
-**Version:** 1.2  
+**Version:** 1.3  
 **Status:** Approved  
-**Last Updated:** 2026-07-28 (added Implementation Status and Related Documents; corrected the Current Priority Packs status column, the contract-suite requirement, and the directory-structure claims against the one real pack on disk)
+**Last Updated:** 2026-07-28 (product-owner decision: the direct-Kernel-import exception under Platform Interaction Rules is now a **hard gate** — no new agent or Capability Pack may be added until the Platform SDK exists. The five existing Software Engineering pack agents are grandfathered and need no change.)
 
-**Previously:** 2026-07-28 (v1.1 — Platform Interaction Rules: added a dated exception note recording the `software-engineering` pack's real, live direct-Kernel-import compromise)
+**Previously:** 2026-07-28 (v1.2 — added Implementation Status and Related Documents; corrected the Current Priority Packs status column, the contract-suite requirement, and the directory-structure claims against the one real pack on disk). 2026-07-28 (v1.1 — Platform Interaction Rules: added a dated exception note recording the `software-engineering` pack's real, live direct-Kernel-import compromise)
 
 ---
 
@@ -42,7 +42,8 @@ This contract is mandatory for every present and future Capability Pack.
 - **The SDK pack contract suite does not exist**, so the Testing Requirements and Validation Checklist below are review-enforced, not tool-enforced. Nothing checks the Prohibited Practices list mechanically, including "no forbidden dependencies".
 - **No pack discovery beyond a filesystem scan**, no entry-point discovery, no upgrade path, no health monitoring, and no permissions enforcement in the Capability Manager. The Health Contract below has no implementation: no pack exposes a health check and nothing would call one.
 - **No Quality Gate Engine**, so the Validation Checklist's "Quality Gates passed" cannot be satisfied; **no `EventBus`**, so the Event Contract is unexercised; **no Command implementation path**; **no pack-declared Tool** (the one real tool, `SandboxedCommandTool`, is Kernel-internal and not manifest-declared); **no pack-declared Quality Gate**.
-- **Three of the four scoped packs are empty directories:** `capability_packs/project_intelligence/`, `capability_packs/voice_jarvis/`, `capability_packs/benchmarking/`. (`capability_packs/software_engineering/` — underscored — is also an empty directory and is *not* the real pack; the real one is hyphenated, `software-engineering`.)
+- **Three of the four scoped packs have zero tracked files, absent from a fresh clone:** `capability_packs/project_intelligence/`, `capability_packs/voice_jarvis/`, `capability_packs/benchmarking/`. (A stray, never-tracked, dead duplicate directory, `capability_packs/software_engineering/` — underscored, not the real hyphenated `software-engineering/` — was investigated and removed in the 2026-07-28 documentation consolidation audit; see `../../19_roadmap/history/025_documentation_consolidation_audit.md`.)
+- **The Platform SDK gate (product-owner decision, 2026-07-28) is now active:** no new agent or Capability Pack may be added until `ai-os-sdk` exists — see the dated exception under Platform Interaction Rules below, which this gate amends. This blocks Stage C/H's remaining agent work and Stages E/D/F's remaining packs equally.
 
 Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table — rows 13, 27, 29–34) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
@@ -428,7 +429,11 @@ Capability Packs interact with AI_OS only through:
 
 Direct Kernel access is prohibited.
 
-**Dated exception, recorded rather than silently violated (2026-07-28).** The `software-engineering` pack — this contract's own "Highest priority" pack — currently imports `ai_os_kernel.*` internals directly in every one of its agent modules and its pipeline composition (`ai_os_pack_software_engineering.pipeline`), not only through the Platform SDK. **Why:** no `ai-os-sdk` package exists yet (`kernel/pyproject.toml` itself lists it under "Planned, not yet scaffolded") — there is nothing else for a pack to depend on for a real LLM Gateway/Prompt Engine/database connection today, and this pack's own agents need all three to genuinely call a model and persist results. This is a real, live violation of the rule stated above, not a hypothetical one — a fresh reader should not be misled into thinking it is categorically impossible. **What removes it:** a real Platform SDK package (`ai-os-sdk`) exposing the LLM Gateway/Prompt Engine/database access this pack currently reaches through Kernel internals — at that point this pack (and any other) can depend on the SDK instead, and this exception is closed. Tracked in `docs/19_roadmap/implementation_status.md`; each affected module's own docstring records the same compromise at the code level.
+**Dated exception, recorded rather than silently violated (2026-07-28) — now a hard gate on further growth (product-owner decision, 2026-07-28).** The `software-engineering` pack — this contract's own "Highest priority" pack — currently imports `ai_os_kernel.*` internals directly in every one of its agent modules and its pipeline composition (`ai_os_pack_software_engineering.pipeline`), not only through the Platform SDK. **Why:** no `ai-os-sdk` package exists yet (`kernel/pyproject.toml` itself lists it under "Planned, not yet scaffolded") — there is nothing else for a pack to depend on for a real LLM Gateway/Prompt Engine/database connection today, and this pack's own agents need all three to genuinely call a model and persist results. This is a real, live violation of the rule stated above, not a hypothetical one — a fresh reader should not be misled into thinking it is categorically impossible.
+
+**The exception is bounded to the pack surface that already exists.** It is *not* a licence to keep growing that surface. **The Platform SDK (`ai-os-sdk`) must be built before any new agent is added to any Capability Pack, and before any new Capability Pack is added, full stop.** This is a hard blocker, not a soft "temporary" note — no exception, no schedule slip, no "just this once." The five existing Software Engineering pack agents (`requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`) are grandfathered as-is; nothing about them needs to change today, and this gate does not require retrofitting them before the SDK exists. It blocks only the *next* addition.
+
+**What removes it:** a real Platform SDK package (`ai-os-sdk`) exposing the LLM Gateway/Prompt Engine/database access packs currently reach through Kernel internals — at that point every pack, including the five existing agents, migrates onto the SDK, and this exception closes for good. Building that package is explicitly its own dedicated, scoped step — see `docs/19_roadmap/implementation_status.md` §4 and `docs/19_roadmap/feature_inventory.md` module 27 for current status, and `docs/process/standing_rules.md` for the standing rule this gate is recorded under. Each affected module's own docstring records the same compromise at the code level.
 
 ---
 
