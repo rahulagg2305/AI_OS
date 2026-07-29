@@ -31,6 +31,14 @@ established clean-skip pattern) and every sandboxed step in this run
 need Docker; `postgres_container()`'s own skip already covers "Docker is
 unreachable" for both needs at once — no second, redundant Docker check
 is added here.
+
+**qa-test (step 9) and architecture (step 11) are migrated onto the
+Platform SDK** — this file's own `InMemoryAgentRegistry` construction
+was updated to match, mirroring `test_delivery_pipeline.py`'s own
+identical fix: `_test_agent_with_sandbox`/`_architecture_agent_with_prompt`
+construct each zero-arg and `bind_pack_context()` it instead of passing
+a `sandbox=`/`service_factory=` constructor override that no longer
+exists.
 """
 
 from __future__ import annotations
@@ -85,6 +93,26 @@ def _test_agent_with_sandbox(sandbox: DockerSandbox) -> TestAgentEntrypoint:
             pack_version=_PACK_VERSION,
             permissions=["sandbox:execute"],
             sandbox=sandbox,
+        )
+    )
+    return agent
+
+
+def _architecture_agent_with_prompt(template: str, prompt_id: str) -> ArchitectureAgentEntrypoint:
+    """architecture is migrated onto the Platform SDK (step 11) — no
+    more ``service_factory`` constructor override. Construct zero-arg,
+    exactly as ``EntrypointLoader`` does, then bind the real
+    ``PackContext`` a real caller would inject, granting exactly
+    ``llm:invoke`` — mirrors `test_delivery_pipeline.py`'s own identical
+    helper."""
+    agent = ArchitectureAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
         )
     )
     return agent
@@ -151,12 +179,6 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
     attempt and a filesystem-escape attempt — both made by code the
     pipeline itself generated and ran — genuinely failed."""
 
-    async def architecture_service() -> PromptedCompletionService:
-        return await _deterministic_service(
-            "DESIGN: a single Python script that probes its own sandbox.\nContext was: {{context}}",
-            "architecture.propose_design",
-        )
-
     async def build_service() -> PromptedCompletionService:
         return await _deterministic_service(
             "Upstream design: {{context}}\n\n"
@@ -178,8 +200,10 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
 
     registry = InMemoryAgentRegistry(
         {
-            _AGENT_IDS["architecture"]: ArchitectureAgentEntrypoint(
-                service_factory=architecture_service
+            _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
+                "DESIGN: a single Python script that probes its own sandbox.\n"
+                "Context was: {{context}}",
+                "architecture.propose_design",
             ),
             _AGENT_IDS["build"]: BuildAgentEntrypoint(
                 service_factory=build_service,

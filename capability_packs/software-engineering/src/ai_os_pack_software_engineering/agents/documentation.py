@@ -314,10 +314,12 @@ def _resolve_safe_relative_path(working_directory: Path, raw_path: str) -> Path:
 
 async def _build_real_service() -> PromptedCompletionService:
     """The real, production composition — identical to
-    :func:`ai_os_pack_software_engineering.agents.architecture._build_real_service`/
-    :func:`ai_os_pack_software_engineering.agents.build._build_real_service`.
-    Not shared as a common helper — see either module's own docstring
-    for the ADR-0004 reasoning this module also relies on.
+    :func:`ai_os_pack_software_engineering.agents.build._build_real_service`
+    (architecture.py's own former copy was removed in step 11's
+    migration onto the Platform SDK; see that module's docstring and
+    `platform_sdk_v1_scope.md` §6m/§6n). Not shared as a common helper —
+    see `build.py`'s own docstring for the ADR-0004 reasoning this
+    module also relies on.
     """
     provider_config = load_provider_config(_CONFIG_PATH)
     router = StaticRouter(

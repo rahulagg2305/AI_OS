@@ -254,12 +254,15 @@ def _parse_build_instruction(completion_text: str) -> tuple[str, str]:
 
 async def _build_real_service() -> PromptedCompletionService:
     """The real, production composition — identical to
-    :func:`ai_os_pack_software_engineering.agents.architecture._build_real_service`.
-    Not shared as a common helper: each agent module owns its own copy
-    of this small, already-minimal composition, the same "no shared
-    module needed for a single real caller each" reasoning ADR-0004
-    already applies elsewhere in this codebase; a real second use would
-    justify factoring it out, not anticipating one now.
+    :func:`ai_os_pack_software_engineering.agents.documentation._build_real_service`
+    (architecture.py's own former copy was removed in step 11's
+    migration onto the Platform SDK; see that module's docstring and
+    `platform_sdk_v1_scope.md` §6m/§6n). Not shared as a common helper:
+    each still-unmigrated agent module owns its own copy of this small,
+    already-minimal composition, the same "no shared module needed for
+    a single real caller each" reasoning ADR-0004 already applies
+    elsewhere in this codebase; a real second use would justify
+    factoring it out, not anticipating one now.
     """
     provider_config = load_provider_config(_CONFIG_PATH)
     router = StaticRouter(

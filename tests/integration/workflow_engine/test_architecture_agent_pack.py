@@ -6,16 +6,34 @@ real `SqlAgentRegistry` — not `InMemoryAgentRegistry`, the boundary this
 step's own approved framing names as the thing to finally cross for a
 `PromptedAgent`-backed agent.
 
+**Migrated onto the Platform SDK (step 11) — no more agent-internal lazy
+build.** This agent used to compose its own real
+`PromptedCompletionService` on first `execute()`; it now depends
+entirely on a `PackContext` `SqlAgentRegistry` itself injects (step 9a),
+built from real `llm_gateway`/`prompt_engine` objects this file now
+supplies directly to `SqlAgentRegistry`'s own constructor —
+`_build_real_llm_gateway_and_prompt_engine` below is the identical real
+composition the agent's own pre-migration `_build_real_service` used to
+assemble internally, moved to this file's own composition root, mirroring
+`test_requirements_analyst_agent_pack.py`'s own identical step-10 move.
+The same accepted capability loss applies: this test's own real, live
+completion below is no longer recorded to `evaluation.llm_calls` (no SDK
+Telemetry surface exists in v1.0.0 — see the agent's own module
+docstring, and `feature_inventory.md`'s Platform SDK tracking, for the
+full reasoning).
+
 Two tiers, against a real Postgres container (ADR-0015 — no mocking the
 database):
 
 1. **Deterministic, no live LLM call required** — registers the pack,
    seeds a real `catalog.agents` row naming this pack's real
    `ArchitectureAgentEntrypoint`, and proves `SqlAgentRegistry` resolves
-   it for real: a real pack-activation gate, a real `EntrypointLoader`
-   import, a real `isinstance(..., Agent)` check. This alone proves the
-   PromptedAgent/SqlAgentRegistry construction tension is genuinely
-   resolved — no live Anthropic call is needed to prove *resolution*.
+   it for real. Now supplies a real, Echo-backed `llm_gateway`/
+   `prompt_engine` to `SqlAgentRegistry` itself, since step 9a's own
+   injection logic genuinely requires one the moment a resolved
+   entrypoint's own declared permissions include `llm:invoke` — the
+   identical, already-proven consequence step 10 found for
+   `requirements-analyst`.
 2. **Opt-in live** (skipped without `AIOS_SECRET_LLM_ANTHROPIC_API_KEY`,
    exactly mirroring `test_prompted_agent_live.py`) — the same
    resolution, then a genuine `AgentStepExecutor.execute()` call that
@@ -39,10 +57,22 @@ import sqlalchemy as sa
 import yaml
 from alembic import command
 from alembic.config import Config
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.capability_manager.errors import CapabilityManagerError
 from ai_os_kernel.capability_manager.repository import SqlPackLifecycleRepository
+from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
+    PROVIDER_NAME,
+    build_anthropic_adapter,
+)
+from ai_os_kernel.llm_gateway.adapters.model_config import load_provider_config
+from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway
+from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
+from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 from ai_os_kernel.persistence.engine import build_engine
+from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
+from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine, PromptEngine
+from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 from ai_os_kernel.workflow_engine.agent import Agent
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.registry import SqlAgentRegistry
@@ -51,7 +81,40 @@ from ai_os_pack_software_engineering.agents.architecture import (
     ArchitectureAgentEntrypoint,
     ArchitectureProposalOutput,
 )
+from ai_os_sdk.contracts import PackContextReceiver
 from tests.integration._postgres_fixture import postgres_container
+
+_CONFIG_PATH = Path.cwd() / "config" / "llm.yaml"
+_API_KEY_SECRET_REFERENCE = "secret://env/llm/anthropic-api-key"  # noqa: S105 — a reference URI, not a credential
+
+
+async def _build_real_llm_gateway_and_prompt_engine(
+    engine: AsyncEngine,
+) -> tuple[KernelLLMGatewayProtocol, PromptEngine]:
+    """The identical real composition
+    `ai_os_pack_software_engineering.agents.architecture`'s own
+    pre-migration `_build_real_service` used to assemble internally —
+    moved here, to this file's own composition root, since the migrated
+    agent no longer builds anything itself. Mirrors
+    `test_requirements_analyst_agent_pack.py`'s own identical helper."""
+    provider_config = load_provider_config(_CONFIG_PATH)
+    router = StaticRouter(
+        routes={
+            alias: RoutingDecision(
+                provider=provider_config.providers.get(alias, PROVIDER_NAME), model_id=model_id
+            )
+            for alias, model_id in provider_config.model_ids.items()
+        }
+    )
+    anthropic_gateway = await build_anthropic_adapter(
+        secret_provider=EnvSecretProvider(),
+        api_key_secret_reference=_API_KEY_SECRET_REFERENCE,
+        router=router,
+        pricing=provider_config.pricing,
+    )
+    llm_gateway = DispatchingLLMGateway(router=router, gateways={PROVIDER_NAME: anthropic_gateway})
+    return llm_gateway, SqlPromptCatalog(engine)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
@@ -175,11 +238,19 @@ async def _seed_live_prompt(database_url: str) -> None:
 def test_sql_agent_registry_genuinely_resolves_the_architecture_agent(
     database_url: str,
 ) -> None:
-    """Deterministic — no live LLM call. Proves the exact thing this
-    step's own approved framing named as the tension to resolve:
-    PromptedAgent's real dependencies are no longer incompatible with
-    SqlAgentRegistry's zero-argument entrypoint loading, for this one,
-    genuinely zero-arg-constructible entrypoint."""
+    """Deterministic — no live LLM call. Proves this pack's third real
+    `PackContextReceiver`-migrated agent resolves through the real
+    `SqlAgentRegistry` exactly as `qa-test` (step 9) and
+    `requirements-analyst` (step 10) already did.
+
+    **The identical, already-proven consequence of step 9a applies
+    here too:** this agent's own `catalog.agents` row declares
+    `llm:invoke`, so `SqlAgentRegistry.resolve_agent()`'s own real
+    `PackContext` injection genuinely requires a real `llm_gateway`/
+    `prompt_engine` to back it — supplying none here would raise
+    `AgentRegistryError`, not silently resolve. A real, Echo-backed pair
+    is enough to prove resolution deterministically; the live tier below
+    is what proves a real Anthropic completion."""
 
     async def _run() -> None:
         await _register_and_activate_pack(database_url)
@@ -187,10 +258,15 @@ def test_sql_agent_registry_genuinely_resolves_the_architecture_agent(
 
         engine = build_engine(database_url)
         try:
-            registry = SqlAgentRegistry(engine)
+            registry = SqlAgentRegistry(
+                engine,
+                llm_gateway=EchoLLMGateway(),
+                prompt_engine=InMemoryPromptEngine(templates={}),
+            )
             resolved = await registry.resolve_agent(_AGENT_ID)
 
             assert isinstance(resolved, Agent)
+            assert isinstance(resolved, PackContextReceiver)
             assert isinstance(resolved, ArchitectureAgentEntrypoint)
             assert resolved.output_schema == {
                 "type": "object",
@@ -224,7 +300,10 @@ def test_a_real_workflow_step_genuinely_invokes_the_architecture_agent_live(
 
         engine = build_engine(database_url)
         try:
-            registry = SqlAgentRegistry(engine)
+            llm_gateway, prompt_engine = await _build_real_llm_gateway_and_prompt_engine(engine)
+            registry = SqlAgentRegistry(
+                engine, llm_gateway=llm_gateway, prompt_engine=prompt_engine
+            )
             executor = AgentStepExecutor(registry)
             step = WorkflowStep(
                 id="propose_architecture",

@@ -57,6 +57,23 @@ agents in the same run instead of one at a time.
    `EntrypointLoader`'s own zero-argument `cls()` call, so it now
    exercises the real, config-driven `DockerSandbox` default too, on top
    of the real LLM call.
+
+**qa-test (step 9) and architecture (step 11) are now migrated onto the
+Platform SDK — both tiers were updated to match, not left to bit-rot.**
+The deterministic tier's `InMemoryAgentRegistry` no longer constructs
+either with a `service_factory`/`sandbox=` override; `_test_agent_with_sandbox`/
+`_architecture_agent_with_prompt` construct each zero-arg and
+`bind_pack_context()` it, mirroring the exact real caller sequence
+`SqlAgentRegistry` itself performs (step 9a). The live tier's
+`SqlAgentRegistry(engine)` call now also supplies real
+`llm_gateway`/`prompt_engine` objects (`_build_real_llm_gateway_and_prompt_engine`
+below) — architecture's own declared `llm:invoke` permission means step
+9a's own real injection logic requires a real backing pair the moment
+`resolve_agent()` is called, exactly the same real, discovered
+consequence step 10 already proved for `requirements-analyst`. Build and
+Documentation remain unmigrated (steps 12/13) and are unaffected by
+either change — `_bind_pack_context_if_receiver` is a genuine no-op for
+any entrypoint that does not implement `PackContextReceiver`.
 """
 
 import asyncio
@@ -70,15 +87,25 @@ import sqlalchemy as sa
 import yaml
 from alembic import command
 from alembic.config import Config
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.capability_manager.errors import CapabilityManagerError
 from ai_os_kernel.capability_manager.repository import SqlPackLifecycleRepository
-from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
+from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
+    PROVIDER_NAME,
+    build_anthropic_adapter,
+)
+from ai_os_kernel.llm_gateway.adapters.model_config import load_provider_config
+from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway
+from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
+from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 from ai_os_kernel.persistence.engine import build_engine
-from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
+from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
+from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine, PromptEngine
 from ai_os_kernel.prompted_completion import PromptedCompletionService
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
+from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry, SqlAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
@@ -96,6 +123,38 @@ PACK_ROOT = REPO_ROOT / "capability_packs" / "software-engineering"
 _PACK_ID = "software-engineering"
 _PACK_VERSION = "0.1.0"
 _API_KEY_ENV_VAR = "AIOS_SECRET_LLM_ANTHROPIC_API_KEY"
+_CONFIG_PATH = REPO_ROOT / "config" / "llm.yaml"
+_API_KEY_SECRET_REFERENCE = "secret://env/llm/anthropic-api-key"  # noqa: S105 — a reference URI, not a credential
+
+
+async def _build_real_llm_gateway_and_prompt_engine(
+    engine: AsyncEngine,
+) -> tuple[KernelLLMGatewayProtocol, PromptEngine]:
+    """The identical real composition
+    ``test_requirements_analyst_agent_pack.py`` already established for
+    the live-tier `SqlAgentRegistry` a migrated, `llm:invoke`-declaring
+    agent needs — required here because `architecture` (step 11) is now
+    one of the four agents this live test resolves through the real
+    registry, and step 9a's own injection logic genuinely requires a
+    real backing pair the moment `resolve_agent()` sees that permission."""
+    provider_config = load_provider_config(_CONFIG_PATH)
+    router = StaticRouter(
+        routes={
+            alias: RoutingDecision(
+                provider=provider_config.providers.get(alias, PROVIDER_NAME), model_id=model_id
+            )
+            for alias, model_id in provider_config.model_ids.items()
+        }
+    )
+    anthropic_gateway = await build_anthropic_adapter(
+        secret_provider=EnvSecretProvider(),
+        api_key_secret_reference=_API_KEY_SECRET_REFERENCE,
+        router=router,
+        pricing=provider_config.pricing,
+    )
+    llm_gateway = DispatchingLLMGateway(router=router, gateways={PROVIDER_NAME: anthropic_gateway})
+    return llm_gateway, SqlPromptCatalog(engine)
+
 
 _AGENT_IDS = {
     "architecture": f"{_PACK_ID}/architecture",
@@ -127,6 +186,27 @@ def _test_agent_with_sandbox(sandbox: LocalSubprocessSandbox) -> TestAgentEntryp
             pack_version=_PACK_VERSION,
             permissions=["sandbox:execute"],
             sandbox=sandbox,
+        )
+    )
+    return agent
+
+
+def _architecture_agent_with_prompt(template: str, prompt_id: str) -> ArchitectureAgentEntrypoint:
+    """architecture is migrated onto the Platform SDK (step 11) — no
+    more ``service_factory`` constructor override. Construct zero-arg,
+    exactly as ``EntrypointLoader`` does, then bind the real
+    ``PackContext`` a real caller would inject, granting exactly
+    ``llm:invoke`` over a real, Echo-backed gateway and an in-memory
+    prompt engine seeded with ``template`` — the identical pattern
+    ``_test_agent_with_sandbox`` already established for ``qa-test``."""
+    agent = ArchitectureAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
         )
     )
     return agent
@@ -185,9 +265,6 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
             "build.write_file",
         )
 
-    async def architecture_service() -> PromptedCompletionService:
-        return await _deterministic_service(architecture_template, "architecture.propose_design")
-
     async def documentation_service() -> PromptedCompletionService:
         return await _deterministic_service(
             "# {{filePath}}\n\n"
@@ -199,8 +276,8 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
 
     registry = InMemoryAgentRegistry(
         {
-            _AGENT_IDS["architecture"]: ArchitectureAgentEntrypoint(
-                service_factory=architecture_service
+            _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
+                architecture_template, "architecture.propose_design"
             ),
             _AGENT_IDS["build"]: BuildAgentEntrypoint(
                 service_factory=build_service,
@@ -361,7 +438,10 @@ def test_the_real_pipeline_genuinely_runs_end_to_end_against_the_live_api(
 
         engine = build_engine(database_url)
         try:
-            registry = SqlAgentRegistry(engine)
+            llm_gateway, prompt_engine = await _build_real_llm_gateway_and_prompt_engine(engine)
+            registry = SqlAgentRegistry(
+                engine, llm_gateway=llm_gateway, prompt_engine=prompt_engine
+            )
             trigger = build_pipeline_trigger(engine, registry)
 
             requirement = "Write a Python script that prints exactly: hello from the pipeline"
