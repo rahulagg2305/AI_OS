@@ -8,6 +8,23 @@ package has not yet cut a version past `0.1.0`.
 
 ### Added
 
+- **The `PromptRegistry` Protocol and `RenderedPrompt`** (`platform_sdk_v1_scope.md`
+  step 5), kept at the documented pack-facing keyword call style
+  (`render(prompt_id, variables, *, version)`) rather than the Kernel's own
+  request-object envelope — the one deliberate reversal in the specification's
+  favour from step 2a, since a pack-facing Protocol should be shaped for its
+  caller, not its implementer (ADR-0004). `version` is keyword-only and
+  required — nothing resolves a default on a caller's behalf. `RenderedPrompt`
+  narrowed to `prompt_id`/`version`/`content`, matching the real
+  `PromptRenderResponse` exactly; `get()`/`PromptDefinition` and two
+  `RenderedPrompt` fields (`variables_used`, `cache_boundary_index`) stay
+  deferred — no implementation exists at any layer. **No real Kernel class
+  satisfies this Protocol** (it's a from-scratch call convention, not a
+  narrowing), so instead of an `isinstance` proof, the conversion to/from the
+  real `PromptRenderRequest`/`PromptRenderResponse` is proven lossless in both
+  directions — the reference conversion functions are test-local and
+  illustrative, not shipped SDK code. **No Kernel or pack source was modified.**
+
 - **The `LLMGateway` Protocol and its model set** (`platform_sdk_v1_scope.md`
   step 4), narrowed to `complete()` + `capabilities()` — the only two methods
   the real, working `DispatchingLLMGateway` implements. `ai_os_sdk.models.llm`

@@ -7,13 +7,13 @@ built here.** Five interfaces carry one (recorded 2026-07-29,
 ``platform_sdk_v1_scope.md`` step 2a), and where a block and the prose
 around it disagree, the block governs v1.0.0.
 
-Partially real as of step 4: ``Agent`` and ``Tool`` (step 3), and now
-``LLMGateway`` (step 4), narrowed to ``complete``/``capabilities`` — the
-two methods the real ``DispatchingLLMGateway`` implements. The rest
-arrive in order:
+Partially real as of step 5: ``Agent``/``Tool`` (step 3), ``LLMGateway``
+(step 4, narrowed to ``complete``/``capabilities`` — the two methods the
+real ``DispatchingLLMGateway`` implements), and now ``PromptRegistry``
+(step 5, the documented keyword call style — the one interface where
+the *specification* was kept over the Kernel's own request-object
+shape; see its decision block). The rest arrive in order:
 
-- ``prompt_registry.py``   — ``PromptRegistry`` (§5.2, documented
-  keyword call style, ``version`` required)                       — step 5
 - ``tool_invoker.py``      — ``ToolInvoker`` (§5.6) + ``ToolResult``
   and the ``platform.sandbox.run_command`` contract               — step 6
 - ``context_service.py``   — ``ContextService`` (§5.3); its boundary
@@ -34,11 +34,13 @@ from __future__ import annotations
 
 from ai_os_sdk.contracts.agent import Agent
 from ai_os_sdk.contracts.llm_gateway import LLMGateway
+from ai_os_sdk.contracts.prompt_registry import PromptRegistry
 from ai_os_sdk.contracts.tool import Tool, TrustTier
 
 __all__ = [
     "Agent",
     "LLMGateway",
+    "PromptRegistry",
     "Tool",
     "TrustTier",
 ]
