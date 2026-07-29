@@ -2,11 +2,11 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Platform SDK Specification
-**Version:** 1.1
-**Status:** Approved as a specification — **not implemented** (see §1a)
-**Last Updated:** 2026-07-28 (added Implementation Status and Related Documents; every claim that this surface exists in code corrected — it does not)
+**Version:** 1.2
+**Status:** Approved as a specification — **build started, packaging only** (see §1a)
+**Last Updated:** 2026-07-28 (`platform_sdk_v1_scope.md` step 1 complete: `ai-os-sdk` is now a real, installable, importable package — packaging only, no Protocol/model/error content yet. §1a updated to match; §2–§10 unchanged, still fully specification-only.)
 
-**Previously:** 2026-07-25 (v1.0)
+**Previously:** 2026-07-28 (v1.1 — added Implementation Status and Related Documents); 2026-07-25 (v1.0)
 
 ---
 
@@ -30,11 +30,9 @@ Governing decisions: [ADR-0001](../../18_decision_log/adr/ADR-0001-modular-capab
 
 ---
 
-## 1a. Implementation Status (2026-07-28)
+## 1a. Implementation Status (2026-07-28, updated same day: Platform SDK v1.0.0 Step 1 complete)
 
-**Built:** one file. `../../../platform_sdk/schemas/manifest.schema.json` — the machine-readable Capability Pack manifest schema (JSON Schema draft 2020-12), which is real, versioned, and actively enforced by the Manifest Loader.
-
-**That is the entirety of `platform_sdk/` on disk.** There is **no `ai-os-sdk` distribution and no importable `ai_os_sdk` package**. It is not a workspace member in `../../../pyproject.toml` (it is listed there under "Planned, not yet scaffolded"), has no `pyproject.toml` of its own, and contains no Python file whatsoever. `platform_sdk/contracts/`, `platform_sdk/models/`, `platform_sdk/sdk/`, `platform_sdk/utilities/`, and `platform_sdk/prompts/` are all **empty directories**. `platform_sdk/errors/` and `platform_sdk/testing/` — both named in §3, §4.4, and §9 — **do not exist at all**, not even as empty directories.
+**Built:** the manifest schema (unchanged) — `../../../platform_sdk/schemas/manifest.schema.json`, real, versioned, actively enforced by the Manifest Loader — **plus, as of `platform_sdk_v1_scope.md` step 1, a real, installable, importable `ai-os-sdk` package.** `platform_sdk/` now has its own `pyproject.toml`, is a workspace member in `../../../pyproject.toml`, and `import ai_os_sdk` succeeds, along with its six subpackages (`ai_os_sdk.contracts`, `.models`, `.errors`, `.sdk`, `.utilities`, `.testing`). **This is packaging only.** Every subpackage is a docstring-only stub — no Protocol, no boundary model, no error class, nothing importable *from* any of them yet. `platform_sdk/prompts/` remains empty and undecided. Every substantive claim below ("not built") is still accurate; only the package's own existence and importability have changed.
 
 **Not built — i.e. everything else in this document:**
 

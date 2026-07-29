@@ -4,7 +4,7 @@
 **Document:** Implementation Status
 **Version:** 2.0 (restructured short form)
 **Status:** Active
-**Last Updated:** 2026-07-28 (Platform SDK v1.0.0 scoped as its own plan document — see §6 and `../03_architecture/platform/platform_sdk_v1_scope.md` — docs only, no SDK code yet, awaiting approval before the first implementation step. Prior entries: a targeted fix step corrected stale test/mypy numbers in §2 below and closed 15 real mypy errors with a `py.typed` marker; before that, the product-owner decision recorded **the direct-Kernel-import exception is now a hard gate — no new agent or Capability Pack may be added until the Platform SDK exists**; completed the documentation audit's remaining ~20 unreviewed files. See §4 and `history/026_platform_sdk_gate_and_audit_completion.md`.)
+**Last Updated:** 2026-07-28 (Platform SDK v1.0.0 build started: Step 1 of 15 complete — `platform_sdk/` scaffolded as a real, installable `ai-os-sdk` distribution, packaging only, no Protocols/models/errors yet. See §2 and §6. Prior entries: the SDK build was scoped as its own plan document (`../03_architecture/platform/platform_sdk_v1_scope.md`); before that, a targeted fix step corrected stale test/mypy numbers in §2 below and closed 15 real mypy errors with a `py.typed` marker; before that, the product-owner decision recorded **the direct-Kernel-import exception is now a hard gate — no new agent or Capability Pack may be added until the Platform SDK exists**. See §4 and `history/026_platform_sdk_gate_and_audit_completion.md`.)
 
 ---
 
@@ -28,7 +28,9 @@ A prior version of this paragraph claimed "849 tests passed" and "mypy --strict 
 
 Three prior steps (2026-07-28) were documentation/infrastructure-only. The step recorded above this paragraph closed the documentation audit and recorded a hard product-owner gate (see §4, first item) — no code changed. This paragraph itself was corrected by a small, targeted follow-up fix step (also 2026-07-28) that touched only: the `py.typed` marker, this paragraph's numbers, a new standing-rules lesson, and two documentation-formatting fixes.
 
-> **🛑 HARD GATE (product-owner decision, 2026-07-28): no new agent or Capability Pack may be added until the Platform SDK (`ai-os-sdk`) exists.** This is the single most important thing for the next session to know before touching the Software Engineering pack or any other pack. See §4 for the full statement and §6 for what happens next.
+**Platform SDK build, Step 1 of 15 (`platform_sdk_v1_scope.md`), complete as of this entry.** `platform_sdk/` is now a real, installable PEP 621 distribution (`ai-os-sdk`), added to the root workspace's `[tool.uv.workspace]` members. `import ai_os_sdk` works, along with its six stub subpackages (`contracts/`, `models/`, `errors/`, `sdk/`, `utilities/`, `testing/`) — each a docstring-only `__init__.py` naming what a future step fills in. **No Protocol, model, or error class exists yet; nothing consumes this package.** Re-verified fresh after this step: `pytest -q` (root suite) → 803 passed, 11 skipped, 0 failed (unchanged); `pytest -q capability_packs/software-engineering/tests/` → 46 passed (unchanged); `pytest -q platform_sdk/tests/` → 1 passed (new); `mypy --strict kernel/src kernel/alembic tests platform_sdk/src platform_sdk/tests` → 0 errors, 275 source files (267 + 8 new stub/test files); `ruff check .` → clean.
+
+> **🛑 HARD GATE (product-owner decision, 2026-07-28) still in force: no new agent or Capability Pack until the Platform SDK exists *and* the Software Engineering pack is migrated onto it and verified compliant (`platform_sdk_v1_scope.md` step 15).** Step 1 (scaffolding) does not lift this gate on its own — see §4 for the full statement and §6 for what's next.
 
 ---
 
@@ -83,9 +85,9 @@ Per standing rule (`docs/process/standing_rules.md`), every step from now on end
 
 ## 6. Recommended Next Small Step
 
-**The Platform SDK v1.0.0 build is now scoped: `../03_architecture/platform/platform_sdk_v1_scope.md`.** That document answers, with real-usage evidence (57 imports across 7 files, deduplicated to 24 unique Kernel modules, mapped one by one against `platform_sdk.md`'s §5), exactly which interfaces are needed now (`LLMGateway`, `PromptRegistry`, `SecretResolver`, `ToolInvoker`, `ContextService`'s boundary models, plus `PackContext`/`CapabilityPack`), which 10 of the 15 stay deferred, the migration sequencing for the 5 real agents, `pack_contract_suite`'s split timing, and a file-by-file plan for the SDK's empty subdirectories. It breaks the work into a 15-step ordered sequence (8 SDK-build steps, 6 agent-migration steps, 1 compliance-completion step), each individually approvable.
+**Step 2 of 15**: the `AiOsError` exception hierarchy + `StructuredError` model, plus the shared boundary models `ArtifactRef`, `TraceContext`, `SecurityContext`, `StepBudget` (`platform_sdk.md` §4.1, §4.4) — landing in `platform_sdk/src/ai_os_sdk/errors/taxonomy.py` and `platform_sdk/src/ai_os_sdk/models/common.py`, per `platform_sdk_v1_scope.md` §5–§6. Dependency-free foundation everything else in the sequence builds on; still nothing consumes it yet (migration doesn't start until step 9).
 
-**This step (scoping) does not start step 1 of that sequence.** The scope document is awaiting product-owner approval on the plan itself before the first implementation prompt (`platform_sdk_v1_scope.md` §6, step 1: scaffold `platform_sdk` as a real `ai-os-sdk` PEP 621 distribution — packaging only, no interfaces yet) is sent.
+Full 15-step sequence, current position: **Step 1 (scaffold) — done.** Steps 2–8 (SDK build) → 9–14 (agent migration) → 15 (compliance completion) remain. See `../03_architecture/platform/platform_sdk_v1_scope.md` for the full plan; each step is individually approved before it starts.
 
 A separate, smaller, non-blocking follow-up: the prior step completed the full documentation audit (see §7 and `history/026`), so there is no remaining doc-completeness debt to schedule.
 

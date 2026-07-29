@@ -6,6 +6,7 @@ requires-python = ">=3.12, <3.14"
 members = [
     "ai-os-kernel",
     "ai-os-pack-software-engineering",
+    "ai-os-sdk",
     "ai-os-workspace",
 ]
 
@@ -72,12 +73,24 @@ requires-dist = [
 ]
 
 [[package]]
+name = "ai-os-sdk"
+version = "0.1.0"
+source = { editable = "platform_sdk" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2.7,<3.0" }]
+
+[[package]]
 name = "ai-os-workspace"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "ai-os-kernel" },
     { name = "ai-os-pack-software-engineering" },
+    { name = "ai-os-sdk" },
 ]
 
 [package.dev-dependencies]
@@ -98,6 +111,7 @@ dev = [
 requires-dist = [
     { name = "ai-os-kernel", editable = "kernel" },
     { name = "ai-os-pack-software-engineering", editable = "capability_packs/software-engineering" },
+    { name = "ai-os-sdk", editable = "platform_sdk" },
 ]
 
 [package.metadata.requires-dev]

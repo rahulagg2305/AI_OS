@@ -36,7 +36,7 @@ Every subsystem document under `03_architecture/` carries an **Implementation St
 
 Entirely unbuilt as of 2026-07-28 — these documents are pure specification, with no corresponding code:
 
-- `03_architecture/platform/platform_sdk.md` — **no `ai-os-sdk` package exists.** All 15 Protocols, the boundary models, the `AiOsError` hierarchy, and `pack_contract_suite` are design only. This is why packs import Kernel internals directly.
+- `03_architecture/platform/platform_sdk.md` — **`ai-os-sdk` exists as an installable package (as of `platform_sdk_v1_scope.md` step 1, 2026-07-28) but is packaging-only.** All 15 Protocols, the boundary models, the `AiOsError` hierarchy, and `pack_contract_suite` are still design only, built one step at a time per the scope document. This is why packs still import Kernel internals directly.
 - All 7 documents in `03_architecture/services/` (Storage, Search's vector half, Document Processing, Notification, Caching, Git Integration)
 - `03_architecture/quality/quality_gates_framework.md` and `03_architecture/kernel/quality_gate_engine.md` — **nothing enforces any quality gate in code today**
 - `03_architecture/kernel/{evaluation_engine,event_bus,knowledge_manager,memory_manager,traceability_engine}.md`
@@ -83,7 +83,7 @@ Entirely unbuilt as of 2026-07-28 — these documents are pure specification, wi
 | System Architecture | `03_architecture/platform/system_architecture.md` | Approved (v2.0) |
 | **Technology Stack** | `03_architecture/platform/technology_stack.md` | Approved |
 | **Platform SDK Specification** | `03_architecture/platform/platform_sdk.md` | Approved |
-| **Platform SDK v1.0.0 Scope and Build Sequence** | `03_architecture/platform/platform_sdk_v1_scope.md` | Proposed — awaiting approval |
+| **Platform SDK v1.0.0 Scope and Build Sequence** | `03_architecture/platform/platform_sdk_v1_scope.md` | Approved — Step 1 of 15 complete |
 | Kernel Architecture | `03_architecture/kernel/kernel_architecture.md` | Approved (v2.0) |
 | Capability Pack Contract | `03_architecture/capability_framework/capability_pack_contract.md` | Approved |
 | Manifest Schema | `03_architecture/capability_framework/manifest_schema.md` | Approved (v2.0) |

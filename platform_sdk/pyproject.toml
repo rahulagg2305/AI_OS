@@ -1,0 +1,27 @@
+[project]
+name = "ai-os-sdk"
+version = "0.1.0"
+description = "AI_OS Platform SDK — the only sanctioned interface between Capability Packs and the platform (platform_sdk.md). Packaging scaffold only; no Protocols, models, or errors yet (platform_sdk_v1_scope.md step 1)."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+# License: not yet decided at the project level — the identical open
+# item already recorded in kernel/pyproject.toml and
+# capability_packs/software-engineering/pyproject.toml. Do not set a
+# `license` field here until the project owner decides one.
+dependencies = [
+    # Every boundary model this SDK will define is a Pydantic v2 model
+    # (platform_sdk.md §2, design rule 3) — declared now, ahead of any
+    # model existing, because a package with no runtime dependency at
+    # all cannot import Pydantic to define one the moment step 2 lands.
+    "pydantic>=2.7,<3.0",
+]
+# Design rule 1 (platform_sdk.md §2): "The SDK is the dependency floor.
+# ai-os-sdk depends on no other AI_OS distribution." No ai-os-kernel,
+# ai-os-pack-*, or ai-os-services entry belongs in this list, ever.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_os_sdk"]

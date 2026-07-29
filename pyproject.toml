@@ -9,6 +9,7 @@ requires-python = ">=3.12,<3.14"
 # Add each pack/service distribution to this list as it is scaffolded.
 dependencies = [
     "ai-os-kernel",
+    "ai-os-sdk",
     "ai-os-pack-software-engineering",
 ]
 
@@ -39,20 +40,25 @@ dev = [
 # exists — `uv sync` fails on a listed path with no manifest, so this list
 # is deliberately behind the actual scaffolding, not ahead of it.
 #
-# Planned, not yet scaffolded (added as each Implementation Roadmap step
-# lands): platform_sdk (ai-os-sdk), platform_services (ai-os-services),
+# platform_sdk (ai-os-sdk) was scaffolded 2026-07-28
+# (platform_sdk_v1_scope.md step 1) — packaging only, no Protocols or
+# models yet; see platform_sdk/README.md for what each future step adds.
+#
+# Still planned, not yet scaffolded: platform_services (ai-os-services),
 # tools/cli (ai-os-cli). capability_packs/software-engineering is the
 # first pack scaffolded this way — see its own pyproject.toml for why it
 # depends on ai-os-kernel directly (a documented, temporary compromise:
-# no ai-os-sdk exists yet for a pack to depend on instead).
+# platform_sdk_v1_scope.md steps 9–14 migrate it onto ai-os-sdk instead).
 [tool.uv.workspace]
 members = [
     "kernel",
+    "platform_sdk",
     "capability_packs/software-engineering",
 ]
 
 [tool.uv.sources]
 ai-os-kernel = { workspace = true }
+ai-os-sdk = { workspace = true }
 ai-os-pack-software-engineering = { workspace = true }
 
 # --- Shared tooling ---------------------------------------------------------
@@ -61,7 +67,7 @@ ai-os-pack-software-engineering = { workspace = true }
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["kernel/src", "capability_packs/software-engineering/src"]
+src = ["kernel/src", "platform_sdk/src", "capability_packs/software-engineering/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "SIM"]
@@ -70,9 +76,10 @@ select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "SIM"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
 "capability_packs/*/tests/**" = ["S101"]
+"platform_sdk/tests/**" = ["S101"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["ai_os_kernel", "ai_os_pack_software_engineering"]
+known-first-party = ["ai_os_kernel", "ai_os_sdk", "ai_os_pack_software_engineering"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -82,7 +89,7 @@ plugins = ["pydantic.mypy"]
 # Only real code is checked. Empty component stubs (docstring-only
 # __init__.py files awaiting later Implementation Roadmap stages) still
 # type-check cleanly since they contain no statements.
-files = ["kernel/src", "kernel/alembic", "tests", "capability_packs/software-engineering/src", "capability_packs/software-engineering/tests"]
+files = ["kernel/src", "kernel/alembic", "tests", "platform_sdk/src", "platform_sdk/tests", "capability_packs/software-engineering/src", "capability_packs/software-engineering/tests"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"

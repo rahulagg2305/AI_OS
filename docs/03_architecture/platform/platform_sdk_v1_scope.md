@@ -3,8 +3,8 @@
 **Project:** AI_OS (AI Operating System)
 **Document:** Platform SDK v1.0.0 Scope and Build Sequence
 **Version:** 1.0
-**Status:** Proposed — awaiting product-owner approval before the first implementation step starts
-**Last Updated:** 2026-07-28
+**Status:** Approved — Step 1 of 15 complete (packaging scaffold), Step 2 next
+**Last Updated:** 2026-07-28 (Step 1 complete: `platform_sdk/` scaffolded as a real, installable `ai-os-sdk` distribution — see `platform_sdk.md` §1a and `implementation_status.md` §2 for verification evidence)
 
 ---
 
