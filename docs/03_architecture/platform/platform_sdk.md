@@ -2,11 +2,11 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Platform SDK Specification
-**Version:** 1.2
-**Status:** Approved as a specification — **build started, packaging only** (see §1a)
-**Last Updated:** 2026-07-28 (`platform_sdk_v1_scope.md` step 1 complete: `ai-os-sdk` is now a real, installable, importable package — packaging only, no Protocol/model/error content yet. §1a updated to match; §2–§10 unchanged, still fully specification-only.)
+**Version:** 1.3
+**Status:** Approved as a specification — **build in progress; five interfaces now carry binding v1.0.0 reconciliation decisions** (see §1a)
+**Last Updated:** 2026-07-29 (`platform_sdk_v1_scope.md` **step 2a** complete: §4.2, §4.3, §5.1, §5.2 and §5.6 each carry a dated **v1.0.0 Reconciliation Decision** block recording whether the specified shape was narrowed to match working code, extended because the real code is richer, deferred, or designed from scratch. **Where a decision block and the surrounding prose disagree, the decision block governs for v1.0.0** and the prose remains the long-term target. Also: step 2 complete — the `AiOsError` hierarchy and shared boundary models are real.)
 
-**Previously:** 2026-07-28 (v1.1 — added Implementation Status and Related Documents); 2026-07-25 (v1.0)
+**Previously:** 2026-07-28 (v1.2 — step 1, packaging scaffold); 2026-07-28 (v1.1 — added Implementation Status and Related Documents); 2026-07-25 (v1.0)
 
 ---
 
@@ -30,15 +30,26 @@ Governing decisions: [ADR-0001](../../18_decision_log/adr/ADR-0001-modular-capab
 
 ---
 
-## 1a. Implementation Status (2026-07-28, updated same day: Platform SDK v1.0.0 Step 1 complete)
+## 1a. Implementation Status (2026-07-29 — Platform SDK v1.0.0 steps 1, 2, and 2a complete)
 
-**Built:** the manifest schema (unchanged) — `../../../platform_sdk/schemas/manifest.schema.json`, real, versioned, actively enforced by the Manifest Loader — **plus, as of `platform_sdk_v1_scope.md` step 1, a real, installable, importable `ai-os-sdk` package.** `platform_sdk/` now has its own `pyproject.toml`, is a workspace member in `../../../pyproject.toml`, and `import ai_os_sdk` succeeds, along with its six subpackages (`ai_os_sdk.contracts`, `.models`, `.errors`, `.sdk`, `.utilities`, `.testing`). **This is packaging only.** Every subpackage is a docstring-only stub — no Protocol, no boundary model, no error class, nothing importable *from* any of them yet. `platform_sdk/prompts/` remains empty and undecided. Every substantive claim below ("not built") is still accurate; only the package's own existence and importability have changed.
+**⚠ Read this before treating §4–§10 as the binding contract.** Five interfaces — §4.2 `Agent`, §4.3 `Tool`/`ToolResult`, §5.1 `LLMGateway`, §5.2 `PromptRegistry`, §5.6 `ToolInvoker` — now carry a **v1.0.0 Reconciliation Decision** block recording a binding shape that **deliberately differs from the prose around it**. Those blocks govern what gets built; the prose remains the approved long-term target. They exist because an architecture review (2026-07-29) established that the specified shapes could not be satisfied by any real Kernel object, and that building them as written would have failed at pack-migration time.
+
+**Built:**
+
+- The manifest schema (unchanged) — `../../../platform_sdk/schemas/manifest.schema.json`, real, versioned, actively enforced by the Manifest Loader.
+- **A real, installable, importable `ai-os-sdk` package** (step 1). `platform_sdk/` has its own `pyproject.toml`, is a workspace member, ships a `py.typed` marker, and `import ai_os_sdk` succeeds.
+- **The §4.4 error taxonomy and the §4.1/§4.2 shared boundary models** (step 2). `ai_os_sdk.errors` holds `ErrorCategory` (all six documented categories), `StructuredError`, and `AiOsError` → `TransientError`/`PermanentError`/`QualityError`/`InfrastructureError`/`BudgetExceededError`/`SecurityError`, each mapping 1:1 onto a `StructuredError`. `ai_os_sdk.models` holds `ArtifactRef`, `TraceContext`, `SecurityContext`, and `StepBudget`. **Consumed by nothing yet.**
+- **Binding shape decisions for five interfaces** (step 2a, docs only — the decision blocks named above). No Protocol code exists yet; step 3 is the first to write one.
+
+**Two shape notes worth carrying forward.** `ai_os_sdk.models.TraceContext` is the canonical §4.1 seven-field shape; the Kernel independently holds **two narrower `TraceContext` classes** (`ai_os_kernel.observability.trace`, and `ai_os_kernel.llm_gateway.models:105`), and **both of their docstrings already name this §4.1 shape as the canonical one they are reduced slices of**. Consolidating them is Kernel-side work, not SDK scope. Separately, `StructuredError.trace` is **required** here (§4.4 marks `retry_after_seconds`/`details` nullable and pointedly does not mark `trace`), while the raising `AiOsError` carries it optionally — so a raise site that does not know its trace cannot fabricate one, and the boundary that does know it supplies it at conversion time.
+
+Everything else below remains unbuilt, as detailed next.
 
 **Not built — i.e. everything else in this document:**
 
-- **All 15 Protocol interfaces in §5** (`LLMGateway`, `PromptRegistry`, `ContextService`, `RetrievalService`, `MemoryService`, `ToolInvoker`, `EventBus`, `ConfigService`, `SecretResolver`, `StorageService`, `WorkspaceService`, `Telemetry`, `TraceabilityService`, `QualityGateRegistry`, `SpeechGateway`). None exists as an SDK Protocol. Several have *unrelated, narrower, Kernel-internal* counterparts that are **not** this interface and are **not** pack-facing — for example `ai_os_kernel.llm_gateway.gateway.DispatchingLLMGateway` (no `stream()`, no `embed()`, no `count_tokens()`), `ai_os_kernel.prompt_engine.catalog`, `ai_os_kernel.context_manager.manager.ContextManager`, `ai_os_kernel.secrets_manager.provider`. Five of the fifteen have no counterpart at any layer, because their whole subsystem is an empty stub package: `MemoryService`, `EventBus`, `TraceabilityService`, `QualityGateRegistry`, and `StorageService`. `SpeechGateway` has no code anywhere. **`ToolInvoker` does not exist in any form** — the closest real thing is the workflow-engine-internal `ToolStepExecutor` + `SandboxedCommandTool`, which is not a pack-facing interface.
-- **All §4 boundary models** (`ArtifactRef`, `TraceContext`, `SecurityContext`, `AgentRequest`, `AgentResult`, `StepBudget`, `ToolRequest`, `ToolResult`, `StructuredError`, and the `LLMRequest`/`LLMResponse`/`UsageRecord`/`ProviderCapabilities` shapes in §5.1). The Kernel has its own internal Pydantic models under `ai_os_kernel.llm_gateway.models` and a `TraceContext` in `ai_os_kernel.observability.trace`; these are Kernel types, not SDK boundary types, and no pack contract is defined in terms of them.
-- **The `AiOsError` exception hierarchy** (§4.4) — `AiOsError`, `TransientError`, `PermanentError`, `QualityError`, `InfrastructureError`, `BudgetExceededError`, `SecurityError`. **None of these classes exists anywhere in the codebase.** The LLM Gateway defines its own local `LLMProviderError`/`LLMRefusalError` in `ai_os_kernel/llm_gateway/errors.py` which inherit from nothing shared; the same is true of every other subsystem's `errors.py`. The `error_code` catalogue this document places in `platform_sdk/errors/` does not exist.
+- **All 15 Protocol interfaces in §5** (`LLMGateway`, `PromptRegistry`, `ContextService`, `RetrievalService`, `MemoryService`, `ToolInvoker`, `EventBus`, `ConfigService`, `SecretResolver`, `StorageService`, `WorkspaceService`, `Telemetry`, `TraceabilityService`, `QualityGateRegistry`, `SpeechGateway`). None exists as an SDK Protocol yet. **Three of them (`LLMGateway`, `PromptRegistry`, `ToolInvoker`) now have a binding v1.0.0 shape decided** — see their decision blocks in §5.1/§5.2/§5.6 — and are built in steps 4, 5, and 6. Of the rest, `ContextService` contributes boundary models only (step 7), and **eleven are deferred past v1.0.0**, including `SecretResolver`, which was dropped because the one real pack declares no secret permission and §6 grants a `PackContext` attribute only for a declared capability (`platform_sdk_v1_scope.md` §2.3). Several have *unrelated, narrower, Kernel-internal* counterparts that are **not** this interface and are **not** pack-facing — for example `ai_os_kernel.llm_gateway.gateway.DispatchingLLMGateway` (no `stream()`, no `embed()`, no `count_tokens()`), `ai_os_kernel.prompt_engine.catalog`, `ai_os_kernel.context_manager.manager.ContextManager`, `ai_os_kernel.secrets_manager.provider`. Five of the fifteen have no counterpart at any layer, because their whole subsystem is an empty stub package: `MemoryService`, `EventBus`, `TraceabilityService`, `QualityGateRegistry`, and `StorageService`. `SpeechGateway` has no code anywhere. **`ToolInvoker` does not exist in any form** — the closest real thing is the workflow-engine-internal `ToolStepExecutor` + `SandboxedCommandTool`, which is not a pack-facing interface.
+- **The remaining §4 boundary models.** `ArtifactRef`, `TraceContext`, `SecurityContext`, and `StepBudget` are **now built** (step 2, see above). Still unbuilt: `ToolResult` (arrives with `ToolInvoker`, step 6) and the `LLMRequest`/`LLMResponse`/`UsageRecord`/`ProviderCapabilities` shapes in §5.1 (step 4). **`AgentRequest`, `AgentResult`, and `ToolRequest` are deliberately deferred past v1.0.0 entirely** — they have no consumer under the narrowed `Agent`/`Tool` Protocols; see §4.2's and §4.3's decision blocks. The Kernel's own internal Pydantic models under `ai_os_kernel.llm_gateway.models` remain Kernel types, not SDK boundary types.
+- **The `error_code` catalogue** (§3). The `AiOsError` hierarchy and `StructuredError` themselves are **now built** (step 2), but the stable, catalogued set of `error_code` values this document places in `platform_sdk/errors/` does not exist — populating it needs real producers, which arrive with the Protocols. Every other subsystem still defines unrelated local exceptions (for example `ai_os_kernel/llm_gateway/errors.py`, inheriting from plain `Exception`); migrating them onto the shared hierarchy is Kernel-side work tracked as `../../19_roadmap/feature_inventory.md` module 44, not a Platform SDK step.
 - **`PackContext` (§6)** — the object a pack is "handed". No such object exists; nothing constructs one.
 - **The `CapabilityPack` Protocol and `PackRegistration` (§7)** as SDK types. The real `software-engineering` pack does expose an entry-point class, but it is typed against Kernel internals, not against an SDK Protocol.
 - **SDK semantic versioning enforcement (§8).** Nothing has an SDK version to check, so the Manifest Loader cannot enforce `dependencies.sdkVersion`; that semantic rule is currently unenforceable rather than merely unimplemented.
@@ -127,6 +138,24 @@ Agent (Protocol)
 
 Agents are stateless between invocations. Any state persists via Workflow State.
 
+> **🔵 v1.0.0 RECONCILIATION DECISION (2026-07-29): NARROW. The binding v1.0.0 `Agent` Protocol is the existing dict-based Kernel shape, not the shape above.**
+>
+> ```text
+> Agent (Protocol)                      # ai_os_sdk.contracts.agent — v1.0.0
+>     output_schema: dict[str, Any]
+>     async def execute(inputs: dict[str, Any]) -> dict[str, Any]
+> ```
+>
+> **Why.** Five real agents implement exactly this shape today (`ai_os_kernel/workflow_engine/agent.py:71-73`), and the Workflow Engine is coupled to it in two places that would both have to change: `AgentStepExecutor` calls `agent.execute(inputs_dict)` and validates the returned dict against `agent.output_schema` (`workflow_engine/step_executor.py:165-172`), and `SqlAgentRegistry` gates every dynamically-loaded entrypoint on `isinstance(loaded, Agent)` (`workflow_engine/registry.py:222`). Adopting the shape above would mean changing `AgentStepExecutor`, `SqlAgentRegistry`, `InMemoryAgentRegistry`, `EchoAgent`, all five pack agents, and their tests — real risk to working, proven code (803 passing tests) for a benefit that is deferrable.
+>
+> **A precision correction to the review that prompted this decision.** `Agent` is `@runtime_checkable`, and a `runtime_checkable` Protocol's `isinstance` check verifies **member presence only, never signatures** — `agent.py:61-68` states this explicitly ("a structural presence check only … not a signature or type check"). So an `AgentRequest`-shaped agent would fail to load specifically because it lacks an attribute *named* `output_schema` (it has `input_model`/`output_model` instead), **not** because of its `execute` signature; the signature mismatch would instead surface as a `TypeError` at first invocation. The conclusion is unchanged, but the coupling is `AgentStepExecutor`'s call convention plus the attribute name, not the Protocol check alone.
+>
+> **What this costs, recorded rather than glossed.** `SecurityContext`, `StepBudget`, and `TraceContext` cannot reach an agent as **named, typed fields** under this shape; they arrive as entries in the `inputs` dict. This is consistent with what already happens — `AgentStepExecutor` already passes a real `AssembledContext` object under the `"context"` key (`step_executor.py:158-161`), so the dict is already `dict[str, Any]` carrying rich objects, not a flat string map. The cost is lost type safety at that one boundary, not lost capability.
+>
+> **`AgentRequest`/`AgentResult` are therefore deferred, not built, in v1.0.0.** They have no consumer under the narrowed Protocol. Two of `AgentResult`'s five fields depend on services that do not exist anyway (`artifacts` needs `StorageService`, `traceability_links` needs `TraceabilityService` — both 0%). Introducing the typed request/result pair is a deliberate future **major** SDK version change (§8), scheduled with the Workflow Engine change it requires — not an oversight to be quietly corrected later.
+>
+> The shape documented above this note remains the approved long-term target. Decision recorded in `platform_sdk_v1_scope.md` step 2a.
+
 ### 4.3 Tool contract
 
 ```text
@@ -147,6 +176,34 @@ Tool (Protocol)
 ```
 
 `trust_tier` is validated at pack load. Any tool that executes a command string, compiles, runs tests, installs dependencies, or processes untrusted repository content **must** be `tier1_sandboxed` ([ADR-0016](../../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md)).
+
+> **🔵 v1.0.0 RECONCILIATION DECISION (2026-07-29): NARROW the `Tool` Protocol; MIXED narrow-and-extend on `ToolResult`; DEFER `ToolRequest`.**
+>
+> **`Tool` — narrow, for the same reasons as `Agent` (§4.2).** The binding v1.0.0 shape is the existing Kernel one (`workflow_engine/tool.py:65-68`):
+>
+> ```text
+> Tool (Protocol)                       # ai_os_sdk.contracts.tool — v1.0.0
+>     trust_tier: TrustTier
+>     output_schema: dict[str, Any]
+>     async def execute(inputs: dict[str, Any]) -> dict[str, Any]
+> ```
+>
+> Note the method is **`execute`**, not `invoke` as documented above — a difference of *name*, not just signature, so the two are not interchangeable at all. `SqlToolRegistry` gates on `isinstance(loaded, Tool)` and additionally cross-checks the loaded object's `trust_tier` against its `catalog.tools` row (`workflow_engine/registry.py:277-284`), so this shape is load-bearing in the same way `Agent`'s is. `ToolRequest` is deferred alongside `AgentRequest`: it has no consumer under this shape.
+>
+> **`ToolResult` — this one is *not* purely a narrowing, and the direction differs field by field.** It is the return type of `ToolInvoker.invoke` (§5.6), so unlike `ToolRequest` it is genuinely needed in v1.0.0. Reconciled against what the real sandbox actually produces — `SandboxResult` (`sandbox/models.py:63-68`: `exit_code: int | None`, `stdout: str`, `stderr: str`, `timed_out: bool`, `truncated: bool`, `duration_seconds: float`):
+>
+> | Documented field | v1.0.0 | Why |
+> |---|---|---|
+> | `status: success\|failure` | **Kept** | Derivable from `exit_code`/`timed_out`. |
+> | `outputs \| error: StructuredError` | **Kept** | `StructuredError` is real as of step 2. |
+> | `exit_code?` | **Kept** | Direct from `SandboxResult.exit_code`; `None` exactly when `timed_out`. |
+> | `duration_ms` | **Kept** | `SandboxResult.duration_seconds × 1000`. |
+> | `stdout_ref?` / `stderr_ref?` | **NARROWED** to inline `stdout: str` / `stderr: str` | A `*_ref` is an `ArtifactRef` into a content-addressed store, and **`StorageService` (§5.10) does not exist** (0% built, deferred — §1a). The sandbox already returns inline strings, and already bounds them (`max_output_bytes` + `truncated`), so inline is safe rather than unbounded. Becomes a ref when `StorageService` is real. |
+> | `artifacts: ArtifactRef[]` | **DEFERRED** (absent in v1.0.0) | Same reason: nothing can produce an `ArtifactRef` without `StorageService`. |
+> | — | **EXTENDED: `timed_out: bool`** | The spec above has **no way to express a timeout** distinctly from a non-zero exit. `SandboxResult` distinguishes them, and the difference is material to a caller deciding whether to retry. |
+> | — | **EXTENDED: `truncated: bool`** | The spec above has **no way to express "output was capped."** A caller parsing truncated stdout as complete output draws a wrong conclusion silently. This is a case where the real Kernel is richer than the specification, not poorer. |
+>
+> Decision recorded in `platform_sdk_v1_scope.md` step 2a. The `invoke`-named, `ToolRequest`-taking shape above remains the approved long-term target.
 
 ### 4.4 Error model
 
@@ -243,6 +300,26 @@ ProviderCapabilities
 
 **Prohibited:** literal model IDs in pack code; any direct provider import; any HTTP call to a provider endpoint.
 
+> **🔵 v1.0.0 RECONCILIATION DECISION (2026-07-29): NARROW the method set to 2 of 5; EXTEND `ProviderCapabilities` to the real 13 fields.**
+>
+> **Methods — narrow to what exists.** The binding v1.0.0 Protocol is:
+>
+> ```text
+> LLMGateway (Protocol)                 # ai_os_sdk.contracts.llm_gateway — v1.0.0
+>     async def complete(request: LLMRequest) -> LLMResponse
+>     def capabilities(alias: str) -> ProviderCapabilities
+> ```
+>
+> `stream()`, `embed()`, and `count_tokens()` are **deferred**: `DispatchingLLMGateway` implements `complete()` (`llm_gateway/gateway.py:358`) and `capabilities()` (`:337`) and nothing else, and no provider adapter implements streaming, embeddings, or token counting. Declaring them would ship three methods that any real adapter must raise `NotImplementedError` from — worse than absent, because a pack could type-check against them and fail at runtime. They are already recorded as unbuilt in `../../19_roadmap/feature_inventory.md`; adding them later is a **minor** bump (§8, a new Protocol method is additive for callers).
+>
+> Note that the Kernel's own internal `LLMGateway` Protocol (`gateway.py:90`) declares only `complete()` — `capabilities()` lives on the concrete `DispatchingLLMGateway`. The SDK Protocol is therefore deliberately one method wider than the Kernel's internal Protocol and exactly as wide as the concrete class step 6a's adapter will wrap. That is intentional, not an inconsistency.
+>
+> **`ProviderCapabilities` — extend to the real shape.** The 10-field list above is **incomplete**: the real, working `ProviderCapabilities` (`llm_gateway/capability_negotiator.py:98-109`) carries **13** fields, and its own docstring already records this document as the discrepancy it "implements past." The three fields missing above are `supports_strict_tools`, `prompt_cache_min_tokens: int | None`, and `accepts_sampling_params`. The 13-field shape — which matches `llm_gateway.md` §6, this document's own cited source — is binding for v1.0.0. `prompt_cache_min_tokens` is additionally validated against `supports_prompt_caching` by a real model validator, so the two cannot disagree.
+>
+> **One shape note carried over.** `capabilities(alias)` is documented above as keyed by alias, but the real `StaticCapabilityNegotiator` resolves alias → model id through the `Router` first, because a capability is a fact about the *model*, not the alias string (`capability_negotiator.py:24-33`, the same reasoning that keys `ModelPricing` by model id). The SDK keeps the documented `alias` parameter — a pack must never see a model id (§10) — and the adapter performs the resolution behind it.
+>
+> Decision recorded in `platform_sdk_v1_scope.md` step 2a.
+
 ### 5.2 `PromptRegistry`
 
 ```text
@@ -254,6 +331,25 @@ RenderedPrompt     prompt_id; version; content; variables_used;
 ```
 
 Prompts are versioned pack assets. Rendering validates variables against the prompt's declared `input_schema`. The rendered result records `prompt_id` + `version` for the run manifest ([ADR-0022](../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md)).
+
+> **🔵 v1.0.0 RECONCILIATION DECISION (2026-07-29): KEEP the documented keyword call style (reject the Kernel's request-object envelope for the pack-facing API); NARROW `version` to required; DEFER `get()` and two `RenderedPrompt` fields.**
+>
+> ```text
+> PromptRegistry (Protocol)             # ai_os_sdk.contracts.prompt_registry — v1.0.0
+>     async def render(prompt_id: str, variables: dict, *, version: str) -> RenderedPrompt
+>
+> RenderedPrompt     prompt_id; version; content        # v1.0.0
+> ```
+>
+> **Call style — keep the documented one, do not adopt the Kernel's.** The real `PromptEngine.render` takes a `PromptRenderRequest` envelope (`prompt_engine/renderer.py:79`, `prompt_engine/models.py:56-63`). This is the one place in this reconciliation where the **documented shape is the better one going forward**, and the reason is audience: the Kernel's envelope style suits internal seams that pass requests between components, whereas this is a *pack-facing* API whose caller writes one line to render one prompt. `await prompts.render("requirements.analyze", {"requirement": x}, version="0.1.0")` is materially clearer than constructing a request object to pass one field of real content. The adapter conversion in step 6a is three lines, and it is the right place for that cost to sit — a Protocol should be shaped for its caller, not for the convenience of the thing implementing it (ADR-0004, interface-driven design). This is the deliberate exception to this step's general "prefer the working shape" bias.
+>
+> **`version` — narrow to required.** Documented as `version=None`, which implies the engine resolves a default. It cannot: version resolution is the Version Manager / Prompt Resolver's job (`prompt_engine.md` §5, §9), and `prompt_engine/models.py`'s own docstring states plainly why `version` is required in the real implementation — *"nothing here silently picks a version on the caller's behalf."* An SDK that accepted `version=None` would have to either fail or invent a choice. Requiring it now and relaxing it later is a **backward-compatible** change for every existing caller (§8), so the strict direction is the safe one; the reverse is not.
+>
+> **`get() -> PromptDefinition` — deferred.** No implementation exists at any layer: `SqlPromptCatalog` exposes `render()` and nothing else (`prompt_engine/catalog.py:65`). `PromptDefinition` is the *stored* §6 Prompt Contract (name, owner, template, `input_schema`, tags, metadata); `catalog.prompts` holds those columns but has no definition-fetch reader. Nothing in the one real pack calls anything like it.
+>
+> **`RenderedPrompt` — `variables_used` and `cache_boundary_index?` deferred.** The real `PromptRenderResponse` carries `prompt_id`, `version`, `content` only (`prompt_engine/models.py:81-89`). `cache_boundary_index` requires the Prompt Cache Planner ([ADR-0025](../../18_decision_log/adr/ADR-0025-caching-strategy.md), unbuilt); `variables_used` has no producer. Both are additive later (minor bump).
+>
+> Decision recorded in `platform_sdk_v1_scope.md` step 2a.
 
 ### 5.3 `ContextService`
 
@@ -313,6 +409,42 @@ def available_tools() -> ToolDescriptor[]
 ```
 
 Enforces permissions, applies the trust tier, and records the invocation. An agent may not execute a side effect by any other means.
+
+> **🔵 v1.0.0 RECONCILIATION DECISION (2026-07-29): DESIGN (neither narrow nor extend — nothing exists to reconcile against). The documented signature is KEPT, and grounded in a platform-provided tool id.**
+>
+> ```text
+> ToolInvoker (Protocol)                # ai_os_sdk.contracts.tool_invoker — v1.0.0
+>     async def invoke(tool_id: str, inputs: dict, *, timeout_seconds: float | None = None) -> ToolResult
+>     def available_tools() -> tuple[ToolDescriptor, ...]
+>
+> ToolDescriptor     tool_id; trust_tier; input_schema; output_schema
+> ```
+>
+> **The problem this design had to solve.** The documented signature is a *registry lookup* — invoke a named tool with varying inputs. Two facts made that look unimplementable, and both were verified:
+>
+> 1. **The one real pack declares zero tools.** Its manifest declares `permissions: [llm:invoke, sandbox:execute]` and no `tools:` entries at all (`capability_packs/software-engineering/manifest.yaml:71-73`), so a pack-tool registry has nothing to resolve and `available_tools()` would return an empty tuple.
+> 2. **The one real tool ignores its own inputs.** `SandboxedCommandTool.execute(inputs)` never reads `inputs` (`workflow_engine/sandboxed_tool.py:110-118`) — the command, working directory, timeout, and output cap are all baked in at construction. The three sandbox-using agents therefore construct a fresh tool per call (`agents/build.py:324`, `agents/verification.py:265`) rather than invoking a registered one.
+>
+> **The resolution: the sandbox runner becomes a *platform-provided* tool with a well-known id**, and the command moves from constructor into `inputs`:
+>
+> ```text
+> tool_id: "platform.sandbox.run_command"        trust_tier: tier1_sandboxed
+> inputs:  command: list[str]                    (required)
+>          working_directory: str                (required, workspace-relative)
+>          timeout_seconds: float                (required)
+>          max_output_bytes: int                 (required)
+>          env: dict[str, str] | None
+>          stdin: str | None
+> returns: ToolResult                            (§4.3, as reconciled there)
+> ```
+>
+> **Why this is better than both alternatives.** It keeps the documented Protocol signature intact rather than inventing a differently-named interface for the same capability; it gives `available_tools()` a real, non-empty answer (one entry in v1.0.0); and passing the command through `inputs` **fixes the ignored-`inputs` wart** rather than propagating it — the current constructor-baking is precisely why `invoke(tool_id, inputs)` looked like a poor fit. It also serves the pack's actual declared permission (`sandbox:execute`) through the interface that permission is meant to gate.
+>
+> **What step 6a's adapter implements.** The Kernel-side `ToolInvoker` adapter is built **directly over `SandboxExecutor`** (`sandbox/executor.py:151-160`), *not* over the dict-based `Tool` Protocol. The two paths stay honestly separate: `Tool` (§4.3, narrowed) remains what the **Workflow Engine** uses for `tool`-type steps and pack-declared tools; `ToolInvoker` is what an **agent** uses to cause a sandboxed side effect. Routing the invoker through a dict-returning `Tool` would mean serialising a typed `SandboxResult` into a dict and re-parsing it, losing the `timed_out`/`truncated` distinctions §4.3 was just extended to preserve.
+>
+> **Permission enforcement is declared but not yet enforced here.** "Enforces permissions" above requires the monotonic-narrowing chain, which computes only its principal term today (`security_manager/models.py`'s own docstring; `authentication_authorization.md`'s Implementation Status). The v1.0.0 adapter records the invocation and applies the trust tier; permission enforcement arrives with the chain, and this note is the record that it is not silently assumed.
+>
+> Decision recorded in `platform_sdk_v1_scope.md` step 2a.
 
 ### 5.7 `EventBus`
 

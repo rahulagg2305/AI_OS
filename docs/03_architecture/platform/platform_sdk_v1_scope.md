@@ -2,9 +2,9 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Platform SDK v1.0.0 Scope and Build Sequence
-**Version:** 2.0
-**Status:** Approved — **revised to 18 steps** after an independent architecture review; Steps 1–2 complete, Step 2a next
-**Last Updated:** 2026-07-28 (v2.0: an independent architecture review found 7 real problems — three of them blocking — in v1.0's step sequence. All accepted in full. The sequence is now 18 steps, `SecretResolver` is dropped from v1.0.0, migration order is reversed to `qa-test`-first, and three new steps (2a, 6a, 6b) plus one relocation step (7) are inserted. Findings and reasoning: §6a. Step 2 also complete.)
+**Version:** 2.1
+**Status:** Approved — 18 steps; **Steps 1, 2, and 2a complete**, Step 3 next (and now smaller — see §6b)
+**Last Updated:** 2026-07-29 (v2.1: **Step 2a complete** — all five Protocol/reality reconciliation decisions made and recorded as dated blocks in `platform_sdk.md` §4.2/§4.3/§5.1/§5.2/§5.6; summary and evidence in §6b. Step 3's scope shrinks as a result: two Protocols, no request/result models. Prior, v2.0: an independent architecture review found 7 real problems — three blocking — in v1.0's 15-step sequence; all accepted, sequence revised to 18 steps, `SecretResolver` dropped, migration reordered `qa-test`-first, steps 2a/6a/6b/7 inserted. Findings: §6a.)
 
 **Previously:** 2026-07-28 (v1.0 — original 15-step sequence, Step 1 complete)
 
@@ -232,8 +232,8 @@ Each step below is scoped to become its own future prompt, in this order, each i
 |---|---|---|
 | 1 | Scaffold `platform_sdk` as a real `ai-os-sdk` PEP 621 distribution — packaging only, six stub subpackages, workspace member. | **Done** (`fc0973a`) |
 | 2 | `AiOsError` hierarchy + `StructuredError` + shared boundary models (`ArtifactRef`, `TraceContext`, `SecurityContext`, `StepBudget` — §4.1, §4.4). Dependency-free foundation everything else builds on. | **Done** |
-| **2a** | **NEW — Protocol/reality reconciliation decision (docs only).** For each of `LLMGateway`, `PromptRegistry`, `ToolInvoker`, `Agent`, `Tool`: decide *narrow-the-spec* vs *extend-the-Kernel*, and amend `platform_sdk.md` §4.2/§4.3/§5.1/§5.2/§5.6 accordingly. **Must land before step 3** — resolves P1 + P3 before any code is written against a shape nothing can satisfy. | Next |
-| 3 | `Agent`/`Tool` Protocols + request/result models — **at the shapes decided in 2a**, not as §4.2/§4.3 currently read. | |
+| **2a** | **Protocol/reality reconciliation decision (docs only).** All five decisions made and recorded as dated blocks in `platform_sdk.md` §4.2/§4.3/§5.1/§5.2/§5.6 — see §6b below for the summary. Resolves P1 + P3. | **Done** |
+| 3 | `Agent` + `Tool` Protocols **only** — the narrowed, dict-based shapes decided in 2a. **`AgentRequest`/`AgentResult`/`ToolRequest` are no longer in scope** (deferred past v1.0.0; they have no consumer under the narrowed Protocols), and `ToolResult` moves to step 6 where its consumer lives. Scope is smaller than v2.0 assumed — see §6b. | Next |
 
 **Contracts**
 
@@ -241,7 +241,7 @@ Each step below is scoped to become its own future prompt, in this order, each i
 |---|---|
 | 4 | `LLMGateway` Protocol + models (as decided in 2a). |
 | 5 | `PromptRegistry` Protocol + models (as decided in 2a). |
-| 6 | `ToolInvoker` Protocol + `Tool` wiring (as decided in 2a). **`SecretResolver` removed from this step** — see §2.3. |
+| 6 | `ToolInvoker` Protocol + `ToolDescriptor` + **`ToolResult`** (moved here from step 3, since this is where its consumer lives), and the `platform.sandbox.run_command` tool contract — all as decided in 2a. **`SecretResolver` removed from this step** — see §2.3. |
 | **6a** | **NEW — Kernel-side adapters implementing the SDK Protocols**, over `DispatchingLLMGateway`, the Prompt Engine, and the sandbox. Without this, the Protocols from 4–6 have no conforming implementation anywhere. Resolves P1. |
 | **6b** | **NEW — `PackContext` construction + injection path.** Build a real `PackContext` in the composition root, and resolve the zero-argument blocker (`EntrypointLoader`/`SqlAgentRegistry`, or a real `activate()` call path). **This is the actual unlock for every migration step.** Resolves P2. |
 | 7 | **REPURPOSED — relocate `pipeline.py` out of the shipped package into `tests/`** (§4.1), and land `ContextService` boundary models (§5.3) + the entry-point contract `PackContext`/`CapabilityPack`/`PackRegistration`/`HealthReport` (§6, §7). Resolves P4's permanent-failure half. |
@@ -290,6 +290,24 @@ An independent architecture review of v1.0 of this document, conducted against r
 | **P7** | Low | Documentation arithmetic slip. | §2.1 says *"all 8 `workflow_engine.{…}`"* then lists **nine** modules. The 11 pipeline-only modules are 2 `context_manager` + 9 `workflow_engine`. (The 13 + 11 = 24 total is correct.) | Corrected in §2.1. |
 
 **Two findings reduced scope rather than adding it:** dropping `SecretResolver` (P5) and relocating `pipeline.py` instead of waiting on a Capability Manager (P4).
+
+## 6b. Step 2a — the five reconciliation decisions (2026-07-29)
+
+Each decision is recorded in full, with its evidence, as a dated **v1.0.0 Reconciliation Decision** block in the corresponding section of `platform_sdk.md`. Summary:
+
+| Interface | Decision | Core evidence | Consequence |
+|---|---|---|---|
+| **`Agent`** (§4.2) | **NARROW** to the dict-based `output_schema` + `execute(inputs) -> outputs` shape | 5 real agents on it (`agent.py:71-73`); `AgentStepExecutor` calls `execute(dict)` and validates against `output_schema` (`step_executor.py:165-172`); `SqlAgentRegistry` gates on `isinstance` (`registry.py:222`) | `AgentRequest`/`AgentResult` deferred past v1.0.0 — **step 3 shrinks** |
+| **`Tool`** (§4.3) | **NARROW** the Protocol; **MIXED** on `ToolResult`; **DEFER** `ToolRequest` | `tool.py:65-68` — and the method is named `execute`, not the spec's `invoke`; `SqlToolRegistry` also cross-checks `trust_tier` against `catalog.tools` (`registry.py:277-284`) | `ToolResult`: `stdout_ref`/`stderr_ref` narrowed to inline strings (no `StorageService`), `artifacts` deferred, **and extended with `timed_out`/`truncated`** — two real outcomes the spec cannot express (`sandbox/models.py:63-68`) |
+| **`LLMGateway`** (§5.1) | **NARROW** methods 5 → 2 (`complete`, `capabilities`); **EXTEND** `ProviderCapabilities` 10 → 13 fields | `DispatchingLLMGateway` has `complete()` (`gateway.py:358`) and `capabilities()` (`:337`) only; real `ProviderCapabilities` carries 13 fields and its own docstring names this document as the discrepancy it "implements past" (`capability_negotiator.py:98-109`) | `stream`/`embed`/`count_tokens` deferred (additive later = minor bump) |
+| **`PromptRegistry`** (§5.2) | **KEEP the documented keyword call style** (reject the Kernel's request-object envelope); **NARROW** `version` to required; **DEFER** `get()` and 2 `RenderedPrompt` fields | Real `PromptEngine.render(request)` (`renderer.py:79`); `models.py:56-63` requires `version` and its docstring states *"nothing here silently picks a version on the caller's behalf"*; `SqlPromptCatalog` exposes only `render()` (`catalog.py:65`) | **The one deliberate "documented shape wins" decision** — a pack-facing Protocol is shaped for its caller, not its implementer (ADR-0004); adapter conversion is ~3 lines |
+| **`ToolInvoker`** (§5.6) | **DESIGN** — signature KEPT, grounded in a platform-provided tool id `platform.sandbox.run_command` | The pack declares **zero** tools (`manifest.yaml:71-73`); `SandboxedCommandTool.execute(inputs)` **ignores `inputs`** entirely (`sandboxed_tool.py:110-118`), so agents construct a fresh tool per call (`build.py:324`, `verification.py:265`) | Moving the command into `inputs` makes `invoke(tool_id, inputs)` genuinely meaningful and **fixes** the ignored-inputs wart; step 6a's adapter is built directly over `SandboxExecutor`, not over the dict-based `Tool` |
+
+**Net direction:** four narrowings, two targeted extensions where the real Kernel is richer than the specification, one deliberate reversal in the specification's favour (`PromptRegistry`'s call style), and one from-scratch design. **Every extension is a case where the spec could not express a real, materially-different outcome** — not scope creep.
+
+**Effect on the remaining plan:** step 3 gets *smaller* (two Protocols, no models); step 6 gets one model (`ToolResult`) and one tool contract; steps 4, 5, 6a, 6b, 7, 8, 9–15 are unchanged in scope. **No new step is needed**, and nothing else blocks step 3.
+
+---
 
 ### 6a.1 Additional observations recorded during Step 2 (not review findings)
 
