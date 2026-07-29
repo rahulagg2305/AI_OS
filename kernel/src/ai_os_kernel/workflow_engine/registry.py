@@ -112,7 +112,6 @@ from ai_os_kernel.persistence.catalog_schema import tools as tools_table
 from ai_os_kernel.prompt_engine.renderer import PromptEngine
 from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
 from ai_os_kernel.sandbox.executor import SandboxExecutor
-from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.workflow_engine.agent import Agent
 from ai_os_kernel.workflow_engine.entrypoint_loader import EntrypointLoader
 from ai_os_kernel.workflow_engine.errors import (
@@ -181,9 +180,29 @@ def _bind_pack_context_if_receiver(
     :func:`~ai_os_kernel.sdk_adapters.pack_context.build_pack_context`'s
     own ``ValueError``, wrapped so every failure this class raises shares
     one error family.
+
+    **``build_pack_context`` is imported here, not at module level — a
+    real, discovered circular import, not a style choice.**
+    ``ai_os_kernel.sdk_adapters.pack_context`` imports
+    ``ai_os_kernel.capability_manager.pack_contract``, which triggers
+    ``ai_os_kernel.capability_manager``'s own package init, which imports
+    ``ai_os_kernel.capability_manager.models``, which imports
+    ``ai_os_kernel.workflow_engine.pack_state`` — and importing *any*
+    submodule of ``ai_os_kernel.workflow_engine`` requires this very
+    package's own ``__init__.py`` to finish first, which re-enters this
+    module while it is itself still mid-import whenever something
+    imports ``ai_os_kernel.sdk_adapters.pack_context`` (or anything
+    built on ``ai_os_kernel.capability_manager``) before
+    ``ai_os_kernel.workflow_engine`` has already finished loading once.
+    Deferring this one import to call time — genuinely safe, since
+    nothing can call :meth:`SqlAgentRegistry.resolve_agent` before the
+    whole module system has already settled — breaks the cycle without
+    restructuring either package.
     """
     if not isinstance(loaded, PackContextReceiver):
         return
+
+    from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 
     try:
         context = build_pack_context(

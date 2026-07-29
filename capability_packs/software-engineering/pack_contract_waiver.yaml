@@ -2,21 +2,22 @@
 # TEMPORARY, EXPIRING WAIVER — pack_contract_suite check 7 (forbidden imports)
 # ============================================================================
 #
-# This pack has NOT fully migrated onto the Platform SDK yet. Four real
+# This pack has NOT fully migrated onto the Platform SDK yet. Three real
 # agents (and its own CapabilityPack entry point) still import ai_os_kernel
 # directly — a known, documented, dated compromise recorded independently in
 # capability_pack_contract.md §1a and in each listed module's own docstring.
-# qa-test (agents/verification.py) migrated in step 9 (2026-07-29) — the
-# first of six migration steps — and is REMOVED from the list below: check 7
-# now genuinely passes for that module, unwaived, on its own merits.
+# qa-test (agents/verification.py, step 9) and requirements-analyst
+# (agents/requirements_analyst.py, step 10, 2026-07-29 — the first agent
+# needing real gateway injection) are both REMOVED from the list below:
+# check 7 now genuinely passes for each, unwaived, on its own merits.
 #
 # This waiver exists ONLY so that check 7 (see
 # platform_sdk/src/ai_os_sdk/testing/forbidden_imports.py) can be wired into
 # CI today, enforcing the rule for every NEW violation, without turning CI
 # red for the remaining migration steps
-# (docs/03_architecture/platform/platform_sdk_v1_scope.md steps 10-14).
+# (docs/03_architecture/platform/platform_sdk_v1_scope.md steps 11-14).
 #
-# It covers EXACTLY the five modules listed below — no others. A new
+# It covers EXACTLY the four modules listed below — no others. A new
 # ai_os_kernel import introduced anywhere else in this pack, or a genuinely
 # new forbidden import (a provider SDK, a database driver, a direct HTTP
 # client) in ANY module including the ones listed here, still fails check 7
@@ -36,18 +37,16 @@ granted: "2026-07-29"
 expires_at_step: 14
 
 reason: >
-  Steps 10-14 of the referenced plan migrate this pack's remaining four real
+  Steps 11-14 of the referenced plan migrate this pack's remaining three real
   agents and its CapabilityPack entry point onto the real SDK adapters built
   in steps 6a/6b (LLMGateway, PromptRegistry, ToolInvoker,
-  PackContextReceiver) one at a time - requirements-analyst next (the first
-  agent needing real gateway injection). Until each module is migrated, it
-  continues to import ai_os_kernel directly for its database engine,
-  secrets, LLM Gateway, and sandbox - the same compromise every one of these
-  modules' own docstrings already names and dates.
+  PackContextReceiver) one at a time - architecture next. Until each module
+  is migrated, it continues to import ai_os_kernel directly for its database
+  engine, secrets, LLM Gateway, and sandbox - the same compromise every one
+  of these modules' own docstrings already names and dates.
 
 modules:
   - ai_os_pack_software_engineering.agents.architecture
   - ai_os_pack_software_engineering.agents.build
   - ai_os_pack_software_engineering.agents.documentation
-  - ai_os_pack_software_engineering.agents.requirements_analyst
   - ai_os_pack_software_engineering.pack

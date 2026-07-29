@@ -104,30 +104,36 @@ class TestRealSoftwareEngineeringPackScan:
         categories = {v.category for v in violations}
         assert categories == {ForbiddenImportCategory.KERNEL}
 
-    def test_the_exact_six_modules_with_violations(self) -> None:
+    def test_the_exact_four_modules_with_violations(self) -> None:
         """Guards the waiver file's own `modules` list against silent
         drift -- if a module is migrated (steps 9-14) or a new one
         starts importing ai_os_kernel, this test fails until the waiver
         file is updated to match, which is exactly the point.
 
-        Five modules, not six, as of step 9: qa-test
-        (`agents.verification`) migrated onto the Platform SDK and is no
-        longer in this set at all."""
+        Four modules, not six, as of step 10: qa-test
+        (`agents.verification`, step 9) and requirements-analyst
+        (`agents.requirements_analyst`, step 10) are both migrated onto
+        the Platform SDK and no longer in this set at all."""
         violations = scan_pack_source(_SE_PACK_SRC, own_pack_package=_SE_PACK_PACKAGE)
         modules = {v.module for v in violations}
         assert modules == {
             f"{_SE_PACK_PACKAGE}.agents.architecture",
             f"{_SE_PACK_PACKAGE}.agents.build",
             f"{_SE_PACK_PACKAGE}.agents.documentation",
-            f"{_SE_PACK_PACKAGE}.agents.requirements_analyst",
             f"{_SE_PACK_PACKAGE}.pack",
         }
 
-    def test_qa_test_is_migrated_and_contributes_zero_violations(self) -> None:
-        """Step 9's own real proof, at the scanner level: the migrated
-        module imports nothing ai_os_kernel imports at all."""
+    def test_qa_test_and_requirements_analyst_are_migrated_and_contribute_zero_violations(
+        self,
+    ) -> None:
+        """Steps 9 and 10's own real proof, at the scanner level: both
+        migrated modules import nothing ai_os_kernel imports at all."""
         violations = scan_pack_source(_SE_PACK_SRC, own_pack_package=_SE_PACK_PACKAGE)
-        assert not any(v.module == f"{_SE_PACK_PACKAGE}.agents.verification" for v in violations)
+        migrated_modules = {
+            f"{_SE_PACK_PACKAGE}.agents.verification",
+            f"{_SE_PACK_PACKAGE}.agents.requirements_analyst",
+        }
+        assert not any(v.module in migrated_modules for v in violations)
 
     def test_pipeline_py_is_gone_so_it_contributes_no_violations(self) -> None:
         """Step 7 relocated pipeline.py out of this tree entirely -- if

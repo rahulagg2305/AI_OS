@@ -8,66 +8,100 @@ against acceptance criteria beyond what the model itself states —
 output capture only, the identical scope reduction every agent in this
 pack has used for its own first real slice.
 
-**Reuses `PromptedAgent` unchanged, via the identical zero-arg/lazy-build
-pattern `ArchitectureAgentEntrypoint` already established — invents no
-new mechanism.** This agent needs no sandbox at all (it produces text,
-not a file) and no completion-text parsing (its whole output *is* the
-model's own completion, verbatim) — the simplest possible shape this
-pack's own four prior agents have already proven, structurally
-identical to `ArchitectureAgentEntrypoint` in every respect but its own
-prompt/input field name (`requirement` here too, matching the same
-free-text convention) and output field name (`analysis` in place of
-`content`, since this agent's own output is a structured requirements
-analysis, not a design proposal — the two are conceptually distinct
-Agent Contract "Produced Outputs," so given their own names rather than
-reusing Architecture's `content` field name by accident of having an
-identical shape).
+**Migrated onto the real Platform SDK (``platform_sdk_v1_scope.md``
+step 10) — the first agent needing real gateway injection.** This
+entrypoint now implements :class:`~ai_os_sdk.contracts.Agent` and
+:class:`~ai_os_sdk.contracts.entrypoint_context.PackContextReceiver`
+only. It imports nothing from ``ai_os_kernel`` at all: no database
+engine, no secret provider, no ``load_provider_config``, no
+``build_anthropic_prompted_completion_service``. Where it used to lazily
+build its own real :class:`~ai_os_kernel.workflow_engine.prompted_agent.
+PromptedAgent` (itself wrapping a real
+:class:`~ai_os_kernel.prompted_completion.PromptedCompletionService`) on
+first :meth:`execute` call, it now reads ``self._context.llm``/
+``self._context.prompts`` — the real
+:class:`~ai_os_kernel.sdk_adapters.llm_gateway_adapter.LLMGatewayAdapter`/
+:class:`~ai_os_kernel.sdk_adapters.prompt_registry_adapter.
+PromptRegistryAdapter` a caller injects via :meth:`bind_pack_context`,
+directly replicating :meth:`~ai_os_kernel.prompted_completion.
+PromptedCompletionService.complete_from_prompt`'s own real logic
+(render, then complete) using only SDK Protocols.
 
-**Composes the identical real production service every other
-`PromptedAgent`-backed agent in this pack already does — not a second,
-divergent way to assemble the same pieces.** See
-:mod:`ai_os_pack_software_engineering.agents.architecture`'s own
-docstring for the full reasoning behind
-`build_anthropic_prompted_completion_service()` reuse, the
-zero-argument/lazy-build resolution to the `EntrypointLoader`
-incompatibility, and the "this pack imports Kernel internals directly"
-documented, temporary compromise — all identical here, not repeated in
-full.
+**The lazy-build lock is gone entirely — not preserved alongside the new
+mechanism, and this is the real finding this step's own approved framing
+asked to watch for.** ``ArchitectureAgentEntrypoint``'s own docstring
+(and this module's own, before this step) explains *why* the lazy-build-
+under-an-``asyncio.Lock()`` pattern existed: ``EntrypointLoader`` only
+ever calls ``cls()``, so a real, async-composed dependency had nowhere
+honest to be built except lazily, on first (necessarily async)
+``execute()`` call, guarded against a concurrent double-build. **The
+step 6b/9a injection mechanism does not need that guard, and adding one
+back would be redundant complexity, not a tension to resolve.**
+:meth:`bind_pack_context` is a plain, synchronous method, called exactly
+once by the resolver (``SqlAgentRegistry``, as of step 9a) immediately
+after construction — genuinely before any concurrent ``execute()`` call
+could possibly begin, since nothing can call ``execute()`` on an
+instance it has not yet received from ``resolve_agent()``. There is no
+race to guard against, because composition moved from "lazily, inside
+the object, racing against its own first use" to "eagerly, by the
+caller, strictly before any use is possible." The old pattern is not in
+tension with the new one; it is simply obsolete for any fully-migrated
+agent, and this module no longer carries it.
+
+**A real, discovered, unavoidable capability loss, recorded rather than
+silently dropped: real Anthropic completions from this agent are no
+longer recorded to ``evaluation.llm_calls``.**
+:func:`~ai_os_kernel.prompted_completion.build_anthropic_prompted_completion_service`
+always wired a real
+:class:`~ai_os_kernel.llm_gateway.call_recorder.SqlLLMCallRecorder` into
+the :class:`~ai_os_kernel.prompted_completion.PromptedCompletionService`
+this agent used to delegate to — every real completion was recorded.
+Platform SDK v1.0.0 has no ``Telemetry``/``TraceabilityService`` surface
+at all (both are explicitly deferred past v1.0.0, ``platform_sdk.md``
+§2), so there is no SDK-sanctioned way for a migrated agent to preserve
+this — reaching back into ``ai_os_kernel.llm_gateway.call_recorder``
+directly would reintroduce exactly the forbidden import this migration
+removes. This does not change this agent's own visible output (the
+``analysis`` this method returns is identical either way) — it is a
+real, silent loss of observability data, not a functional regression,
+and is recorded here as a concrete input for whichever future step adds
+a real ``Telemetry``/call-recording surface to the SDK.
+
+**``workflow_id``/``step_id`` still reach the real per-workflow budget
+ceiling, faithfully, even though this agent can no longer build a
+Kernel ``TraceContext`` directly.** ``DispatchingLLMGateway``'s own
+per-workflow budget enforcement (llm_gateway.md §9) keys off
+``workflow_id`` inside the request's own metadata —
+:class:`~ai_os_kernel.sdk_adapters.llm_gateway_adapter.LLMGatewayAdapter`'s
+own real, already-proven conversion narrows the SDK's 7-field
+``TraceContext`` down to the Kernel's own ``workflow_id``/``step_id``-only
+one (step 6a's own documented narrowing), so passing them through the
+SDK's own model still reaches the real budget enforcer unchanged.
+``trace_id``/``span_id`` are required fields on the SDK's own
+``TraceContext`` model but are functionally inert once converted (the
+Kernel's own narrower shape drops them) — generated fresh, per call,
+with the stdlib's own ``uuid.uuid4().hex`` (mirroring, in spirit,
+:func:`~ai_os_kernel.observability.trace.generate_trace_id`'s identical
+scheme, but implemented here with no ``ai_os_kernel`` import at all,
+since this pack module may not have one).
 """
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Awaitable, Callable
-from pathlib import Path
+import uuid
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import PROVIDER_NAME
-from ai_os_kernel.llm_gateway.adapters.model_config import load_provider_config
-from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
-from ai_os_kernel.persistence.engine import build_engine
-from ai_os_kernel.persistence.settings import DatabaseSettings
-from ai_os_kernel.prompted_completion import (
-    PromptedCompletionService,
-    build_anthropic_prompted_completion_service,
-)
-from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
-from ai_os_kernel.workflow_engine.prompted_agent import PromptedAgent
-
-# Mirrors architecture.py's own identical constant exactly.
-_API_KEY_SECRET_REFERENCE = "secret://env/llm/anthropic-api-key"  # noqa: S105 — a reference URI, not a credential
+from ai_os_sdk.models import LLMRequest, Message, MessageRole, TraceContext
 
 # Named, documented first-cut value, not yet tuned against real
 # requirements-analysis output lengths — the same "placeholder safety
 # limit" carve-out every agent in this pack already uses.
 _MAX_OUTPUT_TOKENS = 2048
 
-# This agent's own output field is `analysis`, not `PromptedAgent`'s own
-# `content` — see this module's own docstring for why. Mapping one onto
-# the other happens in `execute()` below, not by reusing `PromptedAgent`
-# .output_schema literally, unlike `ArchitectureAgentEntrypoint`.
+# This agent's own output field is `analysis`, not `content` — see this
+# module's own docstring for why.
 _OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {"analysis": {"type": "string"}},
@@ -75,7 +109,15 @@ _OUTPUT_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-_CONFIG_PATH = Path.cwd() / "config" / "llm.yaml"
+_REQUIRED_INVOCATION_FIELDS = ("promptId", "promptVersion", "modelAlias")
+
+
+class RequirementsAnalystInputError(ValueError):
+    """This agent's inputs were missing a required invocation field
+    (``promptId``/``promptVersion``/``modelAlias``) — the same real
+    contract :class:`~ai_os_kernel.workflow_engine.prompted_agent.
+    PromptedAgent` already enforced, now enforced directly here since
+    this agent no longer delegates to it."""
 
 
 class RequirementsAnalysisInput(BaseModel):
@@ -104,69 +146,93 @@ class RequirementsAnalysisOutput(BaseModel):
     )
 
 
-async def _build_real_service() -> PromptedCompletionService:
-    """The real, production composition — identical to
-    :func:`ai_os_pack_software_engineering.agents.architecture._build_real_service`.
-    Not shared as a common helper — see that module's own docstring for
-    the ADR-0004 reasoning every agent module in this pack already
-    applies to its own copy of this same, already-minimal composition.
-    """
-    provider_config = load_provider_config(_CONFIG_PATH)
-    router = StaticRouter(
-        routes={
-            alias: RoutingDecision(
-                provider=provider_config.providers.get(alias, PROVIDER_NAME), model_id=model_id
-            )
-            for alias, model_id in provider_config.model_ids.items()
-        }
-    )
-    engine = build_engine(DatabaseSettings().database_url)
-    return await build_anthropic_prompted_completion_service(
-        engine=engine,
-        secret_provider=EnvSecretProvider(),
-        api_key_secret_reference=_API_KEY_SECRET_REFERENCE,
-        router=router,
-        pricing=provider_config.pricing,
-    )
+def _build_variables(inputs: dict[str, Any]) -> dict[str, Any]:
+    """Mirrors :meth:`~ai_os_kernel.workflow_engine.prompted_agent.
+    PromptedAgent._build_variables` exactly, duck-typed rather than
+    ``isinstance``-checked against ``AssembledContext`` — see this
+    module's own docstring and ``platform_sdk_v1_scope.md`` §6k for why:
+    the real object the Workflow Engine sends here is still Kernel-typed,
+    a different class from the SDK's own boundary model, so a nominal
+    check would always be ``False`` against it."""
+    variables = dict(inputs.get("variables") or {})
+    context = inputs.get("context")
+    items = getattr(context, "items", None)
+    if items and "context" not in variables:
+        variables["context"] = "\n\n".join(item.content for item in items)
+    return variables
 
 
 class RequirementsAnalystAgentEntrypoint:
     """The manifest's own ``agents[].entrypoint`` for the Requirements
     Analyst Agent — zero-argument-constructible
     (:class:`~ai_os_kernel.workflow_engine.entrypoint_loader.EntrypointLoader`,
-    :class:`~ai_os_kernel.workflow_engine.registry.SqlAgentRegistry`),
-    lazily delegating to a real, internally-built
-    :class:`~ai_os_kernel.workflow_engine.prompted_agent.PromptedAgent`
-    on first :meth:`execute` call — the identical pattern
-    :class:`~ai_os_pack_software_engineering.agents.architecture.
-    ArchitectureAgentEntrypoint` already establishes, reused, not
-    reinvented.
-
-    ``service_factory`` is an optional constructor override — always
-    ``None`` in production (``EntrypointLoader`` only ever calls
-    ``cls()``), and how a test substitutes a deterministic
-    ``PromptedCompletionService`` without touching the real composition.
+    :class:`~ai_os_kernel.workflow_engine.registry.SqlAgentRegistry`).
+    See this module's own docstring for why it no longer lazily builds
+    anything: real composition now arrives, once, via
+    :meth:`bind_pack_context`.
     """
 
     output_schema: dict[str, Any] = _OUTPUT_SCHEMA
 
-    def __init__(
-        self,
-        *,
-        service_factory: Callable[[], Awaitable[PromptedCompletionService]] | None = None,
-    ) -> None:
-        self._service_factory = service_factory or _build_real_service
-        self._agent: PromptedAgent | None = None
-        self._build_lock = asyncio.Lock()
+    def __init__(self) -> None:
+        self._context: Any | None = None
+
+    def bind_pack_context(self, context: Any) -> None:
+        self._context = context
 
     async def execute(self, inputs: dict[str, Any]) -> dict[str, Any]:
-        agent = await self._ensure_agent()
-        completion_outputs = await agent.execute(inputs)
-        return {"analysis": completion_outputs["content"]}
+        if self._context is None or self._context.llm is None or self._context.prompts is None:
+            raise RequirementsAnalystInputError(
+                "RequirementsAnalystAgentEntrypoint.execute() called before "
+                "bind_pack_context() bound a PackContext granting the llm:invoke "
+                "permission (context.llm/context.prompts) — a real caller must "
+                "inject one before first use"
+            )
 
-    async def _ensure_agent(self) -> PromptedAgent:
-        async with self._build_lock:
-            if self._agent is None:
-                service = await self._service_factory()
-                self._agent = PromptedAgent(service=service, max_output_tokens=_MAX_OUTPUT_TOKENS)
-        return self._agent
+        prompt_id = inputs.get("promptId")
+        prompt_version = inputs.get("promptVersion")
+        model_alias = inputs.get("modelAlias")
+        missing = [
+            name
+            for name, value in zip(
+                _REQUIRED_INVOCATION_FIELDS,
+                (prompt_id, prompt_version, model_alias),
+                strict=True,
+            )
+            if not isinstance(value, str) or not value
+        ]
+        if missing:
+            raise RequirementsAnalystInputError(
+                "RequirementsAnalystAgentEntrypoint requires 'promptId', 'promptVersion', "
+                f"and 'modelAlias' in its inputs — missing: {', '.join(missing)}"
+            )
+
+        rendered = await self._context.prompts.render(
+            prompt_id, _build_variables(inputs), version=prompt_version
+        )
+
+        workflow_id = inputs.get("workflowId")
+        step_id = inputs.get("stepId")
+        agent_id = inputs.get("agentId")
+        metadata = (
+            TraceContext(
+                trace_id=uuid.uuid4().hex,
+                span_id=uuid.uuid4().hex,
+                workflow_id=workflow_id,
+                step_id=step_id,
+                agent_id=agent_id,
+            )
+            if workflow_id is not None or step_id is not None
+            else None
+        )
+
+        response = await self._context.llm.complete(
+            LLMRequest(
+                model_alias=model_alias,
+                messages=[Message(role=MessageRole.USER, content=rendered.content)],
+                max_output_tokens=_MAX_OUTPUT_TOKENS,
+                metadata=metadata,
+            )
+        )
+
+        return {"analysis": response.content}
