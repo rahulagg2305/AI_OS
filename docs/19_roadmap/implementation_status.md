@@ -4,7 +4,7 @@
 **Document:** Implementation Status
 **Version:** 2.0 (restructured short form)
 **Status:** Active
-**Last Updated:** 2026-07-28 (targeted fix step: corrected stale test/mypy numbers in §2 below with freshly re-run figures, added a `py.typed` marker to `capability_packs/software-engineering` closing 15 real mypy errors, and fixed 2 documentation-audit formatting inconsistencies. Prior entry: product-owner decision recorded — **the direct-Kernel-import exception is now a hard gate — no new agent or Capability Pack may be added until the Platform SDK exists**; completed the documentation audit's remaining ~20 unreviewed files. See §4 and `history/026_platform_sdk_gate_and_audit_completion.md`.)
+**Last Updated:** 2026-07-28 (Platform SDK v1.0.0 scoped as its own plan document — see §6 and `../03_architecture/platform/platform_sdk_v1_scope.md` — docs only, no SDK code yet, awaiting approval before the first implementation step. Prior entries: a targeted fix step corrected stale test/mypy numbers in §2 below and closed 15 real mypy errors with a `py.typed` marker; before that, the product-owner decision recorded **the direct-Kernel-import exception is now a hard gate — no new agent or Capability Pack may be added until the Platform SDK exists**; completed the documentation audit's remaining ~20 unreviewed files. See §4 and `history/026_platform_sdk_gate_and_audit_completion.md`.)
 
 ---
 
@@ -83,17 +83,11 @@ Per standing rule (`docs/process/standing_rules.md`), every step from now on end
 
 ## 6. Recommended Next Small Step
 
-**The next session should scope the Platform SDK v1.0.0 build as its own dedicated step — do not start SDK design work inside whatever step reads this next.** This step deliberately did not begin that design; it only recorded the gate and confirmed the documentation audit is complete, so scoping starts from accurate ground truth.
+**The Platform SDK v1.0.0 build is now scoped: `../03_architecture/platform/platform_sdk_v1_scope.md`.** That document answers, with real-usage evidence (57 imports across 7 files, deduplicated to 24 unique Kernel modules, mapped one by one against `platform_sdk.md`'s §5), exactly which interfaces are needed now (`LLMGateway`, `PromptRegistry`, `SecretResolver`, `ToolInvoker`, `ContextService`'s boundary models, plus `PackContext`/`CapabilityPack`), which 10 of the 15 stay deferred, the migration sequencing for the 5 real agents, `pack_contract_suite`'s split timing, and a file-by-file plan for the SDK's empty subdirectories. It breaks the work into a 15-step ordered sequence (8 SDK-build steps, 6 agent-migration steps, 1 compliance-completion step), each individually approvable.
 
-**Why this is next, ahead of both previously-live candidates** (wiring Requirements Analyst into `se.delivery_pipeline`, or building a sixth agent): the hard gate recorded this step blocks any further pack growth until the SDK exists. Wiring an *existing* agent into an *existing* workflow is arguably not "adding a new agent" and may not be strictly blocked by the gate's letter — but building a sixth agent (`code-reviewer` or otherwise) unambiguously is. Rather than spend a step on the one growth path that might be a grey area, the higher-value move is closing the gate itself.
+**This step (scoping) does not start step 1 of that sequence.** The scope document is awaiting product-owner approval on the plan itself before the first implementation prompt (`platform_sdk_v1_scope.md` §6, step 1: scaffold `platform_sdk` as a real `ai-os-sdk` PEP 621 distribution — packaging only, no interfaces yet) is sent.
 
-**What scoping that step should decide, concretely** (do not decide these now — this is next session's own scope fence):
-- Which of the 15 documented Protocol interfaces (`platform_sdk.md` §5) are genuinely needed by the *existing* five agents' real usage, vs. which can stay deferred (a full 15-interface build is almost certainly more than the current pack needs).
-- Whether the existing five agents get migrated onto the new SDK as part of that same step, or in an immediately-following step — either is defensible, but it should be a decision, not a default.
-- Whether `pack_contract_suite` (the 9-check compliance suite) is built alongside the SDK or deferred again.
-- How `platform_sdk/contracts/`, `models/`, `sdk/`, `utilities/` (currently all empty) get their first real content — package layout, not just interface signatures.
-
-A separate, smaller, non-blocking follow-up: this step completed the full documentation audit (see §7 and `history/026`), so there is no remaining doc-completeness debt to schedule.
+A separate, smaller, non-blocking follow-up: the prior step completed the full documentation audit (see §7 and `history/026`), so there is no remaining doc-completeness debt to schedule.
 
 ---
 

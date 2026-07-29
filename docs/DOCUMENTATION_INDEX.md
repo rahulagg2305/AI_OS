@@ -83,6 +83,7 @@ Entirely unbuilt as of 2026-07-28 — these documents are pure specification, wi
 | System Architecture | `03_architecture/platform/system_architecture.md` | Approved (v2.0) |
 | **Technology Stack** | `03_architecture/platform/technology_stack.md` | Approved |
 | **Platform SDK Specification** | `03_architecture/platform/platform_sdk.md` | Approved |
+| **Platform SDK v1.0.0 Scope and Build Sequence** | `03_architecture/platform/platform_sdk_v1_scope.md` | Proposed — awaiting approval |
 | Kernel Architecture | `03_architecture/kernel/kernel_architecture.md` | Approved (v2.0) |
 | Capability Pack Contract | `03_architecture/capability_framework/capability_pack_contract.md` | Approved |
 | Manifest Schema | `03_architecture/capability_framework/manifest_schema.md` | Approved (v2.0) |

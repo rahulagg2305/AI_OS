@@ -581,3 +581,4 @@ Order of precedence:
 
 - `../../19_roadmap/feature_inventory.md` — rows 18 (`ToolInvoker`), 27 (`ai-os-sdk`), 28 (Manifest Schema), 44 (`AiOsError` hierarchy)
 - `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`
+- `platform_sdk_v1_scope.md` — the concrete, evidence-based v1.0.0 build sequence for exactly this document's surface, scoped 2026-07-28
