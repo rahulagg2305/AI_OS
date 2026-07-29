@@ -15,7 +15,20 @@ the documented keyword call style — the one interface where the
 see its decision block), and now ``ToolInvoker`` (step 6, a from-scratch
 design grounded in the platform-provided
 :data:`~ai_os_sdk.contracts.tool_invoker.PLATFORM_SANDBOX_RUN_COMMAND`
-tool — see its decision block). The rest arrive in order:
+tool — see its decision block).
+
+Also real as of step 6b: ``PackContextReceiver``
+(``entrypoint_context.py``) — **not** §7's own ``CapabilityPack``/
+``PackContext`` entry-point contract (that is still step 7's job, in
+full, below), but the narrower, distinct injection mechanism a
+zero-argument-constructible entrypoint uses to receive whichever real
+context it was granted, once, before first real use — the generalized
+form of the lazy-build workaround every real Software Engineering pack
+agent already uses today. See its own module docstring for the full
+reasoning, including why it is typed ``context: Any`` rather than
+``context: PackContext``.
+
+The rest arrive in order:
 
 - ``context_service.py``   — ``ContextService`` (§5.3); its boundary
   models are what v1.0.0 actually needs, not its method            — step 7
@@ -34,6 +47,7 @@ stub (``RetrievalService``, ``MemoryService``, ``EventBus``,
 from __future__ import annotations
 
 from ai_os_sdk.contracts.agent import Agent
+from ai_os_sdk.contracts.entrypoint_context import PackContextReceiver
 from ai_os_sdk.contracts.llm_gateway import LLMGateway
 from ai_os_sdk.contracts.prompt_registry import PromptRegistry
 from ai_os_sdk.contracts.tool import Tool, TrustTier
@@ -48,6 +62,7 @@ __all__ = [
     "PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR",
     "Agent",
     "LLMGateway",
+    "PackContextReceiver",
     "PromptRegistry",
     "Tool",
     "ToolInvoker",

@@ -25,13 +25,28 @@ designed in steps 3–6:
   :class:`ai_os_sdk.contracts.ToolInvoker`, exposing
   ``platform.sandbox.run_command``.
 
-**Not wired into anything yet.** ``kernel/bootstrap.py``,
-``EntrypointLoader``, and every pack are untouched by this step —
-constructing and injecting these adapters into a real ``PackContext``
-is step 6b (the zero-argument entrypoint blocker); migrating any agent
-onto them is steps 9–14. This package only proves the adapters exist
-and genuinely work in isolation, against real underlying Kernel
-objects.
+**As of step 6b, one more module assembles those three into a real,
+permission-gated context:**
+
+- :mod:`pack_context` — :func:`~ai_os_kernel.sdk_adapters.pack_context.build_pack_context`
+  builds a real :class:`~ai_os_kernel.capability_manager.pack_contract.PackContext`
+  from an entrypoint's own declared permissions, granting ``llm``/
+  ``prompts``/``tools`` only when the matching permission was declared —
+  never over-provisioned. Injecting the result into a zero-argument
+  entrypoint uses the new :class:`ai_os_sdk.contracts.PackContextReceiver`
+  Protocol, which any entrypoint may implement without this package or
+  the Kernel at all.
+
+**Still not wired into production.** ``kernel/bootstrap.py``,
+``EntrypointLoader``, ``SqlAgentRegistry``, and every pack are untouched
+by this step — a real caller invoking :func:`build_pack_context` and
+then ``bind_pack_context`` for every entrypoint ``SqlAgentRegistry``
+resolves is production wiring, deliberately deferred to whichever future
+step performs it (see ``platform_sdk_v1_scope.md`` step 6b's own record
+for why). This package only proves the mechanism exists and genuinely
+works — step 6a in isolation, step 6b end-to-end through a **test**
+entrypoint — against real underlying Kernel objects; migrating any real
+agent onto it is steps 9–14.
 """
 
 from __future__ import annotations
