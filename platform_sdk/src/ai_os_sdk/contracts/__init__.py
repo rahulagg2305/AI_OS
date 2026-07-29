@@ -65,12 +65,14 @@ from ai_os_sdk.contracts.llm_gateway import LLMGateway
 from ai_os_sdk.contracts.prompt_registry import PromptRegistry
 from ai_os_sdk.contracts.tool import Tool, TrustTier
 from ai_os_sdk.contracts.tool_invoker import (
+    PLATFORM_PYTHON_INTERPRETER,
     PLATFORM_SANDBOX_RUN_COMMAND,
     PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR,
     ToolInvoker,
 )
 
 __all__ = [
+    "PLATFORM_PYTHON_INTERPRETER",
     "PLATFORM_SANDBOX_RUN_COMMAND",
     "PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR",
     "Agent",

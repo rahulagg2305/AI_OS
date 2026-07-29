@@ -35,6 +35,21 @@ nothing to correlate against. Threading a real caller-supplied trace
 through requires widening ``ToolInvoker.invoke``'s own signature, which
 is out of this step's scope (SDK-side only) — recorded here as a
 concrete, evidenced input to whichever future step revisits §5.6.
+
+**Step 12a (inserted, 2026-07-29): resolves ``PLATFORM_PYTHON_INTERPRETER``
+tokens in ``inputs["command"]`` into this instance's own real
+``sandbox.python_command``, before dispatch.** Step 12 (``build`` agent
+migration) found a real regression: a migrated agent no longer holds the
+``SandboxExecutor`` directly, so it can no longer ask it for its own
+backend-specific interpreter invocation the way pre-migration code
+always could, and worked around it with a static constructor default
+that only happened to match the real system-wide default backend. This
+adapter is the one place that still holds the real sandbox object, so
+it is the correct, general place to resolve the token — not the pack
+agent, and not a caller-side constructor default. See
+:data:`~ai_os_sdk.contracts.tool_invoker.PLATFORM_PYTHON_INTERPRETER`'s
+own docstring for the full history and reasoning, and
+``platform_sdk_v1_scope.md`` §6p for this step's own record.
 """
 
 from __future__ import annotations
@@ -48,6 +63,7 @@ from ai_os_kernel.observability.trace import generate_trace_id
 from ai_os_kernel.sandbox.executor import SandboxExecutor
 from ai_os_kernel.sandbox.models import SandboxResult
 from ai_os_sdk.contracts.tool_invoker import (
+    PLATFORM_PYTHON_INTERPRETER,
     PLATFORM_SANDBOX_RUN_COMMAND,
     PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR,
 )
@@ -68,6 +84,23 @@ def _generate_trace_context() -> TraceContext:
     """A fresh, real, per-invocation trace — see this module's own
     docstring for why it cannot be the caller's own trace context."""
     return TraceContext(trace_id=generate_trace_id(), span_id=generate_trace_id())
+
+
+def _resolve_python_interpreter(command: list[str], sandbox: SandboxExecutor) -> list[str]:
+    """Expands every occurrence of
+    :data:`~ai_os_sdk.contracts.tool_invoker.PLATFORM_PYTHON_INTERPRETER`
+    in ``command`` into ``sandbox.python_command``'s own real tokens —
+    the fix closing the real regression step 12 found and recorded (see
+    :data:`~ai_os_sdk.contracts.tool_invoker.PLATFORM_PYTHON_INTERPRETER`'s
+    own docstring for the full history). Expands rather than 1:1
+    substitutes, since ``python_command`` may be more than one token."""
+    resolved: list[str] = []
+    for token in command:
+        if token == PLATFORM_PYTHON_INTERPRETER:
+            resolved.extend(sandbox.python_command)
+        else:
+            resolved.append(token)
+    return resolved
 
 
 def _sandbox_result_to_tool_result(result: SandboxResult) -> ToolResult:
@@ -193,8 +226,9 @@ class ToolInvokerAdapter:
         )
 
         stdin_str: str | None = inputs.get("stdin")
+        command = _resolve_python_interpreter(inputs["command"], self._sandbox)
         result = await self._sandbox.execute(
-            command=inputs["command"],
+            command=command,
             working_directory=Path(inputs["working_directory"]),
             timeout_seconds=effective_timeout_seconds,
             max_output_bytes=inputs["max_output_bytes"],

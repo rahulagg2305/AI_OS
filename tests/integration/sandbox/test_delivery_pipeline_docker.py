@@ -44,7 +44,12 @@ exists. Build's own write now happens through `context.tools.invoke`
 directly constructed `SandboxedCommandTool` — this test is this pack's
 most important real proof of that path, since the generated probe
 script's own network/filesystem-escape attempts must still genuinely
-fail when written and run this way.
+fail when written and run this way. **Step 12a (inserted, 2026-07-29)**
+removed `BuildAgentEntrypoint`'s own `python_command` constructor
+parameter entirely — `ToolInvokerAdapter` now resolves the real
+interpreter command (`python3`, correct for this real `DockerSandbox`)
+itself, so this test's own `_build_agent_with_prompt` no longer passes
+one.
 """
 
 from __future__ import annotations
@@ -132,16 +137,12 @@ def _build_agent_with_prompt(
     zero-arg (aside from ``working_directory``), then bind the real
     ``PackContext`` a real caller would inject, granting both
     ``llm:invoke`` and ``sandbox:execute`` over a real ``DockerSandbox``
-    — mirrors `test_delivery_pipeline.py`'s own identical helper.
-    ``python_command`` is passed explicitly as ``DockerSandbox().python_command``
-    (``python3``) — this module's own docstring already establishes why
-    the sandbox and its matching interpreter command must always be
-    supplied together, explicitly, rather than left to bare defaults
-    that happen to currently agree."""
-    agent = BuildAgentEntrypoint(
-        working_directory=working_directory,
-        python_command=DockerSandbox().python_command,
-    )
+    — mirrors `test_delivery_pipeline.py`'s own identical helper. No
+    ``python_command`` to supply any more (step 12a) — ``ToolInvokerAdapter``
+    resolves the real, portable interpreter invocation itself, from the
+    same ``DockerSandbox`` instance passed to ``build_pack_context``
+    below, automatically."""
+    agent = BuildAgentEntrypoint(working_directory=working_directory)
     agent.bind_pack_context(
         build_pack_context(
             pack_id=_PACK_ID,

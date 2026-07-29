@@ -42,37 +42,30 @@ LLM composition (there is none left to guard). Proven by a concurrent-
 execute test asserting every call shares the identical working
 directory, not merely that all calls individually succeed.
 
-**A real, discovered tension using ``ToolInvoker`` instead of direct
-sandbox construction — the one this step's own approved framing asked
-to watch for.** The old code asked its own injected ``SandboxExecutor``
-for its ``python_command`` property (``sys.executable`` for
-``LocalSubprocessSandbox``, ``python3`` for ``DockerSandbox`` — a real,
-backend-specific fact the sandbox object itself already knew). A
-migrated agent no longer holds a ``SandboxExecutor`` at all — only a
-generic :class:`~ai_os_sdk.contracts.ToolInvoker`, which has no
-``python_command`` concept and cannot answer this question (a real,
-already-documented gap: ``ToolInvokerAdapter``'s own docstring already
-records that the Protocol carries no trace parameter either — this is
-the same class of "the Protocol is deliberately generic, backend facts
-do not cross it" limitation, surfacing a second time). **Resolution:**
-``python_command`` becomes a constructor-time default
-(``("python3",)`` — correct for ``DockerSandbox``, the real,
-documented system-wide default backend, ``AIOS_SANDBOX_BACKEND``
-defaulting to ``"docker"``), overridable by a caller that knows better
-— the identical "optional constructor override, always the default in
-real ``EntrypointLoader`` dispatch" shape every agent in this pack
-already uses for test-only substitution. **The real, narrow regression
-risk this creates, recorded rather than silently accepted:** if a real
-deployment ever sets ``AIOS_SANDBOX_BACKEND=local`` without also
-reconfiguring this agent's own default, the write step fails with a
-real, clear ``platform.sandbox.run_command`` execution error (the
-interpreter named by the stale default is not found) rather than
-silently writing nothing — a loud failure, not a silent wrong write, but
-a real coupling the old code's own dynamic ``sandbox.python_command``
-lookup never had. Recorded in ``feature_inventory.md``'s own §6a "Known
-Regressions" section alongside the ``evaluation.llm_calls`` gap, since
-this is the same category of structural, cross-step finding, not a
-one-off.
+**A real tension using ``ToolInvoker`` instead of direct sandbox
+construction was found at step 12, then closed for good at step 12a
+(inserted, 2026-07-29) — no longer a constructor default this module
+must keep in sync.** The old, pre-migration code asked its own injected
+``SandboxExecutor`` for its ``python_command`` property (``sys.executable``
+for ``LocalSubprocessSandbox``, ``python3`` for ``DockerSandbox`` — a
+real, backend-specific fact). A migrated agent no longer holds a
+``SandboxExecutor`` at all — only a generic
+:class:`~ai_os_sdk.contracts.ToolInvoker`. Step 12's own first attempt
+resolved this with a constructor-time default (``("python3",)``) —
+correct for the real system-wide default backend, but silently wrong
+the moment ``AIOS_SANDBOX_BACKEND=local`` was set without also updating
+that default: a real, recorded regression from the pre-migration
+behaviour's own "always automatically correct" guarantee. **Step 12a
+closes this properly, at the correct layer**: this module now writes
+:data:`~ai_os_sdk.contracts.tool_invoker.PLATFORM_PYTHON_INTERPRETER`
+as the interpreter token in its own ``command``, and
+``ToolInvokerAdapter`` (the one place that still holds the real
+``SandboxExecutor``) substitutes it with that instance's own real
+``python_command`` before dispatch — restoring automatic correctness
+against every backend, with no constructor default, and no backend
+knowledge, in this module at all. See that token's own docstring for
+the full history and reasoning, and ``platform_sdk_v1_scope.md`` §6p
+for this step's own record.
 
 **The identical, already-recorded ``evaluation.llm_calls`` capability
 loss applies here too.** No new finding — see
@@ -130,7 +123,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ai_os_sdk.contracts.tool_invoker import PLATFORM_SANDBOX_RUN_COMMAND
+from ai_os_sdk.contracts.tool_invoker import (
+    PLATFORM_PYTHON_INTERPRETER,
+    PLATFORM_SANDBOX_RUN_COMMAND,
+)
 from ai_os_sdk.models import LLMRequest, Message, MessageRole, TraceContext
 
 # Named, documented first-cut values — the same "placeholder safety
@@ -143,13 +139,6 @@ _WRITE_TIMEOUT_SECONDS = 10.0
 _WRITE_MAX_OUTPUT_BYTES = 65536
 
 _WORKSPACE_PREFIX = "aios-build-agent-"
-
-# The real, documented system-wide default backend
-# (ai_os_kernel.sandbox.default_executor.ENV_VAR defaults to "docker")
-# — see this module's own docstring's "real, discovered tension" section
-# for why this is a constructor default, not a value this module can
-# discover dynamically the way the pre-migration code did.
-_DEFAULT_PYTHON_COMMAND: tuple[str, ...] = ("python3",)
 
 _REQUIRED_INVOCATION_FIELDS = ("promptId", "promptVersion", "modelAlias")
 
@@ -305,29 +294,25 @@ class BuildAgentEntrypoint:
     """The manifest's own ``agents[].entrypoint`` for the Build Agent —
     zero-argument-constructible. See this module's own docstring for
     why it still keeps a lock (guarding only lazy working-directory
-    creation, not any LLM composition) and why ``python_command`` is a
-    constructor default rather than something discovered dynamically.
+    creation, not any LLM composition).
 
-    ``working_directory``/``python_command`` are optional constructor
-    overrides — always their defaults in production (``EntrypointLoader``
-    only ever calls ``cls()``), and how a test substitutes a known
-    temporary directory or a non-default interpreter command. Neither
-    weakens the zero-arg boundary: both parameters are optional and
-    defaulted, so ``cls()`` still succeeds exactly as ``EntrypointLoader``
-    requires.
+    ``working_directory`` is an optional constructor override — always
+    its default (``None``) in production (``EntrypointLoader`` only
+    ever calls ``cls()``), and how a test substitutes a known temporary
+    directory. This does not weaken the zero-arg boundary: the
+    parameter is optional and defaulted, so ``cls()`` still succeeds
+    exactly as ``EntrypointLoader`` requires. There is no
+    ``python_command`` override any more (step 12a) — the real
+    interpreter command is now resolved by ``ToolInvokerAdapter`` itself
+    from :data:`~ai_os_sdk.contracts.tool_invoker.PLATFORM_PYTHON_INTERPRETER`,
+    never guessed here.
     """
 
     output_schema: dict[str, Any] = _OUTPUT_SCHEMA
 
-    def __init__(
-        self,
-        *,
-        working_directory: Path | None = None,
-        python_command: tuple[str, ...] = _DEFAULT_PYTHON_COMMAND,
-    ) -> None:
+    def __init__(self, *, working_directory: Path | None = None) -> None:
         self._context: Any | None = None
         self._working_directory = working_directory
-        self._python_command = python_command
         self._directory_lock = asyncio.Lock()
 
     def bind_pack_context(self, context: Any) -> None:
@@ -403,7 +388,12 @@ class BuildAgentEntrypoint:
         result = await self._context.tools.invoke(
             PLATFORM_SANDBOX_RUN_COMMAND,
             {
-                "command": [*self._python_command, "-c", _WRITE_FILE_SCRIPT, str(relative_path)],
+                "command": [
+                    PLATFORM_PYTHON_INTERPRETER,
+                    "-c",
+                    _WRITE_FILE_SCRIPT,
+                    str(relative_path),
+                ],
                 "working_directory": str(working_directory),
                 "timeout_seconds": _WRITE_TIMEOUT_SECONDS,
                 "max_output_bytes": _WRITE_MAX_OUTPUT_BYTES,

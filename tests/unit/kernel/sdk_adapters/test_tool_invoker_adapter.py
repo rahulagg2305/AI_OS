@@ -7,10 +7,23 @@ Runs genuine subprocesses, matching step 6's own cross-boundary proof
 that file proves the *conversion logic* against real sandbox output;
 this file proves the *production adapter* built from it, including the
 timeout-precedence decision this step resolves for the first time.
+
+**``TestPlatformPythonInterpreterSubstitution`` (step 12a, inserted
+2026-07-29)** proves the fix for a real regression step 12 found: a
+migrated agent (``build``) can no longer ask its own sandbox for its
+``python_command`` directly, and a static constructor default only
+happens to match whichever backend is active *today*. The real fix
+moves interpreter resolution into this adapter — the one place that
+still holds the real ``SandboxExecutor`` — via a well-known placeholder
+token, :data:`~ai_os_sdk.contracts.tool_invoker.PLATFORM_PYTHON_INTERPRETER`.
+The Docker half of that proof (against a real, live ``DockerSandbox``)
+lives in ``tests/integration/sandbox/test_tool_invoker_adapter_docker.py``
+— this file stays Docker-free, consistent with every other test here.
 """
 
 from __future__ import annotations
 
+import sys
 import time
 
 import pytest
@@ -18,6 +31,7 @@ import pytest
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.sdk_adapters.tool_invoker_adapter import ToolInvokerAdapter, UnknownToolError
 from ai_os_sdk.contracts import (
+    PLATFORM_PYTHON_INTERPRETER,
     PLATFORM_SANDBOX_RUN_COMMAND,
     PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR,
 )
@@ -160,3 +174,79 @@ class TestTimeoutPrecedence:
 
         assert result.status is ToolStatus.SUCCESS
         assert result.timed_out is False
+
+
+class TestPlatformPythonInterpreterSubstitution:
+    """Step 12a's own real proof: a caller that writes
+    ``PLATFORM_PYTHON_INTERPRETER`` in place of a literal interpreter
+    path gets the real, current backend's own ``python_command``
+    substituted in automatically — restoring the "always correct, no
+    caller-side guessing" guarantee the pre-migration code had by asking
+    its own injected sandbox directly. Proven against a real,
+    actually-executed ``LocalSubprocessSandbox`` (this file's own,
+    Docker-free tier); the ``DockerSandbox`` half of this same proof
+    lives in ``test_tool_invoker_adapter_docker.py``.
+    """
+
+    async def test_the_placeholder_resolves_to_the_real_local_sandbox_interpreter(self) -> None:
+        """Proves the substitution against a real, live sandbox
+        genuinely produced the *correct* interpreter for this backend —
+        not merely "some" command that happened to run. Compares the
+        script's own reported `sys.executable` against
+        `LocalSubprocessSandbox().python_command`'s own real value, the
+        same fact the pre-migration `build.py` used to ask for
+        directly."""
+        adapter = _real_adapter()
+        expected_python_command = LocalSubprocessSandbox().python_command
+
+        result = await adapter.invoke(
+            PLATFORM_SANDBOX_RUN_COMMAND,
+            {
+                "command": [PLATFORM_PYTHON_INTERPRETER, "-c", "import sys; print(sys.executable)"],
+                "working_directory": ".",
+                "timeout_seconds": 10.0,
+                "max_output_bytes": 65536,
+            },
+        )
+
+        assert result.status is ToolStatus.SUCCESS
+        # LocalSubprocessSandbox.python_command is (sys.executable,) —
+        # the real interpreter the substituted command actually ran
+        # under must report that identical path back.
+        assert expected_python_command == (sys.executable,)
+        assert result.stdout.strip() == sys.executable
+
+    async def test_a_multi_token_command_only_expands_the_placeholder_token(self) -> None:
+        """The substitution expands in place, not 1:1 -- proven here by
+        a command with a real argument *after* the placeholder, which
+        must survive unchanged (LocalSubprocessSandbox.python_command
+        is exactly one token today, so this also guards against a
+        future multi-token python_command silently swallowing the
+        following argument)."""
+        adapter = _real_adapter()
+
+        result = await adapter.invoke(
+            PLATFORM_SANDBOX_RUN_COMMAND,
+            {
+                "command": [PLATFORM_PYTHON_INTERPRETER, "-c", "print('after placeholder')"],
+                "working_directory": ".",
+                "timeout_seconds": 10.0,
+                "max_output_bytes": 65536,
+            },
+        )
+
+        assert result.status is ToolStatus.SUCCESS
+        assert result.stdout.strip() == "after placeholder"
+
+    async def test_a_command_with_no_placeholder_is_passed_through_unchanged(self) -> None:
+        """No token equals the placeholder here -- the substitution must
+        be a genuine no-op, not a blanket rewrite of the whole command."""
+        adapter = _real_adapter()
+
+        result = await adapter.invoke(
+            PLATFORM_SANDBOX_RUN_COMMAND,
+            _python_inputs("print('no placeholder used')"),
+        )
+
+        assert result.status is ToolStatus.SUCCESS
+        assert result.stdout.strip() == "no placeholder used"

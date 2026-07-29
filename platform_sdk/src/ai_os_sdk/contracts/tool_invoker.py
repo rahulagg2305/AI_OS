@@ -50,6 +50,51 @@ PLATFORM_SANDBOX_RUN_COMMAND = "platform.sandbox.run_command"
 command runner, not a pack-declared tool. Grounds
 :class:`ToolInvoker.available_tools` in a real, concrete answer."""
 
+PLATFORM_PYTHON_INTERPRETER = "{platform.python}"
+"""A well-known placeholder token a caller may use as any element of
+``inputs["command"]`` in place of a literal Python interpreter path
+(``platform_sdk_v1_scope.md``'s inserted step 12a, closing a real
+regression step 12 found and recorded).
+
+**The problem this restores.** Before the Platform SDK existed, an agent
+that needed to run a Python script inside its own injected
+``SandboxExecutor`` asked that object for its own
+``python_command`` property (``sys.executable`` for
+``LocalSubprocessSandbox``, ``python3`` for ``DockerSandbox`` — a real
+fact that genuinely differs by backend). Once migrated onto
+``ToolInvoker``, an agent no longer holds a ``SandboxExecutor`` at all —
+only this deliberately backend-agnostic Protocol, which has no
+``python_command`` concept and cannot answer the question. Step 12
+(``build`` agent) worked around this with a constructor-time default
+(``("python3",)``) — correct for ``DockerSandbox``, the real system-wide
+default, but silently wrong the moment ``AIOS_SANDBOX_BACKEND=local`` is
+set without also updating that default: a real, documented regression
+from the pre-migration behaviour, which was always automatically
+correct because it asked the real, active sandbox directly.
+
+**The fix.** A conforming :class:`ToolInvoker` implementation
+substitutes every occurrence of this token in ``inputs["command"]`` with
+the real, current backend's own portable interpreter invocation
+*before* dispatching — restoring the "always automatically correct,
+no caller-side guessing" guarantee at the one layer that actually still
+holds the real ``SandboxExecutor`` object (the adapter, never the pack
+agent). A caller writes ``[PLATFORM_PYTHON_INTERPRETER, "-c", script]``
+exactly once and it is correct against *every* backend, present or
+future, with zero backend-specific knowledge and no constructor default
+of its own to keep in sync. ``python_command`` may be more than one
+token (e.g. a future ``("py", "-3")``); a conforming implementation
+expands the placeholder into every token, not a strict 1:1 replacement.
+
+**Deliberately not a general-purpose templating mechanism.** This is
+one specific, named, documented substitution for one specific, real,
+recurring need (every ``PromptedAgent``-descended write-a-file agent in
+this pack needs a portable interpreter invocation) — not a precedent
+for arbitrary ``{...}`` interpolation in tool commands, which would
+reopen exactly the "agent reaching for a side effect by any means other
+than the declared Protocol" risk :class:`ToolInvoker`'s own docstring
+already warns against.
+"""
+
 _RUN_COMMAND_INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {

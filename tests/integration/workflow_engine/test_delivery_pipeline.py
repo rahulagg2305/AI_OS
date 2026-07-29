@@ -72,11 +72,14 @@ below) — build's own declared `llm:invoke` permission needs the
 identical backing pair architecture's own migration (step 11) already
 required, so no further change was needed there; its own `sandbox:execute`
 permission is backed by `SqlAgentRegistry`'s own default sandbox
-(step 9a), and build's own `python_command` constructor default
-(`("python3",)`) matches that default backend (`DockerSandbox`).
-Documentation remains unmigrated (step 13) and is unaffected by any of
-this — `_bind_pack_context_if_receiver` is a genuine no-op for any
-entrypoint that does not implement `PackContextReceiver`.
+(step 9a). **Step 12a (inserted, 2026-07-29)** removed `BuildAgentEntrypoint`'s
+own `python_command` constructor parameter entirely — `ToolInvokerAdapter`
+now resolves the real interpreter command itself from whichever sandbox
+it actually wraps, so this test's own `_build_agent_with_prompt` no
+longer needs to pass one either. Documentation remains unmigrated
+(step 13) and is unaffected by any of this — `_bind_pack_context_if_receiver`
+is a genuine no-op for any entrypoint that does not implement
+`PackContextReceiver`.
 """
 
 import asyncio
@@ -224,16 +227,12 @@ def _build_agent_with_prompt(
     override — see the agent's own module docstring), then bind the
     real ``PackContext`` a real caller would inject, granting both
     ``llm:invoke`` and ``sandbox:execute`` — the first agent in this
-    pipeline needing both together. ``python_command`` is passed
-    explicitly, matching ``LocalSubprocessSandbox().python_command``
-    (``sys.executable``) — the identical "the caller supplying the
-    sandbox must also supply the matching interpreter command"
-    discipline this module's own docstring already established for the
-    Test step's derived ``runCommand``."""
-    agent = BuildAgentEntrypoint(
-        working_directory=working_directory,
-        python_command=LocalSubprocessSandbox().python_command,
-    )
+    pipeline needing both together. No ``python_command`` to supply any
+    more (step 12a) — ``ToolInvokerAdapter`` resolves the real,
+    portable interpreter invocation itself, from the same
+    ``LocalSubprocessSandbox`` instance passed to ``build_pack_context``
+    below, automatically."""
+    agent = BuildAgentEntrypoint(working_directory=working_directory)
     agent.bind_pack_context(
         build_pack_context(
             pack_id=_PACK_ID,

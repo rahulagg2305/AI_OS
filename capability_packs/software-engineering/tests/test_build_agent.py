@@ -77,16 +77,11 @@ def _agent_with_prompt(
     gateway, an in-memory prompt engine seeded with ``template``, and a
     real ``LocalSubprocessSandbox`` — the same construction+injection
     sequence a real ``SqlAgentRegistry``-backed caller would perform.
-    ``python_command`` defaults to ``LocalSubprocessSandbox().python_command``
-    (``sys.executable``), matching the real sandbox this test actually
-    uses — the identical "the caller supplying the sandbox must also
-    supply the matching interpreter command" discipline
-    ``test_delivery_pipeline.py`` already established at the pipeline
-    level."""
-    agent = BuildAgentEntrypoint(
-        working_directory=working_directory,
-        python_command=LocalSubprocessSandbox().python_command,
-    )
+    No ``python_command`` to supply any more (step 12a) — the real,
+    genuinely portable interpreter invocation is now resolved by
+    ``ToolInvokerAdapter`` itself, from the same ``LocalSubprocessSandbox``
+    instance this test hands to ``build_pack_context``, automatically."""
+    agent = BuildAgentEntrypoint(working_directory=working_directory)
     agent.bind_pack_context(
         build_pack_context(
             pack_id=_PACK_ID,
