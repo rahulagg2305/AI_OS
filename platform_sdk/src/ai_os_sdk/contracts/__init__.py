@@ -1,27 +1,42 @@
 """Protocol definitions — the SDK's interfaces (``platform_sdk.md`` §4.2,
 §4.3, §5, §7).
 
-Empty in this step. Filled in, one file per interface, by
-``platform_sdk_v1_scope.md``'s steps 3–7:
+**Read the *v1.0.0 Reconciliation Decision* block in each corresponding
+section of ``platform_sdk.md`` before treating its prose as the shape
+built here.** Five interfaces carry one (recorded 2026-07-29,
+``platform_sdk_v1_scope.md`` step 2a), and where a block and the prose
+around it disagree, the block governs v1.0.0.
 
-- ``agent.py``            — ``Agent`` Protocol (§4.2)                — step 3
-- ``tool.py``              — ``Tool`` Protocol (§4.3)                 — step 3
-- ``llm_gateway.py``       — ``LLMGateway`` Protocol (§5.1)           — step 4
-- ``prompt_registry.py``   — ``PromptRegistry`` Protocol (§5.2)       — step 5
-- ``secret_resolver.py``   — ``SecretResolver`` Protocol (§5.9)       — step 6
-- ``tool_invoker.py``      — ``ToolInvoker`` Protocol (§5.6)          — step 6
-- ``context_service.py``   — ``ContextService`` Protocol (§5.3) —
-  declared but with no real caller yet; see the scope document §2.2
-  for why only its boundary models, not this Protocol's ``assemble()``
-  method, are exercised by any current agent               — step 7
-- ``capability_pack.py``   — ``CapabilityPack`` Protocol (§7)         — step 7
+Partially real as of step 3: ``Agent`` and ``Tool`` exist, at their
+narrowed shapes. The rest arrive in order:
 
-The other 10 documented interfaces (``RetrievalService``,
-``MemoryService``, ``EventBus``, ``ConfigService``, ``StorageService``,
-``WorkspaceService``, ``Telemetry``, ``TraceabilityService``,
-``QualityGateRegistry``, ``SpeechGateway``) are deliberately deferred —
-none has any real usage today; see ``platform_sdk_v1_scope.md`` §7,
-Non-goals.
+- ``llm_gateway.py``       — ``LLMGateway`` (§5.1, narrowed to
+  ``complete``/``capabilities``)                                  — step 4
+- ``prompt_registry.py``   — ``PromptRegistry`` (§5.2, documented
+  keyword call style, ``version`` required)                       — step 5
+- ``tool_invoker.py``      — ``ToolInvoker`` (§5.6) + ``ToolResult``
+  and the ``platform.sandbox.run_command`` contract               — step 6
+- ``context_service.py``   — ``ContextService`` (§5.3); its boundary
+  models are what v1.0.0 actually needs, not its method            — step 7
+- ``capability_pack.py``   — ``CapabilityPack`` (§7)                — step 7
+
+**Deferred past v1.0.0, deliberately:** ``SecretResolver`` (§5.9 — the
+one real pack declares no secret permission, and §6 grants a
+``PackContext`` attribute only for a declared capability), plus the ten
+interfaces whose underlying subsystem is 0%-built or a docstring-only
+stub (``RetrievalService``, ``MemoryService``, ``EventBus``,
+``ConfigService``, ``StorageService``, ``WorkspaceService``,
+``Telemetry``, ``TraceabilityService``, ``QualityGateRegistry``,
+``SpeechGateway``). See ``platform_sdk_v1_scope.md`` §2.3 and §7.
 """
 
 from __future__ import annotations
+
+from ai_os_sdk.contracts.agent import Agent
+from ai_os_sdk.contracts.tool import Tool, TrustTier
+
+__all__ = [
+    "Agent",
+    "Tool",
+    "TrustTier",
+]

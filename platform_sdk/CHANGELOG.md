@@ -8,6 +8,19 @@ package has not yet cut a version past `0.1.0`.
 
 ### Added
 
+- **The `Agent` and `Tool` Protocols, plus `TrustTier`** (`platform_sdk_v1_scope.md`
+  step 3), at the narrowed shapes decided in step 2a: dict-based
+  `execute(inputs) -> outputs` with a declared `output_schema`, and `trust_tier`
+  on `Tool`. Both `@runtime_checkable`. `TrustTier` is defined here rather than
+  imported from the Kernel — the SDK is the dependency floor (`platform_sdk.md`
+  §2 rule 1) — and both enums independently mirror `manifest.schema.json`'s
+  `tools[].trustTier`. **Structural compatibility is proven against real classes,
+  not mocks:** all five pack agents and `EchoAgent` satisfy `Agent`; `EchoTool`
+  and `SandboxedCommandTool` satisfy `Tool`; **no Kernel or pack source was
+  modified.** `AgentRequest`/`AgentResult`/`ToolRequest` are deliberately absent
+  (no consumer under the narrowed shapes); `ToolResult` arrives in step 6 with
+  `ToolInvoker`.
+
 - **The `AiOsError` hierarchy, `StructuredError`, and the four shared boundary
   models** (`platform_sdk_v1_scope.md` step 2). `ai_os_sdk.errors` now holds
   `ErrorCategory` (all six documented categories), `StructuredError`, and

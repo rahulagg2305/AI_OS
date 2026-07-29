@@ -2,9 +2,9 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Platform SDK v1.0.0 Scope and Build Sequence
-**Version:** 2.1
-**Status:** Approved — 18 steps; **Steps 1, 2, and 2a complete**, Step 3 next (and now smaller — see §6b)
-**Last Updated:** 2026-07-29 (v2.1: **Step 2a complete** — all five Protocol/reality reconciliation decisions made and recorded as dated blocks in `platform_sdk.md` §4.2/§4.3/§5.1/§5.2/§5.6; summary and evidence in §6b. Step 3's scope shrinks as a result: two Protocols, no request/result models. Prior, v2.0: an independent architecture review found 7 real problems — three blocking — in v1.0's 15-step sequence; all accepted, sequence revised to 18 steps, `SecretResolver` dropped, migration reordered `qa-test`-first, steps 2a/6a/6b/7 inserted. Findings: §6a.)
+**Version:** 2.2
+**Status:** Approved — 18 steps; **Steps 1, 2, 2a, and 3 complete**, Step 4 next
+**Last Updated:** 2026-07-29 (v2.2: **Step 3 complete** — `Agent` and `Tool` Protocols built at the narrowed shapes, with structural compatibility proven against all five real pack agents and both real tools, zero Kernel/pack source modified. A new record for step 3 is in §6c. Prior, v2.1: **Step 2a complete** — all five Protocol/reality reconciliation decisions made and recorded as dated blocks in `platform_sdk.md` §4.2/§4.3/§5.1/§5.2/§5.6; summary and evidence in §6b. Step 3's scope shrinks as a result: two Protocols, no request/result models. Prior, v2.0: an independent architecture review found 7 real problems — three blocking — in v1.0's 15-step sequence; all accepted, sequence revised to 18 steps, `SecretResolver` dropped, migration reordered `qa-test`-first, steps 2a/6a/6b/7 inserted. Findings: §6a.)
 
 **Previously:** 2026-07-28 (v1.0 — original 15-step sequence, Step 1 complete)
 
@@ -233,13 +233,13 @@ Each step below is scoped to become its own future prompt, in this order, each i
 | 1 | Scaffold `platform_sdk` as a real `ai-os-sdk` PEP 621 distribution — packaging only, six stub subpackages, workspace member. | **Done** (`fc0973a`) |
 | 2 | `AiOsError` hierarchy + `StructuredError` + shared boundary models (`ArtifactRef`, `TraceContext`, `SecurityContext`, `StepBudget` — §4.1, §4.4). Dependency-free foundation everything else builds on. | **Done** |
 | **2a** | **Protocol/reality reconciliation decision (docs only).** All five decisions made and recorded as dated blocks in `platform_sdk.md` §4.2/§4.3/§5.1/§5.2/§5.6 — see §6b below for the summary. Resolves P1 + P3. | **Done** |
-| 3 | `Agent` + `Tool` Protocols **only** — the narrowed, dict-based shapes decided in 2a. **`AgentRequest`/`AgentResult`/`ToolRequest` are no longer in scope** (deferred past v1.0.0; they have no consumer under the narrowed Protocols), and `ToolResult` moves to step 6 where its consumer lives. Scope is smaller than v2.0 assumed — see §6b. | Next |
+| 3 | `Agent` + `Tool` Protocols **only** — the narrowed, dict-based shapes decided in 2a, plus the SDK's own `TrustTier`. `AgentRequest`/`AgentResult`/`ToolRequest` out of scope (deferred past v1.0.0); `ToolResult` moved to step 6 with its consumer. **Structural compatibility proven against real classes**, not mocks: all 5 pack agents + `EchoAgent` satisfy `Agent`, and `EchoTool` + `SandboxedCommandTool` satisfy `Tool`, with **zero modification to any Kernel or pack source** (`tests/unit/platform_sdk/test_kernel_satisfies_sdk_contracts.py`, 13 assertions). | **Done** |
 
 **Contracts**
 
 | # | Scope |
 |---|---|
-| 4 | `LLMGateway` Protocol + models (as decided in 2a). |
+| 4 | `LLMGateway` Protocol + models (as decided in 2a): narrowed to `complete()` + `capabilities()`, with `ProviderCapabilities` extended to the real 13 fields. **Next, and unblocked** — it depends only on step 2's `StructuredError`/`TraceContext` and on the 2a decision, both of which are done; it has no dependency on step 3's Protocols. |
 | 5 | `PromptRegistry` Protocol + models (as decided in 2a). |
 | 6 | `ToolInvoker` Protocol + `ToolDescriptor` + **`ToolResult`** (moved here from step 3, since this is where its consumer lives), and the `platform.sandbox.run_command` tool contract — all as decided in 2a. **`SecretResolver` removed from this step** — see §2.3. |
 | **6a** | **NEW — Kernel-side adapters implementing the SDK Protocols**, over `DispatchingLLMGateway`, the Prompt Engine, and the sandbox. Without this, the Protocols from 4–6 have no conforming implementation anywhere. Resolves P1. |
@@ -306,6 +306,26 @@ Each decision is recorded in full, with its evidence, as a dated **v1.0.0 Reconc
 **Net direction:** four narrowings, two targeted extensions where the real Kernel is richer than the specification, one deliberate reversal in the specification's favour (`PromptRegistry`'s call style), and one from-scratch design. **Every extension is a case where the spec could not express a real, materially-different outcome** — not scope creep.
 
 **Effect on the remaining plan:** step 3 gets *smaller* (two Protocols, no models); step 6 gets one model (`ToolResult`) and one tool contract; steps 4, 5, 6a, 6b, 7, 8, 9–15 are unchanged in scope. **No new step is needed**, and nothing else blocks step 3.
+
+---
+
+## 6c. Step 3 — `Agent`/`Tool` Protocols built and proven (2026-07-29)
+
+Two `Protocol` definitions in `platform_sdk/src/ai_os_sdk/contracts/`, plus the SDK's own `TrustTier`. Both are `@runtime_checkable`, matching the Kernel's own convention so a loader can reject a structurally unrelated entrypoint.
+
+**The claim step 2a's narrowing rested on is now proven against real code, not a mock.** `tests/unit/platform_sdk/test_kernel_satisfies_sdk_contracts.py` imports the actual shipped classes and asserts `isinstance` against the new SDK Protocols — 13 assertions, all passing:
+
+- **`Agent`:** all five Software Engineering pack agents (`ArchitectureAgentEntrypoint`, `BuildAgentEntrypoint`, `DocumentationAgentEntrypoint`, `RequirementsAnalystAgentEntrypoint`, `TestAgentEntrypoint`) plus the Kernel's `EchoAgent`. Each is constructed exactly as `EntrypointLoader` constructs it — `cls()`, zero arguments — so the test exercises the real construction path, and none performs I/O before first `execute`.
+- **`Tool`:** the Kernel's `EchoTool` and the one real non-trivial tool, `SandboxedCommandTool`, constructed the way `agents/build.py` and `agents/verification.py` construct it.
+- **Negative controls:** an object missing `output_schema` is not an `Agent`; a real agent is not a `Tool` (the tier is what separates them, and an agent passing as a tool could bypass ADR-0016's sandbox guard).
+
+**Three decisions and findings worth recording:**
+
+1. **The SDK defines its own `TrustTier` rather than importing the Kernel's**, because §2 rule 1 makes this SDK the dependency floor. Both enums independently mirror `manifest.schema.json`'s `tools[].trustTier` enum — verified to be exactly `["tier1_sandboxed", "tier2_trusted"]` — and a test asserts the two carry identical values, since nothing else would catch them drifting apart. **Consequence, recorded rather than hidden:** because they are distinct Python types, a Kernel-typed tool is *not statically assignable* to the SDK `Tool` Protocol even though it satisfies it at runtime. Bridging that is step 6a's adapter, exactly as §4.3's decision block anticipated.
+2. **`mypy --strict` rejects enum-to-string and cross-enum equality as non-overlapping**, even where it is true at runtime for a `StrEnum`. Four such comparisons were written and then corrected to compare `.value` explicitly — which is also the more precise claim, since what must agree with the schema is the wire value, not member identity.
+3. **The cross-boundary test lives in the root suite, not in `platform_sdk/tests/`.** A test importing `ai_os_kernel`, a pack, *and* `ai_os_sdk` is inherently a cross-boundary assertion, and `platform_sdk/tests/` deliberately imports nothing from the Kernel or any pack — holding the dependency-floor discipline in the SDK's own test suite, not only in its source.
+
+**Also asserted: the limit of what the runtime check proves.** A test constructs an object whose `execute` is not async, takes no arguments, and whose `output_schema` is a plain string — and confirms it still passes `isinstance`. This makes §4.2's precision correction executable: a `runtime_checkable` Protocol verifies *member presence only*, never signatures, so the check converts "this is not remotely an agent" into a clear error but never certifies the contract.
 
 ---
 
