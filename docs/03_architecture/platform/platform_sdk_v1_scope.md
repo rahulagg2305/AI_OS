@@ -2,9 +2,9 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Platform SDK v1.0.0 Scope and Build Sequence
-**Version:** 2.2
-**Status:** Approved — 18 steps; **Steps 1, 2, 2a, and 3 complete**, Step 4 next
-**Last Updated:** 2026-07-29 (v2.2: **Step 3 complete** — `Agent` and `Tool` Protocols built at the narrowed shapes, with structural compatibility proven against all five real pack agents and both real tools, zero Kernel/pack source modified. A new record for step 3 is in §6c. Prior, v2.1: **Step 2a complete** — all five Protocol/reality reconciliation decisions made and recorded as dated blocks in `platform_sdk.md` §4.2/§4.3/§5.1/§5.2/§5.6; summary and evidence in §6b. Step 3's scope shrinks as a result: two Protocols, no request/result models. Prior, v2.0: an independent architecture review found 7 real problems — three blocking — in v1.0's 15-step sequence; all accepted, sequence revised to 18 steps, `SecretResolver` dropped, migration reordered `qa-test`-first, steps 2a/6a/6b/7 inserted. Findings: §6a.)
+**Version:** 2.3
+**Status:** Approved — 18 steps; **Steps 1, 2, 2a, 3, and 4 complete**, Step 5 next
+**Last Updated:** 2026-07-29 (v2.3: **Step 4 complete** — `LLMGateway` Protocol built narrowed to `complete()`/`capabilities()`, `ProviderCapabilities` extended to the real 13 fields, structural compatibility proven against the real `DispatchingLLMGateway`, zero Kernel/pack source modified. Record in §6d. Prior, v2.2: **Step 3 complete** — `Agent` and `Tool` Protocols built at the narrowed shapes, with structural compatibility proven against all five real pack agents and both real tools. Record in §6c. Prior, v2.1: **Step 2a complete** — all five Protocol/reality reconciliation decisions made and recorded as dated blocks in `platform_sdk.md` §4.2/§4.3/§5.1/§5.2/§5.6; summary and evidence in §6b. Prior, v2.0: an independent architecture review found 7 real problems — three blocking — in v1.0's 15-step sequence; all accepted, sequence revised to 18 steps, `SecretResolver` dropped, migration reordered `qa-test`-first, steps 2a/6a/6b/7 inserted. Findings: §6a.)
 
 **Previously:** 2026-07-28 (v1.0 — original 15-step sequence, Step 1 complete)
 
@@ -237,14 +237,14 @@ Each step below is scoped to become its own future prompt, in this order, each i
 
 **Contracts**
 
-| # | Scope |
-|---|---|
-| 4 | `LLMGateway` Protocol + models (as decided in 2a): narrowed to `complete()` + `capabilities()`, with `ProviderCapabilities` extended to the real 13 fields. **Next, and unblocked** — it depends only on step 2's `StructuredError`/`TraceContext` and on the 2a decision, both of which are done; it has no dependency on step 3's Protocols. |
-| 5 | `PromptRegistry` Protocol + models (as decided in 2a). |
-| 6 | `ToolInvoker` Protocol + `ToolDescriptor` + **`ToolResult`** (moved here from step 3, since this is where its consumer lives), and the `platform.sandbox.run_command` tool contract — all as decided in 2a. **`SecretResolver` removed from this step** — see §2.3. |
-| **6a** | **NEW — Kernel-side adapters implementing the SDK Protocols**, over `DispatchingLLMGateway`, the Prompt Engine, and the sandbox. Without this, the Protocols from 4–6 have no conforming implementation anywhere. Resolves P1. |
-| **6b** | **NEW — `PackContext` construction + injection path.** Build a real `PackContext` in the composition root, and resolve the zero-argument blocker (`EntrypointLoader`/`SqlAgentRegistry`, or a real `activate()` call path). **This is the actual unlock for every migration step.** Resolves P2. |
-| 7 | **REPURPOSED — relocate `pipeline.py` out of the shipped package into `tests/`** (§4.1), and land `ContextService` boundary models (§5.3) + the entry-point contract `PackContext`/`CapabilityPack`/`PackRegistration`/`HealthReport` (§6, §7). Resolves P4's permanent-failure half. |
+| # | Scope | Status |
+|---|---|---|
+| 4 | `LLMGateway` Protocol narrowed to `complete()` + `capabilities()` (the two methods `DispatchingLLMGateway` implements); `ProviderCapabilities` extended to the real 13 fields; `LLMRequest`/`Message`/`MessageRole`/`StopReason`/`UsageRecord`/`LLMResponse` as field-for-field mirrors of the real Kernel models. **Structural compatibility proven against the real `DispatchingLLMGateway`**, not a mock, constructed with an empty `StaticRouter` and no providers — zero I/O, zero Kernel/pack source modified. `EchoLLMGateway` correctly does *not* satisfy the SDK Protocol (it implements only `complete()`), which is itself evidence the narrowing is exact, not accidentally loose. | **Done** |
+| 5 | `PromptRegistry` Protocol + models (as decided in 2a). | Next |
+| 6 | `ToolInvoker` Protocol + `ToolDescriptor` + **`ToolResult`** (moved here from step 3, since this is where its consumer lives), and the `platform.sandbox.run_command` tool contract — all as decided in 2a. **`SecretResolver` removed from this step** — see §2.3. | |
+| **6a** | **NEW — Kernel-side adapters implementing the SDK Protocols**, over `DispatchingLLMGateway`, the Prompt Engine, and the sandbox. Without this, the Protocols from 4–6 have no conforming implementation anywhere. Resolves P1. | |
+| **6b** | **NEW — `PackContext` construction + injection path.** Build a real `PackContext` in the composition root, and resolve the zero-argument blocker (`EntrypointLoader`/`SqlAgentRegistry`, or a real `activate()` call path). **This is the actual unlock for every migration step.** Resolves P2. | |
+| 7 | **REPURPOSED — relocate `pipeline.py` out of the shipped package into `tests/`** (§4.1), and land `ContextService` boundary models (§5.3) + the entry-point contract `PackContext`/`CapabilityPack`/`PackRegistration`/`HealthReport` (§6, §7). Resolves P4's permanent-failure half. | |
 
 **Compliance gate**
 
@@ -326,6 +326,18 @@ Two `Protocol` definitions in `platform_sdk/src/ai_os_sdk/contracts/`, plus the 
 3. **The cross-boundary test lives in the root suite, not in `platform_sdk/tests/`.** A test importing `ai_os_kernel`, a pack, *and* `ai_os_sdk` is inherently a cross-boundary assertion, and `platform_sdk/tests/` deliberately imports nothing from the Kernel or any pack — holding the dependency-floor discipline in the SDK's own test suite, not only in its source.
 
 **Also asserted: the limit of what the runtime check proves.** A test constructs an object whose `execute` is not async, takes no arguments, and whose `output_schema` is a plain string — and confirms it still passes `isinstance`. This makes §4.2's precision correction executable: a `runtime_checkable` Protocol verifies *member presence only*, never signatures, so the check converts "this is not remotely an agent" into a clear error but never certifies the contract.
+
+---
+
+## 6d. Step 4 — `LLMGateway` Protocol built and proven (2026-07-29)
+
+One `Protocol` in `platform_sdk/src/ai_os_sdk/contracts/llm_gateway.py`, at the narrowed shape decided in 2a (`complete()` + `capabilities()` only), plus its full model set in `platform_sdk/src/ai_os_sdk/models/llm.py`: `Message`, `MessageRole`, `LLMRequest`, `StopReason`, `UsageRecord`, `LLMResponse` (field-for-field mirrors of the real, working Kernel models — narrowed exactly as far as the Kernel's own models are narrowed, no further), and `ProviderCapabilities` (extended to the real 13 fields, per 2a).
+
+**Proven against the real `DispatchingLLMGateway`, not a mock.** Added to `tests/unit/platform_sdk/test_kernel_satisfies_sdk_contracts.py`: `DispatchingLLMGateway(router=StaticRouter(routes={}), gateways={})` — constructed with an empty routing table and no providers, so zero I/O and zero network occur — satisfies the new SDK `LLMGateway` Protocol via `isinstance`. **A negative control worth keeping:** `EchoLLMGateway`, which implements only `complete()`, does *not* satisfy the SDK Protocol. This is itself evidence the narrowing is exact rather than accidentally loose — the Kernel's own internal `LLMGateway` Protocol requires only `complete()`, so it is narrower than this SDK Protocol; only the real, production `DispatchingLLMGateway` (which also implements `capabilities()`) conforms.
+
+**One thing worth recording:** `LLMRequest.metadata` uses the SDK's own canonical, seven-field `TraceContext` (`ai_os_sdk.models.common`, built in step 2), not the Kernel's own two-field reduced `TraceContext` (`llm_gateway/models.py:107`). The two are structurally different models serving the same field name in different packages — not a bug, since the SDK is the dependency floor and cannot reference the Kernel's type, but worth a future adapter author's attention when step 6a builds the real conversion between a pack-facing `LLMRequest` and whatever the Kernel's `DispatchingLLMGateway.complete()` actually consumes.
+
+**Verified:** `platform_sdk/tests/` 109 → 124 passed (15 new: `test_llm_models.py`, `test_llm_gateway_contract.py`); cross-boundary proof 13 → 15 passed; `mypy --strict` clean across 304 files; `ruff check`/`format` clean; root suite 816 → 818 passed, 11 skipped (unchanged); SE pack suite unchanged at 46; zero Kernel/pack source modified (`git status -- kernel/ capability_packs/` reports nothing).
 
 ---
 

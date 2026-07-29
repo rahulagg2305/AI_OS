@@ -8,6 +8,19 @@ package has not yet cut a version past `0.1.0`.
 
 ### Added
 
+- **The `LLMGateway` Protocol and its model set** (`platform_sdk_v1_scope.md`
+  step 4), narrowed to `complete()` + `capabilities()` — the only two methods
+  the real, working `DispatchingLLMGateway` implements. `ai_os_sdk.models.llm`
+  adds `Message`/`MessageRole`/`LLMRequest`/`StopReason`/`UsageRecord`/
+  `LLMResponse` as field-for-field mirrors of the real Kernel models, and
+  `ProviderCapabilities` extended to the real 13-field shape (the working
+  `StaticCapabilityNegotiator` already implements all 13; its own docstring
+  names `platform_sdk.md` as the discrepancy it "implements past"). **Proven
+  against the real `DispatchingLLMGateway`**, constructed with an empty router
+  and no providers (zero I/O); `EchoLLMGateway` correctly does *not* satisfy
+  the SDK Protocol, since it implements only `complete()`. **No Kernel or pack
+  source was modified.**
+
 - **The `Agent` and `Tool` Protocols, plus `TrustTier`** (`platform_sdk_v1_scope.md`
   step 3), at the narrowed shapes decided in step 2a: dict-based
   `execute(inputs) -> outputs` with a declared `output_schema`, and `trust_tier`

@@ -1,15 +1,16 @@
 """Proof that the **real, already-shipped** Kernel and Capability Pack
-implementations satisfy the new SDK ``Agent``/``Tool`` Protocols with
-**zero modification** — ``platform_sdk_v1_scope.md`` step 3.
+implementations satisfy the new SDK ``Agent``/``Tool``/``LLMGateway``
+Protocols with **zero modification** — ``platform_sdk_v1_scope.md``
+steps 3 and 4.
 
-This is the claim step 2a's narrowing decision rests on: §4.2/§4.3 were
-narrowed to the working dict-based shape *specifically* so that the five
-proven agents, the two Echo stand-ins, and the one real sandboxed tool
-would already conform. A test built around a fresh mock written to
-satisfy the Protocol would prove nothing about that — so every subject
-below is an actual class imported from ``ai_os_kernel`` or from the
-``software-engineering`` pack, constructed the same way its real caller
-constructs it.
+This is the claim each narrowing decision rests on: §4.2/§4.3/§5.1 were
+narrowed to the working shape *specifically* so that the five proven
+agents, the two Echo stand-ins, the one real sandboxed tool, and the
+real multi-provider gateway would already conform. A test built around
+a fresh mock written to satisfy the Protocol would prove nothing about
+that — so every subject below is an actual class imported from
+``ai_os_kernel`` or from the ``software-engineering`` pack, constructed
+the same way its real caller constructs it.
 
 **Why this file lives in the root suite rather than in
 ``platform_sdk/tests/``.** ``platform_sdk.md`` §2 rule 1 makes the SDK
@@ -18,8 +19,8 @@ that discipline is held in its own test suite too. A test that imports
 ``ai_os_kernel`` *and* a pack *and* ``ai_os_sdk`` is inherently a
 cross-boundary assertion, and the root suite already spans all three.
 
-**Nothing in the Kernel or the pack is modified by step 3.** This file
-only observes them.
+**Nothing in the Kernel or the pack is modified by steps 3 or 4.** This
+file only observes them.
 """
 
 from __future__ import annotations
@@ -28,6 +29,8 @@ from pathlib import Path
 
 import pytest
 
+from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway
+from ai_os_kernel.llm_gateway.router import StaticRouter
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.workflow_engine.agent import EchoAgent
 from ai_os_kernel.workflow_engine.sandboxed_tool import SandboxedCommandTool
@@ -41,6 +44,7 @@ from ai_os_pack_software_engineering.agents.requirements_analyst import (
 )
 from ai_os_pack_software_engineering.agents.verification import TestAgentEntrypoint
 from ai_os_sdk.contracts import Agent as SdkAgent
+from ai_os_sdk.contracts import LLMGateway as SdkLLMGateway
 from ai_os_sdk.contracts import Tool as SdkTool
 from ai_os_sdk.contracts import TrustTier as SdkTrustTier
 
@@ -99,6 +103,33 @@ class TestRealToolsSatisfyTheSdkToolProtocol:
         as a tool would let a mis-registered entrypoint bypass ADR-0016's
         sandbox guard."""
         assert not isinstance(EchoAgent(), SdkTool)
+
+
+def _real_dispatching_gateway() -> DispatchingLLMGateway:
+    """The real, working multi-provider gateway, constructed with the
+    minimum real dependencies it requires: a real ``Router`` (empty
+    routing table — nothing here calls ``complete``, only checks shape)
+    and an empty provider mapping. No network, no provider adapter, no
+    capability negotiator — none of `capabilities()`'s or `complete()`'s
+    actual behaviour is exercised, only the object's shape.
+    """
+    return DispatchingLLMGateway(router=StaticRouter(routes={}), gateways={})
+
+
+class TestRealLLMGatewaySatisfiesTheSdkLLMGatewayProtocol:
+    def test_dispatching_llm_gateway_is_an_sdk_llm_gateway(self) -> None:
+        assert isinstance(_real_dispatching_gateway(), SdkLLMGateway)
+
+    def test_echo_llm_gateway_is_not_an_sdk_llm_gateway(self) -> None:
+        """EchoLLMGateway implements only complete() — the Kernel's own
+        internal LLMGateway Protocol (gateway.py) requires just that one
+        method, which is narrower than this SDK Protocol. The SDK
+        Protocol requires both complete() and capabilities(), so only
+        DispatchingLLMGateway — the real, production gateway — conforms,
+        not every historical Kernel implementer of the narrower internal
+        Protocol.
+        """
+        assert not isinstance(EchoLLMGateway(), SdkLLMGateway)
 
 
 class TestTrustTierAgreement:

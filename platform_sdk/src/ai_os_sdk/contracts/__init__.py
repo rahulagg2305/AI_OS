@@ -7,11 +7,11 @@ built here.** Five interfaces carry one (recorded 2026-07-29,
 ``platform_sdk_v1_scope.md`` step 2a), and where a block and the prose
 around it disagree, the block governs v1.0.0.
 
-Partially real as of step 3: ``Agent`` and ``Tool`` exist, at their
-narrowed shapes. The rest arrive in order:
+Partially real as of step 4: ``Agent`` and ``Tool`` (step 3), and now
+``LLMGateway`` (step 4), narrowed to ``complete``/``capabilities`` — the
+two methods the real ``DispatchingLLMGateway`` implements. The rest
+arrive in order:
 
-- ``llm_gateway.py``       — ``LLMGateway`` (§5.1, narrowed to
-  ``complete``/``capabilities``)                                  — step 4
 - ``prompt_registry.py``   — ``PromptRegistry`` (§5.2, documented
   keyword call style, ``version`` required)                       — step 5
 - ``tool_invoker.py``      — ``ToolInvoker`` (§5.6) + ``ToolResult``
@@ -33,10 +33,12 @@ stub (``RetrievalService``, ``MemoryService``, ``EventBus``,
 from __future__ import annotations
 
 from ai_os_sdk.contracts.agent import Agent
+from ai_os_sdk.contracts.llm_gateway import LLMGateway
 from ai_os_sdk.contracts.tool import Tool, TrustTier
 
 __all__ = [
     "Agent",
+    "LLMGateway",
     "Tool",
     "TrustTier",
 ]

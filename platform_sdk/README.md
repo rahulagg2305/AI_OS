@@ -3,16 +3,17 @@
 The only sanctioned interface between a Capability Pack and AI_OS
 (`docs/03_architecture/platform/platform_sdk.md`).
 
-## Status: error taxonomy, shared boundary models, and the first two Protocols
+## Status: error taxonomy, shared boundary models, and three Protocols
 
 **Last updated: 2026-07-29.**
 
 This package is real, installable, and importable. It defines the platform
-error taxonomy, the four shared boundary models, and the `Agent`/`Tool`
-Protocols — which **every one of the five real Software Engineering pack
-agents already satisfies without modification** (proven in
+error taxonomy, the shared boundary models, and the `Agent`/`Tool`/
+`LLMGateway` Protocols — which **every one of the five real Software
+Engineering pack agents, both real tools, and the real production
+`DispatchingLLMGateway` already satisfy without modification** (proven in
 `tests/unit/platform_sdk/test_kernel_satisfies_sdk_contracts.py`). Steps 1,
-2, 2a and 3 of the **18**-step build sequence in
+2, 2a, 3, and 4 of the **18**-step build sequence in
 [`../docs/03_architecture/platform/platform_sdk_v1_scope.md`](../docs/03_architecture/platform/platform_sdk_v1_scope.md)
 are complete. *(The sequence was revised from 15 to 18 steps after an
 independent architecture review — see that document's §6a.)*
@@ -20,8 +21,8 @@ independent architecture review — see that document's §6a.)*
 | Subpackage | Holds | Status |
 |---|---|---|
 | `errors/` | `ErrorCategory`, `StructuredError`, `AiOsError` + 6 subclasses | **Real** (step 2) |
-| `models/` | `ArtifactRef`, `TraceContext`, `SecurityContext`, `StepBudget` | **Real** (step 2); LLM models step 4, prompt step 5, `ToolResult` step 6, context/pack step 7 |
-| `contracts/` | `Agent`, `Tool`, `TrustTier` | **Real** (step 3, at the narrowed shapes decided in 2a); `LLMGateway` step 4, `PromptRegistry` step 5, `ToolInvoker` step 6, `ContextService`/`CapabilityPack` step 7 |
+| `models/` | `ArtifactRef`, `TraceContext`, `SecurityContext`, `StepBudget`, plus `LLMRequest`/`LLMResponse`/`UsageRecord`/`ProviderCapabilities` (13 fields) | **Real** (steps 2, 4); prompt step 5, `ToolResult` step 6, context/pack step 7 |
+| `contracts/` | `Agent`, `Tool`, `TrustTier`, `LLMGateway` | **Real** (steps 3, 4, at the narrowed shapes decided in 2a); `PromptRegistry` step 5, `ToolInvoker` step 6, `ContextService`/`CapabilityPack` step 7 |
 | `sdk/` | Concrete helper implementations (proposed content, see the scope document §5) | Step 7 |
 | `utilities/` | ids/hashing/canonical JSON — deliberately empty, no real caller exists yet | Not scheduled |
 | `testing/` | `pack_contract_suite` | Step 8 (check 7 + waiver) and step 15 (the remaining 8) |
