@@ -313,12 +313,14 @@ documented way of running the Kernel (``uv run uvicorn ...``, the
 Docker image, Kubernetes) starts the process from the repository root.
 """
 
+import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import sqlalchemy as sa
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -394,6 +396,17 @@ from ai_os_kernel.workflow_engine.step_executor import (
 )
 
 logger = get_logger("ai_os_kernel.bootstrap")
+
+# The database readiness check's own timeout ceiling (health_lifecycle.md
+# §10's now-resolved "hard vs. soft dependency" gap: the database is a
+# real hard dependency, checked with a genuine SELECT 1, not just "was a
+# URL configured") — short enough that a readiness probe hitting this
+# check every few seconds never accumulates meaningful latency even
+# against a completely unreachable host, long enough not to false-fail a
+# real database under brief, ordinary load. A placeholder safety bound,
+# the identical named-constant carve-out every other Kernel policy
+# constant in this file already uses.
+_DATABASE_CHECK_TIMEOUT_SECONDS = 2.0
 
 # The one agent this composition root registers so far — a fully-qualified
 # "pack_id/agent_slug" shape (data_model.md §5) even though no real
@@ -557,15 +570,17 @@ def _build_health_service(
     """``app`` is the same instance ``build_app`` is about to attach this
     very ``HealthService`` to — passed here, not built from, since this
     function runs before ``_lifespan`` ever populates
-    ``app.state.pack_lifecycle_repository`` (real pack discovery only
-    happens once a real database engine exists). ``manifest_loader_check``
-    below reads that attribute lazily, at call time, via the same
+    ``app.state.pack_lifecycle_repository``/``app.state.database_engine``
+    (real pack discovery, and the real database connectivity check
+    below, both only happen once a real database engine exists).
+    ``manifest_loader_check``/``database_check`` below read those
+    attributes lazily, at call time, via the same
     ``getattr(app.state, ..., None)`` idiom
     :mod:`ai_os_kernel.routes.packs` already uses — by the time a real
     request hits ``/health/ready``, ``_lifespan`` may or may not have run
-    yet (a bare ``TestClient(app)`` never triggers it at all), and this
-    check must degrade to its pre-existing, database-free behaviour
-    exactly, not raise, in either case.
+    yet (a bare ``TestClient(app)`` never triggers it at all), and both
+    checks must degrade to a real "unreachable"/"absent" report, not
+    raise, in either case.
     """
 
     def configuration_manager_check() -> ComponentStatus:
@@ -617,7 +632,54 @@ def _build_health_service(
 
         return ComponentStatus(name="manifest_loader", status=status, detail=detail)
 
-    return HealthService([configuration_manager_check, manifest_loader_check])
+    async def database_check() -> ComponentStatus:
+        """A real hard dependency (see :mod:`ai_os_kernel.health.service`'s
+        own docstring for the evidence) — ``critical=True`` unconditionally,
+        so an unreachable database escalates the overall report to
+        ``"not_ready"`` (HTTP 503), not merely ``"degraded"``.
+
+        Reuses ``app.state.database_engine`` (the same real, pooled
+        engine ``_lifespan`` already built for everything else, exposed
+        there for exactly this reason) rather than building a dedicated
+        one per call — the cheapest way to make this genuine, not just
+        "was a URL configured": ``create_async_engine`` is lazy, so the
+        engine merely *existing* on ``app.state`` proves nothing about
+        whether the real host behind it is reachable right now, only
+        that construction (URL parsing) succeeded at startup. A real
+        ``SELECT 1``, bounded by ``_DATABASE_CHECK_TIMEOUT_SECONDS`` so a
+        completely unreachable host fails fast rather than hanging a
+        readiness probe on the OS's own default TCP connect timeout, is
+        what actually answers the question. Absent entirely when no
+        database is configured (or under a bare ``TestClient(app)``,
+        which never triggers ``_lifespan``) — reported as unreachable,
+        not silently skipped, since a real Kernel with no database
+        configured genuinely cannot serve any functional route either.
+        """
+        engine: AsyncEngine | None = getattr(app.state, "database_engine", None)
+        if engine is None:
+            return ComponentStatus(
+                name="database",
+                status="error",
+                detail="no database engine configured",
+                critical=True,
+            )
+
+        async def _ping() -> None:
+            async with engine.connect() as connection:
+                await connection.execute(sa.text("SELECT 1"))
+
+        try:
+            await asyncio.wait_for(_ping(), timeout=_DATABASE_CHECK_TIMEOUT_SECONDS)
+        except Exception as exc:
+            return ComponentStatus(
+                name="database",
+                status="error",
+                detail=f"database unreachable: {exc}",
+                critical=True,
+            )
+        return ComponentStatus(name="database", status="ok", detail="reachable", critical=True)
+
+    return HealthService([configuration_manager_check, manifest_loader_check, database_check])
 
 
 async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
@@ -964,18 +1026,20 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     (unlike ``build_app``, which runs synchronously at import time) —
     the only point in this file's startup story that can ``await``
     anything. A bare ``TestClient(app)`` never triggers this (verified,
-    not assumed); only ``with TestClient(app) as client:`` does, which
-    is exactly why every existing health-check test — none of which use
-    the ``with`` form — is unaffected by this step.
+    not assumed); only ``with TestClient(app) as client:`` does — a bare
+    ``TestClient`` therefore has no ``database_engine`` either, and
+    ``database_check`` reports it as genuinely unreachable, exactly as a
+    real Kernel with no configured database would be.
 
     A missing/misconfigured database degrades to an empty
-    ``AgentRegistry`` and **no** ``trigger_prompted_agent_workflow``,
-    ``workflow_instance_repository``, ``context_manager``, or
-    ``pack_lifecycle_repository`` at all — there is nothing real for any
-    of them to run against without one, unlike a missing LLM secret
-    alone (handled inside ``_build_prompted_agent_registry``), which
-    still leaves a real database for the Workflow Engine components to
-    use. The token verifier degrades independently of all five (see
+    ``AgentRegistry`` and **no** ``database_engine``,
+    ``trigger_prompted_agent_workflow``, ``workflow_instance_repository``,
+    ``context_manager``, or ``pack_lifecycle_repository`` at all — there
+    is nothing real for any of them to run against without one, unlike a
+    missing LLM secret alone (handled inside
+    ``_build_prompted_agent_registry``), which still leaves a real
+    database for the Workflow Engine components to use. The token
+    verifier degrades independently of all five (see
     ``_build_token_verifier``), since authentication needs neither a
     database nor an LLM secret.
     """
@@ -990,6 +1054,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     if engine is None:
         app.state.agent_registry = InMemoryAgentRegistry({})
     else:
+        # Exposed here, raw, for exactly one real reason: the Health
+        # Service's own database_check (_build_health_service) needs
+        # this real, pooled engine to issue a genuine SELECT 1 against
+        # — every other app.state object below wraps it inside a
+        # higher-level repository/service that does not expose it.
+        app.state.database_engine = engine
         app.state.agent_registry = await _build_prompted_agent_registry(engine)
         # The Context Manager's first real slice (ai_os_kernel.context_manager)
         # — one real resolver, reading through the same read accessor

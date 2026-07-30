@@ -74,3 +74,47 @@ def test_an_async_check_that_reports_degraded_makes_the_overall_status_degraded(
     report = asyncio.run(service.readiness())
 
     assert report.status == "degraded"
+
+
+def test_a_failing_critical_component_makes_the_overall_status_not_ready() -> None:
+    """The real hard-dependency escalation this step adds — see
+    ai_os_kernel.health.service's own docstring for why the database is
+    a genuine hard dependency, not an assumed one."""
+    service = HealthService(
+        [
+            lambda: ComponentStatus(name="soft", status="ok"),
+            lambda: ComponentStatus(name="hard", status="error", detail="boom", critical=True),
+        ]
+    )
+
+    report = asyncio.run(service.readiness())
+
+    assert report.status == "not_ready"
+
+
+def test_a_passing_critical_component_does_not_force_not_ready() -> None:
+    """critical=True alone must not escalate anything — only a critical
+    component whose own status is not "ok" does."""
+    service = HealthService(
+        [
+            lambda: ComponentStatus(name="hard", status="ok", critical=True),
+            lambda: ComponentStatus(name="soft", status="degraded", detail="minor"),
+        ]
+    )
+
+    report = asyncio.run(service.readiness())
+
+    assert report.status == "degraded"
+
+
+def test_not_ready_takes_priority_over_a_merely_degraded_component() -> None:
+    service = HealthService(
+        [
+            lambda: ComponentStatus(name="soft", status="degraded", detail="minor"),
+            lambda: ComponentStatus(name="hard", status="error", detail="boom", critical=True),
+        ]
+    )
+
+    report = asyncio.run(service.readiness())
+
+    assert report.status == "not_ready"

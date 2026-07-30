@@ -37,14 +37,25 @@ def test_health_live_reports_status_without_dependencies() -> None:
     assert response.json() == {"status": "live"}
 
 
-def test_health_ready_reports_component_statuses() -> None:
+def test_health_ready_reports_component_statuses_and_is_not_ready_without_a_database() -> None:
+    """No real database is configured anywhere in this unit-level file
+    (see the module docstring) — a bare ``TestClient`` never triggers
+    ``_lifespan`` either, so ``app.state.database_engine`` never exists.
+    This is now a genuine, correctly-reported "not_ready"/503: the
+    database is a real hard dependency (every functional route in this
+    codebase already independently 503s without one), not a soft one
+    that should still claim "ready" — see
+    ``ai_os_kernel.health.service``'s own docstring for the evidence."""
     response = _client().get("/api/v1/health/ready")
-    assert response.status_code == 200
+    assert response.status_code == 503
 
     body = response.json()
-    assert body["status"] == "ready"
+    assert body["status"] == "not_ready"
     names = {c["name"] for c in body["components"]}
-    assert names == {"configuration_manager", "manifest_loader"}
+    assert names == {"configuration_manager", "manifest_loader", "database"}
+    database_component = next(c for c in body["components"] if c["name"] == "database")
+    assert database_component["status"] == "error"
+    assert database_component["critical"] is True
 
 
 def test_health_ready_is_degraded_when_a_discovered_pack_is_invalid(tmp_path: Path) -> None:
@@ -58,8 +69,14 @@ def test_health_ready_is_degraded_when_a_discovered_pack_is_invalid(tmp_path: Pa
     response = _client(config).get("/api/v1/health/ready")
 
     body = response.json()
-    assert body["status"] == "degraded"
+    # Overall status is "not_ready" here too — this file's own tests
+    # never configure a real database (see the module docstring) — but
+    # the manifest_loader component's own logic is unaffected and
+    # asserted directly, exactly as before this step.
+    assert body["status"] == "not_ready"
+    assert response.status_code == 503
     manifest_component = next(c for c in body["components"] if c["name"] == "manifest_loader")
+    assert manifest_component["status"] == "degraded"
     assert "1 invalid" in manifest_component["detail"]
 
 

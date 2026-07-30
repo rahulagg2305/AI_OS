@@ -9,10 +9,12 @@ Readiness is backed by real component checks
 
 from importlib.metadata import PackageNotFoundError, version
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 
 from ai_os_kernel.configuration_manager import PlatformConfig
 from ai_os_kernel.health import HealthService, ReadinessReport
+
+_NOT_READY_STATUS_CODE = 503
 
 router = APIRouter(prefix="/api/v1", tags=["health"])
 
@@ -34,13 +36,19 @@ async def health_live() -> dict[str, str]:
 
 
 @router.get("/health/ready", response_model=ReadinessReport)
-async def health_ready(request: Request) -> ReadinessReport:
-    """Readiness probe. Returns HTTP 200 whether the report is "ready" or
-    "degraded" — Stage A has no hard dependency whose failure justifies
-    refusing traffic (503) entirely; see
-    ``ai_os_kernel.health.service.HealthService``."""
+async def health_ready(request: Request, response: Response) -> ReadinessReport:
+    """Readiness probe. Returns HTTP 200 for "ready"/"degraded" — a
+    reduced-capability Kernel can still usefully serve some traffic —
+    and HTTP 503 for "not_ready": at least one critical component (the
+    database, today — see ``ai_os_kernel.health.service``'s own
+    docstring for why it is a real hard dependency, not an assumed one)
+    has failed, and every functional route in this codebase already
+    independently 503s without one anyway."""
     health_service: HealthService = request.app.state.health_service
-    return await health_service.readiness()
+    report = await health_service.readiness()
+    if report.status == "not_ready":
+        response.status_code = _NOT_READY_STATUS_CODE
+    return report
 
 
 def build_version_payload(config: PlatformConfig) -> dict[str, str]:

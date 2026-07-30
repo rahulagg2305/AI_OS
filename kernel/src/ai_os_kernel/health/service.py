@@ -15,10 +15,26 @@ become async just because one does.
 Per docs/03_architecture/kernel/health_lifecycle.md: "A degraded state
 should be reported rather than presenting an unhealthy system as
 healthy." A component that is not fully "ok" makes the overall status
-"degraded", not "ready" — but Stage A has no dependency whose failure
-should make the Kernel refuse to serve entirely, so this never returns
-a harder "not ready" state yet. That is added once a hard dependency
-(e.g. the database) exists to justify it.
+"degraded", not "ready".
+
+**§10's own "hard vs. soft dependency" gap is resolved (2026-07-30):
+the database is a real hard dependency.** Every functional HTTP route
+in this codebase (``POST /api/v1/workflows``,
+``POST /api/v1/workflows/se.delivery_pipeline``,
+``POST``/``GET /api/v1/packs*``) already independently returns ``503``
+the moment its own required ``app.state`` object is absent because no
+database is configured — confirmed by reading each route's own source,
+not assumed. A component whose own ``critical`` field is ``True`` and
+whose ``status`` is not ``"ok"`` therefore escalates the *overall*
+report to a third state, ``"not_ready"`` — genuinely distinct from
+``"degraded"`` — which :mod:`ai_os_kernel.routes.health` maps to HTTP
+``503``, not ``200``: a Kubernetes readiness probe should stop routing
+traffic to a Kernel instance where every functional route will 503
+anyway, exactly per this document's own §7 rule ("Startup should not
+advertise 'Ready' until critical components are functional"). Every
+check written before this addition defaults ``critical=False`` and is
+therefore unaffected — a non-critical failure still only ever produces
+``"degraded"``, never ``"not_ready"``.
 """
 
 import inspect
@@ -32,11 +48,18 @@ class ComponentStatus(BaseModel):
     status: str
     """One of: "ok", "degraded", "error"."""
     detail: str = ""
+    critical: bool = False
+    """When True and status is not "ok", the overall report becomes
+    "not_ready" rather than "degraded" — a hard dependency whose
+    failure means the Kernel cannot serve meaningful traffic at all,
+    not merely a reduced-capability one. Defaults to False so every
+    check written before this field existed is unaffected."""
 
 
 class ReadinessReport(BaseModel):
     status: str
-    """One of: "ready", "degraded"."""
+    """One of: "ready", "degraded", "not_ready" (the last only when at
+    least one critical component's status is not "ok")."""
     components: list[ComponentStatus]
 
 
@@ -54,5 +77,11 @@ class HealthService:
             if inspect.isawaitable(result):
                 result = await result
             components.append(result)
-        overall = "ready" if all(c.status == "ok" for c in components) else "degraded"
+
+        if any(c.critical and c.status != "ok" for c in components):
+            overall = "not_ready"
+        elif all(c.status == "ok" for c in components):
+            overall = "ready"
+        else:
+            overall = "degraded"
         return ReadinessReport(status=overall, components=components)
