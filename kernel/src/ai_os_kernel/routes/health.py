@@ -40,7 +40,7 @@ async def health_ready(request: Request) -> ReadinessReport:
     refusing traffic (503) entirely; see
     ``ai_os_kernel.health.service.HealthService``."""
     health_service: HealthService = request.app.state.health_service
-    return health_service.readiness()
+    return await health_service.readiness()
 
 
 def build_version_payload(config: PlatformConfig) -> dict[str, str]:

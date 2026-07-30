@@ -327,7 +327,10 @@ from ai_os_kernel.capability_manager.errors import (
     InvalidPackTransitionError,
     PackAlreadyRegisteredError,
 )
-from ai_os_kernel.capability_manager.repository import SqlPackLifecycleRepository
+from ai_os_kernel.capability_manager.repository import (
+    PackLifecycleRepository,
+    SqlPackLifecycleRepository,
+)
 from ai_os_kernel.configuration_manager import BootstrapEnv, ConfigurationManager, PlatformConfig
 from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextManager
 from ai_os_kernel.context_manager.resolvers import WorkflowStateResolver
@@ -373,6 +376,7 @@ from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitio
 from ai_os_kernel.workflow_engine.delivery_pipeline import build_pipeline_trigger
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowDefinition, WorkflowStep
+from ai_os_kernel.workflow_engine.pack_state import PackState
 from ai_os_kernel.workflow_engine.prompted_agent import PromptedAgent
 from ai_os_kernel.workflow_engine.registry import (
     AgentRegistry,
@@ -547,7 +551,23 @@ def _build_manifest_loader(config: PlatformConfig) -> ManifestLoader:
     )
 
 
-def _build_health_service(config: PlatformConfig, manifest_loader: ManifestLoader) -> HealthService:
+def _build_health_service(
+    config: PlatformConfig, manifest_loader: ManifestLoader, app: FastAPI
+) -> HealthService:
+    """``app`` is the same instance ``build_app`` is about to attach this
+    very ``HealthService`` to — passed here, not built from, since this
+    function runs before ``_lifespan`` ever populates
+    ``app.state.pack_lifecycle_repository`` (real pack discovery only
+    happens once a real database engine exists). ``manifest_loader_check``
+    below reads that attribute lazily, at call time, via the same
+    ``getattr(app.state, ..., None)`` idiom
+    :mod:`ai_os_kernel.routes.packs` already uses — by the time a real
+    request hits ``/health/ready``, ``_lifespan`` may or may not have run
+    yet (a bare ``TestClient(app)`` never triggers it at all), and this
+    check must degrade to its pre-existing, database-free behaviour
+    exactly, not raise, in either case.
+    """
+
     def configuration_manager_check() -> ComponentStatus:
         # Reaching this closure at all means configuration already loaded
         # successfully at startup — see build_app().
@@ -555,7 +575,7 @@ def _build_health_service(config: PlatformConfig, manifest_loader: ManifestLoade
             name="configuration_manager", status="ok", detail=f"env={config.env}"
         )
 
-    def manifest_loader_check() -> ComponentStatus:
+    async def manifest_loader_check() -> ComponentStatus:
         # Re-scans the filesystem on every call. Acceptable at Stage A
         # scale; revisit (cache with a short TTL) if this probe is hit
         # frequently against a large capability_packs/ tree.
@@ -563,8 +583,38 @@ def _build_health_service(config: PlatformConfig, manifest_loader: ManifestLoade
             report = manifest_loader.scan()
         except Exception as exc:  # the schema/validator itself is broken
             return ComponentStatus(name="manifest_loader", status="error", detail=str(exc))
+
         detail = f"{len(report.discovered)} pack(s) discovered, {len(report.failed)} invalid"
         status = "ok" if not report.failed else "degraded"
+
+        # Real activation status — genuinely distinguishes (a) discovered
+        # and activated, (b) discovered, schema-valid, but stuck/failed
+        # during registration or activation, from (c) not schema-valid at
+        # all (report.failed, already covered above). Only attempted when
+        # a real pack_lifecycle_repository exists (a real database is
+        # configured and _lifespan has already run) — the identical
+        # "must not depend on a Stage B integration being configured"
+        # degrade this file's every other Stage B component already
+        # follows; with no repository, this check's behaviour is
+        # byte-for-byte what it was before this step.
+        repository: PackLifecycleRepository | None = getattr(
+            app.state, "pack_lifecycle_repository", None
+        )
+        if repository is not None and report.discovered:
+            not_activated: list[str] = []
+            for discovered_pack in report.discovered:
+                pack_id = discovered_pack.metadata.id
+                record = await repository.get_pack(pack_id)
+                if record is None:
+                    not_activated.append(f"{pack_id} [not registered]")
+                elif record.state is not PackState.ACTIVATED:
+                    not_activated.append(f"{pack_id} [state={record.state.value}]")
+            activated_count = len(report.discovered) - len(not_activated)
+            detail += f"; {activated_count} activated, {len(not_activated)} not activated"
+            if not_activated:
+                detail += f" ({', '.join(not_activated)})"
+                status = "degraded"
+
         return ComponentStatus(name="manifest_loader", status=status, detail=detail)
 
     return HealthService([configuration_manager_check, manifest_loader_check])
@@ -888,8 +938,22 @@ async def _register_and_activate_discovered_packs(
                 pack_id=pack_id, actor=_PACK_DISCOVERY_ACTOR, reason=_PACK_DISCOVERY_REASON
             )
             logger.info("kernel.bootstrap.pack_activated", pack_id=pack_id)
-        except InvalidPackTransitionError:
-            logger.info("kernel.bootstrap.pack_already_activated", pack_id=pack_id)
+        except InvalidPackTransitionError as exc:
+            # Only genuinely benign if the real reason is "already
+            # activated" — a real, discovered gap this step's own health
+            # check work surfaced: every InvalidPackTransitionError used
+            # to be logged at info unconditionally, which would have
+            # misclassified a pack genuinely stuck in some other,
+            # non-activatable state (e.g. "failed") as a harmless restart
+            # instead of a real problem. Checked once, here, rather than
+            # trusted blindly.
+            current = await pack_lifecycle_repository.get_pack(pack_id)
+            if current is not None and current.state is PackState.ACTIVATED:
+                logger.info("kernel.bootstrap.pack_already_activated", pack_id=pack_id)
+            else:
+                logger.error(
+                    "kernel.bootstrap.pack_activation_failed", pack_id=pack_id, error=str(exc)
+                )
         except CapabilityManagerError as exc:
             logger.error("kernel.bootstrap.pack_activation_failed", pack_id=pack_id, error=str(exc))
 
@@ -1001,7 +1065,6 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     logger.info("kernel.bootstrap.start", env=config.env, role=config.role)
 
     manifest_loader = _build_manifest_loader(config)
-    health_service = _build_health_service(config, manifest_loader)
 
     app = FastAPI(
         title="AI_OS Kernel API",
@@ -1014,7 +1077,13 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     )
     app.state.config = config
     app.state.manifest_loader = manifest_loader
-    app.state.health_service = health_service
+    # Built after `app` exists (unlike every other Stage A component
+    # above) and given a reference to it — see _build_health_service's
+    # own docstring for why: its manifest_loader_check now needs to read
+    # app.state.pack_lifecycle_repository, which does not exist yet at
+    # this point in build_app() and is only ever populated later, inside
+    # _lifespan, once a real database engine exists.
+    app.state.health_service = _build_health_service(config, manifest_loader, app)
     app.add_middleware(TraceIdMiddleware)
     app.include_router(health_router)
     app.include_router(workflows_router)
