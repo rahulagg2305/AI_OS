@@ -21,6 +21,20 @@ dependencies = [
     # own pyyaml dependency (kernel/pyproject.toml), which parses the
     # same format for the same reason (manifest parsing).
     "pyyaml>=6.0,<7.0",
+    # ai_os_sdk.testing.pack_contract_suite check 1 (manifest validity)
+    # re-implements the exact schema-validation logic
+    # ai_os_kernel.manifest_loader.ManifestLoader already runs in
+    # production, against the same schema file — this package cannot
+    # import that Kernel module (dependency-floor rule below), so it
+    # depends on the same underlying library directly instead. Identical
+    # version range to the Kernel's own jsonschema dependency
+    # (kernel/pyproject.toml), which validates the same schema for the
+    # same reason.
+    "jsonschema>=4.23,<5.0",
+    # check 1 also verifies a manifest's declared dependencies.sdkVersion
+    # PEP 440 range against the real, installed ai-os-sdk version —
+    # packaging.specifiers is the standard library for that comparison.
+    "packaging>=24.0,<27.0",
 ]
 # Design rule 1 (platform_sdk.md §2): "The SDK is the dependency floor.
 # ai-os-sdk depends on no other AI_OS distribution." No ai-os-kernel,

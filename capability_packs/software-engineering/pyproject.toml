@@ -10,19 +10,22 @@ requires-python = ">=3.12,<3.14"
 # project owner decides one.
 dependencies = [
     "pydantic>=2.7,<3.0",
-    # Direct Kernel dependency — a known, documented, temporary
-    # compromise, not the intended long-term shape. capability_pack_contract.md's
-    # own "Platform Interaction Rules" name the Platform SDK as a pack's
-    # only sanctioned interaction surface ("Direct Kernel access is
-    # prohibited"), but no ai-os-sdk package exists yet (kernel's own
-    # pyproject.toml lists it under "Planned, not yet scaffolded"). This
-    # pack's Architecture Agent needs a real PromptedCompletionService
-    # (database engine, LLM Gateway, Prompt Engine) with nowhere else
-    # honest to get one — see ai_os_pack_software_engineering.agents.
-    # architecture's own docstring for the full reasoning. Replacing
-    # this with a Platform SDK dependency is Platform SDK v1.0.0's own
-    # migration to make, not a redesign of this pack.
-    "ai-os-kernel",
+    # The only real runtime dependency beyond pydantic, as of
+    # platform_sdk_v1_scope.md step 14: every agent and pack.py itself
+    # depend solely on ai_os_sdk types. The prior "ai-os-kernel" runtime
+    # dependency this list carried since before that step (a documented,
+    # temporary compromise while the Platform SDK did not yet exist) is
+    # removed here — a real, discovered gap: step 14's own migration
+    # made ai_os_kernel unreachable from this pack's src/ tree, but never
+    # updated this file to match, so the built wheel kept over-declaring
+    # a dependency it no longer imports. ai-os-kernel remains available
+    # in this workspace's shared dev venv (root pyproject.toml's own
+    # dependencies list installs every member unconditionally) for this
+    # pack's own tests/, which still legitimately use real Kernel-side
+    # test doubles (EchoLLMGateway, InMemoryPromptEngine,
+    # LocalSubprocessSandbox, DockerSandbox) — it simply no longer
+    # belongs in this pack's own published runtime dependency list.
+    "ai-os-sdk",
 ]
 
 [build-system]
