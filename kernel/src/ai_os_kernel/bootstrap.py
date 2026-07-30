@@ -48,6 +48,11 @@ this file top to bottom is meant to tell the whole startup story:
     (``ai_os_kernel.capability_manager.health_poller.run_health_polling_loop``)
     that re-polls every ``POLL_INTERVAL_SECONDS`` for the life of the
     process — genuinely stopped, not merely abandoned, on shutdown.
+12. The Lease Reaper: a second real, continuously-running background
+    task (``ai_os_kernel.workflow_engine.lease_reaper.run_reap_loop``)
+    that proactively reclaims expired ``workflow_leases`` rows every
+    ``LEASE_REAP_INTERVAL_SECONDS``, the identical start/cancel pattern
+    step 11 established.
 
 As further Stage B/C components land, their construction and startup
 order is added here, not scattered across
@@ -390,6 +395,11 @@ from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner, W
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.delivery_pipeline import build_pipeline_trigger
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
+from ai_os_kernel.workflow_engine.lease_reaper import (
+    LEASE_REAP_INTERVAL_SECONDS,
+    WorkflowLeaseReaper,
+    run_reap_loop,
+)
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowDefinition, WorkflowStep
 from ai_os_kernel.workflow_engine.pack_state import PackState
 from ai_os_kernel.workflow_engine.prompted_agent import PromptedAgent
@@ -1147,25 +1157,30 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     ``AgentRegistry`` and **no** ``database_engine``,
     ``trigger_prompted_agent_workflow``, ``workflow_instance_repository``,
     ``context_manager``, ``pack_lifecycle_repository``, or
-    ``pack_health_polling_task`` at all — there is nothing real for any
-    of them to run against without one, unlike a missing LLM secret
-    alone (handled inside ``_build_prompted_agent_registry``), which
-    still leaves a real database for the Workflow Engine components to
-    use. The token verifier degrades independently of all six, since
-    authentication needs neither a database nor an LLM secret.
+    ``pack_health_polling_task``, or ``lease_reap_task`` at all — there
+    is nothing real for any of them to run against without one, unlike
+    a missing LLM secret alone (handled inside
+    ``_build_prompted_agent_registry``), which still leaves a real
+    database for the Workflow Engine components to use. The token
+    verifier degrades independently of all seven, since authentication
+    needs neither a database nor an LLM secret.
 
-    **The Pack Health Collector's own background polling loop
+    **Two real, continuously-running background tasks are started here
+    and stopped in this function's own ``finally`` block** — the Pack
+    Health Collector's own polling loop
     (``ai_os_kernel.capability_manager.health_poller.run_health_polling_loop``)
-    is started here and stopped in this function's own ``finally``
-    block** — the first real, continuously-running background task
-    this composition root has ever started. Cancelled and genuinely
-    awaited before ``engine.dispose()`` runs, so no query it makes can
-    ever race a closed connection pool.
+    and, as of this step, the Lease Reaper's own reap loop
+    (``ai_os_kernel.workflow_engine.lease_reaper.run_reap_loop``), the
+    "future worker process framework" that module's own docstring used
+    to defer to. Both are cancelled and genuinely awaited before
+    ``engine.dispose()`` runs, so no query either makes can ever race a
+    closed connection pool.
     """
     app.state.token_verifier = await _build_token_verifier()
 
     engine: AsyncEngine | None = None
     health_polling_task: asyncio.Task[None] | None = None
+    lease_reap_task: asyncio.Task[None] | None = None
     try:
         engine = build_engine(DatabaseSettings().database_url)
     except Exception as exc:
@@ -1199,6 +1214,28 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.trigger_prompted_agent_workflow = _build_workflow_trigger(
             engine, app.state.agent_registry, app.state.context_manager
         )
+        # The Lease Reaper's own real background loop — the "future
+        # worker process framework" ai_os_kernel.workflow_engine.lease_reaper's
+        # own docstring used to defer to, applying the identical
+        # started-in-_lifespan/cancelled-in-finally pattern
+        # health_polling_task above already proves. A dedicated,
+        # plain, stateless WorkflowLeaseReaper/WorkflowLeaseService
+        # pair over the same shared engine — the identical "cheap to
+        # construct a second one" reasoning workflow_instance_repository
+        # below already establishes, rather than threading state out
+        # of _build_workflow_trigger's own internal one.
+        lease_reap_interval = app.state.config.lease_reap_interval_seconds
+        if lease_reap_interval is None:
+            lease_reap_interval = LEASE_REAP_INTERVAL_SECONDS
+        lease_reap_task = asyncio.create_task(
+            run_reap_loop(
+                reaper=WorkflowLeaseReaper(
+                    WorkflowLeaseService(SqlWorkflowLeaseRepository(engine))
+                ),
+                interval_seconds=lease_reap_interval,
+            )
+        )
+        app.state.lease_reap_task = lease_reap_task
         # The same read accessors GET /workflows/{id}(/steps|/events)
         # use (ai_os_kernel.routes.workflows) — a plain, stateless
         # wrapper over the engine, safe to construct separately from the
@@ -1309,16 +1346,20 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        # The polling loop is cancelled and genuinely awaited *before*
-        # the engine it queries is disposed — it uses that same engine
-        # on every iteration, so disposing first would race a live
-        # query against a closed pool. asyncio.CancelledError is the
-        # loop's own expected exit signal (see its own docstring), not
-        # a real error to log here.
+        # Both background loops are cancelled and genuinely awaited
+        # *before* the engine they query is disposed — each uses that
+        # same engine on every iteration, so disposing first would race
+        # a live query against a closed pool. asyncio.CancelledError is
+        # each loop's own expected exit signal (see their own
+        # docstrings), not a real error to log here.
         if health_polling_task is not None:
             health_polling_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await health_polling_task
+        if lease_reap_task is not None:
+            lease_reap_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await lease_reap_task
         if engine is not None:
             await engine.dispose()
 

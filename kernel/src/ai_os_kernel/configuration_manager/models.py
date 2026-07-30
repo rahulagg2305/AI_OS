@@ -44,3 +44,11 @@ class PlatformConfig(BaseModel):
     the loop against a short interval without waiting out the real
     30-second production cadence; it is not itself a second policy
     decision."""
+
+    lease_reap_interval_seconds: float | None = None
+    """Overrides :data:`ai_os_kernel.workflow_engine.lease_reaper.LEASE_REAP_INTERVAL_SECONDS`
+    for the real background lease-reap loop (`ai_os_kernel.bootstrap._lifespan`).
+    The identical "test-only override, never a second policy decision"
+    shape ``pack_health_poll_interval_seconds`` already establishes —
+    ``None`` (every real deployment) means "use the real, decided
+    15-second policy constant"."""
