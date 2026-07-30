@@ -329,7 +329,10 @@ from ai_os_kernel.capability_manager.errors import (
     InvalidPackTransitionError,
     PackAlreadyRegisteredError,
 )
-from ai_os_kernel.capability_manager.health_poller import poll_pack_health
+from ai_os_kernel.capability_manager.health_poller import (
+    CONSECUTIVE_FAILURE_THRESHOLD,
+    poll_pack_health,
+)
 from ai_os_kernel.capability_manager.repository import (
     PackLifecycleRepository,
     SqlPackLifecycleRepository,
@@ -566,6 +569,28 @@ def _build_manifest_loader(config: PlatformConfig) -> ManifestLoader:
     )
 
 
+def _format_pack_health_summary(pack_id: str, health: dict[str, Any]) -> str:
+    """Renders one activated pack's own real ``catalog.packs.health``
+    snapshot (written by
+    :func:`~ai_os_kernel.capability_manager.health_poller.poll_pack_health`)
+    into the same "bracketed annotation appended to a name" style
+    ``manifest_loader_check`` already uses for ``not_activated`` — real,
+    full detail (status, the consecutive-failure count *and* the real
+    threshold it is measured against, when the snapshot was taken, and
+    which specific agents are failing, if any), not a placeholder.
+    """
+    consecutive_failures = health.get("consecutive_failures", 0)
+    summary = (
+        f"{pack_id} [{health.get('status', 'unknown')}, "
+        f"consecutive_failures={consecutive_failures}/{CONSECUTIVE_FAILURE_THRESHOLD}, "
+        f"checked_at={health.get('checked_at', 'never')}]"
+    )
+    failed_agents = health.get("details", {}).get("failed_agents")
+    if failed_agents:
+        summary += f" failed_agents={sorted(failed_agents)}"
+    return summary
+
+
 def _build_health_service(
     config: PlatformConfig, manifest_loader: ManifestLoader, app: FastAPI
 ) -> HealthService:
@@ -619,17 +644,41 @@ def _build_health_service(
         )
         if repository is not None and report.discovered:
             not_activated: list[str] = []
+            health_summaries: list[str] = []
+            any_pack_degrading = False
             for discovered_pack in report.discovered:
                 pack_id = discovered_pack.metadata.id
                 record = await repository.get_pack(pack_id)
                 if record is None:
                     not_activated.append(f"{pack_id} [not registered]")
-                elif record.state is not PackState.ACTIVATED:
+                    continue
+                if record.state is not PackState.ACTIVATED:
                     not_activated.append(f"{pack_id} [state={record.state.value}]")
+                    continue
+
+                # The Pack Health Collector's own real snapshot
+                # (health_poller.poll_pack_health) — surfaced here for
+                # every genuinely activated, already-polled pack, not
+                # only ones that already crossed the failure threshold.
+                # An activated pack with real, non-zero
+                # consecutive_failures is a genuine early warning (it
+                # has not yet been moved to PackState.FAILED — that is
+                # the "not_activated" branch above, a distinct, later
+                # consequence) and must be visible here, not silent
+                # until the pack actually goes down.
+                if record.health is not None:
+                    health_summaries.append(_format_pack_health_summary(pack_id, record.health))
+                    if record.health.get("consecutive_failures", 0) > 0:
+                        any_pack_degrading = True
+
             activated_count = len(report.discovered) - len(not_activated)
             detail += f"; {activated_count} activated, {len(not_activated)} not activated"
             if not_activated:
                 detail += f" ({', '.join(not_activated)})"
+                status = "degraded"
+            if health_summaries:
+                detail += f"; health: {'; '.join(health_summaries)}"
+            if any_pack_degrading:
                 status = "degraded"
 
         return ComponentStatus(name="manifest_loader", status=status, detail=detail)
