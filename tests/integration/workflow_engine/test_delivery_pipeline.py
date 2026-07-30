@@ -82,7 +82,7 @@ already required, so no further change was needed there.
 Architecture's real input — the one new hand-off this feature step
 adds, proven the same way every other hand-off in this pipeline already
 is: by reading it back from a later step's own real, persisted output,
-never by hand-copying anything.** See `tests/integration/_delivery_pipeline.py`'s
+never by hand-copying anything.** See `ai_os_kernel.workflow_engine.delivery_pipeline`'s
 own docstring for the full `_STEP_SOURCES`/`_FIELD_SELECTORS` wiring —
 `architecture`'s own `context` prompt variable now comes from
 `requirements-analyst`'s output (field-selected to `analysis`), not the
@@ -119,6 +119,7 @@ from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
+from ai_os_kernel.workflow_engine.delivery_pipeline import build_pipeline_trigger
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry, SqlAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
@@ -128,7 +129,6 @@ from ai_os_pack_software_engineering.agents.requirements_analyst import (
     RequirementsAnalystAgentEntrypoint,
 )
 from ai_os_pack_software_engineering.agents.verification import TestAgentEntrypoint
-from tests.integration._delivery_pipeline import build_pipeline_trigger
 from tests.integration._postgres_fixture import postgres_container
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

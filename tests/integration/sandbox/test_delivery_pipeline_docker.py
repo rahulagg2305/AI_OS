@@ -59,7 +59,7 @@ both Build and Documentation, neither of which passes one.
 **Requirements Analyst's own real output now genuinely reaches
 Architecture's real input, through the same real `WorkflowStepOutputResolver`
 hand-off proven here for every other step, now genuinely running through
-`DockerSandbox` end to end.** See `tests/integration/_delivery_pipeline.py`'s
+`DockerSandbox` end to end.** See `ai_os_kernel.workflow_engine.delivery_pipeline`'s
 own docstring for the full `_STEP_SOURCES`/`_FIELD_SELECTORS` wiring.
 """
 
@@ -72,7 +72,6 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from tests.integration._delivery_pipeline import build_pipeline_trigger
 from tests.integration._postgres_fixture import postgres_container
 
 from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
@@ -81,6 +80,7 @@ from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.sandbox.docker_executor import DockerSandbox
 from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
+from ai_os_kernel.workflow_engine.delivery_pipeline import build_pipeline_trigger
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint

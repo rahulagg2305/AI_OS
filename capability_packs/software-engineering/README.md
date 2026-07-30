@@ -29,7 +29,8 @@ And one real, declared workflow: **`se.delivery_pipeline`** ([`workflows/deliver
 |---|---|
 | Manifest (agents, prompts, workflow, permissions) | [`manifest.yaml`](manifest.yaml) |
 | Pack entry point (`CapabilityPack`) | [`src/ai_os_pack_software_engineering/pack.py`](src/ai_os_pack_software_engineering/pack.py) |
-| Pipeline composition (test-harness code, relocated out of this pack's shipped wheel — `platform_sdk_v1_scope.md` step 7) | [`../../tests/integration/_delivery_pipeline.py`](../../tests/integration/_delivery_pipeline.py) |
+| Pipeline composition (real Kernel code — relocated out of this pack's shipped wheel in `platform_sdk_v1_scope.md` step 7, then promoted from test-harness code into `ai_os_kernel` itself 2026-07-30 once a real HTTP route needed the same composition) | [`../../kernel/src/ai_os_kernel/workflow_engine/delivery_pipeline.py`](../../kernel/src/ai_os_kernel/workflow_engine/delivery_pipeline.py) |
+| HTTP trigger route (`POST /api/v1/workflows/se.delivery_pipeline`, added 2026-07-30) | [`../../kernel/src/ai_os_kernel/routes/delivery_pipeline.py`](../../kernel/src/ai_os_kernel/routes/delivery_pipeline.py) |
 | Prompts | [`prompts/`](prompts/) — one per LLM-backed agent |
 | Pack-local tests | [`tests/`](tests/) — deterministic, no database, no live LLM call |
 | Kernel-side integration tests | `../../tests/integration/workflow_engine/` and `../../tests/integration/sandbox/` |

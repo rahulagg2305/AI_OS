@@ -25,6 +25,17 @@ this file top to bottom is meant to tell the whole startup story:
    ``.../deactivate``, and ``GET /api/v1/packs/{id}`` — gated on the
    new ``pack:manage``/``pack:read`` permissions, reusing the same
    ``app.state.pack_lifecycle_repository`` unchanged.
+9. Build a real ``SqlAgentRegistry`` for the Software Engineering
+   pack's own ``se.delivery_pipeline`` workflow
+   (``_build_se_delivery_pipeline_registry``) and register ``POST
+   /api/v1/workflows/se.delivery_pipeline``
+   (:mod:`ai_os_kernel.routes.delivery_pipeline`) — the first
+   pack-specific, HTTP-triggerable workflow in this codebase, gated by
+   the same ``workflow:start`` permission the platform demo route
+   already uses. The real composition this reuses
+   (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`) was promoted
+   here from ``tests/integration/_delivery_pipeline.py`` this same
+   step — see that module's own docstring for why.
 
 As further Stage B/C components land (pack discovery, ...), their
 construction and startup order is added here, not scattered across
@@ -254,7 +265,10 @@ from ai_os_kernel.configuration_manager import BootstrapEnv, ConfigurationManage
 from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextManager
 from ai_os_kernel.context_manager.resolvers import WorkflowStateResolver
 from ai_os_kernel.health import ComponentStatus, HealthService
-from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import PROVIDER_NAME
+from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
+    PROVIDER_NAME,
+    build_anthropic_adapter,
+)
 from ai_os_kernel.llm_gateway.adapters.local_adapter import (
     PROVIDER_NAME as LOCAL_PROVIDER_NAME,
 )
@@ -264,8 +278,8 @@ from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
 from ai_os_kernel.llm_gateway.budget_enforcer import PerScopeBudgetEnforcer
 from ai_os_kernel.llm_gateway.capability_negotiator import StaticCapabilityNegotiator
 from ai_os_kernel.llm_gateway.circuit_breaker import InMemoryCircuitBreaker
-from ai_os_kernel.llm_gateway.gateway import LLMGateway
-from ai_os_kernel.llm_gateway.router import StaticRouter, build_routing_chain
+from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, LLMGateway
+from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter, build_routing_chain
 from ai_os_kernel.manifest_loader import ManifestLoader
 from ai_os_kernel.observability import (
     TraceIdMiddleware,
@@ -276,7 +290,9 @@ from ai_os_kernel.observability import (
 )
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.persistence.settings import DatabaseSettings
+from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
 from ai_os_kernel.prompted_completion import build_anthropic_prompted_completion_service
+from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
 from ai_os_kernel.routes.health import router as health_router
 from ai_os_kernel.routes.packs import router as packs_router
 from ai_os_kernel.routes.workflows import router as workflows_router
@@ -287,6 +303,7 @@ from ai_os_kernel.security_manager.token_verifier import (
 )
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner, WorkflowRunResult
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
+from ai_os_kernel.workflow_engine.delivery_pipeline import build_pipeline_trigger
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowDefinition, WorkflowStep
 from ai_os_kernel.workflow_engine.prompted_agent import PromptedAgent
@@ -294,6 +311,7 @@ from ai_os_kernel.workflow_engine.registry import (
     AgentRegistry,
     InMemoryAgentRegistry,
     InMemoryToolRegistry,
+    SqlAgentRegistry,
 )
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.service import WorkflowInstanceService
@@ -647,6 +665,76 @@ def _build_workflow_trigger(
     return trigger
 
 
+async def _build_se_delivery_pipeline_registry(engine: AsyncEngine) -> AgentRegistry:
+    """Real ``SqlAgentRegistry`` composition for ``se.delivery_pipeline``'s
+    own five pack-qualified agents (``software-engineering/*``) — the
+    first real caller of :class:`~ai_os_kernel.workflow_engine.registry.SqlAgentRegistry`
+    in this composition root (that class's own docstring: "bootstrap.py
+    does not construct this class at all yet" — this is the step that
+    makes that no longer true).
+
+    **A deliberately simpler LLM Gateway composition than
+    ``_build_prompted_agent_registry``'s own** — no circuit breaker,
+    backoff policy, budget enforcer, or capability negotiator. This
+    pipeline's own three LLM-calling agents need a real, working
+    completion path to genuinely run; the platform demo's full
+    resilience stack is real, useful infrastructure this pipeline does
+    not yet have a documented need for. Adding it is a distinct, later
+    step once real usage justifies it, not speculative infrastructure
+    built ahead of that need (coding_standards.md: "no
+    placeholder/speculative architecture").
+
+    **Always returns a real, usable registry — never ``None``, even
+    when no real Anthropic secret is configured.** A first version of
+    this function degraded to ``None`` on any Gateway-construction
+    failure, making the *entire* route reply a blanket ``503`` — a real,
+    discovered inconsistency with ``_build_prompted_agent_registry``'s
+    own established shape, which degrades to an agent-less registry
+    instead, so the route still reaches the real Workflow Engine and
+    gets an honest, structured ``failed`` outcome (a real per-agent
+    permission/resolution error) rather than an opaque
+    whole-composition unavailability. Fixed here to match: only the
+    Gateway construction is guarded; ``llm_gateway`` degrades to
+    ``None`` on failure (:class:`~ai_os_kernel.workflow_engine.registry.SqlAgentRegistry`'s
+    own docstring: a resolved entrypoint's own permissions trigger a
+    clear error from ``build_pack_context`` if a needed one is missing,
+    rather than this composition silently proceeding or refusing to
+    exist at all). ``SqlPromptCatalog`` needs no network/secret call to
+    construct, so it is never guarded.
+
+    Takes the already-built ``engine`` rather than constructing its
+    own, the same one-engine-per-process reasoning every other
+    engine-dependent composition in this file already follows.
+    """
+    llm_gateway: LLMGateway | None = None
+    try:
+        provider_config = load_provider_config(Path.cwd() / "config" / "llm.yaml")
+        router = StaticRouter(
+            routes={
+                alias: RoutingDecision(
+                    provider=provider_config.providers.get(alias, PROVIDER_NAME),
+                    model_id=model_id,
+                )
+                for alias, model_id in provider_config.model_ids.items()
+            }
+        )
+        anthropic_gateway = await build_anthropic_adapter(
+            secret_provider=EnvSecretProvider(),
+            api_key_secret_reference=_ANTHROPIC_API_KEY_SECRET_REFERENCE,
+            router=router,
+            pricing=provider_config.pricing,
+        )
+        llm_gateway = DispatchingLLMGateway(
+            router=router, gateways={PROVIDER_NAME: anthropic_gateway}
+        )
+    except Exception as exc:
+        logger.warning(
+            "kernel.bootstrap.se_delivery_pipeline_llm_gateway_unavailable", error=str(exc)
+        )
+
+    return SqlAgentRegistry(engine, llm_gateway=llm_gateway, prompt_engine=SqlPromptCatalog(engine))
+
+
 async def _build_token_verifier() -> JWTBearerTokenVerifier | None:
     """The minimal Security Manager's bearer-token authenticator (see
     ``ai_os_kernel.security_manager.token_verifier`` for what this
@@ -740,6 +828,17 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # through the real composition root instead of only through a
         # hand-built engine.
         app.state.pack_lifecycle_repository = SqlPackLifecycleRepository(engine)
+        # se.delivery_pipeline's own real trigger (ai_os_kernel.routes.delivery_pipeline)
+        # — a second, independent trigger closure alongside
+        # trigger_prompted_agent_workflow above. Always attached once a
+        # real engine exists — a missing/invalid Anthropic secret
+        # degrades the registry's own llm_gateway internally (see
+        # _build_se_delivery_pipeline_registry's own docstring), so the
+        # route still reaches the real Workflow Engine and returns an
+        # honest, structured `failed` outcome instead of a blanket 503.
+        app.state.trigger_se_delivery_pipeline = build_pipeline_trigger(
+            engine, await _build_se_delivery_pipeline_registry(engine)
+        )
 
     try:
         yield
@@ -778,6 +877,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.add_middleware(TraceIdMiddleware)
     app.include_router(health_router)
     app.include_router(workflows_router)
+    app.include_router(delivery_pipeline_router)
     app.include_router(packs_router)
 
     logger.info("kernel.bootstrap.complete")

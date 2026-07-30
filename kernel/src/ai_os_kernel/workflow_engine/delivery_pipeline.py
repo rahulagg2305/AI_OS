@@ -2,37 +2,51 @@
 agents — Requirements Analyst, Architecture, Build, Test, Documentation
 — into one real, declared Workflow Engine pipeline:
 ``capability_packs/software-engineering/workflows/delivery_pipeline.yaml``,
-loaded through the already-real, previously-unused
-:class:`~ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader`.
+loaded through :class:`~ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader`.
 Not a new orchestration mechanism, no new Workflow Engine capability —
 composition only, the identical shape
 :func:`~ai_os_kernel.bootstrap._build_workflow_trigger` already
 establishes for the Kernel's own demo workflow, reused here for a real
 pack-owned one.
 
-**Relocated from ``capability_packs/software-engineering/src/
-ai_os_pack_software_engineering/pipeline.py`` into ``tests/integration/``
-(``platform_sdk_v1_scope.md`` step 7, resolving finding P4).** This
-module is test-harness composition, not pack-facing capability — it
-constructs the Workflow Engine's own lease service, repository, instance
-service, and step executors by hand, work a real Capability Manager
-would do once, generically, for every pack (see below). Verified before
-moving: **zero pack source modules import it** — its only two importers
-are ``tests/integration/workflow_engine/test_delivery_pipeline.py`` and
-``tests/integration/sandbox/test_delivery_pipeline_docker.py``, both
-already inside this tree. Leaving it inside the pack's own shipped wheel
-meant ``pack_contract_suite`` check 7 (forbidden imports — no
-``ai_os_kernel``, no database driver) could never pass on this pack, at
-any point, ever, since this module imports both. Named with a leading
-underscore, matching ``tests/integration/_postgres_fixture.py``'s own
-convention, so pytest never tries to collect it as a test module in its
-own right — every caller imports its functions explicitly.
+**Promoted from ``tests/integration/_delivery_pipeline.py`` into real
+Kernel code (this feature step, 2026-07-30) — not a second
+implementation, the same one, relocated.** That module's own prior
+home was itself a relocation (from the pack's own source tree,
+``platform_sdk_v1_scope.md`` step 7): pack code must never import
+``ai_os_kernel``, so this composition — which genuinely needs
+``ai_os_kernel`` internals throughout — could never live there. Living
+under ``tests/`` was correct only as long as the only real callers
+*were* tests. Now a real HTTP route (:mod:`ai_os_kernel.routes.delivery_pipeline`)
+needs the identical composition to trigger a real, production run —
+and production code importing from ``tests/`` would be backwards, the
+same class of layering mistake the step-7 relocation existed to avoid
+in the other direction. This module is the one real, canonical home;
+``bootstrap.py`` and both Delivery Pipeline integration tests
+(``tests/integration/workflow_engine/test_delivery_pipeline.py``,
+``tests/integration/sandbox/test_delivery_pipeline_docker.py``) all
+import the same functions from here now, rather than each holding
+its own copy.
 
-**The one genuinely missing piece this step builds: a real
-step-output-to-next-step-input hand-off.** Each of this pack's four
-agents was, until now, proven only independently — nothing in this
-codebase had ever taken one step's real, persisted output and turned
-it into the next step's real input. That piece is
+**Still genuinely pack-specific, hardcoded knowledge, exactly like
+``bootstrap.py``'s own demo composition already is.** This module
+knows the real, fully-qualified agent ids
+(``software-engineering/architecture``, etc.), the real workflow id
+(``se.delivery_pipeline``), and the real step ids this one pack's one
+workflow declares — the identical "no generic Capability-Manager-driven
+pack/workflow discovery exists yet, so a real route needs real,
+named knowledge instead of speculative generic infrastructure" shape
+``bootstrap.py``'s own ``_build_demo_workflow_definition``/
+``_DEMO_WORKFLOW_*`` constants already establish for the platform's
+own demo agent. This is a documented, temporary compromise, not the
+long-term shape — see ``capability_pack_contract.md``'s own note on
+pack discovery being Capability Manager territory, not yet built.
+
+**The one genuinely missing piece the original relocation-into-tests
+step built: a real step-output-to-next-step-input hand-off.** Each of
+this pack's five agents was, until then, proven only independently —
+nothing in this codebase had ever taken one step's real, persisted
+output and turned it into the next step's real input. That piece is
 :class:`~ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver`
 (a Kernel-level, reusable Context Manager resolver — see its own
 docstring for the full design and why it lives there, not as a new
@@ -73,31 +87,17 @@ contract can satisfy on its own.
   entry, deriving ``runCommand = [*python_command, filePath]`` from the
   now-known, real ``filePath`` Build actually produced. This pipeline's
   own Architecture step is the one that ultimately decides Build
-  produces a Python file (see ``delivery_pipeline.yaml``'s own
-  ``inputs``/this pack's own live-test instruction) — this transform is
-  the one place that assumption is recorded, not silently relied upon.
+  produces a Python file — this transform is the one place that
+  assumption is recorded, not silently relied upon.
 
   **``python_command`` is threaded through explicitly
   (``build_pipeline_trigger``/``build_pipeline_context_manager``'s own
-  ``python_command`` parameter), not independently re-derived — a real,
-  discovered bug this fixes, not a style preference.** An earlier
-  version of this function called
-  :func:`~ai_os_kernel.sandbox.default_executor.default_python_command`
-  directly, on the (false, in general) assumption that "whichever
-  backend the Build/Test agents themselves default to" always matches
-  "whichever backend `AIOS_SANDBOX_BACKEND` currently names" — true only
-  when *every* agent in the run is left to its own bare default. A
-  caller that explicitly injects a specific ``sandbox=`` into Build/Test
-  (any test wanting a fast, Docker-independent run, most concretely)
-  breaks that assumption: the transform would derive ``python3``
-  (matching the ambient env var) while the agent it hands the command to
-  was actually constructed with ``LocalSubprocessSandbox`` (needing
-  ``sys.executable``) — a real failure, caught by
-  ``test_delivery_pipeline.py``'s own deterministic tier the first time
-  it ran against a real daemon. The fix makes the *caller* — the one
-  party that genuinely knows which backend every agent in this run was
-  actually given — supply ``python_command`` once, consistently, rather
-  than leaving two independent resolutions to coincidentally agree.
+  ``python_command`` parameter), not independently re-derived.** A
+  caller that constructs its own agents with an explicit ``sandbox=``
+  override (any test wanting a specific, non-default backend) must
+  pass the matching ``python_command`` here too, or the transform would
+  derive an interpreter command that does not match the sandbox the
+  agents were actually given.
 - ``documentation`` reads **both** ``build``'s and ``test``'s own
   outputs, merged (``build`` first, ``test`` second — ``test``'s own
   ``exitCode`` therefore wins over ``build``'s own same-named field,
@@ -109,23 +109,12 @@ contract can satisfy on its own.
   needed here at all.
 
 **Why a real pack-owned YAML file, not a Python-constructed
-``WorkflowDefinition`` (kernel/bootstrap.py's own demo's own choice).**
-That demo's own comment is explicit about why it chose Python: "there
-is no real pack directory for such a file to live in yet." One now
-does — this is the first genuine consumer of
-:class:`WorkflowDefinitionLoader` in this codebase's own history, not a
-second, parallel way to build a definition.
-
-**Why this composition lives in the pack, not in
-``kernel/bootstrap.py``.** Every step this pipeline declares names a
-pack-qualified agent id (``software-engineering/architecture``, etc.) —
-real, working dispatch for these needs the pack's own
-``SqlAgentRegistry``-resolvable agents, not the Kernel's own unrelated
-demo agent. Kernel code importing pack-specific pipeline logic would
-also invert this pack's own already-documented, one-way "pack imports
-Kernel internals" compromise (``architecture.py``'s own docstring) —
-this module imports Kernel internals, exactly like every other module
-in this pack, never the reverse.
+``WorkflowDefinition`` (``kernel/bootstrap.py``'s own demo's own
+choice).** That demo's own comment is explicit about why it chose
+Python: "there is no real pack directory for such a file to live in
+yet." One now does — :class:`WorkflowDefinitionLoader` is the real,
+existing mechanism for loading it, not a second, parallel way to build
+a definition.
 """
 
 from __future__ import annotations
@@ -162,17 +151,15 @@ from ai_os_kernel.workflow_engine.step_executor import (
     ToolStepExecutor,
 )
 
-_PACK_ID = "software-engineering"
-# Repo root is parents[2] from tests/integration/_delivery_pipeline.py
-# (integration -> tests -> root) — recomputed for this step's relocation
-# out of the pack's own source tree, which used to make this a
-# same-directory sibling of `workflows/` two levels up instead.
+PACK_ID = "software-engineering"
+
+# Paths are resolved relative to the current working directory, matching
+# every other path bootstrap.py resolves (see its own module docstring:
+# "every documented way of running the Kernel ... starts the process
+# from the repository root") — not `Path(__file__)`-relative, since this
+# module now runs as real production code, not a relocatable test file.
 _DEFINITION_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "capability_packs"
-    / "software-engineering"
-    / "workflows"
-    / "delivery_pipeline.yaml"
+    Path("capability_packs") / "software-engineering" / "workflows" / "delivery_pipeline.yaml"
 )
 
 # Deliberately generous, not tuned — five real steps plus one final
@@ -220,17 +207,14 @@ _FIELD_SELECTORS = {"architecture": "analysis", "build": "content"}
 # agent step, so the question of scoping it never arose before this
 # pipeline had multiple). Only the `requirements-analyst` step needs
 # that contribution (the real `requirement` a caller supplied) — every
-# other step now needs exactly one clean payload from
-# WorkflowStepOutputResolver alone (architecture's own `context` used to
-# come from here too, before Requirements Analyst was wired in as this
-# pipeline's own first step); concatenating WorkflowStateResolver's own
-# item alongside it would corrupt that payload (two JSON objects, or two
-# texts, joined by DefaultContextManager/PromptedAgent's own "\n\n"
-# flatten — genuinely discovered by this step's own manual end-to-end
-# trace, not by inspection). _StepScopedResolver is the fix: a tiny,
-# pipeline-owned wrapper restricting WorkflowStateResolver's own
-# contribution to the one step that needs it, without changing
-# WorkflowStateResolver itself at all.
+# other step needs exactly one clean payload from
+# WorkflowStepOutputResolver alone; concatenating WorkflowStateResolver's
+# own item alongside it would corrupt that payload (two JSON objects, or
+# two texts, joined by DefaultContextManager/PromptedAgent's own "\n\n"
+# flatten). _StepScopedResolver is the fix: a tiny, pipeline-owned
+# wrapper restricting WorkflowStateResolver's own contribution to the
+# one step that needs it, without changing WorkflowStateResolver itself
+# at all.
 _REQUIREMENTS_ANALYST_STEP_ID = "requirements-analyst"
 
 
@@ -254,8 +238,8 @@ class _StepScopedResolver:
 def load_pipeline_definition() -> WorkflowDefinition:
     """Loads and validates ``workflows/delivery_pipeline.yaml`` through
     the real :class:`WorkflowDefinitionLoader` — the one canonical
-    definition both the deterministic and the opt-in live full-chain
-    tests drive; only the agent registry each supplies differs."""
+    definition every real caller drives, production route and tests
+    alike; only the agent registry each supplies differs."""
     return WorkflowDefinitionLoader().load(_DEFINITION_PATH)
 
 
@@ -277,8 +261,7 @@ def build_pipeline_context_manager(
     pipeline dispatches to resolves its own sandbox from that identical
     default. A caller that constructs its own agents with an explicit
     ``sandbox=`` override (any test wanting a specific, non-default
-    backend) must pass the matching ``python_command`` here too — see
-    this module's own docstring for the bug this closes.
+    backend) must pass the matching ``python_command`` here too.
     """
     resolved_python_command = python_command or default_python_command()
     return DefaultContextManager(
@@ -308,10 +291,11 @@ def build_pipeline_trigger(
     shape exactly — real, ``engine``-backed persistence driving one
     ``WorkflowDefinition`` through create -> start -> run-to-completion.
     ``agent_registry`` is the one thing a caller must choose: a real
-    ``SqlAgentRegistry`` (production, and this step's own opt-in live
-    proof) or a deterministic, Echo-backed ``InMemoryAgentRegistry``
-    keyed by this same pack-qualified id convention (this step's own
-    deterministic full-chain test) — this function does not care which.
+    ``SqlAgentRegistry`` (production, via ``bootstrap.py``, and the
+    opt-in live integration tests) or a deterministic, Echo-backed
+    ``InMemoryAgentRegistry`` keyed by this same pack-qualified id
+    convention (the deterministic integration tests) — this function
+    does not care which.
 
     ``python_command`` is forwarded to :func:`build_pipeline_context_manager`
     unchanged — see that function's own docstring.
@@ -338,7 +322,7 @@ def build_pipeline_trigger(
             definition=definition,
             inputs=inputs,
             principal_id=principal_id,
-            pack_id=_PACK_ID,
+            pack_id=PACK_ID,
         )
         await instance_service.start(
             workflow_id=instance.workflow_id,

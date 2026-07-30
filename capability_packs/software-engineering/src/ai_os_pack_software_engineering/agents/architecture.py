@@ -101,7 +101,7 @@ class ArchitectureProposalInput(BaseModel):
     workflow's own raw top-level ``inputs`` — since this pipeline wired
     Requirements Analyst in as its own first step, this agent's
     ``context`` variable is Requirements Analyst's own real, refined
-    output (see ``tests/integration/_delivery_pipeline.py``'s own
+    output (see ``ai_os_kernel.workflow_engine.delivery_pipeline``'s own
     ``_STEP_SOURCES``/``_FIELD_SELECTORS`` for that pipeline's specific
     wiring) — a different, but structurally identical, real source
     supplying the same variable this agent has always read.
