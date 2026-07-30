@@ -12,6 +12,8 @@ Auto-read every session. Keep this short — detail lives in the linked files, n
 
 Work proceeds in small, explicitly-scoped steps, each approved by the product owner before it starts. Finish exactly the approved scope, report using the shape in `docs/process/reporting_format.md`, recommend the next step (one recommendation, not a menu), and **wait for explicit approval before starting it** — never chain into unapproved work. Full rules: `docs/process/standing_rules.md`.
 
+**Every report also confirms `coding_standards.md` compliance (flagging any deviation found, even pre-existing), backs every claim with real command output, ends with a status block (phase / phase % / overall weighted % / what major areas remain), and includes an efficiency note when a real one exists.** Full shape: `docs/process/reporting_format.md`.
+
 ## Known environment quirks
 
 - `uv sync --frozen --all-packages` removes the manually-installed `uv` binary from the venv — reinstall with `pip install uv` afterward.

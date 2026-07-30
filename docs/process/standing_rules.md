@@ -1,6 +1,6 @@
 # Standing Rules – AI_OS
 
-**Status:** Active | **Last Updated:** 2026-07-29 (the Platform SDK growth gate is **lifted** — a hard product-owner decision, revising the gate's own previously-recorded lift condition; see below)
+**Status:** Active | **Last Updated:** 2026-07-30 (4 permanent reporting rules added: coding-standards confirmation, evidence-based claims, the phase/%/remaining-areas status block, and the optional efficiency note — see Reporting discipline below and `docs/process/reporting_format.md`. Prior: 2026-07-29, the Platform SDK growth gate is **lifted** — a hard product-owner decision, revising the gate's own previously-recorded lift condition; see below)
 
 The process rules this project has actually operated under, distilled from how every step so far has actually been approved and executed. These are binding unless the product owner explicitly says otherwise for a given step.
 
@@ -54,6 +54,16 @@ The process rules this project has actually operated under, distilled from how e
 - Zero regressions — run the full relevant test suite (not just new tests) before reporting a step complete.
 - Prefer a real fake or a real execution path over a mock; see `docs/process/coding_standards.md` for the one recorded exception and why.
 - No hardcoded secrets, ever.
+- **Every step's own coding-standards compliance is confirmed explicitly in that step's report, not just inferred from a clean `mypy`/`ruff` run** — and any deviation from `docs/process/coding_standards.md` found anywhere touched or read this step (including pre-existing code the step didn't write) is flagged, not silently passed over. Recorded 2026-07-30; full shape in `docs/process/reporting_format.md` item 5.
+
+## Reporting discipline (added 2026-07-30)
+
+Four permanent additions to every step's report, in full in `docs/process/reporting_format.md` (items 5–8) — summarized here so this document's own "what's binding" list stays complete:
+
+1. **Coding standards confirmation** — see the Engineering discipline bullet above.
+2. **Evidence-based claims, codified as a permanent rule.** This project already required real, re-run command output behind every numeric claim in a *status document* (the audit-born rule two bullets below). This extends the identical discipline to every claim in every *step report* — test results, "the pipeline ran end to end," anything else — as a standing rule, not something only status docs enforce.
+3. **The status block** — phase (per `feature_inventory.md` §4), phase % complete, overall weighted % complete, one line naming what major feature areas remain. Ends every report, replacing the need to ask for this breakdown separately.
+4. **The efficiency note** — optional, real findings only, never manufactured.
 
 ## Environment quirks worth knowing (see `CLAUDE.md` for the short version)
 
