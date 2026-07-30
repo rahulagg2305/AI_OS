@@ -329,6 +329,7 @@ from ai_os_kernel.capability_manager.errors import (
     InvalidPackTransitionError,
     PackAlreadyRegisteredError,
 )
+from ai_os_kernel.capability_manager.health_poller import poll_pack_health
 from ai_os_kernel.capability_manager.repository import (
     PackLifecycleRepository,
     SqlPackLifecycleRepository,
@@ -350,7 +351,7 @@ from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
 from ai_os_kernel.llm_gateway.budget_enforcer import PerScopeBudgetEnforcer
 from ai_os_kernel.llm_gateway.capability_negotiator import StaticCapabilityNegotiator
 from ai_os_kernel.llm_gateway.circuit_breaker import InMemoryCircuitBreaker
-from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, LLMGateway
+from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway, LLMGateway
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter, build_routing_chain
 from ai_os_kernel.manifest_loader import ManifestLoader
 from ai_os_kernel.observability import (
@@ -363,6 +364,7 @@ from ai_os_kernel.observability import (
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.persistence.settings import DatabaseSettings
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
+from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import build_anthropic_prompted_completion_service
 from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
 from ai_os_kernel.routes.health import router as health_router
@@ -951,7 +953,7 @@ async def _build_token_verifier() -> JWTBearerTokenVerifier | None:
 
 async def _register_and_activate_discovered_packs(
     manifest_loader: ManifestLoader, pack_lifecycle_repository: SqlPackLifecycleRepository
-) -> None:
+) -> list[str]:
     """Real pack discovery -> registration -> activation, with zero
     manual intervention — see this module's own docstring for the full
     design (idempotency, degrade behaviour, why ``sdk_version``/
@@ -963,6 +965,16 @@ async def _register_and_activate_discovered_packs(
     ``activate()`` to write to without one, the identical "a missing
     database is handled one level up" reasoning
     ``_build_prompted_agent_registry``'s own docstring already states.
+
+    Returns every schema-valid discovered pack's own ``pack_id`` —
+    regardless of whether *this* call's own register/activate attempt
+    succeeded, was a benign idempotent-restart skip, or hit a genuine,
+    logged error — so ``_lifespan``'s own health-poll step (see
+    :mod:`ai_os_kernel.capability_manager.health_poller`) can attempt a
+    real poll for every discovered pack. A poll against a pack that
+    genuinely isn't ``ACTIVATED`` for any reason correctly reports
+    unhealthy on its own (agent resolution itself requires an activated
+    pack) — not a special case this function needs to filter out first.
     """
     report = manifest_loader.scan()
     for failure in report.failed:
@@ -1018,6 +1030,49 @@ async def _register_and_activate_discovered_packs(
                 )
         except CapabilityManagerError as exc:
             logger.error("kernel.bootstrap.pack_activation_failed", pack_id=pack_id, error=str(exc))
+
+    return [discovered.metadata.id for discovered in report.discovered]
+
+
+async def _poll_discovered_pack_health(
+    engine: AsyncEngine,
+    pack_lifecycle_repository: SqlPackLifecycleRepository,
+    agent_registry: AgentRegistry,
+    pack_ids: list[str],
+) -> None:
+    """The Pack Health Collector's own real caller — one real poll per
+    discovered pack, per Kernel startup. See
+    :mod:`ai_os_kernel.capability_manager.health_poller`'s own docstring
+    for the full design (the three-value policy, why there is no
+    background scheduler yet, why this is deliberately the smallest
+    real slice). ``agent_registry`` is whatever
+    ``_build_se_delivery_pipeline_registry`` already built for the
+    pipeline trigger — reused, not rebuilt, the same "one real object,
+    not a second copy" reasoning this file already applies elsewhere
+    (e.g. ``app.state.database_engine``).
+
+    A genuine polling failure (a real database error, not merely an
+    unhealthy pack — that is the *expected*, correctly-reported outcome
+    of a real poll) is logged and does not abort polling the remaining
+    packs, the identical per-item resilience
+    ``_register_and_activate_discovered_packs`` already established.
+    """
+    for pack_id in pack_ids:
+        try:
+            report = await poll_pack_health(
+                engine=engine,
+                pack_lifecycle_repository=pack_lifecycle_repository,
+                agent_registry=agent_registry,
+                pack_id=pack_id,
+                actor=_PACK_DISCOVERY_ACTOR,
+            )
+            logger.info(
+                "kernel.bootstrap.pack_health_polled", pack_id=pack_id, status=report.status
+            )
+        except Exception as exc:
+            logger.error(
+                "kernel.bootstrap.pack_health_poll_failed", pack_id=pack_id, error=str(exc)
+            )
 
 
 @asynccontextmanager
@@ -1100,9 +1155,54 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # for the full design (idempotency, per-pack degrade behaviour).
         # Uses the manifest_loader already built and attached in
         # build_app(), reused rather than rebuilt.
-        await _register_and_activate_discovered_packs(
+        discovered_pack_ids = await _register_and_activate_discovered_packs(
             app.state.manifest_loader, app.state.pack_lifecycle_repository
         )
+        # The Pack Health Collector's own real caller — one real poll
+        # per discovered pack, per Kernel startup. See
+        # ai_os_kernel.capability_manager.health_poller's own docstring
+        # for the full design (poll interval/timeout/consecutive-failure
+        # policy, why there is no background scheduler yet).
+        #
+        # Deliberately backed by a real, always-answering
+        # EchoLLMGateway/InMemoryPromptEngine, never
+        # se_delivery_pipeline_registry's own real, credential-gated
+        # one built below — a genuine, discovered design correction
+        # made during this step's own testing, not shipped as a first
+        # guess. "Can this pack's agents still resolve/construct" is a
+        # code-health question; whether a live Anthropic secret happens
+        # to be configured right now is a separate, already-tracked
+        # degrade (`se_delivery_pipeline_llm_gateway_unavailable`,
+        # logged at warning). Polling with the credential-gated registry
+        # would have reported the four llm:invoke agents "unhealthy"
+        # for a missing secret alone — three such Kernel restarts with
+        # no secret configured (a completely ordinary dev/CI state, not
+        # a broken pack) would have genuinely, permanently failed the
+        # pack via mark_failed(), with no recovery path
+        # (`_ACTIVATABLE_FROM_STATES` excludes `FAILED`). The Echo/
+        # InMemory pair used here is real, working infrastructure
+        # (:class:`~ai_os_kernel.llm_gateway.gateway.EchoLLMGateway`,
+        # the identical "deterministic, no live LLM call required"
+        # backing every pack-agent unit/integration test in this
+        # codebase already uses) — it genuinely exercises
+        # `build_pack_context`'s own permission-gated injection path,
+        # just never a real network call.
+        health_check_agent_registry = SqlAgentRegistry(
+            engine,
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={}),
+        )
+        await _poll_discovered_pack_health(
+            engine,
+            app.state.pack_lifecycle_repository,
+            health_check_agent_registry,
+            discovered_pack_ids,
+        )
+        # se.delivery_pipeline's own registry — real and
+        # credential-gated, built here (not for the health poll above,
+        # which needs an always-answering one instead — see its own
+        # comment for why).
+        se_delivery_pipeline_registry = await _build_se_delivery_pipeline_registry(engine)
         # se.delivery_pipeline's own real trigger (ai_os_kernel.routes.delivery_pipeline)
         # — a second, independent trigger closure alongside
         # trigger_prompted_agent_workflow above. Always attached once a
@@ -1112,7 +1212,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # route still reaches the real Workflow Engine and returns an
         # honest, structured `failed` outcome instead of a blanket 503.
         app.state.trigger_se_delivery_pipeline = build_pipeline_trigger(
-            engine, await _build_se_delivery_pipeline_registry(engine)
+            engine, se_delivery_pipeline_registry
         )
 
     try:

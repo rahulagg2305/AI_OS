@@ -31,12 +31,25 @@ pack directory (every integration test that used to hand-seed rows,
 and any future pack-directory-driven registration path) opts in
 explicitly by passing it.
 
+**``mark_failed()`` and ``record_health()`` close capability_manager.md
+§9's own "health check protocols" gap — the real consequence of a
+genuine Pack Health Collector poll, not health monitoring itself.**
+:mod:`~ai_os_kernel.capability_manager.health_poller` is the real
+caller: ``record_health()`` writes a plain, informational
+``catalog.packs.health`` snapshot on every poll (healthy or not — never
+itself a lifecycle transition); ``mark_failed()`` is the one real,
+audited transition this module gains beyond register/activate/
+deactivate, called only after that poller's own consecutive-failure
+threshold is crossed, following the identical lock/validate/write/
+record shape ``activate``/``deactivate`` already establish.
+
 **The smallest useful slice of the full canonical lifecycle**
 (capability_manager.md §4: ``discovered -> validated -> installed ->
 configured -> activated -> {deactivated, failed} -> uninstalled``) —
-register/install, activate, deactivate only. No ``configured``/
-``failed``/``uninstalled`` transitions, no health monitoring, no
-upgrade path, no permissions matrix, no sandboxing, no remote download.
+register/install, activate, deactivate, and (as of this step) the one
+real ``-> failed`` transition. Still no ``configured``/``uninstalled``
+transitions, no upgrade path, no permissions matrix, no sandboxing, no
+remote download.
 
 **Why ``register()`` records ``discovered -> installed``, not
 ``validated -> installed`` or two separate transitions.** Nothing in
@@ -110,6 +123,13 @@ _REGISTER_FROM_STATE = PackState.DISCOVERED
 _ACTIVATABLE_FROM_STATES = frozenset({PackState.INSTALLED, PackState.DEACTIVATED})
 _DEACTIVATABLE_FROM_STATES = frozenset({PackState.ACTIVATED})
 
+# See module docstring: only a currently-ACTIVATED pack can genuinely
+# fail — a pack that was never serving (installed/deactivated) has
+# nothing running to fail. Deliberately excludes ACTIVATABLE_FROM_STATES
+# so `failed` stays a distinct, one-way consequence of real, observed
+# health polling, not something reachable from every other state.
+_FAILABLE_FROM_STATES = frozenset({PackState.ACTIVATED})
+
 
 class PackLifecycleRepository(Protocol):
     """Persistence boundary for the Capability Pack lifecycle's write
@@ -132,6 +152,10 @@ class PackLifecycleRepository(Protocol):
     async def activate(self, *, pack_id: str, actor: str, reason: str) -> PackRecord: ...
 
     async def deactivate(self, *, pack_id: str, actor: str, reason: str) -> PackRecord: ...
+
+    async def mark_failed(self, *, pack_id: str, actor: str, reason: str) -> PackRecord: ...
+
+    async def record_health(self, *, pack_id: str, health: dict[str, Any]) -> None: ...
 
     async def get_pack(self, pack_id: str) -> PackRecord | None: ...
 
@@ -279,6 +303,63 @@ class SqlPackLifecycleRepository:
 
         return PackRecord.model_validate(dict(pack_row))
 
+    async def mark_failed(self, *, pack_id: str, actor: str, reason: str) -> PackRecord:
+        """The real consequence capability_manager.md §9 names ("the
+        number of consecutive failures that moves a pack to `failed`")
+        — called by
+        :mod:`ai_os_kernel.capability_manager.health_poller` once a
+        pack's own consecutive unhealthy-poll count crosses its
+        threshold. The identical audited-transition shape
+        :meth:`activate`/:meth:`deactivate` already establish (lock,
+        validate, write, record), not a special case."""
+        occurred_at = datetime.now(UTC)
+        try:
+            async with self._engine.begin() as connection:
+                from_state = await self._lock_current_state(connection, pack_id)
+                if from_state not in _FAILABLE_FROM_STATES:
+                    raise InvalidPackTransitionError(
+                        f"cannot mark pack '{pack_id}' failed: current state is "
+                        f"{from_state.value!r}, expected one of "
+                        f"({', '.join(sorted(s.value for s in _FAILABLE_FROM_STATES))})"
+                    )
+
+                result = await connection.execute(
+                    sa.update(packs)
+                    .where(packs.c.pack_id == pack_id, packs.c.state == from_state.value)
+                    .values(state=PackState.FAILED.value)
+                    .returning(*packs.columns)
+                )
+                pack_row = result.mappings().one()
+
+                await self._record_transition(
+                    connection,
+                    pack_id=pack_id,
+                    from_state=from_state,
+                    to_state=PackState.FAILED,
+                    actor=actor,
+                    reason=reason,
+                    occurred_at=occurred_at,
+                )
+        except sa.exc.SQLAlchemyError as exc:
+            raise PackRegistrationError(f"failed to mark pack '{pack_id}' failed: {exc}") from exc
+
+        return PackRecord.model_validate(dict(pack_row))
+
+    async def record_health(self, *, pack_id: str, health: dict[str, Any]) -> None:
+        """A plain metadata write, deliberately outside the audited
+        state-transition machinery above — recording a pack's own
+        health snapshot is not itself a lifecycle transition (unlike
+        `mark_failed`, its real consequence), the same distinction
+        capability_manager.md draws between `catalog.packs.health`
+        (informational) and `catalog.pack_state_transitions` (the
+        audited log). Silently a no-op if `pack_id` does not exist —
+        the caller (`health_poller`) already knows it does, since it
+        just resolved the pack's own agents against it."""
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                sa.update(packs).where(packs.c.pack_id == pack_id).values(health=health)
+            )
+
     async def get_pack(self, pack_id: str) -> PackRecord | None:
         """A plain, unguarded read — mirrors
         :meth:`~ai_os_kernel.workflow_engine.repository.WorkflowInstanceRepository.get_instance`."""
@@ -292,9 +373,10 @@ class SqlPackLifecycleRepository:
         """Takes a row lock (``FOR UPDATE``) on ``pack_id``'s row and
         returns its current state — the read half of the atomic
         "read current state, validate, write" sequence :meth:`activate`/
-        :meth:`deactivate` both need. Raises :class:`PackNotFoundError`
-        if no such row exists; ``pack_id`` is not itself the caller's to
-        create here (that is :meth:`register`'s job)."""
+        :meth:`deactivate`/:meth:`mark_failed` all need. Raises
+        :class:`PackNotFoundError` if no such row exists; ``pack_id`` is
+        not itself the caller's to create here (that is
+        :meth:`register`'s job)."""
         result = await connection.execute(
             sa.select(packs.c.state).where(packs.c.pack_id == pack_id).with_for_update()
         )
