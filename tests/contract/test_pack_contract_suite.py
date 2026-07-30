@@ -242,3 +242,34 @@ class TestFullSuiteAgainstTheRealPack:
         rendered = render_suite_report(report)
         rendered.encode("ascii")  # UnicodeEncodeError if not -- waiver.render_report's precedent
         assert isinstance(report, PackContractSuiteReport)
+
+
+class TestOrchestratorSurvivesAnUnreadableManifest:
+    """A real, fixed regression: `run_pack_contract_suite()` used to call
+    the unguarded manifest loader directly and would crash with an
+    uncaught exception if the manifest were invalid YAML or a
+    non-mapping document -- losing every check's own result, not just
+    check 1's. Fixed to run check 1 first and report a clean,
+    all-9-checks-present failure instead."""
+
+    async def test_an_unreadable_manifest_produces_a_clean_failed_report_not_a_crash(
+        self, tmp_path: Path
+    ) -> None:
+        bad_manifest = tmp_path / "manifest.yaml"
+        bad_manifest.write_text("key: [unterminated\n", encoding="utf-8")
+
+        report = await run_pack_contract_suite(
+            pack_root=_SE_PACK_ROOT,
+            manifest_path=bad_manifest,
+            schema_path=_SCHEMA_PATH,
+            own_pack_package=_SE_PACK_PACKAGE,
+            waiver_path=_SE_WAIVER_PATH,
+        )
+
+        assert not report.passed
+        assert len(report.results) == 9
+        assert [r.check_id for r in report.results] == list(range(1, 10))
+        assert not report.results[0].passed  # check 1 itself fails, cleanly
+        # check 7 is manifest-independent and still runs for real against the real pack
+        assert report.results[6].check_id == 7
+        assert report.results[6].passed

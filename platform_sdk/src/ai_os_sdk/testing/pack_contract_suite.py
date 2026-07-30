@@ -114,6 +114,34 @@ def _load_manifest(manifest_path: Path) -> dict[str, Any]:
     return raw
 
 
+class _ManifestUnreadable(Exception):
+    """Raised internally when a manifest is not parseable YAML or not a
+    mapping — caught by :func:`check_1_manifest_is_valid` and
+    :func:`run_pack_contract_suite` so a malformed manifest is reported
+    as a clean check failure, never an uncaught crash. Real, discovered
+    gap: a first version of this module let `yaml.YAMLError`/`ValueError`
+    from `_load_manifest` propagate straight out of `check_1_manifest_is_valid`
+    (and out of the orchestrator, which also calls `_load_manifest`
+    directly) — the one behavior every other check in this suite
+    deliberately avoids (each reports its own failure in
+    `PackContractCheckResult`, never raises for a bad *pack*, only for a
+    genuinely unexpected bug). Found by
+    `tests/unit/platform_sdk/test_manifest_check_agrees_with_kernel_loader.py`,
+    which expected `check_1_manifest_is_valid` to return `passed=False`
+    for a non-mapping/invalid-YAML document the same way
+    `ManifestLoader.load_one` raises a clean `ManifestError` for it —
+    instead it crashed with an unhandled exception."""
+
+
+def _load_manifest_or_raise_unreadable(manifest_path: Path) -> dict[str, Any]:
+    try:
+        return _load_manifest(manifest_path)
+    except yaml.YAMLError as exc:
+        raise _ManifestUnreadable(f"{manifest_path}: not valid YAML: {exc}") from exc
+    except ValueError as exc:
+        raise _ManifestUnreadable(str(exc)) from exc
+
+
 def _resolve_dotted_path(dotted: str) -> Any:
     """Resolves a manifest ``module.path:AttributeName`` reference to the
     real object it names, raising the natural ``ImportError``/
@@ -140,9 +168,19 @@ def check_1_manifest_is_valid(manifest_path: Path, schema_path: Path) -> PackCon
     production against the identical schema file — this function is a
     second, independent proof over the same real artifact, not a new
     rule invented for this suite.
+
+    **Fails closed on unparseable input, like every other check in this
+    suite — never raises for a bad manifest.** Invalid YAML or a
+    non-mapping top-level document is reported as ``passed=False``, the
+    same real outcome ``ManifestLoader.load_one`` reaches by raising a
+    caught ``ManifestError`` — a genuine, discovered gap this function
+    used not to close (see :class:`_ManifestUnreadable`'s own docstring).
     """
     details: list[str] = []
-    manifest = _load_manifest(manifest_path)
+    try:
+        manifest = _load_manifest_or_raise_unreadable(manifest_path)
+    except _ManifestUnreadable as exc:
+        return PackContractCheckResult(1, "manifest is valid", False, (str(exc),))
     schema: dict[str, Any] = yaml.safe_load(schema_path.read_text(encoding="utf-8"))
 
     validator = Draft202012Validator(schema)
@@ -648,19 +686,53 @@ async def run_pack_contract_suite(
     every result together, in check-id order. Loads and parses the
     manifest exactly once, threading the same parsed ``dict`` to every
     check that needs it — see this module's own docstring for why no
-    check resolves its own manifest path internally."""
-    manifest = _load_manifest(manifest_path)
+    check resolves its own manifest path internally.
 
+    **Runs check 1 first and never crashes on an unreadable manifest.**
+    Checks 2-6, 8, and 9 all need the manifest already parsed into a
+    ``dict``; check 1 is the one place that parsing can fail (invalid
+    YAML, a non-mapping document). If it does, this function reports
+    check 1's own real failure plus an honest "cannot run without a
+    valid manifest" result for every check that needs the parse to have
+    succeeded — check 7 is pack-source-only and independent of the
+    manifest, so it still runs for real regardless. A prior version of
+    this function called the unguarded ``_load_manifest`` directly here,
+    which raised past this function entirely on the same input — found
+    by :mod:`tests.unit.platform_sdk.test_manifest_check_agrees_with_kernel_loader`,
+    fixed here rather than only inside :func:`check_1_manifest_is_valid`.
+    """
+    check_1 = check_1_manifest_is_valid(manifest_path, schema_path)
+    check_7 = check_7_no_forbidden_imports(
+        pack_root, own_pack_package=own_pack_package, waiver_path=waiver_path
+    )
+
+    if not check_1.passed:
+        unrunnable = (
+            "skipped: check 1 (manifest is valid) failed, so the manifest could not be "
+            "parsed for this check to run against"
+        )
+        results = (
+            check_1,
+            PackContractCheckResult(2, "entry points resolve", False, (unrunnable,)),
+            PackContractCheckResult(3, "I/O models match", False, (unrunnable,)),
+            PackContractCheckResult(4, "workflow steps resolve", False, (unrunnable,)),
+            PackContractCheckResult(5, "trust tier consistency", False, (unrunnable,)),
+            PackContractCheckResult(6, "permission vocabulary", False, (unrunnable,)),
+            check_7,
+            PackContractCheckResult(8, "required prompts exist", False, (unrunnable,)),
+            PackContractCheckResult(9, "clean activation", False, (unrunnable,)),
+        )
+        return PackContractSuiteReport(results=results)
+
+    manifest = _load_manifest(manifest_path)
     results = (
-        check_1_manifest_is_valid(manifest_path, schema_path),
+        check_1,
         check_2_entry_points_resolve(manifest, pack_root),
         check_3_io_models_match(manifest),
         check_4_workflow_steps_resolve(manifest, pack_root),
         check_5_trust_tier_consistency(manifest),
         check_6_permission_vocabulary(manifest, schema_path),
-        check_7_no_forbidden_imports(
-            pack_root, own_pack_package=own_pack_package, waiver_path=waiver_path
-        ),
+        check_7,
         check_8_required_prompts_exist(manifest, pack_root),
         await check_9_clean_activation(manifest),
     )
