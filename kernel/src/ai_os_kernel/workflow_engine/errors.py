@@ -150,18 +150,39 @@ class QualityGateFailedError(Exception):
 
     ``gate_step_id`` (added 2026-07-30, the bounded-retry step) is the
     failing gate's own declared step id — structured, not parsed back
-    out of the message string — so ``run_to_completion`` can look it up
-    in its own ``gate_retry_targets`` mapping and decide whether a
-    bounded retry applies, without this exception needing to know
-    anything about retry policy itself. When no retry is configured for
-    this gate (the default, every caller except ``se.delivery_pipeline``),
-    this still halts the run with ``WorkflowRunOutcome.FAILED`` exactly
-    as before — carrying the id is additive, not a behavior change on
+    out of the message string. ``WorkflowInstanceService.advance``
+    (added 2026-07-30, the general-step-retry step) additionally
+    attaches the identical value to *every* exception it catches, as a
+    generic ``step_id`` attribute — so this class's own ``gate_step_id``
+    is now redundant with that (kept only so nothing that already reads
+    it breaks), and ``run_to_completion`` reads the generic ``step_id``
+    for every exception type uniformly, gate or not.
+
+    ``retriable = True`` (added 2026-07-30, the general-step-retry step)
+    is this class's own self-declaration, following the identical
+    ``LLMProviderError.retriable`` convention
+    (:mod:`ai_os_kernel.llm_gateway.errors`) that already exists for
+    exactly this purpose: ``run_to_completion`` retries an exception
+    only when it declares itself ``retriable`` — see that class's own
+    docstring, and :mod:`ai_os_kernel.workflow_engine.advance_runner`'s
+    module docstring, for the full retriable-vs-not category reasoning.
+    A quality-gate failure is always retriable *by this codebase's own
+    design*: the retry re-runs the step that *produces* the artifact
+    the gate evaluates (e.g. ``build``, never the gate's own source
+    step alone), which is genuine, real "corrective work" in the sense
+    error_handling_retry.md §3's ``quality`` category requires — not a
+    blind re-evaluation of the identical, already-failed artifact.
+
+    When no retry is configured for this gate's own step id (the
+    default, every caller except ``se.delivery_pipeline``), this still
+    halts the run with ``WorkflowRunOutcome.FAILED`` exactly as before
+    — carrying these attributes is additive, not a behavior change on
     its own."""
 
     def __init__(self, message: str, *, gate_step_id: str) -> None:
         super().__init__(message)
         self.gate_step_id = gate_step_id
+        self.retriable = True
 
 
 class WorkflowLeaseUnavailableError(Exception):

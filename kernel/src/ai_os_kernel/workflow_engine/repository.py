@@ -448,7 +448,7 @@ class SqlWorkflowInstanceRepository:
                     # constant this replaces), so this is a zero-behavior
                     # -change fix for every existing caller; a genuine
                     # bounded retry (`WorkflowInstanceService.
-                    # retry_after_gate_failure`, added 2026-07-30) is what
+                    # retry_after_step_failure`, added 2026-07-30) is what
                     # makes a *second* row for the same step_name possible
                     # at all — `uq_workflow_steps_workflow_id_step_name_attempt`
                     # is exactly the constraint that makes reusing
@@ -548,7 +548,7 @@ class SqlWorkflowInstanceRepository:
         """Move ``current_step_id`` *backward* to ``retry_to_step_id`` —
         the one real, minimal primitive a bounded quality-gate retry
         needs (:meth:`~ai_os_kernel.workflow_engine.service.
-        WorkflowInstanceService.retry_after_gate_failure`) that
+        WorkflowInstanceService.retry_after_step_failure`) that
         :meth:`advance_workflow` cannot express: that method only ever
         moves ``current_step_id`` *forward*, to a step it just executed.
 

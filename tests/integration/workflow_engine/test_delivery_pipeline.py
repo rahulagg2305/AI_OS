@@ -108,8 +108,10 @@ from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
     build_anthropic_adapter,
 )
 from ai_os_kernel.llm_gateway.adapters.model_config import load_provider_config
+from ai_os_kernel.llm_gateway.errors import LLMProviderError
 from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway
 from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
+from ai_os_kernel.llm_gateway.models import LLMRequest, LLMResponse
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
@@ -282,6 +284,67 @@ def _build_agent_with_prompt(
             pack_version=_PACK_VERSION,
             permissions=["llm:invoke", "sandbox:execute"],
             llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
+            sandbox=LocalSubprocessSandbox(),
+        )
+    )
+    return agent
+
+
+class _FlakyLLMGateway:
+    """Wraps a real `LLMGateway` (`EchoLLMGateway` below), raising a
+    real `LLMProviderError` on its own first `failures_before_success`
+    calls before delegating to the wrapped gateway for real — the
+    identical "genuine, controllable transient condition, not a coin
+    flip" shape `test_a_gate_failure_within_the_retry_bound_eventually_succeeds`
+    already establishes via a marker file on disk, applied at the LLM
+    Gateway boundary instead, to prove a non-gate step (`build`) itself
+    now genuinely retries too (general, error-category-driven step
+    retry, added 2026-07-30). `retriable` (default `True`, matching
+    `LLMProviderError`'s own documented default) lets the same fixture
+    also produce the *non*-retriable proof: a real, explicit
+    `retriable=False` classification (llm_gateway.md §10's own
+    `permanent`/`budget` rows) that must never retry, even with a real,
+    configured `_STEP_RETRY_TARGETS` entry for the step raising it."""
+
+    def __init__(
+        self,
+        delegate: KernelLLMGatewayProtocol,
+        *,
+        failures_before_success: int,
+        retriable: bool = True,
+    ) -> None:
+        self._delegate = delegate
+        self._failures_before_success = failures_before_success
+        self._retriable = retriable
+        self.attempts = 0
+
+    async def complete(self, request: LLMRequest) -> LLMResponse:
+        self.attempts += 1
+        if self.attempts <= self._failures_before_success:
+            raise LLMProviderError("simulated provider failure", retriable=self._retriable)
+        return await self._delegate.complete(request)
+
+
+def _build_agent_with_flaky_llm_gateway(
+    template: str,
+    prompt_id: str,
+    *,
+    working_directory: Path,
+    llm_gateway: KernelLLMGatewayProtocol,
+) -> BuildAgentEntrypoint:
+    """The identical construction `_build_agent_with_prompt` already
+    establishes, with `llm_gateway` swapped for a caller-supplied
+    (real, controllable) `_FlakyLLMGateway` instead of a bare
+    `EchoLLMGateway()` — needed only by the two general-step-retry
+    proof tests below, where the LLM call itself must genuinely fail."""
+    agent = BuildAgentEntrypoint(working_directory=working_directory)
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke", "sandbox:execute"],
+            llm_gateway=llm_gateway,
             prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
             sandbox=LocalSubprocessSandbox(),
         )
@@ -773,6 +836,182 @@ async def test_a_gate_that_fails_every_attempt_exhausts_the_retry_bound_and_halt
             assert gate_row.error["type"] == "QualityGateFailedError"
         assert not any(s.step_name == "documentation" for s in steps)
         assert not (tmp_path / "solution.py.md").exists()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_non_gate_step_failure_within_the_retry_bound_eventually_succeeds(
+    tmp_path: Path, database_url: str
+) -> None:
+    """The real proof this feature step exists for: general,
+    error-category-driven step retry, widened beyond quality gates to
+    `build` itself — the same bounded mechanism gates already proved,
+    reused unchanged. `build`'s own LLM call raises a real, retriable
+    `LLMProviderError` (its own documented default) on its first real
+    attempt, then succeeds — the real production `_STEP_RETRY_TARGETS`
+    (`ai_os_kernel.workflow_engine.delivery_pipeline`) retries `build`
+    from itself and the pipeline completes, the identical way a failed
+    gate already does."""
+
+    requirements_analyst_template = "ANALYSIS: refined and structured.\nRaw ask was: {{context}}"
+    architecture_template = "DESIGN: a single Python script.\nContext was: {{context}}"
+    build_template = (
+        "Upstream design: {{context}}\n\n"
+        "FILE_PATH: solution.py\n"
+        "FILE_CONTENT_BEGIN\n"
+        'print("hello from the pipeline")\n'
+        "FILE_CONTENT_END"
+    )
+    documentation_template = (
+        "# {{filePath}}\n\nInstruction: {{instruction}}\nPassed: {{passed}} (exit {{exitCode}})"
+    )
+
+    flaky_build_gateway = _FlakyLLMGateway(EchoLLMGateway(), failures_before_success=1)
+
+    registry = InMemoryAgentRegistry(
+        {
+            _AGENT_IDS["requirements-analyst"]: _requirements_analyst_agent_with_prompt(
+                requirements_analyst_template, "requirements.analyze"
+            ),
+            _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
+                architecture_template, "architecture.propose_design"
+            ),
+            _AGENT_IDS["build"]: _build_agent_with_flaky_llm_gateway(
+                build_template,
+                "build.write_file",
+                working_directory=tmp_path,
+                llm_gateway=flaky_build_gateway,
+            ),
+            _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
+                documentation_template, "documentation.record_artifact"
+            ),
+        }
+    )
+
+    engine = build_engine(database_url)
+    try:
+        trigger = build_pipeline_trigger(
+            engine, registry, python_command=LocalSubprocessSandbox().python_command
+        )
+
+        result = await trigger({"requirement": "print a friendly message"}, "test-principal")
+
+        assert result.outcome == WorkflowRunOutcome.COMPLETED
+        assert result.error is None
+        assert result.last_instance is not None
+        assert flaky_build_gateway.attempts == 2  # one real failure, one real retry
+
+        written_file = tmp_path / "solution.py"
+        assert written_file.is_file()
+        assert (
+            written_file.read_text(encoding="utf-8").strip() == 'print("hello from the pipeline")'
+        )
+
+        engine_repo = SqlWorkflowInstanceRepository(engine)
+        steps = await engine_repo.list_steps(result.last_instance.workflow_id)
+
+        # build genuinely ran twice — a real second attempt, not skipped.
+        build_rows = sorted((s for s in steps if s.step_name == "build"), key=lambda s: s.attempt)
+        assert [s.attempt for s in build_rows] == [1, 2]
+        failed_build_row, passed_build_row = build_rows
+
+        # The genuinely failed first attempt is now genuinely persisted
+        # (the observability-gap fix, 2026-07-30) — a real, distinct
+        # "failed" row, not silently discarded.
+        assert failed_build_row.status == "failed"
+        assert failed_build_row.outputs is None
+        assert failed_build_row.error is not None
+        assert failed_build_row.error["type"] == "LLMProviderError"
+
+        assert passed_build_row.status == "completed"
+        assert passed_build_row.outputs is not None
+
+        # Downstream steps genuinely ran on the real, successful retry —
+        # the pipeline completed, not just "didn't crash."
+        lint_outputs = next(s.outputs for s in steps if s.step_name == "lint")
+        assert lint_outputs is not None
+        assert lint_outputs["passed"] is True
+        doc_file = tmp_path / "solution.py.md"
+        assert doc_file.is_file()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_genuinely_non_retriable_step_failure_halts_immediately_despite_a_configured_target(
+    tmp_path: Path, database_url: str
+) -> None:
+    """The other real proof this feature step exists for: `build` has a
+    real, configured retry target (`_STEP_RETRY_TARGETS["build"] ==
+    "build"` — the identical production config the retry-then-succeed
+    test above exercises), but a failure explicitly classified
+    non-retriable (`LLMProviderError(..., retriable=False)`,
+    llm_gateway.md §10's own `permanent`/`budget` rows) must never
+    retry anyway. Proves the retriability check — not merely a
+    configured target — genuinely gates the decision, end to end
+    against the real production pipeline and its real config, not only
+    at the unit level."""
+
+    requirements_analyst_template = "ANALYSIS: refined and structured.\nRaw ask was: {{context}}"
+    architecture_template = "DESIGN: a single Python script.\nContext was: {{context}}"
+    documentation_template = "# {{filePath}}\n\nInstruction: {{instruction}}"
+
+    # `failures_before_success` set absurdly high is irrelevant here —
+    # `retriable=False` alone must prevent even a single retry.
+    always_failing_gateway = _FlakyLLMGateway(
+        EchoLLMGateway(), failures_before_success=10_000, retriable=False
+    )
+
+    registry = InMemoryAgentRegistry(
+        {
+            _AGENT_IDS["requirements-analyst"]: _requirements_analyst_agent_with_prompt(
+                requirements_analyst_template, "requirements.analyze"
+            ),
+            _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
+                architecture_template, "architecture.propose_design"
+            ),
+            _AGENT_IDS["build"]: _build_agent_with_flaky_llm_gateway(
+                "irrelevant — the LLM call always raises before this is used",
+                "build.write_file",
+                working_directory=tmp_path,
+                llm_gateway=always_failing_gateway,
+            ),
+            _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
+                documentation_template, "documentation.record_artifact"
+            ),
+        }
+    )
+
+    engine = build_engine(database_url)
+    try:
+        trigger = build_pipeline_trigger(
+            engine, registry, python_command=LocalSubprocessSandbox().python_command
+        )
+
+        result = await trigger({"requirement": "print a friendly message"}, "test-principal")
+
+        assert result.outcome == WorkflowRunOutcome.FAILED
+        assert isinstance(result.error, LLMProviderError)
+        assert always_failing_gateway.attempts == 1  # no retry at all, despite a configured target
+        assert result.last_instance is not None
+
+        engine_repo = SqlWorkflowInstanceRepository(engine)
+        steps = await engine_repo.list_steps(result.last_instance.workflow_id)
+
+        build_rows = [s for s in steps if s.step_name == "build"]
+        assert len(build_rows) == 1  # exactly one attempt — no retry
+        assert build_rows[0].status == "failed"
+        assert build_rows[0].error is not None
+        assert build_rows[0].error["type"] == "LLMProviderError"
+
+        assert not any(s.step_name == "lint" for s in steps)
+        assert not any(s.step_name == "documentation" for s in steps)
+        assert not (tmp_path / "solution.py").exists()
     finally:
         await engine.dispose()
 

@@ -154,15 +154,30 @@ class WorkflowInstanceService:
         ``workflow_steps`` row (``status="failed"``, real error detail,
         a real computed ``attempt`` number from the same
         ``MAX(attempt)+1`` query :meth:`advance_workflow` already uses)
-        before the *original* exception is re-raised, byte-for-byte
-        unchanged (bare ``raise``) — every existing caller
-        (:class:`~ai_os_kernel.workflow_engine.advance_runner.
-        WorkflowAdvanceRunner`'s own retry/failure logic) sees the exact
-        same exception it always has; only a new, genuine side effect
-        (the persisted row) is added. A subsequent successful attempt
-        (a bounded retry, or any future general step retry) still gets
-        its own correct, higher ``attempt`` number, since both write
-        paths compute it from the same table.
+        before the *original* exception is re-raised, byte-for-byte in
+        every way that matters (message, type, chained cause) — every
+        existing caller (:class:`~ai_os_kernel.workflow_engine.
+        advance_runner.WorkflowAdvanceRunner`'s own retry/failure logic)
+        sees the exact same exception it always has; only a new, genuine
+        side effect (the persisted row) is added. A subsequent
+        successful attempt (a bounded retry) still gets its own correct,
+        higher ``attempt`` number, since both write paths compute it
+        from the same table.
+
+        **The caught exception also gains a generic ``step_id``
+        attribute here (added 2026-07-30, the general-step-retry step)
+        — set dynamically, on any exception type, not only ones that
+        declare it themselves.** This is the one piece of information
+        only this method reliably has for *every* exception a step
+        executor can raise (``next_step`` is a local variable here, not
+        recoverable from the exception object otherwise): which step
+        was being attempted. :class:`~ai_os_kernel.workflow_engine.
+        advance_runner.WorkflowAdvanceRunner` reads this generic
+        attribute — never a type-specific one — to decide whether a
+        bounded retry applies, so the retry mechanism itself needs no
+        per-exception-type special-casing; only whether the exception
+        also declares itself ``retriable`` (see that module's own
+        docstring for the category split) gates the decision.
         """
         instance = await self._repository.get_instance(workflow_id)
         if instance is None:
@@ -177,6 +192,17 @@ class WorkflowInstanceService:
             try:
                 outputs = await self._step_executor.execute(next_step, workflow_id=workflow_id)
             except Exception as exc:
+                # setattr (not `exc.step_id = ...`, which mypy --strict
+                # correctly rejects — `exc`'s *static* type is the bare
+                # `Exception` this `except` clause declares, which has
+                # no such attribute) — every real exception type this
+                # codebase raises supports the assignment at runtime
+                # (none declare `__slots__`); `noqa: B010` is this one,
+                # narrow, justified exception to "prefer direct
+                # assignment," needed specifically because the direct
+                # form fails strict type-checking for a deliberately
+                # dynamic attribute.
+                setattr(exc, "step_id", next_step.id)  # noqa: B010
                 await self._repository.record_failed_attempt(
                     workflow_id=workflow_id,
                     definition_id=definition.id,
@@ -217,7 +243,7 @@ class WorkflowInstanceService:
             "(the instance's current step does not belong to this definition)"
         )
 
-    async def retry_after_gate_failure(
+    async def retry_after_step_failure(
         self,
         *,
         workflow_id: str,
@@ -227,10 +253,13 @@ class WorkflowInstanceService:
     ) -> WorkflowInstance:
         """Resets ``workflow_id``'s own ``current_step_id`` so the next
         :meth:`advance` call genuinely re-executes ``retry_from_step_id``
-        — the bounded quality-gate retry
-        :class:`~ai_os_kernel.workflow_engine.advance_runner.
-        WorkflowAdvanceRunner` calls after catching a
-        :class:`~ai_os_kernel.workflow_engine.errors.QualityGateFailedError`
+        — the bounded step retry :class:`~ai_os_kernel.workflow_engine.
+        advance_runner.WorkflowAdvanceRunner` calls after catching *any*
+        exception that declares itself ``retriable`` (originally built,
+        and originally named ``retry_after_gate_failure``, for exactly
+        one such exception, :class:`~ai_os_kernel.workflow_engine.errors.
+        QualityGateFailedError` — see that runner's own module docstring
+        for the full, now-generalized retriable-vs-not category split)
         it has a configured retry target for. Which step to retry from,
         and how many times, are both the *caller's* own decisions (a
         composition-level mapping and ``definition.retry_policy``,

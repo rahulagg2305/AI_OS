@@ -572,7 +572,7 @@ async def test_advance_rejects_a_definition_with_no_steps() -> None:
 
 
 @pytest.mark.asyncio
-async def test_retry_after_gate_failure_resets_to_the_step_before_the_retry_target() -> None:
+async def test_retry_after_step_failure_resets_to_the_step_before_the_retry_target() -> None:
     """`_DEFINITION` is `analyze_requirements` -> `implement`; retrying
     from `implement` must reset `current_step_id` back to
     `analyze_requirements`, so the *next* `advance()` call re-executes
@@ -586,7 +586,7 @@ async def test_retry_after_gate_failure_resets_to_the_step_before_the_retry_targ
     )
     service, repository, _, _ = _service(instance=current)
 
-    result = await service.retry_after_gate_failure(
+    result = await service.retry_after_step_failure(
         workflow_id="wf_fake",
         definition=_DEFINITION,
         retry_from_step_id="implement",
@@ -607,7 +607,7 @@ async def test_retry_after_gate_failure_resets_to_the_step_before_the_retry_targ
 
 
 @pytest.mark.asyncio
-async def test_retry_after_gate_failure_resets_to_none_when_the_target_is_the_first_step() -> None:
+async def test_retry_after_step_failure_resets_to_none_when_the_target_is_the_first_step() -> None:
     """Retrying from the definition's own first step must reset
     `current_step_id` to `None` — the same "haven't started yet"
     meaning `_resolve_next_step` already gives that value."""
@@ -620,7 +620,7 @@ async def test_retry_after_gate_failure_resets_to_none_when_the_target_is_the_fi
     )
     service, repository, _, _ = _service(instance=current)
 
-    result = await service.retry_after_gate_failure(
+    result = await service.retry_after_step_failure(
         workflow_id="wf_fake",
         definition=_DEFINITION,
         retry_from_step_id="analyze_requirements",
@@ -632,11 +632,11 @@ async def test_retry_after_gate_failure_resets_to_none_when_the_target_is_the_fi
 
 
 @pytest.mark.asyncio
-async def test_retry_after_gate_failure_rejects_a_missing_instance() -> None:
+async def test_retry_after_step_failure_rejects_a_missing_instance() -> None:
     service, repository, _, _ = _service(instance=None)
 
     with pytest.raises(WorkflowInvalidTransitionError, match="does not exist"):
-        await service.retry_after_gate_failure(
+        await service.retry_after_step_failure(
             workflow_id="wf_missing",
             definition=_DEFINITION,
             retry_from_step_id="implement",
@@ -647,7 +647,7 @@ async def test_retry_after_gate_failure_rejects_a_missing_instance() -> None:
 
 
 @pytest.mark.asyncio
-async def test_retry_after_gate_failure_rejects_a_step_not_in_the_definition() -> None:
+async def test_retry_after_step_failure_rejects_a_step_not_in_the_definition() -> None:
     current = _instance(
         workflow_id="wf_fake",
         status=WorkflowInstanceStatus.RUNNING,
@@ -658,7 +658,7 @@ async def test_retry_after_gate_failure_rejects_a_step_not_in_the_definition() -
     service, repository, _, _ = _service(instance=current)
 
     with pytest.raises(WorkflowInvalidTransitionError, match="not_a_real_step"):
-        await service.retry_after_gate_failure(
+        await service.retry_after_step_failure(
             workflow_id="wf_fake",
             definition=_DEFINITION,
             retry_from_step_id="not_a_real_step",

@@ -143,18 +143,22 @@ pipeline before Documentation ever runs, rather than Documentation
 blindly recording a failure it never actually blocked.
 
 **A real, bounded retry sits on top of both halts (retry added
-2026-07-30, extended to the lint gate the same day) — a failed gate no
-longer halts the run on its very first failure.** ``retryPolicy``
-(``maxAttempts: 2``, ``maxDurationSeconds: 60.0``) is declared once on
-``delivery_pipeline.yaml`` itself (``WorkflowDefinition.retry_policy``
-— already validated at load time, never read at runtime until the
-first gate needed it) and shared by both gates; ``_GATE_RETRY_TARGETS``
-tells :meth:`~ai_os_kernel.workflow_engine.advance_runner.WorkflowAdvanceRunner.run_to_completion`
-to retry either failed gate from ``build`` (see that constant's own
-comment for why ``build``, not ``requirements-analyst`` or a single
-narrower re-run of ``lint``/``test`` alone). Still genuinely bounded:
-once ``retryPolicy``'s own attempt/duration bound is exhausted for a
-given gate, the pipeline halts exactly as before this feature existed.
+2026-07-30, extended to the lint gate the same day, then widened the
+same day beyond quality gates to `build` itself) — a failed gate, or a
+transient `build` failure, no longer halts the run on its very first
+failure.** ``retryPolicy`` (``maxAttempts: 2``, ``maxDurationSeconds:
+60.0``) is declared once on ``delivery_pipeline.yaml`` itself
+(``WorkflowDefinition.retry_policy`` — already validated at load time,
+never read at runtime until the first retriable failure needed it) and
+shared by all three entries; ``_STEP_RETRY_TARGETS`` tells
+:meth:`~ai_os_kernel.workflow_engine.advance_runner.WorkflowAdvanceRunner.run_to_completion`
+to retry either failed gate from ``build``, and a failed `build` from
+itself (see that constant's own comment for the full reasoning). Which
+exceptions are retriable at all is decided generically, by
+`advance_runner.py`'s own retriable-vs-not category split — not by this
+module. Still genuinely bounded: once ``retryPolicy``'s own
+attempt/duration bound is exhausted for a given step, the pipeline
+halts exactly as before this feature existed.
 
 **Why a real pack-owned YAML file, not a Python-constructed
 ``WorkflowDefinition`` (``kernel/bootstrap.py``'s own demo's own
@@ -216,13 +220,15 @@ _DEFINITION_PATH = (
 # 2026-07-30) plus one final completion transition need nine
 # `advance()` calls in the happy path. delivery_pipeline.yaml's own
 # `retryPolicy.maxAttempts` (2) allows exactly one bounded retry cycle
-# per gate — both gates retry from `build`, so either one's retry
-# replays build/lint/quality-gate-lint-clean/test/quality-gate-tests-pass
+# per step in `_STEP_RETRY_TARGETS` — both gates retry from `build`, so
+# either one's retry replays
+# build/lint/quality-gate-lint-clean/test/quality-gate-tests-pass
 # (5 more calls); allowing for both gates to each trigger their own one
 # retry in the same run (contrived, but not impossible) costs at most
-# 10 more calls — plus a few calls of margin, the identical "bound
-# exists, not sized precisely" reasoning kernel/bootstrap.py's own demo
-# trigger already uses for its own one-step workflow.
+# 10 more calls; `build` retrying from itself costs at most 1 more call
+# — plus a few calls of margin, the identical "bound exists, not sized
+# precisely" reasoning kernel/bootstrap.py's own demo trigger already
+# uses for its own one-step workflow.
 _WORKER_ID = "software-engineering-pipeline-trigger"
 _LEASE_DURATION_SECONDS = 30
 _MAX_ITERATIONS = 25
@@ -244,9 +250,10 @@ _GATE_SOURCES: dict[str, str] = {
     "quality-gate-tests-pass": "test",
 }
 
-# Bounded gate retry (added 2026-07-30) — the same composition-level
+# Bounded step retry (added 2026-07-30; widened the same day beyond
+# the two quality gates to `build` itself) — the same composition-level
 # shape as _GATE_SOURCES above, per WorkflowAdvanceRunner.run_to_completion's
-# own `gate_retry_targets` docstring. Both gates retry from `build`, not
+# own `step_retry_targets` docstring. Both gates retry from `build`, not
 # from `requirements-analyst` (Requirements Analyst's/Architecture's own
 # design decisions are unrelated to why a build/lint/test cycle failed,
 # so re-invoking them on every retry would be wasted, non-deterministic
@@ -254,13 +261,18 @@ _GATE_SOURCES: dict[str, str] = {
 # (both are pure functions of the file `build` already wrote — re-running
 # either alone can never produce a different outcome unless the artifact
 # itself might genuinely differ on a fresh run, which is `build`'s own
-# responsibility, not theirs). The real bound (`maxAttempts`/
-# `maxDurationSeconds`) is declared once, on the workflow's own
-# `retryPolicy` in delivery_pipeline.yaml — never duplicated here, and
-# shared by both gates rather than each declaring its own, since no
-# document names a reason the two categories should be bounded
-# differently.
-_GATE_RETRY_TARGETS: dict[str, str] = {
+# responsibility, not theirs). `build` retries from itself: a transient
+# failure there (e.g. a retriable `LLMProviderError` propagating from its
+# own LLM call, see advance_runner.py's own module docstring for the
+# retriable-vs-not category split) is exactly the case a bare re-run can
+# genuinely fix, with no upstream step's output to re-derive first. The
+# real bound (`maxAttempts`/`maxDurationSeconds`) is declared once, on
+# the workflow's own `retryPolicy` in delivery_pipeline.yaml — never
+# duplicated here, and shared by all three entries rather than each
+# declaring its own, since no document names a reason the categories
+# should be bounded differently.
+_STEP_RETRY_TARGETS: dict[str, str] = {
+    "build": "build",
     "quality-gate-lint-clean": "build",
     "quality-gate-tests-pass": "build",
 }
@@ -456,7 +468,7 @@ def build_pipeline_trigger(
             worker_id=_WORKER_ID,
             lease_duration_seconds=_LEASE_DURATION_SECONDS,
             max_iterations=_MAX_ITERATIONS,
-            gate_retry_targets=_GATE_RETRY_TARGETS,
+            step_retry_targets=_STEP_RETRY_TARGETS,
         )
 
     return trigger
