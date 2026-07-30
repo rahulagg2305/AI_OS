@@ -91,11 +91,20 @@ class ArchitectureProposalInput(BaseModel):
     runtime**: no per-step input-mapping mechanism exists in this
     codebase to check any agent's inputs against a declared schema
     (:mod:`ai_os_kernel.workflow_engine.agent`'s own long-established,
-    unchanged scope). Today, ``requirement`` reaches this agent only via
-    the Context Manager's own assembled ``context`` prompt variable
-    (a workflow's own declared ``inputs``, flattened) — the one real
-    channel ``AgentStepExecutor`` already establishes; this field
-    records the documented contract, not a second, real input path.
+    unchanged scope). ``requirement`` always reaches this agent via the
+    Context Manager's own assembled ``context`` prompt variable — the
+    one real channel ``AgentStepExecutor`` already establishes; this
+    field records the documented contract, not a second, real input
+    path. **Which real source populates that variable is a per-workflow
+    composition choice, not fixed by this agent.** In
+    ``se.delivery_pipeline`` specifically, it is no longer the
+    workflow's own raw top-level ``inputs`` — since this pipeline wired
+    Requirements Analyst in as its own first step, this agent's
+    ``context`` variable is Requirements Analyst's own real, refined
+    output (see ``tests/integration/_delivery_pipeline.py``'s own
+    ``_STEP_SOURCES``/``_FIELD_SELECTORS`` for that pipeline's specific
+    wiring) — a different, but structurally identical, real source
+    supplying the same variable this agent has always read.
     """
 
     requirement: str = Field(

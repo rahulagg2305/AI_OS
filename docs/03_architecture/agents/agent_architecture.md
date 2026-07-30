@@ -2,9 +2,9 @@
 
 **Project:** AI_OS (AI Operating System)  
 **Document:** Agent Architecture & Agent Contract  
-**Version:** 1.1  
+**Version:** 1.2  
 **Status:** Approved  
-**Last Updated:** 2026-07-28 (added Implementation Status and Related Documents; marked the components in the High-Level Architecture diagram that have no implementation; resolved the stale "future documents will define the Agent Catalog" note — it exists)
+**Last Updated:** 2026-07-30 (`requirements-analyst` chained into `se.delivery_pipeline` as its own first step — all 5 real agents are now chained, not 4 of 5. Prior: 2026-07-28, added Implementation Status and Related Documents; marked the components in the High-Level Architecture diagram that have no implementation; resolved the stale "future documents will define the Agent Catalog" note — it exists)
 
 **Previously:** 2026-07-26 (cross-referenced `workflow_architecture.md`'s Step Contract: `promptId`/`promptVersion`/`modelAlias` inform `AgentRequest` construction at invocation step 2)
 
@@ -28,7 +28,7 @@ This document is subordinate to:
 
 ## Implementation Status (2026-07-28)
 
-**Built:** the Invocation Lifecycle below is real end to end for `agent`-type workflow steps. `ai_os_kernel/workflow_engine/step_executor.py`'s `AgentStepExecutor` resolves a step's declared `agentId` through an `AgentRegistry` (in-memory or SQL-backed against real `catalog.agents` rows, gated on pack activation), assembles context via the Context Manager, invokes the agent, and validates its output against the agent's declared `output_schema` — a real Output Validator. `ai_os_kernel/workflow_engine/prompted_agent.py` is a real Prompt Requester + LLM Gateway Client: it renders a versioned prompt through the Prompt Engine and calls the LLM Gateway, never a provider. The `promptId`/`promptVersion`/`modelAlias` pass-through described under Lifecycles is implemented exactly as described. **Five real agents exist**, in `../../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/`: `requirements-analyst`, `architecture`, `build`, `qa-test` (`verification.py`), and `documentation`. Four of the five are genuinely chained through one declared workflow (`se.delivery_pipeline`); `requirements-analyst` is proven independently but not yet chained in. Agents are genuinely stateless between invocations. Observability emits real OpenTelemetry spans.
+**Built:** the Invocation Lifecycle below is real end to end for `agent`-type workflow steps. `ai_os_kernel/workflow_engine/step_executor.py`'s `AgentStepExecutor` resolves a step's declared `agentId` through an `AgentRegistry` (in-memory or SQL-backed against real `catalog.agents` rows, gated on pack activation), assembles context via the Context Manager, invokes the agent, and validates its output against the agent's declared `output_schema` — a real Output Validator. `ai_os_kernel/workflow_engine/prompted_agent.py` is a real Prompt Requester + LLM Gateway Client: it renders a versioned prompt through the Prompt Engine and calls the LLM Gateway, never a provider. The `promptId`/`promptVersion`/`modelAlias` pass-through described under Lifecycles is implemented exactly as described. **Five real agents exist**, in `../../../capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents/`: `requirements-analyst`, `architecture`, `build`, `qa-test` (`verification.py`), and `documentation`. **All five** are genuinely chained through one declared workflow (`se.delivery_pipeline`), `requirements-analyst` as its own first step (2026-07-30). Agents are genuinely stateless between invocations. Observability emits real OpenTelemetry spans.
 
 **Not built:**
 
@@ -124,7 +124,7 @@ The bracketed markers reflect the state of the code on 2026-07-28 (see Implement
 
 An **initial target list**, not an inventory. Five of the sixteen exist in code as of 2026-07-28 — marked below. The authoritative per-agent catalogue is `../../05_agents/agent_catalog.md`.
 
-1. Requirements Analyst — **built** (`requirements-analyst`; proven independently, not yet chained into `se.delivery_pipeline`)
+1. Requirements Analyst — **built** (`requirements-analyst`; chained into `se.delivery_pipeline` as its own first step, 2026-07-30)
 2. Architecture — **built** (`architecture`)
 3. Technical Planning  
 4. Backend Development — partially covered by the **built** `build` agent

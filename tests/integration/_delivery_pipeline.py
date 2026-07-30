@@ -1,6 +1,6 @@
-"""Chains the Software Engineering pack's own four independently-proven
-agents — Architecture, Build, Test, Documentation — into one real,
-declared Workflow Engine pipeline:
+"""Chains the Software Engineering pack's own five independently-proven
+agents — Requirements Analyst, Architecture, Build, Test, Documentation
+— into one real, declared Workflow Engine pipeline:
 ``capability_packs/software-engineering/workflows/delivery_pipeline.yaml``,
 loaded through the already-real, previously-unused
 :class:`~ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader`.
@@ -44,6 +44,17 @@ contract can satisfy on its own.
 
 **The real data flow, and the one deliberate exception.**
 
+- ``architecture`` reads ``requirements-analyst``'s own output,
+  field-selected to ``analysis`` — Requirements Analyst's sole output
+  field, fed into Architecture's own ``{{context}}`` prompt variable as
+  free text, exactly the same variable this pipeline's own raw
+  ``requirement`` top-level input used to feed Architecture directly
+  before this hand-off existed. Architecture's own prompt
+  (``architecture_proposal.md``) needed no change at all: it already
+  reads whatever real text arrives in ``{{context}}``, regardless of
+  which real upstream step supplied it — the identical "forwards
+  whatever arrives, unchanged" contract every ``PromptedAgent``-descended
+  agent in this pack already has.
 - ``build`` reads ``architecture``'s own output, field-selected to
   ``content`` — Architecture's sole output field, fed into Build's own
   ``{{context}}`` prompt variable as free text (Build's own contract
@@ -164,8 +175,8 @@ _DEFINITION_PATH = (
     / "delivery_pipeline.yaml"
 )
 
-# Deliberately generous, not tuned — four real steps plus one final
-# completion transition need five `advance()` calls; the identical
+# Deliberately generous, not tuned — five real steps plus one final
+# completion transition need six `advance()` calls; the identical
 # "bound exists, not sized precisely" reasoning
 # kernel/bootstrap.py's own demo trigger already uses for its own
 # one-step workflow.
@@ -195,29 +206,32 @@ def _make_run_generated_file_with_python(
 
 
 _STEP_SOURCES: dict[str, str | list[str]] = {
+    "architecture": "requirements-analyst",
     "build": "architecture",
     "test": "build",
     "documentation": ["build", "test"],
 }
-_FIELD_SELECTORS = {"build": "content"}
+_FIELD_SELECTORS = {"architecture": "analysis", "build": "content"}
 
 # WorkflowStateResolver has no per-step concept of its own — it always
 # contributes the workflow instance's own top-level `inputs`,
 # unconditionally, for every step (this is correct, existing, unchanged
 # Kernel behaviour; every other real caller of it has only ever had one
 # agent step, so the question of scoping it never arose before this
-# pipeline had four). Only the `architecture` step needs that
-# contribution (the real `requirement` a caller supplied) — build/test/
-# documentation each need exactly one clean payload from
-# WorkflowStepOutputResolver alone; concatenating WorkflowStateResolver's
-# own item alongside it would corrupt that payload (two JSON objects, or
-# two texts, joined by DefaultContextManager/PromptedAgent's own "\n\n"
+# pipeline had multiple). Only the `requirements-analyst` step needs
+# that contribution (the real `requirement` a caller supplied) — every
+# other step now needs exactly one clean payload from
+# WorkflowStepOutputResolver alone (architecture's own `context` used to
+# come from here too, before Requirements Analyst was wired in as this
+# pipeline's own first step); concatenating WorkflowStateResolver's own
+# item alongside it would corrupt that payload (two JSON objects, or two
+# texts, joined by DefaultContextManager/PromptedAgent's own "\n\n"
 # flatten — genuinely discovered by this step's own manual end-to-end
 # trace, not by inspection). _StepScopedResolver is the fix: a tiny,
 # pipeline-owned wrapper restricting WorkflowStateResolver's own
 # contribution to the one step that needs it, without changing
 # WorkflowStateResolver itself at all.
-_ARCHITECTURE_STEP_ID = "architecture"
+_REQUIREMENTS_ANALYST_STEP_ID = "requirements-analyst"
 
 
 class _StepScopedResolver:
@@ -252,10 +266,10 @@ def build_pipeline_context_manager(
     this pipeline specifically — see this module's own docstring for
     the full reasoning behind each entry. ``WorkflowStateResolver`` is
     included too, but scoped via ``_StepScopedResolver`` to the
-    ``architecture`` step alone (which has no prior step to read from,
-    and needs the workflow instance's own real ``requirement`` input
-    instead) — see the ``_STEP_SOURCES`` comment above for why every
-    other step must not also receive it.
+    ``requirements-analyst`` step alone (which has no prior step to read
+    from, and needs the workflow instance's own real ``requirement``
+    input instead) — see the ``_STEP_SOURCES`` comment above for why
+    every other step must not also receive it.
 
     ``python_command``, when omitted, defaults to
     :func:`~ai_os_kernel.sandbox.default_executor.default_python_command`
@@ -270,7 +284,7 @@ def build_pipeline_context_manager(
     return DefaultContextManager(
         [
             _StepScopedResolver(
-                WorkflowStateResolver(repository), frozenset({_ARCHITECTURE_STEP_ID})
+                WorkflowStateResolver(repository), frozenset({_REQUIREMENTS_ANALYST_STEP_ID})
             ),
             WorkflowStepOutputResolver(
                 repository,

@@ -1,17 +1,27 @@
-# Chains this pack's own four independently-proven agents — Architecture,
-# Build, QA/Test, Documentation (manifest agent ids: `architecture`,
-# `build`, `qa-test`, `documentation`) — into one real, declared
-# Workflow Engine pipeline. Each step's genuine output reaches the next
-# step's genuine input through ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver
+# Chains this pack's own five independently-proven agents — Requirements
+# Analyst, Architecture, Build, QA/Test, Documentation (manifest agent
+# ids: `requirements-analyst`, `architecture`, `build`, `qa-test`,
+# `documentation`) — into one real, declared Workflow Engine pipeline.
+# Each step's genuine output reaches the next step's genuine input
+# through ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver
 # (a Context Manager resolver, not a new orchestration mechanism) —
 # see ai_os_pack_software_engineering.pipeline's own docstring for the
 # full composition.
 #
-# Step ids below (`architecture`/`build`/`test`/`documentation`) are
-# workflow-local identifiers, independent of the agent catalog's own
-# ids — the `test` step id was deliberately left unchanged even though
-# the agent it invokes was renamed to `qa-test`, since step ids are
-# this workflow's own naming, not a copy of the agent catalog.
+# Requirements Analyst is now this pipeline's own first step
+# (previously proven independently, not chained in — see
+# tests/integration/_delivery_pipeline.py's own docstring for the real
+# hand-off this adds): a caller's raw `requirement` reaches Requirements
+# Analyst first, and Architecture now designs against Requirements
+# Analyst's own real, refined output — not the raw requirement directly
+# any more.
+#
+# Step ids below (`requirements-analyst`/`architecture`/`build`/`test`/
+# `documentation`) are workflow-local identifiers, independent of the
+# agent catalog's own ids — the `test` step id was deliberately left
+# unchanged even though the agent it invokes was renamed to `qa-test`,
+# since step ids are this workflow's own naming, not a copy of the
+# agent catalog.
 #
 # Loaded by the already-real, already-existing, previously-unused
 # ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader — the
@@ -24,10 +34,11 @@
 id: se.delivery_pipeline
 name: Software Delivery Pipeline
 description: >-
-  Architecture proposes a design, Build implements it, Test verifies
-  it, Documentation records it — four real agent steps, each genuinely
-  consuming the previous step's real, persisted output.
-version: 1.0.0
+  Requirements Analyst refines the raw ask, Architecture proposes a
+  design against that refined analysis, Build implements it, Test
+  verifies it, Documentation records it — five real agent steps, each
+  genuinely consuming the previous step's real, persisted output.
+version: 1.1.0
 trigger: manual
 
 inputs:
@@ -35,7 +46,10 @@ inputs:
   properties:
     requirement:
       type: string
-      description: The software requirement to design, build, test, and document.
+      description: >-
+        The raw software requirement or ask to design, build, test, and
+        document — analyzed and refined by Requirements Analyst before
+        Architecture ever sees it.
   required: [requirement]
   additionalProperties: false
 
@@ -48,6 +62,7 @@ outputs:
   additionalProperties: false
 
 agents:
+  - software-engineering/requirements-analyst
   - software-engineering/architecture
   - software-engineering/build
   - software-engineering/qa-test
@@ -57,6 +72,13 @@ failureHandling:
   onError: halt
 
 steps:
+  - id: requirements-analyst
+    type: agent
+    agentId: software-engineering/requirements-analyst
+    promptId: requirements.analyze
+    promptVersion: 0.1.0
+    modelAlias: coding-strong
+
   - id: architecture
     type: agent
     agentId: software-engineering/architecture

@@ -1,4 +1,4 @@
-"""The real, hardened proof this step exists for: the same four-step
+"""The real, hardened proof this step exists for: the same five-step
 Software Engineering delivery pipeline `test_delivery_pipeline.py`
 already proves end to end through `LocalSubprocessSandbox`, run again
 here through real `DockerSandbox` instances — and, unlike
@@ -32,26 +32,35 @@ need Docker; `postgres_container()`'s own skip already covers "Docker is
 unreachable" for both needs at once — no second, redundant Docker check
 is added here.
 
-**All four agents this pipeline chains — qa-test (step 9), architecture
-(step 11), build (step 12), and now documentation (step 13) — are
-migrated onto the Platform SDK. This pipeline is now fully migrated.**
-This file's own `InMemoryAgentRegistry` construction was updated to
+**All five agents this pipeline chains — qa-test (step 9), architecture
+(step 11), build (step 12), documentation (step 13), and
+requirements-analyst (step 10, wired into this pipeline as its own
+first step in this feature step) — are migrated onto the Platform SDK.
+This pipeline now exercises all 5 of this pack's built agents, not 4 of
+5.** This file's own `InMemoryAgentRegistry` construction was updated to
 match, mirroring `test_delivery_pipeline.py`'s own identical fix:
-`_test_agent_with_sandbox`/`_architecture_agent_with_prompt`/
-`_build_agent_with_prompt`/`_documentation_agent_with_prompt` construct
-each zero-arg (aside from build's own `working_directory`) and
-`bind_pack_context()` it instead of passing a `sandbox=`/`service_factory=`
-constructor override that no longer exists. Build's and Documentation's
-own writes now happen through `context.tools.invoke`
-(`platform.sandbox.run_command`) against a real `DockerSandbox`, not a
-directly constructed `SandboxedCommandTool` — this test is this pack's
-most important real proof of that path, since the generated probe
-script's own network/filesystem-escape attempts must still genuinely
-fail when written and run this way. **Step 12a (inserted, 2026-07-29)**
-removed `BuildAgentEntrypoint`'s own `python_command` constructor
-parameter entirely — `ToolInvokerAdapter` now resolves the real
-interpreter command (`python3`, correct for this real `DockerSandbox`)
-itself for both Build and Documentation, neither of which passes one.
+`_requirements_analyst_agent_with_prompt`/`_architecture_agent_with_prompt`/
+`_test_agent_with_sandbox`/`_build_agent_with_prompt`/
+`_documentation_agent_with_prompt` construct each zero-arg (aside from
+build's own `working_directory`) and `bind_pack_context()` it instead of
+passing a `sandbox=`/`service_factory=` constructor override that no
+longer exists. Build's and Documentation's own writes now happen
+through `context.tools.invoke` (`platform.sandbox.run_command`) against
+a real `DockerSandbox`, not a directly constructed
+`SandboxedCommandTool` — this test is this pack's most important real
+proof of that path, since the generated probe script's own
+network/filesystem-escape attempts must still genuinely fail when
+written and run this way. **Step 12a (inserted, 2026-07-29)** removed
+`BuildAgentEntrypoint`'s own `python_command` constructor parameter
+entirely — `ToolInvokerAdapter` now resolves the real interpreter
+command (`python3`, correct for this real `DockerSandbox`) itself for
+both Build and Documentation, neither of which passes one.
+
+**Requirements Analyst's own real output now genuinely reaches
+Architecture's real input, through the same real `WorkflowStepOutputResolver`
+hand-off proven here for every other step, now genuinely running through
+`DockerSandbox` end to end.** See `tests/integration/_delivery_pipeline.py`'s
+own docstring for the full `_STEP_SOURCES`/`_FIELD_SELECTORS` wiring.
 """
 
 from __future__ import annotations
@@ -77,6 +86,9 @@ from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepositor
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
 from ai_os_pack_software_engineering.agents.build import BuildAgentEntrypoint
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentEntrypoint
+from ai_os_pack_software_engineering.agents.requirements_analyst import (
+    RequirementsAnalystAgentEntrypoint,
+)
 from ai_os_pack_software_engineering.agents.verification import TestAgentEntrypoint
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -86,6 +98,7 @@ _PACK_ID = "software-engineering"
 _PACK_VERSION = "0.1.0"
 
 _AGENT_IDS = {
+    "requirements-analyst": "software-engineering/requirements-analyst",
     "architecture": "software-engineering/architecture",
     "build": "software-engineering/build",
     "test": "software-engineering/qa-test",
@@ -105,6 +118,28 @@ def _test_agent_with_sandbox(sandbox: DockerSandbox) -> TestAgentEntrypoint:
             pack_version=_PACK_VERSION,
             permissions=["sandbox:execute"],
             sandbox=sandbox,
+        )
+    )
+    return agent
+
+
+def _requirements_analyst_agent_with_prompt(
+    template: str, prompt_id: str
+) -> RequirementsAnalystAgentEntrypoint:
+    """requirements-analyst is migrated onto the Platform SDK (step 10)
+    — no ``service_factory`` constructor override. Construct zero-arg,
+    exactly as ``EntrypointLoader`` does, then bind the real
+    ``PackContext`` a real caller would inject, granting exactly
+    ``llm:invoke`` — mirrors `test_delivery_pipeline.py`'s own identical
+    helper, now this pipeline's own first step."""
+    agent = RequirementsAnalystAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
         )
     )
     return agent
@@ -229,12 +264,15 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
     tmp_path: Path, database_url: str
 ) -> None:
     """The real end-to-end proof this step exists for: the same
-    Architecture -> Build -> Test -> Documentation hand-off
-    `test_delivery_pipeline.py` proves through `LocalSubprocessSandbox`,
-    run here through real `DockerSandbox` instances, with the Test
-    step's own real, persisted output showing that a network-escape
-    attempt and a filesystem-escape attempt — both made by code the
-    pipeline itself generated and ran — genuinely failed."""
+    Requirements Analyst -> Architecture -> Build -> Test -> Documentation
+    hand-off `test_delivery_pipeline.py` proves through
+    `LocalSubprocessSandbox`, run here through real `DockerSandbox`
+    instances, with the Test step's own real, persisted output showing
+    that a network-escape attempt and a filesystem-escape attempt — both
+    made by code the pipeline itself generated and ran — genuinely
+    failed."""
+
+    requirements_analyst_template = "ANALYSIS: refined and structured.\nRaw ask was: {{context}}"
 
     build_template = (
         "Upstream design: {{context}}\n\n"
@@ -253,6 +291,9 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
 
     registry = InMemoryAgentRegistry(
         {
+            _AGENT_IDS["requirements-analyst"]: _requirements_analyst_agent_with_prompt(
+                requirements_analyst_template, "requirements.analyze"
+            ),
             _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
                 "DESIGN: a single Python script that probes its own sandbox.\n"
                 "Context was: {{context}}",
@@ -295,6 +336,26 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
         steps = await SqlWorkflowInstanceRepository(engine).list_steps(
             result.last_instance.workflow_id
         )
+
+        requirements_analyst_outputs = next(
+            s.outputs for s in steps if s.step_name == "requirements-analyst"
+        )
+        assert requirements_analyst_outputs is not None
+        # The raw top-level `requirement` genuinely reached Requirements
+        # Analyst's own real prompt, run through this real Docker-backed
+        # pipeline — read back from its own persisted `analysis` field.
+        assert (
+            "write a script that checks its own sandbox isolation"
+            in (requirements_analyst_outputs["analysis"])
+        )
+
+        architecture_outputs = next(s.outputs for s in steps if s.step_name == "architecture")
+        assert architecture_outputs is not None
+        # Requirements Analyst's own real output genuinely reached
+        # Architecture's own real prompt — the new hand-off this feature
+        # step adds, proven here through DockerSandbox too.
+        assert "ANALYSIS: refined and structured" in architecture_outputs["content"]
+
         test_outputs = next(s.outputs for s in steps if s.step_name == "test")
         assert test_outputs is not None
         assert test_outputs["passed"] is True, test_outputs["output"]

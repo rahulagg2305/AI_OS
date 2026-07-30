@@ -2,9 +2,9 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Software Engineering Pack – Workflows
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Approved
-**Last Updated:** 2026-07-28 (added a "Currently Implemented Subset" section documenting the real `se.delivery_pipeline` workflow, and a row for it in §12's own permissions table — no other content changed)
+**Last Updated:** 2026-07-30 (`se.delivery_pipeline` gained Requirements Analyst as its own first step — the graph is now 5 real agent steps, not 4; the raw `requirement` input now reaches Requirements Analyst first, not Architecture directly. Prior: 2026-07-28, added a "Currently Implemented Subset" section documenting the real `se.delivery_pipeline` workflow, and a row for it in §12's own permissions table)
 
 ---
 
@@ -49,18 +49,19 @@ Step type vocabulary: `agent`, `tool`, `decision`, `parallel`, `foreach`, `sub_w
 
 ### `se.delivery_pipeline` — Reprioritization Proof-of-Concept Pipeline
 
-**Purpose:** prove a real, declared, four-step Workflow Engine pipeline end to end — design, implement, verify, and record one file — using this pack's own four currently-real agents (see `agents.md`'s own "Currently Implemented Subset").
-**Real today.** Declared in `capability_packs/software-engineering/workflows/delivery_pipeline.yaml`, manifest entry `workflows[].id: se.delivery_pipeline`.
+**Purpose:** prove a real, declared, five-step Workflow Engine pipeline end to end — refine a raw ask, design, implement, verify, and record one file — using all five of this pack's currently-real agents (see `agents.md`'s own "Currently Implemented Subset").
+**Real today.** Declared in `capability_packs/software-engineering/workflows/delivery_pipeline.yaml`, manifest entry `workflows[].id: se.delivery_pipeline`. **Requirements Analyst was wired in as this workflow's own first step 2026-07-30** — previously the workflow started at `architecture`, reading the raw `requirement` input directly; now Requirements Analyst reads it first, and Architecture designs against Requirements Analyst's own real, refined output instead.
 
-**Inputs:** `requirement` (string). **Outputs:** `documentationPath` (string).
+**Inputs:** `requirement` (string, the raw ask). **Outputs:** `documentationPath` (string).
 
 **Graph (genuinely simpler than any of §§3–9 — no tools, no decisions, no loops, no quality gates, no human approval points):**
 
 ```text
-1  agent   software-engineering/architecture   → a design proposal (free text)
-2  agent   software-engineering/build          → one real file, written through the sandbox
-3  agent   software-engineering/qa-test        → a real pass/fail, from a real sandboxed exit code
-4  agent   software-engineering/documentation  → one real Markdown record of steps 2–3
+1  agent   software-engineering/requirements-analyst → a refined requirements analysis (free text)
+2  agent   software-engineering/architecture         → a design proposal (free text)
+3  agent   software-engineering/build                → one real file, written through the sandbox
+4  agent   software-engineering/qa-test               → a real pass/fail, from a real sandboxed exit code
+5  agent   software-engineering/documentation         → one real Markdown record of steps 3–4
 ```
 
 **How this differs from `se.implement_task` (§4), checked directly, not assumed:**
@@ -68,7 +69,7 @@ Step type vocabulary: `agent`, `tool`, `decision`, `parallel`, `foreach`, `sub_w
 - `se.implement_task`'s own graph includes `fs.apply_patch`/`test.run` tool steps, two `decision` steps forming iteration loops (`max_iterations: 3`), a `code-reviewer` agent step, and a blocking `quality_gate` — none of which `se.delivery_pipeline` has.
 - `se.delivery_pipeline` includes its own `architecture` and `documentation` steps, which `se.implement_task` deliberately does not (those belong to the *outer* workflow in the full design).
 
-Both are real, intentional, differently-shaped things — `se.delivery_pipeline` is not a smaller or renamed `se.implement_task`; it is the reprioritization's own minimal, standalone, end-to-end proof, and the closest real analogue in this document's own §§3–9 is actually a drastically reduced `se.product_creation` (§3's own "Stage C Scope," §13, already names a similar reduced slice — steps 1, 3, 7, 8, 9 — but using `requirements-analyst`/`backend-developer`/`code-reviewer`, not this pipeline's own four agents).
+Both are real, intentional, differently-shaped things — `se.delivery_pipeline` is not a smaller or renamed `se.implement_task`; it is the reprioritization's own minimal, standalone, end-to-end proof, and the closest real analogue in this document's own §§3–9 is actually a drastically reduced `se.product_creation` (§3's own "Stage C Scope," §13, already names a similar reduced slice — steps 1, 3, 7, 8, 9 — but using `backend-developer`/`code-reviewer` in place of this pipeline's own `build`/`qa-test`/`documentation`).
 
 **Step-output hand-off:** each step's genuine, persisted output reaches the next step's genuine input through `ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver` (a Context Manager resolver, not a new orchestration mechanism — see `context_manager.md` §4 and `workflow_architecture.md`'s own Context Management section, both updated alongside this document to record it).
 

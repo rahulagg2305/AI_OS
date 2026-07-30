@@ -22,7 +22,11 @@ class PipelineInput(BaseModel):
     Schema exactly."""
 
     requirement: str = Field(
-        ..., description="The software requirement to design, build, test, and document."
+        ...,
+        description=(
+            "The raw software requirement or ask to design, build, test, and document — "
+            "analyzed and refined by Requirements Analyst before Architecture ever sees it."
+        ),
     )
 
 

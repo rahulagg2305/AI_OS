@@ -12,13 +12,14 @@
 # real command against a real file through the sandbox, reporting a
 # real pass/fail — no LLM call at all), and Documentation (calls an LLM
 # to record what Build wrote and how QA/Test verified it, writing a
-# real Markdown file through the same sandbox). Architecture, Build,
-# QA/Test, and Documentation are chained into one real, declared
-# workflow (`se.delivery_pipeline`); Requirements Analyst is proven
-# independently (2026-07-28), the identical "prove each agent alone
-# first, chain later" sequencing every other agent in this pack's own
-# history has followed — not yet wired into that workflow. Every other
-# documented agent category from
+# real Markdown file through the same sandbox). All five agents —
+# Requirements Analyst, Architecture, Build, QA/Test, and Documentation
+# — are now chained into one real, declared workflow
+# (`se.delivery_pipeline`): Requirements Analyst was proven
+# independently first (2026-07-28), the identical "prove each agent
+# alone first, chain later" sequencing every other agent in this pack's
+# own history has followed, then wired in as the pipeline's own first
+# step (2026-07-30). Every other documented agent category from
 # docs/06_capability_packs/software_engineering/agents.md's own Agent
 # Catalog (Technical Planning, Frontend Development, Database, API
 # Design, DevOps, Security, Code Review, Release, Refactoring,
@@ -167,11 +168,12 @@ agents:
 workflows:
   - id: se.delivery_pipeline
     name: Software Delivery Pipeline
-    version: 1.0.0
+    version: 1.1.0
     description: >-
-      Chains Architecture, Build, QA/Test, and Documentation into one
-      real, declared workflow — each step's genuine output reaches the
-      next step's genuine input through a real Context Manager resolver.
+      Chains Requirements Analyst, Architecture, Build, QA/Test, and
+      Documentation into one real, declared workflow — each step's
+      genuine output reaches the next step's genuine input through a
+      real Context Manager resolver.
     definition: workflows/delivery_pipeline.yaml
     inputsSchema: ai_os_pack_software_engineering.workflows.models:PipelineInput
     outputsSchema: ai_os_pack_software_engineering.workflows.models:PipelineOutput

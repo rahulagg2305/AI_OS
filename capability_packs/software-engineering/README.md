@@ -3,21 +3,21 @@
 Autonomous software engineering capabilities for AI_OS
 (`capability_pack_contract.md`'s own "Highest priority" pack).
 
-## Status: five real agents; four of them chained into one real workflow
+## Status: five real agents, all five chained into one real workflow
 
-**Last updated: 2026-07-29** (pipeline composition relocated out of this pack's own source tree into `tests/integration/`, `platform_sdk_v1_scope.md` step 7 — see the table below).
+**Last updated: 2026-07-30** (`requirements-analyst` wired into `se.delivery_pipeline` as its own first step — see the table below). Prior: 2026-07-29, pipeline composition relocated out of this pack's own source tree into `tests/integration/`, `platform_sdk_v1_scope.md` step 7.
 
 This pack declares **five** real agents:
 
 | Agent id | Module | In the pipeline? | Notes |
 |---|---|---|---|
-| `requirements-analyst` | [`agents/requirements_analyst.py`](src/ai_os_pack_software_engineering/agents/requirements_analyst.py) | **No** — proven independently | Analyzes/refines a raw requirement into a structured analysis. Matches `agents.md`'s documented id. Added 2026-07-28. |
-| `architecture` | [`agents/architecture.py`](src/ai_os_pack_software_engineering/agents/architecture.py) | Yes (step 1) | Design proposal only, no code. Matches `agents.md`'s documented id. |
-| `build` | [`agents/build.py`](src/ai_os_pack_software_engineering/agents/build.py) | Yes (step 2) | Writes exactly one file through the sandbox. A *new* entry added to `agents.md`'s Agent Catalog, since none of its 15 pre-existing documented agents fit a generic single-file writer. |
-| `qa-test` | [`agents/verification.py`](src/ai_os_pack_software_engineering/agents/verification.py) | Yes (step 3) | Runs the file through the sandbox; pass/fail from the real exit code. **Makes no LLM call at all.** |
-| `documentation` | [`agents/documentation.py`](src/ai_os_pack_software_engineering/agents/documentation.py) | Yes (step 4) | Records the Build+Test result as a Markdown file through the sandbox. |
+| `requirements-analyst` | [`agents/requirements_analyst.py`](src/ai_os_pack_software_engineering/agents/requirements_analyst.py) | Yes (step 1) | Analyzes/refines a raw requirement into a structured analysis. Matches `agents.md`'s documented id. Added 2026-07-28; wired into the pipeline 2026-07-30. |
+| `architecture` | [`agents/architecture.py`](src/ai_os_pack_software_engineering/agents/architecture.py) | Yes (step 2) | Design proposal only, no code. Matches `agents.md`'s documented id. Now designs against `requirements-analyst`'s own real output, not the raw requirement directly. |
+| `build` | [`agents/build.py`](src/ai_os_pack_software_engineering/agents/build.py) | Yes (step 3) | Writes exactly one file through the sandbox. A *new* entry added to `agents.md`'s Agent Catalog, since none of its 15 pre-existing documented agents fit a generic single-file writer. |
+| `qa-test` | [`agents/verification.py`](src/ai_os_pack_software_engineering/agents/verification.py) | Yes (step 4) | Runs the file through the sandbox; pass/fail from the real exit code. **Makes no LLM call at all.** |
+| `documentation` | [`agents/documentation.py`](src/ai_os_pack_software_engineering/agents/documentation.py) | Yes (step 5) | Records the Build+Test result as a Markdown file through the sandbox. |
 
-And one real, declared workflow: **`se.delivery_pipeline`** ([`workflows/delivery_pipeline.yaml`](workflows/delivery_pipeline.yaml)), chaining the four marked above. `requirements-analyst` is built and proven by its own tests but **not yet wired in as the pipeline's first step** — the same "prove alone first, chain later" sequencing every agent here has followed. See `agents.md`'s "Currently Implemented Subset" section, and `workflows.md`'s, for why this is a distinct real workflow rather than a rename of `se.implement_task`.
+And one real, declared workflow: **`se.delivery_pipeline`** ([`workflows/delivery_pipeline.yaml`](workflows/delivery_pipeline.yaml)), now chaining all five agents above. See `agents.md`'s "Currently Implemented Subset" section, and `workflows.md`'s, for why this is a distinct real workflow rather than a rename of `se.implement_task`.
 
 **Sandbox:** two `SandboxExecutor` backends exist in the Kernel this pack depends on — `LocalSubprocessSandbox` (3 of 5 guarantees; no network or filesystem containment) and `DockerSandbox` (a real ADR-0016 Tier 1 backend: ephemeral container, no network, read-only root, non-root, resource-limited). **`DockerSandbox` is now this pack's real default**, selected via the `AIOS_SANDBOX_BACKEND` environment variable (`"docker"` unless set to `"local"`), and has been verified live against a real daemon. Set `AIOS_SANDBOX_BACKEND=local` for environments without Docker or for fast tests.
 
@@ -68,7 +68,7 @@ procedure:
 | [`test_build_agent_pack.py`](../../tests/integration/workflow_engine/test_build_agent_pack.py) | `build` writes a real file through the sandbox |
 | [`test_verification_agent_pack.py`](../../tests/integration/workflow_engine/test_verification_agent_pack.py) | `qa-test` runs a real command and reports a real exit code |
 | [`test_documentation_agent_pack.py`](../../tests/integration/workflow_engine/test_documentation_agent_pack.py) | `documentation` writes a real Markdown record |
-| [`test_delivery_pipeline.py`](../../tests/integration/workflow_engine/test_delivery_pipeline.py) | all four chained steps hand off through real workflow state |
+| [`test_delivery_pipeline.py`](../../tests/integration/workflow_engine/test_delivery_pipeline.py) | all five chained steps hand off through real workflow state |
 | [`test_delivery_pipeline_docker.py`](../../tests/integration/sandbox/test_delivery_pipeline_docker.py) | the same pipeline against a **live Docker daemon**, with network isolation and filesystem containment proven for code the pipeline itself generated |
 
 ## Configuration
@@ -100,11 +100,6 @@ end-to-end proofs live in the Kernel-side integration tests listed above.
 
 - **No automated manifest → catalog installer.** `catalog.agents`/`catalog.prompts`/
   `catalog.workflow_definitions` rows are seeded directly by the integration tests.
-- **`requirements-analyst` is not chained into `se.delivery_pipeline`.** The pipeline still
-  starts at `architecture`. Wiring it in requires updating both
-  [`workflows/delivery_pipeline.yaml`](workflows/delivery_pipeline.yaml) and
-  [`_delivery_pipeline.py`](../../tests/integration/_delivery_pipeline.py)'s `_STEP_SOURCES`, plus
-  re-verifying the existing chained tests — a distinct, later increment.
 - **`SoftwareEngineeringPack.activate()` is under-wired.** It is a real, correct
   implementation of the (reduced) `CapabilityPack` Protocol, but nothing in the Kernel
   calls it yet, and it registers only the Architecture Agent.

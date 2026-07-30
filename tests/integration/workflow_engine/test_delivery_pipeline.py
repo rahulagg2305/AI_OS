@@ -1,6 +1,6 @@
 """The first genuine, end-to-end proof of a real, declared multi-step
-Workflow Engine pipeline: Architecture -> Build -> Test -> Documentation,
-chained through
+Workflow Engine pipeline: Requirements Analyst -> Architecture -> Build
+-> Test -> Documentation, chained through
 `ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver`
 (built this step) and `tests.integration._delivery_pipeline`'s own
 pipeline-specific configuration of it (relocated here from
@@ -23,8 +23,8 @@ LLM call — the identical Echo-vs-live split every other test in this
 pack's own history already uses, just applied to all three prompted
 agents in the same run instead of one at a time.
 
-1. **Deterministic** — `InMemoryAgentRegistry`, all four real pack
-   agents, `EchoLLMGateway`-backed completion services for the three
+1. **Deterministic** — `InMemoryAgentRegistry`, all five real pack
+   agents, `EchoLLMGateway`-backed completion services for the four
    `PromptedAgent`-backed ones. No pack registration/activation/seeding
    needed at all: `WorkflowInstanceService.create_instance()`'s own
    `pack_id` parameter is a plain, unenforced string column (no FK to
@@ -43,40 +43,50 @@ agents in the same run instead of one at a time.
    `DockerSandbox` lives in
    `tests/integration/sandbox/test_delivery_pipeline_docker.py`.
 2. **Opt-in live** (skipped without `AIOS_SECRET_LLM_ANTHROPIC_API_KEY`)
-   — the real `SqlAgentRegistry`, resolving all four real pack agents
-   from real, seeded `catalog.agents` rows, using this pack's own three
-   *real, shipped* prompts (`architecture_proposal.md`/
-   `build_write_file.md`/`documentation_record_artifact.md`) rather
-   than test-only substitutes — a genuine, positive difference from
-   every prior single-agent live test in this pack's own history
-   (`test_architecture_agent_pack.py`/`test_build_agent_pack.py` both
-   needed a substitute prompt specifically because their own `{{context}}`
-   placeholder needed a real Context Manager/workflow-instance round
-   trip no single-agent test stood up — this test finally *is* that
-   round trip, for real, end to end). This tier resolves each agent via
-   `EntrypointLoader`'s own zero-argument `cls()` call, so it now
-   exercises the real, config-driven `DockerSandbox` default too, on top
-   of the real LLM call.
+   — the real `SqlAgentRegistry`, resolving all five real pack agents
+   from real, seeded `catalog.agents` rows, using this pack's own four
+   *real, shipped* prompts (`requirements_analysis.md`/
+   `architecture_proposal.md`/`build_write_file.md`/
+   `documentation_record_artifact.md`) rather than test-only substitutes
+   — a genuine, positive difference from every prior single-agent live
+   test in this pack's own history (`test_architecture_agent_pack.py`/
+   `test_build_agent_pack.py` both needed a substitute prompt
+   specifically because their own `{{context}}` placeholder needed a
+   real Context Manager/workflow-instance round trip no single-agent
+   test stood up — this test finally *is* that round trip, for real, end
+   to end). This tier resolves each agent via `EntrypointLoader`'s own
+   zero-argument `cls()` call, so it now exercises the real,
+   config-driven `DockerSandbox` default too, on top of the real LLM
+   call.
 
-**All four agents this pipeline chains — qa-test (step 9), architecture
-(step 11), build (step 12), and now documentation (step 13) — are
-migrated onto the Platform SDK. This pipeline is now fully migrated.**
-The deterministic tier's `InMemoryAgentRegistry` no longer constructs
-any of the four with a `service_factory`/`sandbox=` override;
-`_test_agent_with_sandbox`/`_architecture_agent_with_prompt`/
+**All five agents this pipeline chains — qa-test (step 9), architecture
+(step 11), build (step 12), documentation (step 13), and
+requirements-analyst (step 10, wired into this pipeline as its own
+first step in this feature step) — are migrated onto the Platform SDK.
+This pipeline now exercises all 5 of this pack's built agents, not 4 of
+5.** The deterministic tier's `InMemoryAgentRegistry` no longer
+constructs any of the five with a `service_factory`/`sandbox=`
+override; `_requirements_analyst_agent_with_prompt`/
+`_architecture_agent_with_prompt`/`_test_agent_with_sandbox`/
 `_build_agent_with_prompt`/`_documentation_agent_with_prompt` construct
 each zero-arg (aside from build's own `working_directory`) and
 `bind_pack_context()` it, mirroring the exact real caller sequence
 `SqlAgentRegistry` itself performs (step 9a). The live tier's
 `SqlAgentRegistry(engine)` call already supplies real
 `llm_gateway`/`prompt_engine` objects (`_build_real_llm_gateway_and_prompt_engine`
-below) — documentation's own declared `llm:invoke` permission needs the
-identical backing pair the other three migrations already required, so
-no further change was needed there; its own `sandbox:execute`
-permission is backed by `SqlAgentRegistry`'s own default sandbox
-(step 9a), and (step 12a) its write uses `PLATFORM_PYTHON_INTERPRETER`,
-resolved automatically by `ToolInvokerAdapter` — no `python_command` to
-supply at all, unlike build's own `working_directory`-only override.
+below) — requirements-analyst's own declared `llm:invoke` permission
+needs the identical backing pair the other three prompted migrations
+already required, so no further change was needed there.
+
+**Requirements Analyst's own real output now genuinely reaches
+Architecture's real input — the one new hand-off this feature step
+adds, proven the same way every other hand-off in this pipeline already
+is: by reading it back from a later step's own real, persisted output,
+never by hand-copying anything.** See `tests/integration/_delivery_pipeline.py`'s
+own docstring for the full `_STEP_SOURCES`/`_FIELD_SELECTORS` wiring —
+`architecture`'s own `context` prompt variable now comes from
+`requirements-analyst`'s output (field-selected to `analysis`), not the
+workflow's own raw top-level `requirement` input directly any more.
 """
 
 import asyncio
@@ -114,6 +124,9 @@ from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepositor
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
 from ai_os_pack_software_engineering.agents.build import BuildAgentEntrypoint
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentEntrypoint
+from ai_os_pack_software_engineering.agents.requirements_analyst import (
+    RequirementsAnalystAgentEntrypoint,
+)
 from ai_os_pack_software_engineering.agents.verification import TestAgentEntrypoint
 from tests.integration._delivery_pipeline import build_pipeline_trigger
 from tests.integration._postgres_fixture import postgres_container
@@ -159,12 +172,17 @@ async def _build_real_llm_gateway_and_prompt_engine(
 
 
 _AGENT_IDS = {
+    "requirements-analyst": f"{_PACK_ID}/requirements-analyst",
     "architecture": f"{_PACK_ID}/architecture",
     "build": f"{_PACK_ID}/build",
     "test": f"{_PACK_ID}/qa-test",
     "documentation": f"{_PACK_ID}/documentation",
 }
 _AGENT_ENTRYPOINTS = {
+    "requirements-analyst": (
+        "ai_os_pack_software_engineering.agents.requirements_analyst:"
+        "RequirementsAnalystAgentEntrypoint"
+    ),
     "architecture": (
         "ai_os_pack_software_engineering.agents.architecture:ArchitectureAgentEntrypoint"
     ),
@@ -188,6 +206,29 @@ def _test_agent_with_sandbox(sandbox: LocalSubprocessSandbox) -> TestAgentEntryp
             pack_version=_PACK_VERSION,
             permissions=["sandbox:execute"],
             sandbox=sandbox,
+        )
+    )
+    return agent
+
+
+def _requirements_analyst_agent_with_prompt(
+    template: str, prompt_id: str
+) -> RequirementsAnalystAgentEntrypoint:
+    """requirements-analyst is migrated onto the Platform SDK (step 10)
+    — no `service_factory` constructor override. Construct zero-arg,
+    exactly as `EntrypointLoader` does, then bind the real `PackContext`
+    a real caller would inject, granting exactly `llm:invoke` over a
+    real, Echo-backed gateway and an in-memory prompt engine seeded with
+    `template` — the identical pattern `_architecture_agent_with_prompt`
+    already established, now this pipeline's own first step."""
+    agent = RequirementsAnalystAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
         )
     )
     return agent
@@ -285,24 +326,28 @@ def database_url() -> Generator[str, None, None]:
 
 
 @pytest.mark.asyncio
-async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
+async def test_all_five_steps_genuinely_chain_through_real_persisted_outputs(
     tmp_path: Path, database_url: str
 ) -> None:
     """The real end-to-end proof this step exists for: a real, declared
-    four-step WorkflowDefinition, driven to completion, in which each
+    five-step WorkflowDefinition, driven to completion, in which each
     step's genuine output is proven — by inspecting the final artifact,
     not by a test hand-copying anything — to have reached the next
-    step's genuine input."""
+    step's genuine input, including the new Requirements Analyst ->
+    Architecture hand-off this feature step adds."""
 
+    requirements_analyst_template = "ANALYSIS: refined and structured.\nRaw ask was: {{context}}"
     architecture_template = "DESIGN: a single Python script.\nContext was: {{context}}"
-    # {{context}} (Architecture's own real, JSON-quoted output) is
-    # deliberately placed in a comment-like prefix *before* the
-    # FILE_PATH marker, never inside the generated file's own Python
-    # string literal — `_parse_build_instruction` finds the
-    # FILE_PATH/...END block anywhere in the completion, so this proves
-    # the real hand-off (readable back from `instruction`) without
-    # making the *written file's* own validity depend on what upstream
-    # free text happens to contain (quotes, newlines).
+    # {{context}} (Requirements Analyst's own real, echoed output, for
+    # architecture_template — Architecture's own real, JSON-quoted
+    # output, for build_template) is deliberately placed in a
+    # comment-like prefix *before* the FILE_PATH marker, never inside
+    # the generated file's own Python string literal —
+    # `_parse_build_instruction` finds the FILE_PATH/...END block
+    # anywhere in the completion, so this proves the real hand-off
+    # (readable back from `instruction`) without making the *written
+    # file's* own validity depend on what upstream free text happens to
+    # contain (quotes, newlines).
     build_template = (
         "Upstream design: {{context}}\n\n"
         "FILE_PATH: solution.py\n"
@@ -320,6 +365,9 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
 
     registry = InMemoryAgentRegistry(
         {
+            _AGENT_IDS["requirements-analyst"]: _requirements_analyst_agent_with_prompt(
+                requirements_analyst_template, "requirements.analyze"
+            ),
             _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
                 architecture_template, "architecture.propose_design"
             ),
@@ -357,13 +405,37 @@ async def test_all_four_steps_genuinely_chain_through_real_persisted_outputs(
 
         engine_repo = SqlWorkflowInstanceRepository(engine)
         steps = await engine_repo.list_steps(result.last_instance.workflow_id)
+
+        requirements_analyst_outputs = next(
+            s.outputs for s in steps if s.step_name == "requirements-analyst"
+        )
+        assert requirements_analyst_outputs is not None
+        # The raw top-level `requirement` genuinely reached Requirements
+        # Analyst's own real prompt — read back from its own persisted
+        # `analysis` field, not hand-copied.
+        assert "print a friendly message" in requirements_analyst_outputs["analysis"]
+
+        architecture_outputs = next(s.outputs for s in steps if s.step_name == "architecture")
+        assert architecture_outputs is not None
+        # Requirements Analyst's own real output genuinely reached
+        # Architecture's own real prompt — the new hand-off this feature
+        # step adds — read back from Architecture's own persisted
+        # `content` field, not hand-copied.
+        assert "ANALYSIS: refined and structured" in architecture_outputs["content"]
+        # via 2-hop {{context}}
+        assert "print a friendly message" in architecture_outputs["content"]
+
         build_outputs = next(s.outputs for s in steps if s.step_name == "build")
         assert build_outputs is not None
-        # Architecture's own real output genuinely reached Build's own
-        # real prompt — not hand-copied, read back from Build's own
-        # persisted `instruction` field (its raw completion text).
+        # The full chain, read back three hops downstream: Architecture's
+        # own real output (which itself embeds Requirements Analyst's own
+        # real output, which itself embeds the raw top-level requirement)
+        # genuinely reached Build's own real prompt — not hand-copied,
+        # read back from Build's own persisted `instruction` field (its
+        # raw completion text).
         assert "DESIGN: a single Python script" in build_outputs["instruction"]
-        assert "print a friendly message" in build_outputs["instruction"]  # via {{context}}
+        assert "ANALYSIS: refined and structured" in build_outputs["instruction"]
+        assert "print a friendly message" in build_outputs["instruction"]  # via 3-hop {{context}}
 
         doc_file = tmp_path / "solution.py.md"
         assert doc_file.is_file()
@@ -431,10 +503,11 @@ async def _seed_agent_rows(database_url: str) -> None:
 
 
 async def _seed_real_prompts(database_url: str) -> None:
-    """Seeds this pack's own three *real, shipped* prompts — see this
+    """Seeds this pack's own four *real, shipped* prompts — see this
     module's own docstring for why this test, unlike every prior
     single-agent live test in this pack, can use them directly."""
     prompts = {
+        "requirements.analyze": PACK_ROOT / "prompts" / "requirements_analysis.md",
         "architecture.propose_design": PACK_ROOT / "prompts" / "architecture_proposal.md",
         "build.write_file": PACK_ROOT / "prompts" / "build_write_file.md",
         "documentation.record_artifact": PACK_ROOT / "prompts" / "documentation_record_artifact.md",
@@ -471,7 +544,7 @@ def test_the_real_pipeline_genuinely_runs_end_to_end_against_the_live_api(
     """Opt-in live: the full chain this step exists to prove, against
     the real Anthropic API and this pack's own real, shipped prompts —
     a real Documentation artifact, genuinely written to disk, at the
-    end of a real, four-step run."""
+    end of a real, five-step run starting from Requirements Analyst."""
 
     async def _run() -> None:
         await _register_and_activate_pack(database_url)
@@ -498,8 +571,13 @@ def test_the_real_pipeline_genuinely_runs_end_to_end_against_the_live_api(
             steps = await SqlWorkflowInstanceRepository(engine).list_steps(
                 result.last_instance.workflow_id
             )
+            requirements_analyst_step = next(
+                s for s in steps if s.step_name == "requirements-analyst"
+            )
             build_step = next(s for s in steps if s.step_name == "build")
             documentation_step = next(s for s in steps if s.step_name == "documentation")
+            assert requirements_analyst_step.outputs is not None
+            assert requirements_analyst_step.outputs["analysis"].strip() != ""
             assert build_step.outputs is not None
             assert documentation_step.outputs is not None
 
