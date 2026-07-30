@@ -39,6 +39,7 @@ from ai_os_kernel.workflow_engine.tool import TrustTier as KernelTrustTier
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
 from ai_os_pack_software_engineering.agents.build import BuildAgentEntrypoint
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentEntrypoint
+from ai_os_pack_software_engineering.agents.lint import LintAgentEntrypoint
 from ai_os_pack_software_engineering.agents.requirements_analyst import (
     RequirementsAnalystAgentEntrypoint,
 )
@@ -49,15 +50,18 @@ from ai_os_sdk.contracts import Tool as SdkTool
 from ai_os_sdk.contracts import TrustTier as SdkTrustTier
 
 # Every real agent-shaped entrypoint the platform ships today: the
-# Kernel's own trivial stand-in, plus all five Software Engineering pack
-# agents. Each is zero-argument constructible because `EntrypointLoader`
-# only ever calls `cls()` — so constructing them here is exactly what the
-# real loader does, and none of them performs I/O until first `execute`.
+# Kernel's own trivial stand-in, plus all six Software Engineering pack
+# agents (Lint added 2026-07-30 — this pack's sixth, and the first added
+# since the Capability Pack growth gate lifted). Each is zero-argument
+# constructible because `EntrypointLoader` only ever calls `cls()` — so
+# constructing them here is exactly what the real loader does, and none
+# of them performs I/O until first `execute`.
 _REAL_AGENT_TYPES = [
     EchoAgent,
     ArchitectureAgentEntrypoint,
     BuildAgentEntrypoint,
     DocumentationAgentEntrypoint,
+    LintAgentEntrypoint,
     RequirementsAnalystAgentEntrypoint,
     TestAgentEntrypoint,
 ]
@@ -83,12 +87,12 @@ class TestRealAgentsSatisfyTheSdkAgentProtocol:
     def test_real_agent_is_an_sdk_agent(self, agent_type: type) -> None:
         assert isinstance(agent_type(), SdkAgent)
 
-    def test_all_five_pack_agents_are_covered(self) -> None:
+    def test_all_six_pack_agents_are_covered(self) -> None:
         """Guards the list above against silently drifting out of date:
-        the pack declares five agents, and all five must be asserted, not
+        the pack declares six agents, and all six must be asserted, not
         a convenient subset."""
         pack_agent_types = [t for t in _REAL_AGENT_TYPES if t is not EchoAgent]
-        assert len(pack_agent_types) == 5
+        assert len(pack_agent_types) == 6
 
 
 class TestRealToolsSatisfyTheSdkToolProtocol:

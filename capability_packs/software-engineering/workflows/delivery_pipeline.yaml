@@ -1,9 +1,9 @@
-# Chains this pack's own five independently-proven agents — Requirements
-# Analyst, Architecture, Build, QA/Test, Documentation (manifest agent
-# ids: `requirements-analyst`, `architecture`, `build`, `qa-test`,
-# `documentation`) — into one real, declared Workflow Engine pipeline.
-# Each step's genuine output reaches the next step's genuine input
-# through ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver
+# Chains this pack's own six independently-proven agents — Requirements
+# Analyst, Architecture, Build, Lint, QA/Test, Documentation (manifest
+# agent ids: `requirements-analyst`, `architecture`, `build`, `lint`,
+# `qa-test`, `documentation`) — into one real, declared Workflow Engine
+# pipeline. Each step's genuine output reaches the next step's genuine
+# input through ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver
 # (a Context Manager resolver, not a new orchestration mechanism) —
 # see ai_os_pack_software_engineering.pipeline's own docstring for the
 # full composition.
@@ -16,31 +16,44 @@
 # Analyst's own real, refined output — not the raw requirement directly
 # any more.
 #
-# Step ids below (`requirements-analyst`/`architecture`/`build`/`test`/
-# `quality-gate-tests-pass`/`documentation`) are workflow-local
-# identifiers, independent of the agent catalog's own ids — the `test`
-# step id was deliberately left unchanged even though the agent it
-# invokes was renamed to `qa-test`, since step ids are this workflow's
-# own naming, not a copy of the agent catalog.
+# Step ids below (`requirements-analyst`/`architecture`/`build`/
+# `quality-gate-lint-clean`/`test`/`quality-gate-tests-pass`/
+# `documentation`) are workflow-local identifiers, independent of the
+# agent catalog's own ids — the `test` step id was deliberately left
+# unchanged even though the agent it invokes was renamed to `qa-test`,
+# since step ids are this workflow's own naming, not a copy of the
+# agent catalog.
 #
-# `quality-gate-tests-pass` (added 2026-07-30) is a real, blocking
-# quality_gate step — the smallest real slice of the Quality Gate
-# Engine (see ai_os_kernel.workflow_engine.quality_gate's own
-# docstring). It reads the `test` step's own real, persisted `passed`
-# field and halts the pipeline (Documentation never runs) when it is
-# not `True` — which prior step it reads is composition-level config in
+# Two real, blocking quality_gate steps now exist — the smallest real
+# slices of the Quality Gate Engine (see
+# ai_os_kernel.workflow_engine.quality_gate's own docstring), each
+# reading a named prior step's own real, persisted `passed` field and
+# halting the pipeline when it is not `True`. Which prior step each
+# gate reads is composition-level config in
 # ai_os_kernel.workflow_engine.delivery_pipeline, not a field declared
-# here (see that module's own `_GATE_SOURCES`).
+# here (see that module's own `_GATE_SOURCES`):
 #
-# `retryPolicy` below (added 2026-07-30) bounds a real retry when this
+# - `quality-gate-lint-clean` (added 2026-07-30, this pipeline's second
+#   gate, proving the mechanism genuinely generalizes beyond Testing to
+#   a second category, Static Analysis) sits between `build` and `test`
+#   — cheap static checks run before the more expensive sandboxed test
+#   execution, matching quality_gates_framework.md §5's own documented
+#   category order (5.1 Build, 5.2 Static Analysis, 5.3 Testing). It
+#   reads the new `lint` step's own real `passed` field.
+# - `quality-gate-tests-pass` (added 2026-07-30, earlier the same day)
+#   sits between `test` and `documentation`, reading `test`'s own real
+#   `passed` field.
+#
+# `retryPolicy` below (added 2026-07-30) bounds a real retry when either
 # gate fails: up to 2 total attempts, and no more than 60 real seconds
 # spent retrying, before the pipeline genuinely halts — see
 # ai_os_kernel.workflow_engine.delivery_pipeline's own `_GATE_RETRY_TARGETS`
-# for which step a failed gate retries from, and
+# for which step each failed gate retries from (both retry from `build`
+# — see that constant's own comment for why), and
 # WorkflowAdvanceRunner.run_to_completion's own docstring for the
 # mechanism. This field already existed and was already validated
 # (bounded attempts + bounded duration, per error_handling_retry.md §4)
-# before this step — it was simply never read at runtime until now.
+# before the first gate read it at runtime.
 #
 # Loaded by the already-real, already-existing, previously-unused
 # ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader — the
@@ -54,13 +67,14 @@ id: se.delivery_pipeline
 name: Software Delivery Pipeline
 description: >-
   Requirements Analyst refines the raw ask, Architecture proposes a
-  design against that refined analysis, Build implements it, Test
-  verifies it, a real Quality Gate blocks on a genuine test failure (and
-  bounded-retries build/test once before giving up), Documentation
-  records it — five real agent steps plus one real, blocking, retried
-  quality gate, each genuinely consuming the previous step's real,
+  design against that refined analysis, Build implements it, a real
+  Quality Gate blocks on a genuine lint failure, Test verifies it, a
+  second real Quality Gate blocks on a genuine test failure (both
+  bounded-retry from Build once before giving up), Documentation
+  records it — six real agent steps plus two real, blocking, retried
+  quality gates, each genuinely consuming the previous step's real,
   persisted output.
-version: 1.3.0
+version: 1.4.0
 trigger: manual
 
 inputs:
@@ -87,10 +101,12 @@ agents:
   - software-engineering/requirements-analyst
   - software-engineering/architecture
   - software-engineering/build
+  - software-engineering/lint
   - software-engineering/qa-test
   - software-engineering/documentation
 
 qualityGates:
+  - se.build_lint_clean
   - se.build_tests_pass
 
 retryPolicy:
@@ -121,6 +137,13 @@ steps:
     promptId: build.write_file
     promptVersion: 0.1.0
     modelAlias: coding-strong
+
+  - id: lint
+    type: agent
+    agentId: software-engineering/lint
+
+  - id: quality-gate-lint-clean
+    type: quality_gate
 
   - id: test
     type: agent

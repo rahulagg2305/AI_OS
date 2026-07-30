@@ -75,6 +75,17 @@ contract can satisfy on its own.
   never parses structured JSON out of its context — it forwards
   whatever `PromptedAgent` flattens into that one prompt variable,
   unchanged).
+- ``lint`` reads ``build``'s own output, whole (JSON — the identical
+  convention ``test`` below already establishes). **The identical
+  exception ``test`` needed, one field name over**: the Lint Agent's
+  own contract requires ``lintCommand``, a field Build's own output has
+  no reason to produce. :func:`_make_lint_command_with_python` derives
+  ``lintCommand = [*python_command, "-m", "py_compile", filePath]``
+  from the now-known, real ``filePath`` — see
+  :mod:`ai_os_pack_software_engineering.agents.lint`'s own docstring
+  for why ``py_compile`` (not ``ruff``, tried first and found to fail
+  against ``DockerSandbox``'s own default image) and the real
+  trade-off this choice accepts.
 - ``test`` reads ``build``'s own output, whole (JSON — matching
   ``verification.py``'s own already-shipped ``_extract_payload()``
   convention). **The one deliberate exception**: the Test Agent's own
@@ -97,7 +108,8 @@ contract can satisfy on its own.
   override (any test wanting a specific, non-default backend) must
   pass the matching ``python_command`` here too, or the transform would
   derive an interpreter command that does not match the sandbox the
-  agents were actually given.
+  agents were actually given. Both ``lint`` and ``test``'s own
+  transforms share this same threaded value.
 - ``documentation`` reads **both** ``build``'s and ``test``'s own
   outputs, merged (``build`` first, ``test`` second — ``test``'s own
   ``exitCode`` therefore wins over ``build``'s own same-named field,
@@ -106,34 +118,43 @@ contract can satisfy on its own.
   the Documentation Agent's own contract needs
   (``workingDirectory``/``filePath``/``instruction`` from ``build``,
   ``passed``/``exitCode``/``output`` from ``test``) — no transform
-  needed here at all.
+  needed here at all. ``lint``'s own output is deliberately not merged
+  in — Documentation records the Test outcome, per its own existing
+  contract; recording the Lint outcome too would be a real, separate
+  scope decision, not implied by this step.
 
-**A real, blocking quality_gate step now sits between ``test`` and
-``documentation`` (added 2026-07-30) — the smallest real slice of the
-still-0%-built Quality Gate Engine.** ``quality-gate-tests-pass``
-(:class:`~ai_os_kernel.workflow_engine.quality_gate.QualityGateStepExecutor`,
-configured via ``_GATE_SOURCES`` below) reads ``test``'s own real,
-persisted ``passed`` field and raises
+**Two real, blocking quality_gate steps now exist (the second added
+2026-07-30, the smallest real slices of the still-0%-built Quality Gate
+Engine) — proving the gate mechanism itself needed zero changes to gain
+a second, distinct gate category.** ``quality-gate-lint-clean`` (between
+``lint`` and ``test`` in the declared step sequence) reads ``lint``'s
+own real ``passed`` field; ``quality-gate-tests-pass`` (between ``test``
+and ``documentation``) reads ``test``'s own real ``passed`` field —
+both the identical
+:class:`~ai_os_kernel.workflow_engine.quality_gate.QualityGateStepExecutor`,
+configured only via two entries in ``_GATE_SOURCES`` below, raising
 :class:`~ai_os_kernel.workflow_engine.errors.QualityGateFailedError`
-when it is not ``True`` — halting the pipeline via the existing
+when their own configured source step's ``passed`` field is not
+``True`` — halting the pipeline via the existing
 ``WorkflowAdvanceRunner.run_to_completion`` failure boundary, the same
 one :class:`~ai_os_kernel.workflow_engine.errors.AgentOutputValidationError`
-already uses, so a genuinely failing test run now stops the pipeline
-before Documentation ever runs, rather than Documentation blindly
-recording a failure it never actually blocked.
+already uses. A genuinely failing lint or test run now stops the
+pipeline before Documentation ever runs, rather than Documentation
+blindly recording a failure it never actually blocked.
 
-**A real, bounded retry now sits on top of that halt (added
-2026-07-30) — a failed gate no longer halts the run on its very first
-failure.** ``retryPolicy`` (``maxAttempts: 2``, ``maxDurationSeconds: 60.0``)
-is now declared on ``delivery_pipeline.yaml`` itself
-(``WorkflowDefinition.retry_policy`` — already validated at load time,
-never read at runtime until this step); ``_GATE_RETRY_TARGETS`` tells
-:meth:`~ai_os_kernel.workflow_engine.advance_runner.WorkflowAdvanceRunner.run_to_completion`
-to retry a failed ``quality-gate-tests-pass`` from ``build`` (see that
-constant's own comment for why ``build``, not ``requirements-analyst``
-or ``test`` alone). Still genuinely bounded: once ``retryPolicy``'s own
-attempt/duration bound is exhausted, the pipeline halts exactly as
-before this feature existed.
+**A real, bounded retry sits on top of both halts (retry added
+2026-07-30, extended to the lint gate the same day) — a failed gate no
+longer halts the run on its very first failure.** ``retryPolicy``
+(``maxAttempts: 2``, ``maxDurationSeconds: 60.0``) is declared once on
+``delivery_pipeline.yaml`` itself (``WorkflowDefinition.retry_policy``
+— already validated at load time, never read at runtime until the
+first gate needed it) and shared by both gates; ``_GATE_RETRY_TARGETS``
+tells :meth:`~ai_os_kernel.workflow_engine.advance_runner.WorkflowAdvanceRunner.run_to_completion`
+to retry either failed gate from ``build`` (see that constant's own
+comment for why ``build``, not ``requirements-analyst`` or a single
+narrower re-run of ``lint``/``test`` alone). Still genuinely bounded:
+once ``retryPolicy``'s own attempt/duration bound is exhausted for a
+given gate, the pipeline halts exactly as before this feature existed.
 
 **Why a real pack-owned YAML file, not a Python-constructed
 ``WorkflowDefinition`` (``kernel/bootstrap.py``'s own demo's own
@@ -190,45 +211,59 @@ _DEFINITION_PATH = (
     Path("capability_packs") / "software-engineering" / "workflows" / "delivery_pipeline.yaml"
 )
 
-# Deliberately generous, not tuned — six real steps (five agent steps
-# plus the real quality_gate step, added 2026-07-30) plus one final
-# completion transition need seven `advance()` calls in the happy path.
-# delivery_pipeline.yaml's own `retryPolicy.maxAttempts` (2, as of
-# 2026-07-30) allows exactly one bounded retry cycle when the gate
-# fails — re-running build/test/gate costs 3 more `advance()` calls
-# (10 total) — plus a few calls of margin, the identical "bound exists,
-# not sized precisely" reasoning kernel/bootstrap.py's own demo trigger
-# already uses for its own one-step workflow.
+# Deliberately generous, not tuned — eight real steps (six agent steps
+# plus the two real quality_gate steps, `quality-gate-lint-clean` added
+# 2026-07-30) plus one final completion transition need nine
+# `advance()` calls in the happy path. delivery_pipeline.yaml's own
+# `retryPolicy.maxAttempts` (2) allows exactly one bounded retry cycle
+# per gate — both gates retry from `build`, so either one's retry
+# replays build/lint/quality-gate-lint-clean/test/quality-gate-tests-pass
+# (5 more calls); allowing for both gates to each trigger their own one
+# retry in the same run (contrived, but not impossible) costs at most
+# 10 more calls — plus a few calls of margin, the identical "bound
+# exists, not sized precisely" reasoning kernel/bootstrap.py's own demo
+# trigger already uses for its own one-step workflow.
 _WORKER_ID = "software-engineering-pipeline-trigger"
 _LEASE_DURATION_SECONDS = 30
-_MAX_ITERATIONS = 15
+_MAX_ITERATIONS = 25
 
-# The real quality_gate step's own source-step config (added
+# The real quality_gate steps' own source-step config (added
 # 2026-07-30) — composition-level, per ai_os_kernel.workflow_engine.
 # quality_gate.QualityGateStepExecutor's own docstring: which prior
-# step's real output the gate reads is pipeline-specific knowledge, the
-# same shape _STEP_SOURCES below already establishes for
+# step's real output each gate reads is pipeline-specific knowledge,
+# the same shape _STEP_SOURCES below already establishes for
 # WorkflowStepOutputResolver, not a field on the step declaration
-# itself. `quality-gate-tests-pass` reads `test`'s own real `passed`
-# field — see delivery_pipeline.yaml's own comment on this step id.
-_GATE_SOURCES: dict[str, str] = {"quality-gate-tests-pass": "test"}
+# itself. `quality-gate-lint-clean` reads `lint`'s own real `passed`
+# field; `quality-gate-tests-pass` reads `test`'s own real `passed`
+# field — see delivery_pipeline.yaml's own comments on these step ids.
+# Zero changes to QualityGateStepExecutor were needed to add the
+# second entry — the mechanism itself is domain-agnostic by
+# construction; only this mapping grew.
+_GATE_SOURCES: dict[str, str] = {
+    "quality-gate-lint-clean": "lint",
+    "quality-gate-tests-pass": "test",
+}
 
 # Bounded gate retry (added 2026-07-30) — the same composition-level
 # shape as _GATE_SOURCES above, per WorkflowAdvanceRunner.run_to_completion's
-# own `gate_retry_targets` docstring: on a failed `quality-gate-tests-pass`,
-# retry from `build` (re-running build, then test, then the gate again),
-# not from `requirements-analyst` (Requirements Analyst's/Architecture's
-# own design decisions are unrelated to why a build/test cycle failed,
+# own `gate_retry_targets` docstring. Both gates retry from `build`, not
+# from `requirements-analyst` (Requirements Analyst's/Architecture's own
+# design decisions are unrelated to why a build/lint/test cycle failed,
 # so re-invoking them on every retry would be wasted, non-deterministic
-# LLM calls) and not a single, narrower re-run of `test` alone (test's
-# own result is a pure function of the file `build` already wrote —
-# re-running it alone can never produce a different outcome unless the
-# artifact itself might genuinely differ on a fresh run, which is
-# `build`'s own responsibility, not `test`'s). The real bound
-# (`maxAttempts`/`maxDurationSeconds`) is declared once, on the
-# workflow's own `retryPolicy` in delivery_pipeline.yaml — never
-# duplicated here.
-_GATE_RETRY_TARGETS: dict[str, str] = {"quality-gate-tests-pass": "build"}
+# LLM calls) and not a single, narrower re-run of `lint`/`test` alone
+# (both are pure functions of the file `build` already wrote — re-running
+# either alone can never produce a different outcome unless the artifact
+# itself might genuinely differ on a fresh run, which is `build`'s own
+# responsibility, not theirs). The real bound (`maxAttempts`/
+# `maxDurationSeconds`) is declared once, on the workflow's own
+# `retryPolicy` in delivery_pipeline.yaml — never duplicated here, and
+# shared by both gates rather than each declaring its own, since no
+# document names a reason the two categories should be bounded
+# differently.
+_GATE_RETRY_TARGETS: dict[str, str] = {
+    "quality-gate-lint-clean": "build",
+    "quality-gate-tests-pass": "build",
+}
 
 
 def _make_run_generated_file_with_python(
@@ -251,9 +286,35 @@ def _make_run_generated_file_with_python(
     return _run_generated_file_with_python
 
 
+def _make_lint_command_with_python(
+    python_command: tuple[str, ...],
+) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    """The Lint Agent's own analogous transform (added 2026-07-30) —
+    derives ``lintCommand`` from Build's own real, now-known
+    ``filePath``, the identical shape
+    :func:`_make_run_generated_file_with_python` already establishes
+    for the Test Agent's ``runCommand``, deliberately under a different
+    field name (see :mod:`ai_os_pack_software_engineering.agents.lint`'s
+    own docstring for why). ``python -m py_compile <file>`` — not
+    ``ruff``, a real, discovered constraint: ``ruff`` genuinely fails
+    against ``DockerSandbox``'s own default image (no ``ruff``
+    installed, no dependency-install step exists), while ``py_compile``
+    is a stdlib module every real backend already has — see that
+    module's own docstring for the full reasoning and the real
+    trade-off this choice accepts (syntax errors only, not
+    style/unused-import findings)."""
+
+    def _lint_generated_file_with_python(output: dict[str, Any]) -> dict[str, Any]:
+        lint_command = [*python_command, "-m", "py_compile", output["filePath"]]
+        return {**output, "lintCommand": lint_command}
+
+    return _lint_generated_file_with_python
+
+
 _STEP_SOURCES: dict[str, str | list[str]] = {
     "architecture": "requirements-analyst",
     "build": "architecture",
+    "lint": "build",
     "test": "build",
     "documentation": ["build", "test"],
 }
@@ -333,7 +394,8 @@ def build_pipeline_context_manager(
                 step_sources=_STEP_SOURCES,
                 field_selectors=_FIELD_SELECTORS,
                 output_transforms={
-                    "test": _make_run_generated_file_with_python(resolved_python_command)
+                    "lint": _make_lint_command_with_python(resolved_python_command),
+                    "test": _make_run_generated_file_with_python(resolved_python_command),
                 },
             ),
         ]

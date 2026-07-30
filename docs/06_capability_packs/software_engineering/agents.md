@@ -5,7 +5,7 @@
 **Document:** Agents Catalog & Responsibilities  
 **Version:** 1.3  
 **Status:** Approved  
-**Last Updated:** 2026-07-30 (`requirements-analyst` wired into `se.delivery_pipeline` as its own first step — all 5 real agents are now chained, not 4 of 5. Prior: 2026-07-28, updated the "Currently Implemented Subset" section: `requirements-analyst` is now real, 5 of 16)
+**Last Updated:** 2026-07-30 (a new catalog entry, `lint` — this pack's sixth agent, and the first added since the Capability Pack growth gate lifted 2026-07-29 — added specifically to prove the Quality Gate Engine's own gate mechanism generalizes to a second gate category (Static Analysis); now chained into `se.delivery_pipeline` between Build and Test. Prior, same day: `requirements-analyst` wired into `se.delivery_pipeline` as its own first step — all 5 real agents were chained, not 4 of 5. Prior: 2026-07-28, updated the "Currently Implemented Subset" section: `requirements-analyst` is now real, 5 of 16)
 
 ---
 
@@ -77,6 +77,7 @@ Every agent shall define:
 | `software-engineering/refactoring` | Refactoring | Maintainability improvements |
 | `software-engineering/performance` | Performance | Performance optimization |
 | `software-engineering/build` | Build | Generate and write exactly one file from a design or instruction (added 2026-07-28 — see "Currently Implemented Subset" below for why this entry exists) |
+| `software-engineering/lint` | Lint | Run a real static-analysis tool against a file Build wrote and report a real pass/fail (added 2026-07-30 — see "Currently Implemented Subset" below for why this entry exists) |
 
 **Not owned by this pack.** `project-intelligence/existing-project-analyzer` (legacy system analysis) belongs to the Project Intelligence Pack. It participates in this pack's workflows via the Workflow Engine, but it is not a Software Engineering agent and has no `SE-…` identity.
 
@@ -84,19 +85,20 @@ Contract-level specifications (I/O schemas, tools, prompts, permissions, behavio
 
 ---
 
-## Currently Implemented Subset (2026-07-28)
+## Currently Implemented Subset (2026-07-30)
 
 *(This is this document's `## Implementation Status` section — kept under its established name rather than renamed, because the exact phrase "Currently Implemented Subset" is a cross-reference target from several other live documents. Formally recorded as a permitted variant in `docs/process/standing_rules.md`.)*
 
 This document describes the full, intended agent catalog for this pack's mature design. As of this date, a much smaller, real slice actually exists in `capability_packs/software-engineering/`, built under a separate product-owner reprioritization toward "the shortest real path to a working multi-agent software-engineering pipeline" (see `docs/19_roadmap/implementation_status.md`'s own header for the full framing). This section exists so a reader of this document is never misled about the gap between the two.
 
-**Real today: 5 of the 16 agents listed above.**
+**Real today: 6 of the 17 agents listed above** (16 original + `lint`, a new entry added 2026-07-30 for the identical reason `build` gained one).
 
 | Agent ID (real) | Entrypoint | Notes |
 |---|---|---|
 | `software-engineering/requirements-analyst` | `ai_os_pack_software_engineering.agents.requirements_analyst:RequirementsAnalystAgentEntrypoint` | **Added 2026-07-28; wired into `se.delivery_pipeline` as its own first step 2026-07-30.** Matches this document's own catalog exactly. Analyzes/refines a raw requirement into a structured requirements analysis only — no architecture design, no code, no validation of acceptance criteria beyond what the model itself states (this catalog's own "validate requirements" is only half-real). |
 | `software-engineering/architecture` | `ai_os_pack_software_engineering.agents.architecture:ArchitectureAgentEntrypoint` | Matches this document's own catalog exactly. Design proposal only — no code generation, no validation of an existing architecture (this catalog's own "Design **and validate** architecture" is only half-real). |
 | `software-engineering/build` | `ai_os_pack_software_engineering.agents.build:BuildAgentEntrypoint` | **New catalog entry, added by this reconciliation.** Its real scope — write exactly one generic file from a design/instruction, through the sandbox — does not fit `backend-developer`'s own documented scope ("Backend services and APIs", implying a narrower, stack-specific role this agent does not have) or any other pre-existing entry. Rather than force-fit an ill-matching id or leave an undocumented one in code, this catalog gained a new, honestly-scoped entry instead. |
+| `software-engineering/lint` | `ai_os_pack_software_engineering.agents.lint:LintAgentEntrypoint` | **New catalog entry, added 2026-07-30** — this pack's sixth agent, and the first added since the Capability Pack growth gate lifted (2026-07-29). Runs `python -m py_compile <file>` against a file Build wrote, through the sandbox, reporting a real pass/fail from the real exit code — no LLM call at all. `ruff` was tried first and genuinely works against the deterministic tier, but genuinely fails against `DockerSandbox`'s own default image (no `ruff` installed, no dependency-install step exists) — `py_compile`, a stdlib module, works identically on every real backend. Added specifically to prove the Quality Gate Engine's own gate mechanism (`gate_sources`/`success_field`/retry-target) genuinely generalizes to a second, distinct gate category (Static Analysis, not just Testing) via configuration alone — see `ai_os_kernel.workflow_engine.delivery_pipeline`'s own docstring. |
 | `software-engineering/qa-test` | `ai_os_pack_software_engineering.agents.verification:TestAgentEntrypoint` | Matches this document's own catalog exactly (renamed from an earlier, undocumented `test` id during this same reconciliation). Deliberately makes **no LLM call at all** — pass/fail comes only from a real sandboxed exit code, narrower than this catalog's own "Automated testing and validation." |
 | `software-engineering/documentation` | `ai_os_pack_software_engineering.agents.documentation:DocumentationAgentEntrypoint` | Matches this document's own catalog exactly. Records one Build+Test result as one Markdown file — narrower than this catalog's own general "Technical documentation." |
 

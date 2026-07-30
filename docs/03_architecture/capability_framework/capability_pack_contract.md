@@ -483,7 +483,7 @@ Status column refreshed 2026-07-28 against what is actually on disk; see Impleme
 
 | Capability Pack                  | Priority | Status   |
 |----------------------------------|----------|----------|
-| Software Engineering             | Highest  | **Partially built, fully SDK-compliant** — `capability_packs/software-engineering/`: 5 agents, 1 workflow (`se.delivery_pipeline`), 4 prompts, real and loading; no pack-declared tools or quality gates; depends only on `ai_os_sdk` (`platform_sdk_v1_scope.md` step 14, 2026-07-29) — zero Kernel imports remain |
+| Software Engineering             | Highest  | **Partially built, fully SDK-compliant** — `capability_packs/software-engineering/`: 6 agents (`lint` added 2026-07-30, the first since the growth gate lifted), 1 workflow (`se.delivery_pipeline`, now with 2 real quality gates), 4 prompts, real and loading; no pack-declared tools or gates (the 2 real gates are Workflow-Engine-level, not manifest-declared); depends only on `ai_os_sdk` (`platform_sdk_v1_scope.md` step 14, 2026-07-29) — zero Kernel imports remain |
 | Existing Project Intelligence    | High     | Not started — `capability_packs/project_intelligence/` is an empty directory; documented in `../../06_capability_packs/project_intelligence/` |
 | Voice (Jarvis)                   | High     | Not started — `capability_packs/voice_jarvis/` is an empty directory; documented in `../../14_voice_jarvis/` |
 | Benchmarking                     | Medium   | Not started — `capability_packs/benchmarking/` is an empty directory |

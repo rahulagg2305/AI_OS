@@ -5,21 +5,28 @@
 # tests (tests/test_pack.py) for a real, executed proof.
 #
 # This is the "Highest priority" pack capability_pack_contract.md's own
-# "Current Priority Packs" table names — now five agents: Requirements
+# "Current Priority Packs" table names — now six agents: Requirements
 # Analyst (analyzes and refines a raw requirement, no design/code),
 # Architecture (design proposal only, no code), Build (writes one real
-# file through the sandbox from an LLM instruction), QA/Test (runs a
-# real command against a real file through the sandbox, reporting a
-# real pass/fail — no LLM call at all), and Documentation (calls an LLM
-# to record what Build wrote and how QA/Test verified it, writing a
-# real Markdown file through the same sandbox). All five agents —
-# Requirements Analyst, Architecture, Build, QA/Test, and Documentation
-# — are now chained into one real, declared workflow
-# (`se.delivery_pipeline`): Requirements Analyst was proven
-# independently first (2026-07-28), the identical "prove each agent
-# alone first, chain later" sequencing every other agent in this pack's
-# own history has followed, then wired in as the pipeline's own first
-# step (2026-07-30). Every other documented agent category from
+# file through the sandbox from an LLM instruction), Lint (runs a real
+# static-analysis tool against that file through the sandbox, reporting
+# a real pass/fail — no LLM call at all), QA/Test (runs a real command
+# against a real file through the sandbox, reporting a real pass/fail —
+# no LLM call at all), and Documentation (calls an LLM to record what
+# Build wrote and how QA/Test verified it, writing a real Markdown file
+# through the same sandbox). All six agents are now chained into one
+# real, declared workflow (`se.delivery_pipeline`): Requirements Analyst
+# was proven independently first (2026-07-28), the identical "prove
+# each agent alone first, chain later" sequencing every other agent in
+# this pack's own history has followed, then wired in as the pipeline's
+# own first step (2026-07-30). Lint (2026-07-30) is this pack's sixth
+# agent and the first added since the Capability Pack growth gate
+# lifted (2026-07-29) — added specifically to prove the Quality Gate
+# Engine's own gate mechanism (built the same day, one step prior)
+# genuinely generalizes to a second gate category (Static Analysis, not
+# just Testing) via configuration, not a new mechanism; see
+# `ai_os_kernel.workflow_engine.delivery_pipeline`'s own docstring.
+# Every other documented agent category from
 # docs/06_capability_packs/software_engineering/agents.md's own Agent
 # Catalog (Technical Planning, Frontend Development, Database, API
 # Design, DevOps, Security, Code Review, Release, Refactoring,
@@ -52,14 +59,14 @@ metadata:
     Analyst Agent analyzes and refines a raw requirement (no design, no
     code); the Architecture Agent proposes a design (no code); the
     Build Agent turns a design or instruction into one real file,
-    written through the sandbox; the QA/Test Agent runs a real command
-    against a real file through the sandbox and reports a real
+    written through the sandbox; the Lint Agent runs a real
+    static-analysis tool against that file through the sandbox and
+    reports a real pass/fail; the QA/Test Agent runs a real command
+    against that file through the sandbox and reports a real
     pass/fail; the Documentation Agent calls an LLM to record what was
     built and how it was verified, writing a real Markdown file through
-    the same sandbox. Architecture, Build, QA/Test, and Documentation
-    are chained into one real, declared workflow
-    (`se.delivery_pipeline`); Requirements Analyst is proven
-    independently, not yet wired into it.
+    the same sandbox. All six agents are chained into one real,
+    declared workflow (`se.delivery_pipeline`).
   owner: platform-team
   license: UNLICENSED
 
@@ -126,6 +133,28 @@ agents:
     requiredPrompts:
       - build.write_file@0.1.0
 
+  - id: lint
+    name: Lint Agent
+    version: 0.1.0
+    purpose: >-
+      Given a file the Build Agent wrote, genuinely run a real
+      static-analysis check (python -m py_compile — a stdlib syntax
+      check, chosen over ruff after ruff was found to genuinely fail
+      against DockerSandbox's own default image, which has no ruff
+      installed) against it inside the sandbox and report the real
+      pass/fail outcome — derived only from the tool's own exit code,
+      never from an LLM's opinion. This pack's sixth agent, and the
+      first added since the Capability Pack growth gate lifted
+      (2026-07-29).
+    entrypoint: ai_os_pack_software_engineering.agents.lint:LintAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.lint:LintAgentInput
+    outputSchema: ai_os_pack_software_engineering.agents.lint:LintAgentOutput
+    # No modelAlias — this agent makes no LLM call at all, the identical
+    # shape qa-test's own entry below already establishes for the same
+    # reason.
+    permissions:
+      - sandbox:execute
+
   - id: qa-test
     name: QA/Test Agent
     version: 0.1.0
@@ -168,13 +197,14 @@ agents:
 workflows:
   - id: se.delivery_pipeline
     name: Software Delivery Pipeline
-    version: 1.3.0
+    version: 1.4.0
     description: >-
-      Chains Requirements Analyst, Architecture, Build, QA/Test, and
-      Documentation into one real, declared workflow — each step's
+      Chains Requirements Analyst, Architecture, Build, Lint, QA/Test,
+      and Documentation into one real, declared workflow — each step's
       genuine output reaches the next step's genuine input through a
-      real Context Manager resolver. A real, blocking, bounded-retry
-      Quality Gate now sits between Test and Documentation.
+      real Context Manager resolver. Two real, blocking, bounded-retry
+      Quality Gates now exist: one between Build and Test (Static
+      Analysis), one between Test and Documentation (Testing).
     definition: workflows/delivery_pipeline.yaml
     inputsSchema: ai_os_pack_software_engineering.workflows.models:PipelineInput
     outputsSchema: ai_os_pack_software_engineering.workflows.models:PipelineOutput

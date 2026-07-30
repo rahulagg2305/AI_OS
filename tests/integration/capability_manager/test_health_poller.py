@@ -60,6 +60,7 @@ _SE_REAL_AGENT_IDS = {
     f"{_SE_PACK_ID}/requirements-analyst",
     f"{_SE_PACK_ID}/architecture",
     f"{_SE_PACK_ID}/build",
+    f"{_SE_PACK_ID}/lint",
     f"{_SE_PACK_ID}/qa-test",
     f"{_SE_PACK_ID}/documentation",
 }

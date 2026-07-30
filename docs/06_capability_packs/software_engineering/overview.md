@@ -4,7 +4,7 @@
 **Document:** Software Engineering Pack – Overview  
 **Version:** 1.0  
 **Status:** Approved  
-**Last Updated:** 2026-07-30 (corrected a stale "5 of 15"/"the other 10" agent count to "5 of 16"/"the other 11", matching `agents.md`'s own already-corrected 2026-07-28 header — found during the post-Step-15 Platform SDK confirmation pass; unrelated to that initiative, a separate pre-existing gap. Prior: 2026-07-25)
+**Last Updated:** 2026-07-30 (a 6th agent, `lint`, is now real — 6 of 17, not 5 of 16 — and the growth gate is recorded as lifted, not blocked; matching `agents.md`'s own same-day update. Prior, same day: corrected a stale "5 of 15"/"the other 10" agent count to "5 of 16"/"the other 11", matching `agents.md`'s own already-corrected 2026-07-28 header. Prior: 2026-07-25)
 
 ---
 
@@ -23,13 +23,13 @@ This document is subordinate to:
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-07-30)
 
-**A small, real slice exists inside the much larger design this document describes.** Per `agents.md`'s own "Currently Implemented Subset": **5 of the 16 agents listed in §4 are real** (`requirements-analyst`, `architecture`, `build` — not in §4's original 15-agent list, added during the 2026-07-28 reconciliation, which is what makes the denominator 16 rather than 15 — `qa-test`, `documentation`); the other 11 (`technical-planner`, `backend-developer`, `frontend-developer`, `database`, `api-designer`, `devops`, `security`, `code-reviewer`, `release`, `refactoring`, `performance`) have no code. **Corrected here (this confirmation pass, 2026-07-30) — this document's own "5 of 15"/"the other 10" had not been updated to match `agents.md`'s own header, already corrected to "5 of 16" on 2026-07-28; unrelated to the Platform SDK initiative, a separate, pre-existing documentation gap.** Per `workflows.md`'s own "Currently Implemented Subset": **1 of §5's 6 listed workflow categories is real** — `se.delivery_pipeline`, a standalone 4-step proof-of-concept pipeline, not an implementation of any of §5's named workflows. §6's Quality Gates are declared as a specification (`tools_quality_gates.md`) with no Quality Gate Engine to execute them (0% built).
+**A small, real slice exists inside the much larger design this document describes.** Per `agents.md`'s own "Currently Implemented Subset": **6 of the 17 agents listed in §4 are real** (`requirements-analyst`, `architecture`, `build`, `lint` — neither in §4's original 15-agent list, `build` added 2026-07-28, `lint` added 2026-07-30, which is what makes the denominator 17 rather than 15 — `qa-test`, `documentation`); the other 11 (`technical-planner`, `backend-developer`, `frontend-developer`, `database`, `api-designer`, `devops`, `security`, `code-reviewer`, `release`, `refactoring`, `performance`) have no code. Per `workflows.md`'s own "Currently Implemented Subset": **1 of §5's 6 listed workflow categories is real** — `se.delivery_pipeline`, now a 6-agent, 2-quality-gate pipeline, not an implementation of any of §5's named workflows. §6's Quality Gates are declared as a specification (`tools_quality_gates.md`); the Quality Gate Engine itself remains largely unbuilt (7%), but two real, narrow gate instances now exist inside this pipeline — see `../../03_architecture/kernel/quality_gate_engine.md`.
 
-**🛑 Growth is currently blocked**: per the hard blocker recorded 2026-07-28 (`../process/standing_rules.md`), no 6th agent may be added to this pack until the Platform SDK (`ai-os-sdk`) exists. The 5 real agents are grandfathered and unaffected.
+**✅ The Capability Pack growth gate is lifted** (product-owner decision, 2026-07-29, `../../process/standing_rules.md`) — `lint` (2026-07-30) is the first agent added to this pack since the gate lifted, proving growth genuinely works, not merely permitted on paper.
 
-**§7's "must not call LLM providers directly or bypass the Workflow Engine" is upheld** — all 5 real agents are invoked exclusively through the Workflow Engine's `AgentStepExecutor`, and the 4 `PromptedAgent`-backed ones (`qa-test` is the exception, making no LLM call at all) go through the real LLM Gateway.
+**§7's "must not call LLM providers directly or bypass the Workflow Engine" is upheld** — all 6 real agents are invoked exclusively through the Workflow Engine's `AgentStepExecutor`, and the 4 `PromptedAgent`-backed ones (`qa-test`/`lint` are the exceptions, making no LLM call at all) go through the real LLM Gateway.
 
 Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 29) and `../../19_roadmap/implementation_status.md`.
 
@@ -131,7 +131,7 @@ The pack will contribute and require a strong set of Quality Gates, including:
 
 ## 8. Current Status
 
-This document provides the high-level overview. See the Implementation Status section near the top for the real vs. designed gap: 5 of 16 agents, 1 proof-of-concept workflow of 6 documented categories.
+This document provides the high-level overview. See the Implementation Status section near the top for the real vs. designed gap: 6 of 17 agents, 1 proof-of-concept workflow of 6 documented categories.
 
 Subsequent documents detail:
 

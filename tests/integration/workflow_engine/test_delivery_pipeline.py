@@ -125,6 +125,7 @@ from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepositor
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
 from ai_os_pack_software_engineering.agents.build import BuildAgentEntrypoint
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentEntrypoint
+from ai_os_pack_software_engineering.agents.lint import LintAgentEntrypoint
 from ai_os_pack_software_engineering.agents.requirements_analyst import (
     RequirementsAnalystAgentEntrypoint,
 )
@@ -175,6 +176,7 @@ _AGENT_IDS = {
     "requirements-analyst": f"{_PACK_ID}/requirements-analyst",
     "architecture": f"{_PACK_ID}/architecture",
     "build": f"{_PACK_ID}/build",
+    "lint": f"{_PACK_ID}/lint",
     "test": f"{_PACK_ID}/qa-test",
     "documentation": f"{_PACK_ID}/documentation",
 }
@@ -186,6 +188,24 @@ def _test_agent_with_sandbox(sandbox: LocalSubprocessSandbox) -> TestAgentEntryp
     ``EntrypointLoader`` does, then bind the real ``PackContext`` a real
     caller would inject, granting exactly ``sandbox:execute``."""
     agent = TestAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["sandbox:execute"],
+            sandbox=sandbox,
+        )
+    )
+    return agent
+
+
+def _lint_agent_with_sandbox(sandbox: LocalSubprocessSandbox) -> LintAgentEntrypoint:
+    """The Lint Agent (added 2026-07-30) — genuinely SDK-native from the
+    start, no migration needed. Construct zero-arg, exactly as
+    ``EntrypointLoader`` does, then bind the real ``PackContext`` a real
+    caller would inject, granting exactly ``sandbox:execute`` — the
+    identical pattern ``_test_agent_with_sandbox`` already establishes."""
+    agent = LintAgentEntrypoint()
     agent.bind_pack_context(
         build_pack_context(
             pack_id=_PACK_ID,
@@ -312,15 +332,17 @@ def database_url() -> Generator[str, None, None]:
 
 
 @pytest.mark.asyncio
-async def test_all_five_steps_genuinely_chain_through_real_persisted_outputs(
+async def test_all_six_agent_steps_and_both_gates_genuinely_chain_through_real_persisted_outputs(
     tmp_path: Path, database_url: str
 ) -> None:
     """The real end-to-end proof this step exists for: a real, declared
-    five-step WorkflowDefinition, driven to completion, in which each
-    step's genuine output is proven — by inspecting the final artifact,
-    not by a test hand-copying anything — to have reached the next
-    step's genuine input, including the new Requirements Analyst ->
-    Architecture hand-off this feature step adds."""
+    eight-step WorkflowDefinition (six agent steps, two blocking quality
+    gates), driven to completion, in which each step's genuine output is
+    proven — by inspecting the final artifact, not by a test
+    hand-copying anything — to have reached the next step's genuine
+    input, including both real quality gates (`quality-gate-lint-clean`,
+    `quality-gate-tests-pass`) genuinely passing on genuinely clean
+    code."""
 
     requirements_analyst_template = "ANALYSIS: refined and structured.\nRaw ask was: {{context}}"
     architecture_template = "DESIGN: a single Python script.\nContext was: {{context}}"
@@ -360,6 +382,7 @@ async def test_all_five_steps_genuinely_chain_through_real_persisted_outputs(
             _AGENT_IDS["build"]: _build_agent_with_prompt(
                 build_template, "build.write_file", working_directory=tmp_path
             ),
+            _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -423,6 +446,21 @@ async def test_all_five_steps_genuinely_chain_through_real_persisted_outputs(
         assert "ANALYSIS: refined and structured" in build_outputs["instruction"]
         assert "print a friendly message" in build_outputs["instruction"]  # via 3-hop {{context}}
 
+        # Lint genuinely ran `python -m py_compile` against the real file
+        # Build wrote — and the second real proof this step exists for:
+        # the gate mechanism genuinely generalized to this second,
+        # distinct category (Static Analysis) via configuration alone.
+        lint_outputs = next(s.outputs for s in steps if s.step_name == "lint")
+        assert lint_outputs is not None
+        assert lint_outputs["passed"] is True
+        assert lint_outputs["exitCode"] == 0
+
+        lint_gate_outputs = next(
+            s.outputs for s in steps if s.step_name == "quality-gate-lint-clean"
+        )
+        assert lint_gate_outputs is not None
+        assert lint_gate_outputs["passed"] is True
+
         doc_file = tmp_path / "solution.py.md"
         assert doc_file.is_file()
         doc_text = doc_file.read_text(encoding="utf-8")
@@ -452,7 +490,9 @@ async def test_a_genuinely_failing_test_run_halts_the_pipeline_before_documentat
     # Genuinely fails when run — exit code 1, not a syntax error or a
     # sandbox/timeout failure, so `test`'s own `passed` field is real,
     # data-driven `False`, the same "derived only from exitCode/timeout"
-    # contract `verification.py` already documents.
+    # contract `verification.py` already documents. Genuinely valid
+    # syntax (py_compile's own real check, the `lint` gate's tool),
+    # so this scenario reaches `test` unblocked, as intended.
     build_template = (
         "Upstream design: {{context}}\n\n"
         "FILE_PATH: solution.py\n"
@@ -474,6 +514,7 @@ async def test_a_genuinely_failing_test_run_halts_the_pipeline_before_documentat
             _AGENT_IDS["build"]: _build_agent_with_prompt(
                 build_template, "build.write_file", working_directory=tmp_path
             ),
+            _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -563,6 +604,7 @@ async def test_a_gate_failure_within_the_retry_bound_eventually_succeeds(
             _AGENT_IDS["build"]: _build_agent_with_prompt(
                 build_template, "build.write_file", working_directory=tmp_path
             ),
+            _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -652,6 +694,7 @@ async def test_a_gate_that_fails_every_attempt_exhausts_the_retry_bound_and_halt
             _AGENT_IDS["build"]: _build_agent_with_prompt(
                 build_template, "build.write_file", working_directory=tmp_path
             ),
+            _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -687,6 +730,91 @@ async def test_a_gate_that_fails_every_attempt_exhausts_the_retry_bound_and_halt
 
         # Neither gate attempt is persisted (both raised); Documentation
         # never ran — the real proof this halts, not silently continues.
+        assert not any(s.step_name == "quality-gate-tests-pass" for s in steps)
+        assert not any(s.step_name == "documentation" for s in steps)
+        assert not (tmp_path / "solution.py.md").exists()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_genuinely_lint_violating_build_halts_retries_and_exhausts_before_test_runs(
+    tmp_path: Path, database_url: str
+) -> None:
+    """The real proof this feature step exists for: a build that
+    genuinely, persistently fails a real `python -m py_compile` check
+    halts the pipeline at `quality-gate-lint-clean` — retries once (per
+    the existing bounded mechanism, proven generic in the prior step),
+    then genuinely exhausts the bound (the violation is never fixed,
+    since the real Build Agent's own template is static) and halts for
+    good. `test`/`quality-gate-tests-pass`/`documentation` never run at
+    all — a stronger halt than the Test gate's own exhausted case,
+    since Lint sits earlier in the pipeline."""
+
+    requirements_analyst_template = "ANALYSIS: refined and structured.\nRaw ask was: {{context}}"
+    architecture_template = "DESIGN: a single Python script.\nContext was: {{context}}"
+    # A real, deterministic syntax error — never fixed across attempts,
+    # since this template is static; genuinely exhausts the bound
+    # rather than a coin flip.
+    build_template = (
+        "Upstream design: {{context}}\n\n"
+        "FILE_PATH: solution.py\n"
+        "FILE_CONTENT_BEGIN\n"
+        "def f(:\n"
+        "    pass\n"
+        "FILE_CONTENT_END"
+    )
+    documentation_template = "# {{filePath}}\n\nInstruction: {{instruction}}"
+
+    registry = InMemoryAgentRegistry(
+        {
+            _AGENT_IDS["requirements-analyst"]: _requirements_analyst_agent_with_prompt(
+                requirements_analyst_template, "requirements.analyze"
+            ),
+            _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
+                architecture_template, "architecture.propose_design"
+            ),
+            _AGENT_IDS["build"]: _build_agent_with_prompt(
+                build_template, "build.write_file", working_directory=tmp_path
+            ),
+            _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
+                documentation_template, "documentation.record_artifact"
+            ),
+        }
+    )
+
+    engine = build_engine(database_url)
+    try:
+        trigger = build_pipeline_trigger(
+            engine, registry, python_command=LocalSubprocessSandbox().python_command
+        )
+
+        result = await trigger({"requirement": "print a friendly message"}, "test-principal")
+
+        assert result.outcome == WorkflowRunOutcome.FAILED
+        assert isinstance(result.error, QualityGateFailedError)
+        assert "quality-gate-lint-clean" in str(result.error)
+        assert result.last_instance is not None
+
+        engine_repo = SqlWorkflowInstanceRepository(engine)
+        steps = await engine_repo.list_steps(result.last_instance.workflow_id)
+
+        # Exactly retryPolicy.maxAttempts (2) real attempts at build/lint
+        # — never a third: the genuinely-bounded proof.
+        build_rows = [s for s in steps if s.step_name == "build"]
+        lint_rows = [s for s in steps if s.step_name == "lint"]
+        assert sorted(s.attempt for s in build_rows) == [1, 2]
+        assert sorted(s.attempt for s in lint_rows) == [1, 2]
+        for lint_row in lint_rows:
+            assert lint_row.outputs is not None
+            assert lint_row.outputs["passed"] is False
+
+        # Lint sits before Test in this pipeline — a failing lint gate
+        # must halt before Test ever runs, not just before Documentation.
+        assert not any(s.step_name == "quality-gate-lint-clean" for s in steps)
+        assert not any(s.step_name == "test" for s in steps)
         assert not any(s.step_name == "quality-gate-tests-pass" for s in steps)
         assert not any(s.step_name == "documentation" for s in steps)
         assert not (tmp_path / "solution.py.md").exists()

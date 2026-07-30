@@ -84,6 +84,7 @@ _REAL_AGENT_IDS = {
     f"{_PACK_ID}/requirements-analyst",
     f"{_PACK_ID}/architecture",
     f"{_PACK_ID}/build",
+    f"{_PACK_ID}/lint",
     f"{_PACK_ID}/qa-test",
     f"{_PACK_ID}/documentation",
 }

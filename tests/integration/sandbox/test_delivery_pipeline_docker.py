@@ -86,6 +86,7 @@ from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepositor
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
 from ai_os_pack_software_engineering.agents.build import BuildAgentEntrypoint
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentEntrypoint
+from ai_os_pack_software_engineering.agents.lint import LintAgentEntrypoint
 from ai_os_pack_software_engineering.agents.requirements_analyst import (
     RequirementsAnalystAgentEntrypoint,
 )
@@ -101,6 +102,7 @@ _AGENT_IDS = {
     "requirements-analyst": "software-engineering/requirements-analyst",
     "architecture": "software-engineering/architecture",
     "build": "software-engineering/build",
+    "lint": "software-engineering/lint",
     "test": "software-engineering/qa-test",
     "documentation": "software-engineering/documentation",
 }
@@ -112,6 +114,22 @@ def _test_agent_with_sandbox(sandbox: DockerSandbox) -> TestAgentEntrypoint:
     ``EntrypointLoader`` does, then bind the real ``PackContext`` a real
     caller would inject, granting exactly ``sandbox:execute``."""
     agent = TestAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["sandbox:execute"],
+            sandbox=sandbox,
+        )
+    )
+    return agent
+
+
+def _lint_agent_with_sandbox(sandbox: DockerSandbox) -> LintAgentEntrypoint:
+    """The Lint Agent (added 2026-07-30) — genuinely SDK-native from the
+    start, no migration needed. The identical construction+injection
+    pattern ``_test_agent_with_sandbox`` already establishes."""
+    agent = LintAgentEntrypoint()
     agent.bind_pack_context(
         build_pack_context(
             pack_id=_PACK_ID,
@@ -302,6 +320,7 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
             _AGENT_IDS["build"]: _build_agent_with_prompt(
                 build_template, "build.write_file", working_directory=tmp_path
             ),
+            _AGENT_IDS["lint"]: _lint_agent_with_sandbox(DockerSandbox()),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(DockerSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
