@@ -117,13 +117,11 @@ async def _build_real_llm_gateway_and_prompt_engine(
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
+PACK_ROOT = REPO_ROOT / "capability_packs" / "software-engineering"
 
 _PACK_ID = "software-engineering"
 _PACK_VERSION = "0.1.0"
 _AGENT_ID = f"{_PACK_ID}/requirements-analyst"
-_AGENT_ENTRYPOINT = (
-    "ai_os_pack_software_engineering.agents.requirements_analyst:RequirementsAnalystAgentEntrypoint"
-)
 _LIVE_PROMPT_ID = "requirements.analyze.live_test"
 _LIVE_PROMPT_VERSION = "0.1.0"
 _API_KEY_ENV_VAR = "AIOS_SECRET_LLM_ANTHROPIC_API_KEY"
@@ -148,13 +146,18 @@ def database_url() -> Generator[str, None, None]:
 async def _register_and_activate_pack(database_url: str) -> None:
     """Idempotent across the two test functions in this module, which
     share one Postgres container — mirrors
-    `test_architecture_agent_pack.py`'s own helper exactly."""
+    `test_architecture_agent_pack.py`'s own helper exactly.
+
+    **``pack_root=PACK_ROOT`` (added this step) genuinely derives and
+    writes this pack's real ``catalog.agents``/``catalog.prompts``/
+    ``catalog.tools`` rows** — see
+    ``ai_os_kernel.capability_manager.manifest_catalog_installer``.
+    Replaces the hand-written ``catalog.agents`` row a prior version of
+    this file inserted via raw SQL (``_seed_agent_row``, removed)."""
     engine = build_engine(database_url)
     try:
         repository = SqlPackLifecycleRepository(engine)
-        with (REPO_ROOT / "capability_packs" / "software-engineering" / "manifest.yaml").open(
-            encoding="utf-8"
-        ) as fh:
+        with (PACK_ROOT / "manifest.yaml").open(encoding="utf-8") as fh:
             manifest = yaml.safe_load(fh)
         with contextlib.suppress(CapabilityManagerError):
             await repository.register(
@@ -165,38 +168,10 @@ async def _register_and_activate_pack(database_url: str) -> None:
                 min_kernel_version="0.1.0",
                 actor="test",
                 reason="requirements analyst agent pack integration test",
+                pack_root=PACK_ROOT,
             )
         with contextlib.suppress(CapabilityManagerError):
             await repository.activate(pack_id=_PACK_ID, actor="test", reason="integration test")
-    finally:
-        await engine.dispose()
-
-
-async def _seed_agent_row(database_url: str) -> None:
-    """No automated manifest -> catalog.agents installer exists yet —
-    mirrors `test_architecture_agent_pack.py`'s own direct seeding."""
-    engine = build_engine(database_url)
-    try:
-        async with engine.begin() as connection:
-            await connection.execute(
-                sa.text(
-                    "INSERT INTO catalog.agents "
-                    "(agent_id, pack_id, version, entrypoint, input_schema, output_schema, "
-                    " required_permissions, required_tools) "
-                    "VALUES (:agent_id, :pack_id, :version, :entrypoint, "
-                    " '{}'::jsonb, "
-                    ' \'{"type": "object", "properties": {"analysis": {"type": "string"}}, '
-                    '   "required": ["analysis"], "additionalProperties": false}\'::jsonb, '
-                    " '[\"llm:invoke\"]'::jsonb, '[]'::jsonb) "
-                    "ON CONFLICT (agent_id) DO NOTHING"
-                ),
-                {
-                    "agent_id": _AGENT_ID,
-                    "pack_id": _PACK_ID,
-                    "version": _PACK_VERSION,
-                    "entrypoint": _AGENT_ENTRYPOINT,
-                },
-            )
     finally:
         await engine.dispose()
 
@@ -243,7 +218,6 @@ def test_sql_agent_registry_genuinely_resolves_the_requirements_analyst_agent(
 
     async def _run() -> None:
         await _register_and_activate_pack(database_url)
-        await _seed_agent_row(database_url)
 
         engine = build_engine(database_url)
         try:
@@ -284,7 +258,6 @@ def test_a_real_workflow_step_genuinely_invokes_the_requirements_analyst_agent_l
 
     async def _run() -> None:
         await _register_and_activate_pack(database_url)
-        await _seed_agent_row(database_url)
         await _seed_live_prompt(database_url)
 
         engine = build_engine(database_url)

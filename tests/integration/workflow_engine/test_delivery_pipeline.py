@@ -96,7 +96,6 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-import sqlalchemy as sa
 import yaml
 from alembic import command
 from alembic.config import Config
@@ -177,20 +176,6 @@ _AGENT_IDS = {
     "build": f"{_PACK_ID}/build",
     "test": f"{_PACK_ID}/qa-test",
     "documentation": f"{_PACK_ID}/documentation",
-}
-_AGENT_ENTRYPOINTS = {
-    "requirements-analyst": (
-        "ai_os_pack_software_engineering.agents.requirements_analyst:"
-        "RequirementsAnalystAgentEntrypoint"
-    ),
-    "architecture": (
-        "ai_os_pack_software_engineering.agents.architecture:ArchitectureAgentEntrypoint"
-    ),
-    "build": "ai_os_pack_software_engineering.agents.build:BuildAgentEntrypoint",
-    "test": "ai_os_pack_software_engineering.agents.verification:TestAgentEntrypoint",
-    "documentation": (
-        "ai_os_pack_software_engineering.agents.documentation:DocumentationAgentEntrypoint"
-    ),
 }
 
 
@@ -452,6 +437,25 @@ async def test_all_five_steps_genuinely_chain_through_real_persisted_outputs(
 
 
 async def _register_and_activate_pack(database_url: str) -> None:
+    """**``pack_root=PACK_ROOT`` (added this step) genuinely derives and
+    writes this pack's real ``catalog.agents``/``catalog.prompts``/
+    ``catalog.tools`` rows** — see
+    ``ai_os_kernel.capability_manager.manifest_catalog_installer``. This
+    replaces both ``_seed_agent_rows`` and ``_seed_real_prompts``
+    (removed) — the exact hand-duplicated raw-SQL seeding this
+    initiative's own prior feature-step report flagged by name.
+
+    **A real, discovered bug in the raw SQL this replaces, not merely
+    stale duplication**: ``_seed_agent_rows`` granted
+    ``sandbox:execute`` to `requirements-analyst`/`architecture`
+    uniformly with `build`/`documentation`, even though neither of the
+    first two actually declares that permission in the real manifest —
+    over-permissive, silently harmless only because neither agent ever
+    tries to use a tool. The real installer derives each agent's own
+    exact, correct permission set instead — see
+    ``manifest_catalog_installer.py``'s own docstring, and
+    ``tests/integration/capability_manager/test_manifest_catalog_installer.py``
+    for the dedicated proof."""
     engine = build_engine(database_url)
     try:
         repository = SqlPackLifecycleRepository(engine)
@@ -466,70 +470,10 @@ async def _register_and_activate_pack(database_url: str) -> None:
                 min_kernel_version="0.1.0",
                 actor="test",
                 reason="delivery pipeline integration test",
+                pack_root=PACK_ROOT,
             )
         with contextlib.suppress(CapabilityManagerError):
             await repository.activate(pack_id=_PACK_ID, actor="test", reason="integration test")
-    finally:
-        await engine.dispose()
-
-
-async def _seed_agent_rows(database_url: str) -> None:
-    engine = build_engine(database_url)
-    try:
-        async with engine.begin() as connection:
-            for key, agent_id in _AGENT_IDS.items():
-                permissions = (
-                    '["sandbox:execute"]' if key == "test" else '["llm:invoke", "sandbox:execute"]'
-                )
-                await connection.execute(
-                    sa.text(
-                        "INSERT INTO catalog.agents "
-                        "(agent_id, pack_id, version, entrypoint, input_schema, output_schema, "
-                        " required_permissions, required_tools) "
-                        "VALUES (:agent_id, :pack_id, :version, :entrypoint, "
-                        " '{}'::jsonb, '{}'::jsonb, (:permissions)::jsonb, '[]'::jsonb) "
-                        "ON CONFLICT (agent_id) DO NOTHING"
-                    ),
-                    {
-                        "agent_id": agent_id,
-                        "pack_id": _PACK_ID,
-                        "version": _PACK_VERSION,
-                        "entrypoint": _AGENT_ENTRYPOINTS[key],
-                        "permissions": permissions,
-                    },
-                )
-    finally:
-        await engine.dispose()
-
-
-async def _seed_real_prompts(database_url: str) -> None:
-    """Seeds this pack's own four *real, shipped* prompts — see this
-    module's own docstring for why this test, unlike every prior
-    single-agent live test in this pack, can use them directly."""
-    prompts = {
-        "requirements.analyze": PACK_ROOT / "prompts" / "requirements_analysis.md",
-        "architecture.propose_design": PACK_ROOT / "prompts" / "architecture_proposal.md",
-        "build.write_file": PACK_ROOT / "prompts" / "build_write_file.md",
-        "documentation.record_artifact": PACK_ROOT / "prompts" / "documentation_record_artifact.md",
-    }
-    engine = build_engine(database_url)
-    try:
-        async with engine.begin() as connection:
-            for prompt_id, path in prompts.items():
-                await connection.execute(
-                    sa.text(
-                        "INSERT INTO catalog.prompts "
-                        "(prompt_id, pack_id, version, content, input_schema, content_hash) "
-                        "VALUES "
-                        "(:prompt_id, :pack_id, '0.1.0', :content, '{}'::jsonb, 'sha256:abc') "
-                        "ON CONFLICT (prompt_id, version) DO NOTHING"
-                    ),
-                    {
-                        "prompt_id": prompt_id,
-                        "pack_id": _PACK_ID,
-                        "content": path.read_text(encoding="utf-8"),
-                    },
-                )
     finally:
         await engine.dispose()
 
@@ -548,8 +492,6 @@ def test_the_real_pipeline_genuinely_runs_end_to_end_against_the_live_api(
 
     async def _run() -> None:
         await _register_and_activate_pack(database_url)
-        await _seed_agent_rows(database_url)
-        await _seed_real_prompts(database_url)
 
         engine = build_engine(database_url)
         try:

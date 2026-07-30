@@ -14,8 +14,7 @@ so an authorized request reaches all the way through authentication,
 authorization, and the real Workflow Engine machinery, and gets a real,
 structured ``failed`` outcome back — proving the security boundary and
 the real trigger wiring both work, without needing a live credential or
-the manifest -> catalog seeding this codebase does not yet automate
-(a known, separately-tracked gap — see this pack's own README.md).
+any real pack registration at all.
 Mirrors exactly how ``tests/integration/test_workflows_route.py``'s own
 ``test_an_authorized_request_reaches_the_real_workflow_engine`` proves
 the platform demo route's identical plumbing.
@@ -23,9 +22,10 @@ the platform demo route's identical plumbing.
 The opt-in live counterpart,
 ``tests/integration/test_delivery_pipeline_route_live.py``, proves the
 full path all the way to a genuine, completed 5-agent run, reusing the
-same real ``catalog.*`` seeding helpers
+same real ``_register_and_activate_pack`` helper
 ``tests/integration/workflow_engine/test_delivery_pipeline.py``'s own
-live test already established.
+live test already established (now backed by the real manifest -> catalog
+installer, ``ai_os_kernel.capability_manager.manifest_catalog_installer``).
 
 Real Postgres via testcontainers (ADR-0015) — no mocking the database.
 """

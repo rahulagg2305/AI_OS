@@ -4,6 +4,33 @@ transition in ``catalog.pack_state_transitions`` — the "minimal write
 path ... enough to make activation real, not seed-only" this step
 approves.
 
+**``register()`` now also derives and writes real ``catalog.agents``/
+``catalog.prompts``/``catalog.tools`` rows from the pack's own manifest
+— closing the "no automated manifest -> catalog installer exists yet"
+gap several integration tests' own docstrings named explicitly.** See
+:mod:`~ai_os_kernel.capability_manager.manifest_catalog_installer` for
+the real derivation logic (pure functions, no database access); this
+module's own job is only to run that derivation *before* opening the
+write transaction (so a derivation failure — an unresolvable
+``inputSchema`` import, an unreadable prompt file — never leaves a
+partially-registered pack behind) and then insert the derived rows
+inside the same transaction as the pack row itself, so registration
+remains genuinely all-or-nothing.
+
+**Catalog derivation is opt-in via the new ``pack_root`` parameter,
+defaulting to ``None`` (unchanged behaviour) — a deliberate, load-bearing
+choice, not an oversight.** ``POST /api/v1/packs``
+(:mod:`ai_os_kernel.routes.packs`) already calls :meth:`register` today
+with a client-supplied manifest **dict** over HTTP — there is no pack
+directory on disk for that caller to point at, and ``catalog.prompts``
+derivation genuinely needs one (prompt *content* is a real file on
+disk, never inline in the manifest). Defaulting to ``None`` means that
+route's existing behaviour is provably unchanged by this step (zero new
+code there, zero new side effect); every caller that *does* have a real
+pack directory (every integration test that used to hand-seed rows,
+and any future pack-directory-driven registration path) opts in
+explicitly by passing it.
+
 **The smallest useful slice of the full canonical lifecycle**
 (capability_manager.md §4: ``discovered -> validated -> installed ->
 configured -> activated -> {deactivated, failed} -> uninstalled``) —
@@ -45,6 +72,7 @@ read-then-write race" discipline already applied throughout
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Protocol
 
 import sqlalchemy as sa
@@ -57,8 +85,19 @@ from ai_os_kernel.capability_manager.errors import (
     PackRegistrationError,
 )
 from ai_os_kernel.capability_manager.ids import new_transition_id
+from ai_os_kernel.capability_manager.manifest_catalog_installer import (
+    derive_agent_rows,
+    derive_prompt_rows,
+    derive_tool_rows,
+)
 from ai_os_kernel.capability_manager.models import PackRecord
-from ai_os_kernel.persistence.catalog_schema import pack_state_transitions, packs
+from ai_os_kernel.persistence.catalog_schema import (
+    agents,
+    pack_state_transitions,
+    packs,
+    prompts,
+    tools,
+)
 from ai_os_kernel.workflow_engine.pack_state import PackState
 
 # The lifecycle's first canonical state — see module docstring for why
@@ -87,6 +126,7 @@ class PackLifecycleRepository(Protocol):
         min_kernel_version: str,
         actor: str,
         reason: str,
+        pack_root: Path | None = None,
     ) -> PackRecord: ...
 
     async def activate(self, *, pack_id: str, actor: str, reason: str) -> PackRecord: ...
@@ -113,7 +153,21 @@ class SqlPackLifecycleRepository:
         min_kernel_version: str,
         actor: str,
         reason: str,
+        pack_root: Path | None = None,
     ) -> PackRecord:
+        # Derived before the transaction opens, deliberately — see this
+        # module's own docstring: a bad manifest reference must never
+        # leave a half-registered pack behind, and a pure, DB-free
+        # derivation failure here can't, since nothing has been written
+        # yet.
+        agent_rows: list[dict[str, Any]] = []
+        prompt_rows: list[dict[str, Any]] = []
+        tool_rows: list[dict[str, Any]] = []
+        if pack_root is not None:
+            agent_rows = derive_agent_rows(manifest, pack_id=pack_id)
+            prompt_rows = derive_prompt_rows(manifest, pack_id=pack_id, pack_root=pack_root)
+            tool_rows = derive_tool_rows(manifest, pack_id=pack_id)
+
         occurred_at = datetime.now(UTC)
         try:
             async with self._engine.begin() as connection:
@@ -141,6 +195,13 @@ class SqlPackLifecycleRepository:
                     reason=reason,
                     occurred_at=occurred_at,
                 )
+
+                if agent_rows:
+                    await connection.execute(sa.insert(agents), agent_rows)
+                if prompt_rows:
+                    await connection.execute(sa.insert(prompts), prompt_rows)
+                if tool_rows:
+                    await connection.execute(sa.insert(tools), tool_rows)
         except sa.exc.IntegrityError as exc:
             raise PackAlreadyRegisteredError(
                 f"pack '{pack_id}' is already registered in catalog.packs"

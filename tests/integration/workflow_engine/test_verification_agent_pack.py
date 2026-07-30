@@ -51,7 +51,6 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-import sqlalchemy as sa
 import yaml
 from alembic import command
 from alembic.config import Config
@@ -71,11 +70,11 @@ from tests.integration._postgres_fixture import postgres_container
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
+PACK_ROOT = REPO_ROOT / "capability_packs" / "software-engineering"
 
 _PACK_ID = "software-engineering"
 _PACK_VERSION = "0.1.0"
 _AGENT_ID = f"{_PACK_ID}/qa-test"
-_AGENT_ENTRYPOINT = "ai_os_pack_software_engineering.agents.verification:TestAgentEntrypoint"
 
 
 @pytest.fixture(scope="module")
@@ -96,13 +95,18 @@ def database_url() -> Generator[str, None, None]:
 
 async def _register_and_activate_pack(database_url: str) -> None:
     """Idempotent — mirrors test_architecture_agent_pack.py's/
-    test_build_agent_pack.py's own helper exactly."""
+    test_build_agent_pack.py's own helper exactly.
+
+    **``pack_root=PACK_ROOT`` (added this step) genuinely derives and
+    writes this pack's real ``catalog.agents``/``catalog.prompts``/
+    ``catalog.tools`` rows** — see
+    ``ai_os_kernel.capability_manager.manifest_catalog_installer``.
+    Replaces the hand-written ``catalog.agents`` row a prior version of
+    this file inserted via raw SQL (``_seed_agent_row``, removed)."""
     engine = build_engine(database_url)
     try:
         repository = SqlPackLifecycleRepository(engine)
-        with (REPO_ROOT / "capability_packs" / "software-engineering" / "manifest.yaml").open(
-            encoding="utf-8"
-        ) as fh:
+        with (PACK_ROOT / "manifest.yaml").open(encoding="utf-8") as fh:
             manifest = yaml.safe_load(fh)
         with contextlib.suppress(CapabilityManagerError):
             await repository.register(
@@ -113,35 +117,10 @@ async def _register_and_activate_pack(database_url: str) -> None:
                 min_kernel_version="0.1.0",
                 actor="test",
                 reason="test agent pack integration test",
+                pack_root=PACK_ROOT,
             )
         with contextlib.suppress(CapabilityManagerError):
             await repository.activate(pack_id=_PACK_ID, actor="test", reason="integration test")
-    finally:
-        await engine.dispose()
-
-
-async def _seed_agent_row(database_url: str) -> None:
-    """No automated manifest -> catalog.agents installer exists yet —
-    mirrors this pack's own prior integration tests exactly."""
-    engine = build_engine(database_url)
-    try:
-        async with engine.begin() as connection:
-            await connection.execute(
-                sa.text(
-                    "INSERT INTO catalog.agents "
-                    "(agent_id, pack_id, version, entrypoint, input_schema, output_schema, "
-                    " required_permissions, required_tools) "
-                    "VALUES (:agent_id, :pack_id, :version, :entrypoint, "
-                    " '{}'::jsonb, '{}'::jsonb, '[\"sandbox:execute\"]'::jsonb, '[]'::jsonb) "
-                    "ON CONFLICT (agent_id) DO NOTHING"
-                ),
-                {
-                    "agent_id": _AGENT_ID,
-                    "pack_id": _PACK_ID,
-                    "version": _PACK_VERSION,
-                    "entrypoint": _AGENT_ENTRYPOINT,
-                },
-            )
     finally:
         await engine.dispose()
 
@@ -153,7 +132,6 @@ def test_sql_agent_registry_genuinely_resolves_the_test_agent(database_url: str)
 
     async def _run() -> None:
         await _register_and_activate_pack(database_url)
-        await _seed_agent_row(database_url)
 
         engine = build_engine(database_url)
         try:
@@ -193,7 +171,6 @@ def test_a_real_workflow_step_genuinely_runs_a_real_file_via_sql_agent_registry(
 
     async def _run() -> None:
         await _register_and_activate_pack(database_url)
-        await _seed_agent_row(database_url)
 
         (tmp_path / "ok.py").write_text("print('integration pass')\n", encoding="utf-8")
         (tmp_path / "broken.py").write_text("raise SystemExit(3)\n", encoding="utf-8")

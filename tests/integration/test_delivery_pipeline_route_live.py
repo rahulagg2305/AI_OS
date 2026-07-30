@@ -8,11 +8,12 @@ direct call to ``build_pipeline_trigger`` as
 ``tests/integration/workflow_engine/test_delivery_pipeline.py``'s own
 live test uses.
 
-Reuses that same test's own real ``catalog.*`` seeding helpers
-(``_register_and_activate_pack``/``_seed_agent_rows``/``_seed_real_prompts``)
-directly — the identical raw-SQL seeding this codebase uses everywhere
-until a real manifest -> catalog installer exists (a known, separately
-tracked gap) — rather than a second, duplicate copy.
+Reuses that same test's own real ``_register_and_activate_pack`` helper
+directly, which now derives and writes this pack's real
+``catalog.agents``/``catalog.prompts``/``catalog.tools`` rows for real via
+the real manifest -> catalog installer
+(``ai_os_kernel.capability_manager.manifest_catalog_installer``) — rather
+than a second, duplicate copy of hand-written raw-SQL seeding.
 
 Skipped unless a real key is available at the documented local-dev
 secret reference, exactly mirroring every other opt-in live test in
@@ -36,8 +37,6 @@ from ai_os_kernel.configuration_manager import PlatformConfig
 from tests.integration._postgres_fixture import postgres_container
 from tests.integration.workflow_engine.test_delivery_pipeline import (
     _register_and_activate_pack,
-    _seed_agent_rows,
-    _seed_real_prompts,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -87,16 +86,10 @@ def _token(roles: list[str]) -> str:
     return jwt.encode(claims, _SIGNING_KEY, algorithm="HS256")
 
 
-async def _seed_the_real_pack(database_url: str) -> None:
-    await _register_and_activate_pack(database_url)
-    await _seed_agent_rows(database_url)
-    await _seed_real_prompts(database_url)
-
-
 def test_an_authorized_request_drives_the_real_five_agent_pipeline_to_completion(
     database_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    asyncio.run(_seed_the_real_pack(database_url))
+    asyncio.run(_register_and_activate_pack(database_url))
     monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
     app = build_app(_config())
 

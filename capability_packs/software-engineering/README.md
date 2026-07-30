@@ -99,8 +99,6 @@ end-to-end proofs live in the Kernel-side integration tests listed above.
 
 ## Known, documented gaps (not silently deferred)
 
-- **No automated manifest → catalog installer.** `catalog.agents`/`catalog.prompts`/
-  `catalog.workflow_definitions` rows are seeded directly by the integration tests.
 - **`SoftwareEngineeringPack.activate()` is under-wired.** It is a real, correct
   implementation of the (reduced) `CapabilityPack` Protocol, but nothing in the Kernel
   calls it yet, and it registers only the Architecture Agent.
