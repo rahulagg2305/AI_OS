@@ -122,6 +122,19 @@ already uses, so a genuinely failing test run now stops the pipeline
 before Documentation ever runs, rather than Documentation blindly
 recording a failure it never actually blocked.
 
+**A real, bounded retry now sits on top of that halt (added
+2026-07-30) — a failed gate no longer halts the run on its very first
+failure.** ``retryPolicy`` (``maxAttempts: 2``, ``maxDurationSeconds: 60.0``)
+is now declared on ``delivery_pipeline.yaml`` itself
+(``WorkflowDefinition.retry_policy`` — already validated at load time,
+never read at runtime until this step); ``_GATE_RETRY_TARGETS`` tells
+:meth:`~ai_os_kernel.workflow_engine.advance_runner.WorkflowAdvanceRunner.run_to_completion`
+to retry a failed ``quality-gate-tests-pass`` from ``build`` (see that
+constant's own comment for why ``build``, not ``requirements-analyst``
+or ``test`` alone). Still genuinely bounded: once ``retryPolicy``'s own
+attempt/duration bound is exhausted, the pipeline halts exactly as
+before this feature existed.
+
 **Why a real pack-owned YAML file, not a Python-constructed
 ``WorkflowDefinition`` (``kernel/bootstrap.py``'s own demo's own
 choice).** That demo's own comment is explicit about why it chose
@@ -179,13 +192,16 @@ _DEFINITION_PATH = (
 
 # Deliberately generous, not tuned — six real steps (five agent steps
 # plus the real quality_gate step, added 2026-07-30) plus one final
-# completion transition need seven `advance()` calls; the identical
-# "bound exists, not sized precisely" reasoning
-# kernel/bootstrap.py's own demo trigger already uses for its own
-# one-step workflow.
+# completion transition need seven `advance()` calls in the happy path.
+# delivery_pipeline.yaml's own `retryPolicy.maxAttempts` (2, as of
+# 2026-07-30) allows exactly one bounded retry cycle when the gate
+# fails — re-running build/test/gate costs 3 more `advance()` calls
+# (10 total) — plus a few calls of margin, the identical "bound exists,
+# not sized precisely" reasoning kernel/bootstrap.py's own demo trigger
+# already uses for its own one-step workflow.
 _WORKER_ID = "software-engineering-pipeline-trigger"
 _LEASE_DURATION_SECONDS = 30
-_MAX_ITERATIONS = 10
+_MAX_ITERATIONS = 15
 
 # The real quality_gate step's own source-step config (added
 # 2026-07-30) — composition-level, per ai_os_kernel.workflow_engine.
@@ -196,6 +212,23 @@ _MAX_ITERATIONS = 10
 # itself. `quality-gate-tests-pass` reads `test`'s own real `passed`
 # field — see delivery_pipeline.yaml's own comment on this step id.
 _GATE_SOURCES: dict[str, str] = {"quality-gate-tests-pass": "test"}
+
+# Bounded gate retry (added 2026-07-30) — the same composition-level
+# shape as _GATE_SOURCES above, per WorkflowAdvanceRunner.run_to_completion's
+# own `gate_retry_targets` docstring: on a failed `quality-gate-tests-pass`,
+# retry from `build` (re-running build, then test, then the gate again),
+# not from `requirements-analyst` (Requirements Analyst's/Architecture's
+# own design decisions are unrelated to why a build/test cycle failed,
+# so re-invoking them on every retry would be wasted, non-deterministic
+# LLM calls) and not a single, narrower re-run of `test` alone (test's
+# own result is a pure function of the file `build` already wrote —
+# re-running it alone can never produce a different outcome unless the
+# artifact itself might genuinely differ on a fresh run, which is
+# `build`'s own responsibility, not `test`'s). The real bound
+# (`maxAttempts`/`maxDurationSeconds`) is declared once, on the
+# workflow's own `retryPolicy` in delivery_pipeline.yaml — never
+# duplicated here.
+_GATE_RETRY_TARGETS: dict[str, str] = {"quality-gate-tests-pass": "build"}
 
 
 def _make_run_generated_file_with_python(
@@ -361,6 +394,7 @@ def build_pipeline_trigger(
             worker_id=_WORKER_ID,
             lease_duration_seconds=_LEASE_DURATION_SECONDS,
             max_iterations=_MAX_ITERATIONS,
+            gate_retry_targets=_GATE_RETRY_TARGETS,
         )
 
     return trigger

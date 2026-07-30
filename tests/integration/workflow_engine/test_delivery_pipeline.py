@@ -513,6 +513,187 @@ async def test_a_genuinely_failing_test_run_halts_the_pipeline_before_documentat
         await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_a_gate_failure_within_the_retry_bound_eventually_succeeds(
+    tmp_path: Path, database_url: str
+) -> None:
+    """The real proof this step exists for: a build that genuinely
+    fails on its first real run but genuinely succeeds on a real
+    retry — a controllable, deterministic flaky condition (a marker
+    file on disk), not a coin flip. `delivery_pipeline.yaml`'s own
+    `retryPolicy` (`maxAttempts: 2`) allows exactly the one retry this
+    needs; the pipeline completes within the bound, Documentation
+    genuinely runs."""
+
+    requirements_analyst_template = "ANALYSIS: refined and structured.\nRaw ask was: {{context}}"
+    architecture_template = "DESIGN: a single Python script.\nContext was: {{context}}"
+    # Build's own rendered output is identical on every attempt (a
+    # static template, Echo-backed) — what's genuinely flaky is the
+    # *generated script's own execution*: it fails the first time it
+    # ever runs (creating a real marker file on disk), then succeeds
+    # every time after, once that marker exists. This models a real,
+    # transient reason a retry can genuinely help (error_handling_retry.md
+    # §3's own `transient` category), without any randomness.
+    build_template = (
+        "Upstream design: {{context}}\n\n"
+        "FILE_PATH: solution.py\n"
+        "FILE_CONTENT_BEGIN\n"
+        "import pathlib\n"
+        "import sys\n"
+        "marker = pathlib.Path(__file__).resolve().parent / 'retry_marker.txt'\n"
+        "if marker.exists():\n"
+        "    print('second attempt: succeeding')\n"
+        "else:\n"
+        "    marker.write_text('first attempt ran')\n"
+        "    sys.exit(1)\n"
+        "FILE_CONTENT_END"
+    )
+    documentation_template = (
+        "# {{filePath}}\n\nInstruction: {{instruction}}\nPassed: {{passed}} (exit {{exitCode}})"
+    )
+
+    registry = InMemoryAgentRegistry(
+        {
+            _AGENT_IDS["requirements-analyst"]: _requirements_analyst_agent_with_prompt(
+                requirements_analyst_template, "requirements.analyze"
+            ),
+            _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
+                architecture_template, "architecture.propose_design"
+            ),
+            _AGENT_IDS["build"]: _build_agent_with_prompt(
+                build_template, "build.write_file", working_directory=tmp_path
+            ),
+            _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
+                documentation_template, "documentation.record_artifact"
+            ),
+        }
+    )
+
+    engine = build_engine(database_url)
+    try:
+        trigger = build_pipeline_trigger(
+            engine, registry, python_command=LocalSubprocessSandbox().python_command
+        )
+
+        result = await trigger({"requirement": "print a friendly message"}, "test-principal")
+
+        assert result.outcome == WorkflowRunOutcome.COMPLETED
+        assert result.error is None
+        assert result.last_instance is not None
+
+        engine_repo = SqlWorkflowInstanceRepository(engine)
+        steps = await engine_repo.list_steps(result.last_instance.workflow_id)
+
+        # build genuinely ran twice — a real second attempt, not skipped.
+        build_rows = [s for s in steps if s.step_name == "build"]
+        assert sorted(s.attempt for s in build_rows) == [1, 2]
+
+        # test genuinely ran twice too, and its own real outcome flipped
+        # from failing to passing between the two real runs.
+        test_rows = sorted((s for s in steps if s.step_name == "test"), key=lambda s: s.attempt)
+        first_test_outputs, second_test_outputs = test_rows[0].outputs, test_rows[1].outputs
+        assert first_test_outputs is not None
+        assert second_test_outputs is not None
+        assert first_test_outputs["passed"] is False
+        assert first_test_outputs["exitCode"] == 1
+        assert second_test_outputs["passed"] is True
+        assert second_test_outputs["exitCode"] == 0
+
+        # The gate's own first (failed) attempt is never persisted — it
+        # raised before advance_workflow ever wrote a row for it, the
+        # same pre-existing shape every other step failure already has.
+        # Only the second, passing attempt is.
+        gate_rows = [s for s in steps if s.step_name == "quality-gate-tests-pass"]
+        assert len(gate_rows) == 1
+        gate_outputs = gate_rows[0].outputs
+        assert gate_outputs is not None
+        assert gate_outputs["passed"] is True
+
+        # Documentation genuinely ran — the pipeline completed, not just
+        # "didn't crash."
+        doc_file = tmp_path / "solution.py.md"
+        assert doc_file.is_file()
+        assert "Passed: true" in doc_file.read_text(encoding="utf-8")
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_gate_that_fails_every_attempt_exhausts_the_retry_bound_and_halts(
+    tmp_path: Path, database_url: str
+) -> None:
+    """The other real proof this step exists for: a build that
+    genuinely fails on *every* attempt exhausts `retryPolicy`'s own
+    `maxAttempts: 2` bound and genuinely halts the pipeline —
+    Documentation never runs, and `test`/`build` are never attempted a
+    third time (not an infinite loop)."""
+
+    requirements_analyst_template = "ANALYSIS: refined and structured.\nRaw ask was: {{context}}"
+    architecture_template = "DESIGN: a single Python script.\nContext was: {{context}}"
+    build_template = (
+        "Upstream design: {{context}}\n\n"
+        "FILE_PATH: solution.py\n"
+        "FILE_CONTENT_BEGIN\n"
+        "import sys\n"
+        "sys.exit(1)\n"
+        "FILE_CONTENT_END"
+    )
+    documentation_template = "# {{filePath}}\n\nInstruction: {{instruction}}"
+
+    registry = InMemoryAgentRegistry(
+        {
+            _AGENT_IDS["requirements-analyst"]: _requirements_analyst_agent_with_prompt(
+                requirements_analyst_template, "requirements.analyze"
+            ),
+            _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
+                architecture_template, "architecture.propose_design"
+            ),
+            _AGENT_IDS["build"]: _build_agent_with_prompt(
+                build_template, "build.write_file", working_directory=tmp_path
+            ),
+            _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
+                documentation_template, "documentation.record_artifact"
+            ),
+        }
+    )
+
+    engine = build_engine(database_url)
+    try:
+        trigger = build_pipeline_trigger(
+            engine, registry, python_command=LocalSubprocessSandbox().python_command
+        )
+
+        result = await trigger({"requirement": "print a friendly message"}, "test-principal")
+
+        assert result.outcome == WorkflowRunOutcome.FAILED
+        assert isinstance(result.error, QualityGateFailedError)
+        assert result.last_instance is not None
+
+        engine_repo = SqlWorkflowInstanceRepository(engine)
+        steps = await engine_repo.list_steps(result.last_instance.workflow_id)
+
+        # Exactly retryPolicy.maxAttempts (2) real attempts — never a
+        # third. This is the genuinely-bounded proof: without a real
+        # bound this would loop forever, since the build never succeeds.
+        build_rows = [s for s in steps if s.step_name == "build"]
+        test_rows = [s for s in steps if s.step_name == "test"]
+        assert sorted(s.attempt for s in build_rows) == [1, 2]
+        assert sorted(s.attempt for s in test_rows) == [1, 2]
+        for test_row in test_rows:
+            assert test_row.outputs is not None
+            assert test_row.outputs["passed"] is False
+
+        # Neither gate attempt is persisted (both raised); Documentation
+        # never ran — the real proof this halts, not silently continues.
+        assert not any(s.step_name == "quality-gate-tests-pass" for s in steps)
+        assert not any(s.step_name == "documentation" for s in steps)
+        assert not (tmp_path / "solution.py.md").exists()
+    finally:
+        await engine.dispose()
+
+
 async def _register_and_activate_pack(database_url: str) -> None:
     """**``pack_root=PACK_ROOT`` (added this step) genuinely derives and
     writes this pack's real ``catalog.agents``/``catalog.prompts``/

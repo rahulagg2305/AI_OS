@@ -32,6 +32,16 @@
 # ai_os_kernel.workflow_engine.delivery_pipeline, not a field declared
 # here (see that module's own `_GATE_SOURCES`).
 #
+# `retryPolicy` below (added 2026-07-30) bounds a real retry when this
+# gate fails: up to 2 total attempts, and no more than 60 real seconds
+# spent retrying, before the pipeline genuinely halts — see
+# ai_os_kernel.workflow_engine.delivery_pipeline's own `_GATE_RETRY_TARGETS`
+# for which step a failed gate retries from, and
+# WorkflowAdvanceRunner.run_to_completion's own docstring for the
+# mechanism. This field already existed and was already validated
+# (bounded attempts + bounded duration, per error_handling_retry.md §4)
+# before this step — it was simply never read at runtime until now.
+#
 # Loaded by the already-real, already-existing, previously-unused
 # ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader — the
 # first real consumer of that loader in this codebase (every prior
@@ -45,11 +55,12 @@ name: Software Delivery Pipeline
 description: >-
   Requirements Analyst refines the raw ask, Architecture proposes a
   design against that refined analysis, Build implements it, Test
-  verifies it, a real Quality Gate blocks on a genuine test failure,
-  Documentation records it — five real agent steps plus one real,
-  blocking quality gate, each genuinely consuming the previous step's
-  real, persisted output.
-version: 1.2.0
+  verifies it, a real Quality Gate blocks on a genuine test failure (and
+  bounded-retries build/test once before giving up), Documentation
+  records it — five real agent steps plus one real, blocking, retried
+  quality gate, each genuinely consuming the previous step's real,
+  persisted output.
+version: 1.3.0
 trigger: manual
 
 inputs:
@@ -81,6 +92,10 @@ agents:
 
 qualityGates:
   - se.build_tests_pass
+
+retryPolicy:
+  maxAttempts: 2
+  maxDurationSeconds: 60.0
 
 failureHandling:
   onError: halt

@@ -14,6 +14,7 @@ from ai_os_kernel.workflow_engine.advance_runner import (
     WorkflowRunOutcome,
 )
 from ai_os_kernel.workflow_engine.errors import (
+    QualityGateFailedError,
     WorkflowInputValidationError,
     WorkflowInvalidTransitionError,
     WorkflowLeaseUnavailableError,
@@ -61,6 +62,25 @@ _TWO_STEP_DEFINITION = WorkflowDefinition.model_validate(
         "failureHandling": {"onError": "escalate"},
     }
 )
+
+_GATE_DEFINITION = WorkflowDefinition.model_validate(
+    {
+        "id": "se.gated_pipeline",
+        "name": "Gated Pipeline",
+        "description": "One agent step, then one real, blocking quality gate.",
+        "version": "1.0.0",
+        "inputs": {"type": "object"},
+        "outputs": {"type": "object"},
+        "steps": [
+            {"id": "build", "type": "agent", "agentId": "se.software_engineering/build"},
+            {"id": "gate", "type": "quality_gate"},
+        ],
+        "failureHandling": {"onError": "halt"},
+        "retryPolicy": {"maxAttempts": 2, "maxDurationSeconds": 60.0},
+    }
+)
+
+_GATE_DEFINITION_NO_RETRY_POLICY = _GATE_DEFINITION.model_copy(update={"retry_policy": None})
 
 
 def _instance(
@@ -156,6 +176,9 @@ class _FakeInstanceRepository:
         if self._advance_error is not None:
             raise self._advance_error
         return _instance(current_step_id=next_step.id if next_step else None)
+
+    async def reset_current_step(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
 
     async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]:
         raise NotImplementedError("not exercised by these tests")
@@ -257,6 +280,88 @@ class _StatefulInstanceRepository:
             if next_step is not None
             else WorkflowInstanceStatus.COMPLETED
         )
+        return _instance(current_step_id=self._current_step_id, status=self._status)
+
+    async def reset_current_step(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def list_events(self, workflow_id: str) -> list[WorkflowEventRecord]:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def list_instances(
+        self, *, limit: int, before: WorkflowListCursor | None = None
+    ) -> list[WorkflowInstance]:
+        raise NotImplementedError("not exercised by these tests")
+
+
+class _GateRetryInstanceRepository:
+    """A `build` step that always succeeds, feeding a `gate` step that
+    fails on its own first N attempts, then succeeds — a real,
+    controllable flaky condition (a counter), not a coin flip. Also
+    implements `reset_current_step` for real, so a genuine retry
+    genuinely re-executes `build`."""
+
+    def __init__(self, *, gate_failures_before_success: int) -> None:
+        self.advance_calls: list[str | None] = []
+        self.reset_calls: list[dict[str, Any]] = []
+        self._current_step_id: str | None = None
+        self._status = WorkflowInstanceStatus.RUNNING
+        self._gate_attempts = 0
+        self._gate_failures_before_success = gate_failures_before_success
+
+    async def create(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def transition_to_running(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def get_instance(self, workflow_id: str) -> WorkflowInstance | None:
+        return _instance(current_step_id=self._current_step_id, status=self._status)
+
+    async def advance_workflow(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        next_step: WorkflowStep | None,
+        outputs: dict[str, Any],
+    ) -> WorkflowInstance:
+        self.advance_calls.append(next_step.id if next_step else None)
+        if next_step is not None and next_step.id == "gate":
+            self._gate_attempts += 1
+            if self._gate_attempts <= self._gate_failures_before_success:
+                raise QualityGateFailedError("gate failed", gate_step_id="gate")
+        self._current_step_id = next_step.id if next_step else self._current_step_id
+        self._status = (
+            WorkflowInstanceStatus.RUNNING
+            if next_step is not None
+            else WorkflowInstanceStatus.COMPLETED
+        )
+        return _instance(current_step_id=self._current_step_id, status=self._status)
+
+    async def reset_current_step(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        retry_to_step_id: str | None,
+        reason: str,
+    ) -> WorkflowInstance:
+        self.reset_calls.append(
+            {
+                "expected_current_step_id": expected_current_step_id,
+                "retry_to_step_id": retry_to_step_id,
+                "reason": reason,
+            }
+        )
+        self._current_step_id = retry_to_step_id
         return _instance(current_step_id=self._current_step_id, status=self._status)
 
     async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]:
@@ -414,6 +519,104 @@ async def test_a_terminal_error_stops_the_loop_and_is_reported_not_raised() -> N
     assert "simulated failure" in str(result.error)
     # The lease from the failed second call was still released.
     assert len(lease_repository.acquire_calls) == len(lease_repository.release_calls) == 2
+
+
+def _gate_runner(instance_repository: _GateRetryInstanceRepository) -> WorkflowAdvanceRunner:
+    return WorkflowAdvanceRunner(
+        WorkflowInstanceService(instance_repository, NoOpStepExecutor(), _FakeDefinitionCatalog()),
+        WorkflowLeaseService(_FakeLeaseRepository()),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_gate_failure_within_the_retry_bound_eventually_completes() -> None:
+    """Fails once, succeeds on the retry — `maxAttempts: 2` allows
+    exactly this."""
+    instance_repository = _GateRetryInstanceRepository(gate_failures_before_success=1)
+    runner = _gate_runner(instance_repository)
+
+    result = await runner.run_to_completion(
+        workflow_id="wf_fake",
+        definition=_GATE_DEFINITION,
+        worker_id="worker-1",
+        lease_duration_seconds=60,
+        max_iterations=10,
+        gate_retry_targets={"gate": "build"},
+    )
+
+    assert result.outcome is WorkflowRunOutcome.COMPLETED
+    assert result.error is None
+    # build, gate (fails), build (retry), gate (passes), complete.
+    assert instance_repository.advance_calls == ["build", "gate", "build", "gate", None]
+    assert len(instance_repository.reset_calls) == 1
+    assert instance_repository.reset_calls[0]["retry_to_step_id"] is None  # build is the first step
+
+
+@pytest.mark.asyncio
+async def test_a_gate_that_fails_every_attempt_exhausts_the_bound_and_fails() -> None:
+    """Fails on every attempt — `maxAttempts: 2` allows exactly one
+    retry, then genuinely gives up. Not an infinite loop: exactly 2
+    real attempts at `gate`, never a third."""
+    instance_repository = _GateRetryInstanceRepository(gate_failures_before_success=99)
+    runner = _gate_runner(instance_repository)
+
+    result = await runner.run_to_completion(
+        workflow_id="wf_fake",
+        definition=_GATE_DEFINITION,
+        worker_id="worker-1",
+        lease_duration_seconds=60,
+        max_iterations=10,
+        gate_retry_targets={"gate": "build"},
+    )
+
+    assert result.outcome is WorkflowRunOutcome.FAILED
+    assert isinstance(result.error, QualityGateFailedError)
+    assert instance_repository.advance_calls.count("gate") == 2  # maxAttempts, not more
+    assert len(instance_repository.reset_calls) == 1  # exactly one retry was granted
+
+
+@pytest.mark.asyncio
+async def test_a_gate_failure_with_no_configured_retry_target_fails_immediately() -> None:
+    """`gate_retry_targets` doesn't mention `gate` at all — the default,
+    zero-behaviour-change shape every caller except `se.delivery_pipeline`
+    has."""
+    instance_repository = _GateRetryInstanceRepository(gate_failures_before_success=1)
+    runner = _gate_runner(instance_repository)
+
+    result = await runner.run_to_completion(
+        workflow_id="wf_fake",
+        definition=_GATE_DEFINITION,
+        worker_id="worker-1",
+        lease_duration_seconds=60,
+        max_iterations=10,
+        gate_retry_targets=None,
+    )
+
+    assert result.outcome is WorkflowRunOutcome.FAILED
+    assert isinstance(result.error, QualityGateFailedError)
+    assert instance_repository.advance_calls == ["build", "gate"]
+    assert instance_repository.reset_calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_gate_failure_with_no_retry_policy_on_the_definition_fails_immediately() -> None:
+    """A configured `gate_retry_targets` entry alone is not enough —
+    `definition.retry_policy` must also be declared (the real bound
+    comes from there, never invented by the runner)."""
+    instance_repository = _GateRetryInstanceRepository(gate_failures_before_success=1)
+    runner = _gate_runner(instance_repository)
+
+    result = await runner.run_to_completion(
+        workflow_id="wf_fake",
+        definition=_GATE_DEFINITION_NO_RETRY_POLICY,
+        worker_id="worker-1",
+        lease_duration_seconds=60,
+        max_iterations=10,
+        gate_retry_targets={"gate": "build"},
+    )
+
+    assert result.outcome is WorkflowRunOutcome.FAILED
+    assert instance_repository.reset_calls == []
 
 
 @pytest.mark.asyncio

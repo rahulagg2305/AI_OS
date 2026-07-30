@@ -70,6 +70,9 @@ class _FakeRepository:
     async def advance_workflow(self, **kwargs: Any) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
+    async def reset_current_step(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
     async def list_events(self, workflow_id: str) -> list[WorkflowEventRecord]:
         raise NotImplementedError("not exercised by these tests")
 

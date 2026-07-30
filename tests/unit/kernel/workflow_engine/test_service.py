@@ -82,6 +82,7 @@ class _FakeRepository:
         self.create_calls: list[dict[str, Any]] = []
         self.transition_calls: list[dict[str, Any]] = []
         self.advance_calls: list[dict[str, Any]] = []
+        self.reset_calls: list[dict[str, Any]] = []
         self._instance = instance
 
     async def create(
@@ -165,6 +166,34 @@ class _FakeRepository:
             inputs={},
             last_event_seq=100,
             current_step_id=expected_current_step_id,
+        )
+
+    async def reset_current_step(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        retry_to_step_id: str | None,
+        reason: str,
+    ) -> WorkflowInstance:
+        self.reset_calls.append(
+            {
+                "workflow_id": workflow_id,
+                "definition_id": definition_id,
+                "definition_version": definition_version,
+                "expected_current_step_id": expected_current_step_id,
+                "retry_to_step_id": retry_to_step_id,
+                "reason": reason,
+            }
+        )
+        return _instance(
+            workflow_id=workflow_id,
+            status=WorkflowInstanceStatus.RUNNING,
+            inputs={},
+            last_event_seq=99,
+            current_step_id=retry_to_step_id,
         )
 
     async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]:
@@ -461,3 +490,100 @@ async def test_advance_rejects_a_definition_with_no_steps() -> None:
 
     assert repository.advance_calls == []
     assert step_executor.executed_steps == []
+
+
+@pytest.mark.asyncio
+async def test_retry_after_gate_failure_resets_to_the_step_before_the_retry_target() -> None:
+    """`_DEFINITION` is `analyze_requirements` -> `implement`; retrying
+    from `implement` must reset `current_step_id` back to
+    `analyze_requirements`, so the *next* `advance()` call re-executes
+    `implement`, not skip past it."""
+    current = _instance(
+        workflow_id="wf_fake",
+        status=WorkflowInstanceStatus.RUNNING,
+        inputs={},
+        last_event_seq=4,
+        current_step_id="implement",
+    )
+    service, repository, _, _ = _service(instance=current)
+
+    result = await service.retry_after_gate_failure(
+        workflow_id="wf_fake",
+        definition=_DEFINITION,
+        retry_from_step_id="implement",
+        reason="quality gate failed, retrying",
+    )
+
+    assert result.current_step_id == "analyze_requirements"
+    assert repository.reset_calls == [
+        {
+            "workflow_id": "wf_fake",
+            "definition_id": "se.product_creation",
+            "definition_version": "1.0.0",
+            "expected_current_step_id": "implement",
+            "retry_to_step_id": "analyze_requirements",
+            "reason": "quality gate failed, retrying",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_retry_after_gate_failure_resets_to_none_when_the_target_is_the_first_step() -> None:
+    """Retrying from the definition's own first step must reset
+    `current_step_id` to `None` — the same "haven't started yet"
+    meaning `_resolve_next_step` already gives that value."""
+    current = _instance(
+        workflow_id="wf_fake",
+        status=WorkflowInstanceStatus.RUNNING,
+        inputs={},
+        last_event_seq=2,
+        current_step_id="analyze_requirements",
+    )
+    service, repository, _, _ = _service(instance=current)
+
+    result = await service.retry_after_gate_failure(
+        workflow_id="wf_fake",
+        definition=_DEFINITION,
+        retry_from_step_id="analyze_requirements",
+        reason="quality gate failed, retrying",
+    )
+
+    assert result.current_step_id is None
+    assert repository.reset_calls[0]["retry_to_step_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_retry_after_gate_failure_rejects_a_missing_instance() -> None:
+    service, repository, _, _ = _service(instance=None)
+
+    with pytest.raises(WorkflowInvalidTransitionError, match="does not exist"):
+        await service.retry_after_gate_failure(
+            workflow_id="wf_missing",
+            definition=_DEFINITION,
+            retry_from_step_id="implement",
+            reason="quality gate failed, retrying",
+        )
+
+    assert repository.reset_calls == []
+
+
+@pytest.mark.asyncio
+async def test_retry_after_gate_failure_rejects_a_step_not_in_the_definition() -> None:
+    current = _instance(
+        workflow_id="wf_fake",
+        status=WorkflowInstanceStatus.RUNNING,
+        inputs={},
+        last_event_seq=4,
+        current_step_id="implement",
+    )
+    service, repository, _, _ = _service(instance=current)
+
+    with pytest.raises(WorkflowInvalidTransitionError, match="not_a_real_step"):
+        await service.retry_after_gate_failure(
+            workflow_id="wf_fake",
+            definition=_DEFINITION,
+            retry_from_step_id="not_a_real_step",
+            reason="quality gate failed, retrying",
+        )
+
+    assert repository.reset_calls == []

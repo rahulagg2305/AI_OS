@@ -181,3 +181,59 @@ class WorkflowInstanceService:
             f"workflow definition '{definition.id}' has no step '{current_step_id}' "
             "(the instance's current step does not belong to this definition)"
         )
+
+    async def retry_after_gate_failure(
+        self,
+        *,
+        workflow_id: str,
+        definition: WorkflowDefinition,
+        retry_from_step_id: str,
+        reason: str,
+    ) -> WorkflowInstance:
+        """Resets ``workflow_id``'s own ``current_step_id`` so the next
+        :meth:`advance` call genuinely re-executes ``retry_from_step_id``
+        — the bounded quality-gate retry
+        :class:`~ai_os_kernel.workflow_engine.advance_runner.
+        WorkflowAdvanceRunner` calls after catching a
+        :class:`~ai_os_kernel.workflow_engine.errors.QualityGateFailedError`
+        it has a configured retry target for. Which step to retry from,
+        and how many times, are both the *caller's* own decisions (a
+        composition-level mapping and ``definition.retry_policy``,
+        respectively) — this method only performs the one, real,
+        mechanical part: computing "the step immediately before
+        ``retry_from_step_id``" and writing it via
+        :meth:`~ai_os_kernel.workflow_engine.repository.
+        WorkflowInstanceRepository.reset_current_step`.
+        """
+        instance = await self._repository.get_instance(workflow_id)
+        if instance is None:
+            raise WorkflowInvalidTransitionError(
+                f"workflow instance '{workflow_id}' does not exist"
+            )
+
+        retry_to_step_id = self._step_before(definition, retry_from_step_id)
+        return await self._repository.reset_current_step(
+            workflow_id=workflow_id,
+            definition_id=definition.id,
+            definition_version=definition.version,
+            expected_current_step_id=instance.current_step_id,
+            retry_to_step_id=retry_to_step_id,
+            reason=reason,
+        )
+
+    @staticmethod
+    def _step_before(definition: WorkflowDefinition, step_id: str) -> str | None:
+        """The declared step id immediately before ``step_id`` in
+        ``definition.steps`` — ``None`` when ``step_id`` is the
+        definition's own first step (mirroring ``current_step_id``'s
+        existing "haven't started yet" meaning)."""
+        steps = definition.steps
+        for index, step in enumerate(steps):
+            if step.id == step_id:
+                return steps[index - 1].id if index > 0 else None
+
+        raise WorkflowInvalidTransitionError(
+            f"workflow definition '{definition.id}' has no step '{step_id}' "
+            "(a gate_retry_targets/gate_sources mapping refers to a step this "
+            "definition does not declare)"
+        )

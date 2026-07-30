@@ -122,6 +122,18 @@ class _FakeRepository:
     ) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
+    async def reset_current_step(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        retry_to_step_id: str | None,
+        reason: str,
+    ) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
     async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]:
         return self._steps
 

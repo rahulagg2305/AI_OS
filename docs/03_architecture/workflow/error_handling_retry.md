@@ -24,17 +24,19 @@ This document is subordinate to:
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-07-30)
 
-**Partially built — real inside the LLM Gateway; absent everywhere else.**
+**Partially built — real inside the LLM Gateway, and now real for one narrow, real case in the Workflow Engine too.**
 
 **Built:** the LLM Gateway's own `ai_os_kernel.llm_gateway.error_taxonomy.ErrorCategory` implements **4 of this document's 6 categories** — `transient`, `permanent`, `infrastructure`, `budget`. Its own docstring states plainly why `quality` and `security` are excluded: a provider call failure can never actually be either. `classify_http_status()` and `parse_retry_after_seconds()` (numeric-seconds form only, not the HTTP-date form) are real and drive the Gateway's retry/circuit-breaker/backoff logic exactly as §4's "LLM Gateway owns retry/fallback" describes.
 
+**The Workflow Engine's own retry ownership (§4, §9) now has a first real, narrow implementation (2026-07-30).** `RetryPolicy` — declared on `WorkflowDefinition` (not per-step; a factual correction to this document's own prior framing) and already validated at load time (bounded attempts + duration, per §5's own rule) — is genuinely read now: `WorkflowAdvanceRunner.run_to_completion` catches a `QualityGateFailedError`, and, when the failing gate has a configured retry target (composition-level config, e.g. `se.delivery_pipeline`'s own `_GATE_RETRY_TARGETS`), calls `WorkflowInstanceService.retry_after_gate_failure` to reset `current_step_id` backward — genuinely bounded on both axes (`max_attempts` **and** `max_duration_seconds`, never either alone), never an unconditional or unlimited retry. Still scoped narrowly: only `QualityGateFailedError` (a `quality`-category failure) triggers this — any other exception (`AgentOutputValidationError`, etc.) still fails the run immediately, exactly as before. General step-level retry per any error category remains unimplemented.
+
 **Not built:**
 - **The `AiOsError` exception hierarchy (§8) does not exist anywhere in the codebase.** `LLMProviderError`/`LLMRefusalError` (`kernel/src/ai_os_kernel/llm_gateway/errors.py`) inherit from plain `Exception`, not from any shared base — confirmed by the Gateway's own `error_taxonomy.py` docstring, which states outright that it does not build the hierarchy this section describes. The `StructuredError` contract (§8) and the `error_code` catalogue (§3, supposedly at `platform_sdk/errors/`) have no code shape; that path does not exist because no `ai-os-sdk` package exists.
-- **The Workflow Engine's own retry ownership (§4, §9) is unimplemented.** `RetryPolicy` is declared on `WorkflowStep`/`WorkflowDefinition` and validated at load time (bounded attempts + duration, per §5's own rule), but is **never read** by `service.py`, `advance_runner.py`, or `step_executor.py` — a failing step propagates as a raised exception, not a governed retry. Compensation/rollback (§6) and human escalation (§7) do not exist; `quality` and `security` errors have no producer, since the Quality Gate Engine and the Security Manager's own audit path are both largely unbuilt.
+- **General, error-category-driven retry (§4's "different policies for different error categories") remains unimplemented** — only the one narrow `quality`-category, gate-specific path above is real. Compensation/rollback (§6) and human escalation (§7) do not exist; `security` errors have no producer, since the Security Manager's own audit path is largely unbuilt.
 
-Consequence: this document's "single platform error taxonomy" is, in practice, two things — a real, narrower taxonomy inside the Gateway, and a specification for a platform-wide hierarchy nothing implements yet.
+Consequence: this document's "single platform error taxonomy" is, in practice, two things — a real, narrower taxonomy inside the Gateway, and a specification for a platform-wide hierarchy nothing implements yet. The Workflow Engine's own retry ownership is real for exactly one category and one trigger, not yet the general mechanism §4/§9 describe.
 
 Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 6, LLM Gateway; module 44, `AiOsError` hierarchy) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/006_llm_gateway_and_prompt_engine_foundation.md`, `history/011_llm_gateway_advanced_router_retry_budget.md`.
 
@@ -158,7 +160,7 @@ The Python exception hierarchy mirrors this exactly: `AiOsError` → `TransientE
 
 ## 10. Current Status
 
-This document establishes the baseline error handling and retry strategy. See the Implementation Status section near the top for exactly what exists: a real, narrower 4-category taxonomy inside the LLM Gateway, and no platform-wide `AiOsError` hierarchy, error-code catalogue, or Workflow-Engine-level retry enforcement anywhere yet. Concrete policy values for whichever retry mechanism is eventually built (backoff base/max, attempt ceilings) remain a genuinely open implementation decision — the Gateway's own hardcoded constants (`kernel/bootstrap.py`) are a documented, temporary carve-out, not a settled policy.
+This document establishes the baseline error handling and retry strategy. See the Implementation Status section near the top for exactly what exists: a real, narrower 4-category taxonomy inside the LLM Gateway, a first real (narrow, gate-specific) Workflow-Engine-level retry mechanism (2026-07-30), and still no platform-wide `AiOsError` hierarchy or error-code catalogue. Concrete policy values for `se.delivery_pipeline`'s own gate retry are decided and declared (`retryPolicy: {maxAttempts: 2, maxDurationSeconds: 60.0}`, `delivery_pipeline.yaml`); values for any *future*, more general retry mechanism remain a genuinely open implementation decision — the Gateway's own hardcoded constants (`kernel/bootstrap.py`) are a documented, temporary carve-out, not a settled policy.
 
 ---
 

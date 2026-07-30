@@ -139,7 +139,8 @@ class QualityGateStepExecutor:
         if source_output is None:
             raise QualityGateFailedError(
                 f"quality gate step '{step.id}' blocked progression: source step "
-                f"'{source_step_id}' has no persisted output yet"
+                f"'{source_step_id}' has no persisted output yet",
+                gate_step_id=step.id,
             )
 
         result = source_output.get(self._success_field)
@@ -147,7 +148,8 @@ class QualityGateStepExecutor:
             raise QualityGateFailedError(
                 f"quality gate step '{step.id}' blocked progression: source step "
                 f"'{source_step_id}' reported {self._success_field}={result!r}, "
-                "not True"
+                "not True",
+                gate_step_id=step.id,
             )
 
         return {"gateId": step.id, "sourceStepId": source_step_id, self._success_field: True}

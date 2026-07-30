@@ -62,10 +62,8 @@ _STEP_STARTED_EVENT_TYPE = "step.started"
 _STEP_COMPLETED_EVENT_TYPE = "step.completed"
 _STEP_EVENT_SCHEMA_VERSION = 1
 
-# The only attempt number that can exist while retry logic is out of
-# scope (error_handling_retry.md; data_model.md §4.3 idempotency key is
-# derived from (workflow_id, step_name, attempt)).
-_FIRST_ATTEMPT = 1
+_STEP_RETRY_SCHEDULED_EVENT_TYPE = "workflow.step_retry_scheduled"
+_STEP_RETRY_SCHEDULED_SCHEMA_VERSION = 1
 
 # The only status a workflow_steps row can ever be written with today:
 # the executor already ran to completion (or raised, in which case
@@ -109,6 +107,17 @@ class WorkflowInstanceRepository(Protocol):
         expected_current_step_id: str | None,
         next_step: WorkflowStep | None,
         outputs: dict[str, Any],
+    ) -> WorkflowInstance: ...
+
+    async def reset_current_step(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        retry_to_step_id: str | None,
+        reason: str,
     ) -> WorkflowInstance: ...
 
     async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]: ...
@@ -416,12 +425,33 @@ class SqlWorkflowInstanceRepository:
                     )
 
                 if next_step is not None:
+                    # The real attempt number — one more than however many
+                    # prior rows this exact (workflow_id, step_name) already
+                    # has. Every step has zero prior rows on its first-ever
+                    # execution (attempt=1, identical to the old hardcoded
+                    # constant this replaces), so this is a zero-behavior
+                    # -change fix for every existing caller; a genuine
+                    # bounded retry (`WorkflowInstanceService.
+                    # retry_after_gate_failure`, added 2026-07-30) is what
+                    # makes a *second* row for the same step_name possible
+                    # at all — `uq_workflow_steps_workflow_id_step_name_attempt`
+                    # is exactly the constraint that makes reusing
+                    # attempt=1 for that second row fail loudly instead of
+                    # silently overwriting history.
+                    prior_attempts = await connection.execute(
+                        sa.select(sa.func.max(workflow_steps.c.attempt)).where(
+                            workflow_steps.c.workflow_id == workflow_id,
+                            workflow_steps.c.step_name == next_step.id,
+                        )
+                    )
+                    attempt = (prior_attempts.scalar_one_or_none() or 0) + 1
+
                     completed_seq = instance_row["last_event_seq"]
                     started_seq = completed_seq - 1
                     started_payload = {
                         "stepId": next_step.id,
                         "stepType": next_step.type.value,
-                        "attempt": _FIRST_ATTEMPT,
+                        "attempt": attempt,
                     }
                     completed_payload = {**started_payload, "outputs": outputs}
                     await connection.execute(
@@ -455,7 +485,7 @@ class SqlWorkflowInstanceRepository:
                             step_name=next_step.id,
                             step_type=next_step.type.value,
                             status=_STEP_STATUS_COMPLETED,
-                            attempt=_FIRST_ATTEMPT,
+                            attempt=attempt,
                             agent_id=next_step.agent_id,
                             tool_id=next_step.tool_id,
                             prompt_id=next_step.prompt_id,
@@ -464,7 +494,7 @@ class SqlWorkflowInstanceRepository:
                             inputs={},
                             outputs=outputs,
                             error=None,
-                            idempotency_key=f"{workflow_id}:{next_step.id}:{_FIRST_ATTEMPT}",
+                            idempotency_key=f"{workflow_id}:{next_step.id}:{attempt}",
                             usage={},
                             started_at=occurred_at,
                             completed_at=occurred_at,
@@ -485,6 +515,97 @@ class SqlWorkflowInstanceRepository:
         except sa.exc.SQLAlchemyError as exc:
             raise WorkflowInstanceCreationError(
                 f"failed to advance workflow instance '{workflow_id}': {exc}"
+            ) from exc
+
+        return WorkflowInstance.model_validate(dict(instance_row))
+
+    async def reset_current_step(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        retry_to_step_id: str | None,
+        reason: str,
+    ) -> WorkflowInstance:
+        """Move ``current_step_id`` *backward* to ``retry_to_step_id`` —
+        the one real, minimal primitive a bounded quality-gate retry
+        needs (:meth:`~ai_os_kernel.workflow_engine.service.
+        WorkflowInstanceService.retry_after_gate_failure`) that
+        :meth:`advance_workflow` cannot express: that method only ever
+        moves ``current_step_id`` *forward*, to a step it just executed.
+
+        Writes no ``workflow_steps`` row (no step actually ran) but does
+        append one real, observable event
+        (``workflow.step_retry_scheduled`` — error_handling_retry.md §4:
+        "every retry ... must be observable"), so a retry is visible in
+        the append-only log even though nothing else about this call
+        resembles a normal step execution.
+
+        Guarded by the identical ``UPDATE ... WHERE`` CAS pattern
+        :meth:`advance_workflow` already uses (status must be
+        ``running``, definition must match, ``current_step_id`` must
+        equal ``expected_current_step_id``) — reusing
+        :meth:`_describe_rejected_advance` for the rejection message,
+        since the guard conditions are identical.
+        """
+        occurred_at = datetime.now(UTC)
+        current_step_clause = (
+            workflow_instances.c.current_step_id.is_(None)
+            if expected_current_step_id is None
+            else workflow_instances.c.current_step_id == expected_current_step_id
+        )
+
+        try:
+            async with self._engine.begin() as connection:
+                result = await connection.execute(
+                    sa.update(workflow_instances)
+                    .where(
+                        workflow_instances.c.workflow_id == workflow_id,
+                        workflow_instances.c.status == WorkflowInstanceStatus.RUNNING.value,
+                        workflow_instances.c.definition_id == definition_id,
+                        workflow_instances.c.definition_version == definition_version,
+                        current_step_clause,
+                    )
+                    .values(
+                        current_step_id=retry_to_step_id,
+                        last_event_seq=workflow_instances.c.last_event_seq + 1,
+                        updated_at=sa.func.now(),
+                    )
+                    .returning(*workflow_instances.columns)
+                )
+                instance_row = result.mappings().one_or_none()
+
+                if instance_row is None:
+                    raise WorkflowInvalidTransitionError(
+                        await self._describe_rejected_advance(
+                            connection,
+                            workflow_id,
+                            definition_id,
+                            definition_version,
+                            expected_current_step_id,
+                        )
+                    )
+
+                await connection.execute(
+                    sa.insert(workflow_events).values(
+                        event_id=new_event_id(),
+                        workflow_id=workflow_id,
+                        seq=instance_row["last_event_seq"],
+                        event_type=_STEP_RETRY_SCHEDULED_EVENT_TYPE,
+                        schema_version=_STEP_RETRY_SCHEDULED_SCHEMA_VERSION,
+                        payload={
+                            "previousStepId": expected_current_step_id,
+                            "retryToStepId": retry_to_step_id,
+                            "reason": reason,
+                        },
+                        occurred_at=occurred_at,
+                    )
+                )
+        except sa.exc.SQLAlchemyError as exc:
+            raise WorkflowInstanceCreationError(
+                f"failed to reset workflow instance '{workflow_id}' for retry: {exc}"
             ) from exc
 
         return WorkflowInstance.model_validate(dict(instance_row))

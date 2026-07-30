@@ -144,10 +144,24 @@ class QualityGateFailedError(Exception):
     yet or reported a non-passing result. Raised, never silently
     swallowed, so it propagates out of :meth:`WorkflowInstanceService.advance`
     exactly the way :class:`AgentOutputValidationError`/
-    :class:`ToolOutputValidationError` already do, halting
-    :meth:`WorkflowAdvanceRunner.run_to_completion` with
-    ``WorkflowRunOutcome.FAILED`` — the same existing failure boundary,
-    not new orchestration logic."""
+    :class:`ToolOutputValidationError` already do, reaching
+    :meth:`WorkflowAdvanceRunner.run_to_completion` at the same existing
+    failure boundary — not new orchestration logic.
+
+    ``gate_step_id`` (added 2026-07-30, the bounded-retry step) is the
+    failing gate's own declared step id — structured, not parsed back
+    out of the message string — so ``run_to_completion`` can look it up
+    in its own ``gate_retry_targets`` mapping and decide whether a
+    bounded retry applies, without this exception needing to know
+    anything about retry policy itself. When no retry is configured for
+    this gate (the default, every caller except ``se.delivery_pipeline``),
+    this still halts the run with ``WorkflowRunOutcome.FAILED`` exactly
+    as before — carrying the id is additive, not a behavior change on
+    its own."""
+
+    def __init__(self, message: str, *, gate_step_id: str) -> None:
+        super().__init__(message)
+        self.gate_step_id = gate_step_id
 
 
 class WorkflowLeaseUnavailableError(Exception):
