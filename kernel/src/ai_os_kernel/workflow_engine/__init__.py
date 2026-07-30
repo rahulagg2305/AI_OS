@@ -118,6 +118,20 @@ Implemented so far (Stage B):
   sandboxing, no Context Manager, and no general per-step input-mapping
   mechanism beyond the three Step Contract invocation fields — tools are
   still always invoked with no inputs.
+- :class:`QualityGateStepExecutor` (added 2026-07-30) is the first real,
+  blocking implementation for a Quality-Gate step — the smallest real
+  slice of the still-0%-built Quality Gate Engine
+  (`quality_gate_engine.md`): it reads a configured source step's own
+  real, persisted output and raises :class:`QualityGateFailedError`
+  (halting :class:`WorkflowAdvanceRunner.run_to_completion`, the
+  existing failure boundary) unless that output's ``passed`` field is
+  literally ``True``. `se.delivery_pipeline` (below) is its first real
+  caller, gating Documentation on Test's own real outcome. Still not the
+  full engine: no Gate Registry, no pack-declared gate definitions, no
+  ``evaluation.gate_results`` writer, and only one, named, overridable
+  success-field convention (``success_field``, default ``"passed"``) is
+  checked — no ``evaluationMethod``/``successCriteria`` expression
+  language.
 - Lease acquisition, renewal, and release — :class:`WorkflowLeaseService`
   claims a `running` instance's row in ``workflow_leases`` with
   ``SELECT ... FOR UPDATE SKIP LOCKED`` (reclaiming only if expired),
@@ -179,6 +193,7 @@ from ai_os_kernel.workflow_engine.errors import (
     EntrypointLoadError,
     PackNotActivatedError,
     PromptedAgentInputError,
+    QualityGateFailedError,
     ToolNotRegisteredError,
     ToolOutputValidationError,
     ToolRegistryError,
@@ -210,6 +225,7 @@ from ai_os_kernel.workflow_engine.models import (
 )
 from ai_os_kernel.workflow_engine.pack_state import PackState
 from ai_os_kernel.workflow_engine.prompted_agent import PromptedAgent
+from ai_os_kernel.workflow_engine.quality_gate import QualityGateStepExecutor
 from ai_os_kernel.workflow_engine.registry import (
     AgentRegistry,
     InMemoryAgentRegistry,
@@ -256,6 +272,8 @@ __all__ = [
     "PackState",
     "PromptedAgent",
     "PromptedAgentInputError",
+    "QualityGateFailedError",
+    "QualityGateStepExecutor",
     "RetryPolicy",
     "SqlAgentRegistry",
     "SqlToolRegistry",

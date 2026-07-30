@@ -119,6 +119,7 @@ from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
 from ai_os_kernel.workflow_engine.delivery_pipeline import build_pipeline_trigger
+from ai_os_kernel.workflow_engine.errors import QualityGateFailedError
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry, SqlAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
@@ -432,6 +433,82 @@ async def test_all_five_steps_genuinely_chain_through_real_persisted_outputs(
         assert "solution.py" in doc_text
         assert "Passed: true" in doc_text
         assert "exit 0" in doc_text
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_genuinely_failing_test_run_halts_the_pipeline_before_documentation(
+    tmp_path: Path, database_url: str
+) -> None:
+    """The real proof this feature step (the Quality Gate Engine's
+    smallest real slice) exists for: a build that genuinely fails when
+    run halts the pipeline at the new `quality-gate-tests-pass` step —
+    Documentation is never invoked, not merely skipped by convention or
+    asserted from this test's own knowledge of what "should" happen."""
+
+    requirements_analyst_template = "ANALYSIS: refined and structured.\nRaw ask was: {{context}}"
+    architecture_template = "DESIGN: a single Python script.\nContext was: {{context}}"
+    # Genuinely fails when run — exit code 1, not a syntax error or a
+    # sandbox/timeout failure, so `test`'s own `passed` field is real,
+    # data-driven `False`, the same "derived only from exitCode/timeout"
+    # contract `verification.py` already documents.
+    build_template = (
+        "Upstream design: {{context}}\n\n"
+        "FILE_PATH: solution.py\n"
+        "FILE_CONTENT_BEGIN\n"
+        "import sys\n"
+        "sys.exit(1)\n"
+        "FILE_CONTENT_END"
+    )
+    documentation_template = "# {{filePath}}\n\nInstruction: {{instruction}}"
+
+    registry = InMemoryAgentRegistry(
+        {
+            _AGENT_IDS["requirements-analyst"]: _requirements_analyst_agent_with_prompt(
+                requirements_analyst_template, "requirements.analyze"
+            ),
+            _AGENT_IDS["architecture"]: _architecture_agent_with_prompt(
+                architecture_template, "architecture.propose_design"
+            ),
+            _AGENT_IDS["build"]: _build_agent_with_prompt(
+                build_template, "build.write_file", working_directory=tmp_path
+            ),
+            _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
+                documentation_template, "documentation.record_artifact"
+            ),
+        }
+    )
+
+    engine = build_engine(database_url)
+    try:
+        trigger = build_pipeline_trigger(
+            engine, registry, python_command=LocalSubprocessSandbox().python_command
+        )
+
+        result = await trigger({"requirement": "print a friendly message"}, "test-principal")
+
+        assert result.outcome == WorkflowRunOutcome.FAILED
+        assert result.error is not None
+        assert isinstance(result.error, QualityGateFailedError)
+        assert "quality-gate-tests-pass" in str(result.error)
+
+        assert result.last_instance is not None
+        engine_repo = SqlWorkflowInstanceRepository(engine)
+        steps = await engine_repo.list_steps(result.last_instance.workflow_id)
+
+        # The gate's own real source: `test` genuinely ran and genuinely
+        # failed — not skipped, not mocked.
+        test_outputs = next(s.outputs for s in steps if s.step_name == "test")
+        assert test_outputs is not None
+        assert test_outputs["passed"] is False
+        assert test_outputs["exitCode"] == 1
+
+        # The real proof this step blocks progression, not merely
+        # records the failure after the fact: Documentation never runs.
+        assert not any(s.step_name == "documentation" for s in steps)
+        assert not (tmp_path / "solution.py.md").exists()
     finally:
         await engine.dispose()
 

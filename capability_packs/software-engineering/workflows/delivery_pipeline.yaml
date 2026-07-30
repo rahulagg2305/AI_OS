@@ -17,11 +17,20 @@
 # any more.
 #
 # Step ids below (`requirements-analyst`/`architecture`/`build`/`test`/
-# `documentation`) are workflow-local identifiers, independent of the
-# agent catalog's own ids — the `test` step id was deliberately left
-# unchanged even though the agent it invokes was renamed to `qa-test`,
-# since step ids are this workflow's own naming, not a copy of the
-# agent catalog.
+# `quality-gate-tests-pass`/`documentation`) are workflow-local
+# identifiers, independent of the agent catalog's own ids — the `test`
+# step id was deliberately left unchanged even though the agent it
+# invokes was renamed to `qa-test`, since step ids are this workflow's
+# own naming, not a copy of the agent catalog.
+#
+# `quality-gate-tests-pass` (added 2026-07-30) is a real, blocking
+# quality_gate step — the smallest real slice of the Quality Gate
+# Engine (see ai_os_kernel.workflow_engine.quality_gate's own
+# docstring). It reads the `test` step's own real, persisted `passed`
+# field and halts the pipeline (Documentation never runs) when it is
+# not `True` — which prior step it reads is composition-level config in
+# ai_os_kernel.workflow_engine.delivery_pipeline, not a field declared
+# here (see that module's own `_GATE_SOURCES`).
 #
 # Loaded by the already-real, already-existing, previously-unused
 # ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader — the
@@ -36,9 +45,11 @@ name: Software Delivery Pipeline
 description: >-
   Requirements Analyst refines the raw ask, Architecture proposes a
   design against that refined analysis, Build implements it, Test
-  verifies it, Documentation records it — five real agent steps, each
-  genuinely consuming the previous step's real, persisted output.
-version: 1.1.0
+  verifies it, a real Quality Gate blocks on a genuine test failure,
+  Documentation records it — five real agent steps plus one real,
+  blocking quality gate, each genuinely consuming the previous step's
+  real, persisted output.
+version: 1.2.0
 trigger: manual
 
 inputs:
@@ -68,6 +79,9 @@ agents:
   - software-engineering/qa-test
   - software-engineering/documentation
 
+qualityGates:
+  - se.build_tests_pass
+
 failureHandling:
   onError: halt
 
@@ -96,6 +110,9 @@ steps:
   - id: test
     type: agent
     agentId: software-engineering/qa-test
+
+  - id: quality-gate-tests-pass
+    type: quality_gate
 
   - id: documentation
     type: agent

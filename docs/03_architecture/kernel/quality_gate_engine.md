@@ -8,11 +8,13 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-07-30)
 
-**Built: nothing.** `kernel/src/ai_os_kernel/quality_gate_engine/` contains a docstring-only `__init__.py` and zero other `.py` files. **Nothing in AI_OS enforces any quality gate today.** No Gate Registry, no Gate Executor, no Result Evaluator, no Policy Enforcer. The `quality_gate` workflow step type completes as a no-op via `NoOpStepExecutor`; `evaluation.gate_results` exists as a table with no writer; the Software Engineering pack declares no gates.
+**The `kernel/src/ai_os_kernel/quality_gate_engine/` package itself is still a docstring-only `__init__.py`** — no Gate Registry, no Gate Executor, no Result Evaluator, no Policy Enforcer, no `evaluation.gate_results` writer, no pack-declared gate definitions. That full design (§4 above) remains unbuilt.
 
-The [ADR-0006](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) invariant that blocking gates cannot be skipped is therefore an **architectural commitment, not an enforced mechanism**. Outstanding Stage B deliverable. Framework-level policy: `../quality/quality_gates_framework.md`.
+**But the `quality_gate` workflow step type is no longer a no-op, for one real, narrow, deliberately-scoped case.** `ai_os_kernel.workflow_engine.quality_gate.QualityGateStepExecutor` (2026-07-30) reads a configured source step's own real, persisted output and raises `QualityGateFailedError` — genuinely halting `WorkflowAdvanceRunner.run_to_completion` (`WorkflowRunOutcome.FAILED`) — unless that output's `passed` field is literally `True`. `se.delivery_pipeline` (the Software Engineering pack's own workflow) is its first real caller: a new `quality-gate-tests-pass` step now sits between `test` and `documentation`, so a genuinely failing test run halts the pipeline before Documentation ever runs. This is this step's own approved framing, verbatim: "formalizing that pass/fail into a real, declared quality_gate-type workflow step that actually blocks progression on failure, rather than a brand new gate concept" — not a substitute for the full engine above, which remains the eventual, larger destination (Gate Registry, pack-declared gate ids resolving to real `evaluationMethod`/`successCriteria`, an `evaluation.gate_results` writer, parallel gate execution). Proof: `tests/integration/workflow_engine/test_delivery_pipeline.py`'s own new test, a genuinely failing build (`sys.exit(1)`) halting the pipeline with Documentation never invoked.
+
+The [ADR-0006](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) invariant that blocking gates cannot be skipped is therefore **enforced for exactly one, real, in-pipeline case — still an architectural commitment rather than a general mechanism everywhere else.** Framework-level policy: `../quality/quality_gates_framework.md`.
 
 Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 

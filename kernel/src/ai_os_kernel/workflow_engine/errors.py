@@ -137,6 +137,19 @@ class PackNotActivatedError(Exception):
     is not active."""
 
 
+class QualityGateFailedError(Exception):
+    """A blocking ``quality_gate`` step (:class:`~ai_os_kernel.
+    workflow_engine.quality_gate.QualityGateStepExecutor`) genuinely
+    failed — its configured source step either has no persisted output
+    yet or reported a non-passing result. Raised, never silently
+    swallowed, so it propagates out of :meth:`WorkflowInstanceService.advance`
+    exactly the way :class:`AgentOutputValidationError`/
+    :class:`ToolOutputValidationError` already do, halting
+    :meth:`WorkflowAdvanceRunner.run_to_completion` with
+    ``WorkflowRunOutcome.FAILED`` — the same existing failure boundary,
+    not new orchestration logic."""
+
+
 class WorkflowLeaseUnavailableError(Exception):
     """A workflow instance's lease could not be acquired or released.
 

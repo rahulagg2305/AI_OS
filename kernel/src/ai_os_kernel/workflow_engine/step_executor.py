@@ -2,18 +2,23 @@
 work (Agent, Tool, Decision, Parallel, Sub-workflow, Quality Gate, Human
 Approval — workflow_architecture.md "Supported Step Types").
 
-``NoOpStepExecutor`` always succeeds and does nothing — the only
-implementation for Decision/Parallel/Sub-workflow/Quality-Gate/Human-
-Approval steps at this stage. ``AgentStepExecutor`` resolves a step's
-declared ``agentId`` through an injected
+``NoOpStepExecutor`` always succeeds and does nothing — still the only
+implementation for Decision/Parallel/Sub-workflow/Human-Approval steps
+at this stage. ``AgentStepExecutor`` resolves a step's declared
+``agentId`` through an injected
 :class:`~ai_os_kernel.workflow_engine.registry.AgentRegistry` and
 invokes the *specific* real (trivial) in-process
 :class:`~ai_os_kernel.workflow_engine.agent.Agent` it resolves to;
 ``ToolStepExecutor`` does the identical thing for ``toolId`` via
 :class:`~ai_os_kernel.workflow_engine.registry.ToolRegistry` — both
-validate their output. ``DispatchingStepExecutor`` routes between all
-three by ``step.type`` — the composition root wires each individually
-(ADR-0004: interface-driven; ADR-0010: no DI container).
+validate their output. :class:`~ai_os_kernel.workflow_engine.
+quality_gate.QualityGateStepExecutor` (added 2026-07-30) is the first
+real, non-no-op implementation for a Quality-Gate step — see that
+module's own docstring; a caller that does not supply one still routes
+``quality_gate`` steps to ``NoOpStepExecutor``, unchanged.
+``DispatchingStepExecutor`` routes between all four by ``step.type`` —
+the composition root wires each individually (ADR-0004: interface-
+driven; ADR-0010: no DI container).
 
 **Real dispatch by declared id, not real capability discovery.** The
 registry each executor is handed may still only contain
@@ -238,13 +243,20 @@ class ToolStepExecutor:
 
 
 class DispatchingStepExecutor:
-    """Routes an Agent-type step to ``agent_executor``, a Tool-type
-    step to ``tool_executor``, and every other step type to
-    ``default_executor``.
+    """Routes an Agent-type step to ``agent_executor``, a Tool-type step
+    to ``tool_executor``, a Quality-Gate-type step to
+    ``quality_gate_executor`` (when supplied), and every other step type
+    to ``default_executor``.
 
-    The only place that knows all three executors exist; none of them
+    The only place that knows all four executors exist; none of them
     needs to know about the others or about step types it does not
-    handle.
+    handle. ``quality_gate_executor`` defaults to ``None`` — every
+    existing caller that does not supply one keeps routing
+    ``quality_gate`` steps to ``default_executor`` exactly as before
+    (:class:`NoOpStepExecutor`, unchanged); only a caller that genuinely
+    wants a real, blocking gate (:mod:`ai_os_kernel.workflow_engine.
+    delivery_pipeline`) supplies :class:`~ai_os_kernel.workflow_engine.
+    quality_gate.QualityGateStepExecutor` here.
     """
 
     def __init__(
@@ -252,10 +264,12 @@ class DispatchingStepExecutor:
         agent_executor: StepExecutor,
         tool_executor: StepExecutor,
         default_executor: StepExecutor,
+        quality_gate_executor: StepExecutor | None = None,
     ) -> None:
         self._agent_executor = agent_executor
         self._tool_executor = tool_executor
         self._default_executor = default_executor
+        self._quality_gate_executor = quality_gate_executor
 
     async def execute(
         self, step: WorkflowStep, *, workflow_id: str | None = None
@@ -264,4 +278,6 @@ class DispatchingStepExecutor:
             return await self._agent_executor.execute(step, workflow_id=workflow_id)
         if step.type is StepType.TOOL:
             return await self._tool_executor.execute(step, workflow_id=workflow_id)
+        if step.type is StepType.QUALITY_GATE and self._quality_gate_executor is not None:
+            return await self._quality_gate_executor.execute(step, workflow_id=workflow_id)
         return await self._default_executor.execute(step, workflow_id=workflow_id)

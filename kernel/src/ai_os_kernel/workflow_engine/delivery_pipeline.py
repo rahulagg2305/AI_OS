@@ -108,6 +108,20 @@ contract can satisfy on its own.
   ``passed``/``exitCode``/``output`` from ``test``) — no transform
   needed here at all.
 
+**A real, blocking quality_gate step now sits between ``test`` and
+``documentation`` (added 2026-07-30) — the smallest real slice of the
+still-0%-built Quality Gate Engine.** ``quality-gate-tests-pass``
+(:class:`~ai_os_kernel.workflow_engine.quality_gate.QualityGateStepExecutor`,
+configured via ``_GATE_SOURCES`` below) reads ``test``'s own real,
+persisted ``passed`` field and raises
+:class:`~ai_os_kernel.workflow_engine.errors.QualityGateFailedError`
+when it is not ``True`` — halting the pipeline via the existing
+``WorkflowAdvanceRunner.run_to_completion`` failure boundary, the same
+one :class:`~ai_os_kernel.workflow_engine.errors.AgentOutputValidationError`
+already uses, so a genuinely failing test run now stops the pipeline
+before Documentation ever runs, rather than Documentation blindly
+recording a failure it never actually blocked.
+
 **Why a real pack-owned YAML file, not a Python-constructed
 ``WorkflowDefinition`` (``kernel/bootstrap.py``'s own demo's own
 choice).** That demo's own comment is explicit about why it chose
@@ -138,6 +152,7 @@ from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitio
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
 from ai_os_kernel.workflow_engine.loader import WorkflowDefinitionLoader
 from ai_os_kernel.workflow_engine.models import WorkflowDefinition
+from ai_os_kernel.workflow_engine.quality_gate import QualityGateStepExecutor
 from ai_os_kernel.workflow_engine.registry import AgentRegistry, InMemoryToolRegistry
 from ai_os_kernel.workflow_engine.repository import (
     SqlWorkflowInstanceRepository,
@@ -162,14 +177,25 @@ _DEFINITION_PATH = (
     Path("capability_packs") / "software-engineering" / "workflows" / "delivery_pipeline.yaml"
 )
 
-# Deliberately generous, not tuned — five real steps plus one final
-# completion transition need six `advance()` calls; the identical
+# Deliberately generous, not tuned — six real steps (five agent steps
+# plus the real quality_gate step, added 2026-07-30) plus one final
+# completion transition need seven `advance()` calls; the identical
 # "bound exists, not sized precisely" reasoning
 # kernel/bootstrap.py's own demo trigger already uses for its own
 # one-step workflow.
 _WORKER_ID = "software-engineering-pipeline-trigger"
 _LEASE_DURATION_SECONDS = 30
 _MAX_ITERATIONS = 10
+
+# The real quality_gate step's own source-step config (added
+# 2026-07-30) — composition-level, per ai_os_kernel.workflow_engine.
+# quality_gate.QualityGateStepExecutor's own docstring: which prior
+# step's real output the gate reads is pipeline-specific knowledge, the
+# same shape _STEP_SOURCES below already establishes for
+# WorkflowStepOutputResolver, not a field on the step declaration
+# itself. `quality-gate-tests-pass` reads `test`'s own real `passed`
+# field — see delivery_pipeline.yaml's own comment on this step id.
+_GATE_SOURCES: dict[str, str] = {"quality-gate-tests-pass": "test"}
 
 
 def _make_run_generated_file_with_python(
@@ -308,6 +334,7 @@ def build_pipeline_trigger(
             agent_executor=AgentStepExecutor(agent_registry, context_manager=context_manager),
             tool_executor=ToolStepExecutor(InMemoryToolRegistry({})),
             default_executor=NoOpStepExecutor(),
+            quality_gate_executor=QualityGateStepExecutor(repository, gate_sources=_GATE_SOURCES),
         ),
         definition_catalog=SqlWorkflowDefinitionCatalog(engine),
     )

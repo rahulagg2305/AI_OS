@@ -8,11 +8,13 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-07-30)
 
-**Built: nothing. This document is a design specification only.** No Quality Gate Engine exists — `kernel/src/ai_os_kernel/quality_gate_engine/` contains a docstring-only `__init__.py`. **Nothing in AI_OS enforces any quality gate today.** The Workflow Engine has no Gate Coordinator, the `quality_gate` workflow step type completes as a no-op via `NoOpStepExecutor`, no gate is registered or executed, and the `evaluation.gate_results` table exists with no writer. The Software Engineering pack declares no quality gates in its manifest.
+**No full Quality Gate Engine exists** — `kernel/src/ai_os_kernel/quality_gate_engine/` is still a docstring-only `__init__.py`; no Gate Registry, no `evaluation.gate_results` writer, no pack-declared gate definitions. This document's full Gate Contract (§4) and Standard Categories (§5) remain design specification, not built infrastructure.
 
-Consequence a reader must not miss: the "blocking gates cannot be skipped" invariant stated in `PROJECT_INDEX.md` and [ADR-0006](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) is currently an **architectural commitment, not an enforced mechanism**. Building this engine is an outstanding Stage B deliverable.
+**One real, narrow exception, added 2026-07-30**: the `quality_gate` workflow step type is no longer unconditionally a no-op. `ai_os_kernel.workflow_engine.quality_gate.QualityGateStepExecutor` genuinely blocks progression when a configured source step's own real, persisted output does not report success — wired into `se.delivery_pipeline` as a real `quality-gate-tests-pass` step gating Documentation on the Test Agent's own real `passed` field. This is the Testing category (§5.3) alone, for one pipeline, evaluated by one fixed field-name convention — not the general Gate Contract (id/severity/evaluationMethod/successCriteria per §4), which still needs a real Gate Registry. See `../kernel/quality_gate_engine.md`'s own Implementation Status for the full detail.
+
+Consequence a reader must not miss: the "blocking gates cannot be skipped" invariant stated in `PROJECT_INDEX.md` and [ADR-0006](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) is now **enforced for exactly this one real case, still an architectural commitment rather than a general mechanism everywhere else.** Building the full engine remains an outstanding Stage B deliverable.
 
 Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
