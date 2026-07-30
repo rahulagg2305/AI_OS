@@ -52,12 +52,33 @@ not, via
 ``mark_failed()`` state transition, which only fires once
 ``consecutive_failures`` (tracked inside that same snapshot, read back
 from the previous poll) crosses ``CONSECUTIVE_FAILURE_THRESHOLD``.
+
+**``POLL_INTERVAL_SECONDS`` is now genuinely enforced (2026-07-30) —
+:func:`run_health_polling_loop` is the real background scheduler the
+module docstring above originally deferred.** This is the first real,
+continuously-running background task anywhere in this codebase — the
+Workflow Engine's own analogous job,
+:class:`~ai_os_kernel.workflow_engine.lease_reaper.WorkflowLeaseReaper`,
+deliberately stops at "reclaim once, in one bounded pass" and
+documents scheduling as a future worker-process framework's job; this
+step is that framework's first real instance, scoped narrowly to this
+one, already-decided policy value rather than a general-purpose one.
+Sleeps for ``interval_seconds`` *before* each poll pass (not after) so
+the loop never duplicates the one-shot poll a caller already performed
+at startup (``ai_os_kernel.bootstrap._poll_discovered_pack_health`,
+unchanged by this step) — the loop's own first real poll lands one
+full interval later, not immediately. Exits cleanly on
+``asyncio.CancelledError`` (the real signal a caller cancelling the
+wrapping ``asyncio.Task`` sends on shutdown) — logged, then re-raised,
+so the awaiting ``Task`` itself genuinely completes as cancelled, not
+silently swallowed into "finished normally."
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections.abc import Collection
 from datetime import UTC, datetime
 from typing import Any
 
@@ -66,9 +87,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.capability_manager.errors import CapabilityManagerError
 from ai_os_kernel.capability_manager.repository import PackLifecycleRepository
+from ai_os_kernel.observability.logging import get_logger
 from ai_os_kernel.persistence.catalog_schema import agents as agents_table
 from ai_os_kernel.workflow_engine.registry import AgentRegistry
 from ai_os_sdk.contracts.capability_pack import HealthReport
+
+_logger = get_logger(__name__)
 
 POLL_INTERVAL_SECONDS = 30.0
 POLL_TIMEOUT_SECONDS = 5.0
@@ -144,3 +168,55 @@ async def poll_pack_health(
             )
 
     return report
+
+
+async def run_health_polling_loop(
+    *,
+    engine: AsyncEngine,
+    pack_lifecycle_repository: PackLifecycleRepository,
+    agent_registry: AgentRegistry,
+    pack_ids: Collection[str],
+    actor: str,
+    interval_seconds: float = POLL_INTERVAL_SECONDS,
+) -> None:
+    """Calls :func:`poll_pack_health` for every ``pack_id`` in
+    ``pack_ids``, every ``interval_seconds``, until cancelled — see this
+    module's own docstring for the full design (why it sleeps first, why
+    this is genuinely new infrastructure, how it shuts down cleanly).
+
+    ``pack_ids`` is a fixed snapshot the caller already discovered
+    (``ai_os_kernel.bootstrap._register_and_activate_discovered_packs``'s
+    own return value) — this function decides *when* to poll, never
+    *what*; re-discovering packs mid-process is a distinct, later
+    capability, not attempted here.
+
+    A genuine per-pack polling failure (a real database error, not
+    merely an unhealthy pack — that is ``poll_pack_health``'s own
+    correctly-reported outcome) is logged and does not stop the loop or
+    abort polling the other packs in the same pass — the identical
+    per-item resilience
+    :func:`~ai_os_kernel.bootstrap._poll_discovered_pack_health` already
+    established for the one-shot startup poll.
+    """
+    try:
+        while True:
+            await asyncio.sleep(interval_seconds)
+            for pack_id in pack_ids:
+                try:
+                    report = await poll_pack_health(
+                        engine=engine,
+                        pack_lifecycle_repository=pack_lifecycle_repository,
+                        agent_registry=agent_registry,
+                        pack_id=pack_id,
+                        actor=actor,
+                    )
+                    _logger.info(
+                        "health_poller.polling_loop_polled", pack_id=pack_id, status=report.status
+                    )
+                except Exception as exc:
+                    _logger.error(
+                        "health_poller.polling_loop_poll_failed", pack_id=pack_id, error=str(exc)
+                    )
+    except asyncio.CancelledError:
+        _logger.info("health_poller.polling_loop_stopped")
+        raise

@@ -43,6 +43,11 @@ this file top to bottom is meant to tell the whole startup story:
     (``_register_and_activate_discovered_packs``) — no manual ``POST
     /api/v1/packs`` call or test-harness seeding required for a real
     Kernel startup to make a real pack's agents genuinely resolvable.
+11. The Pack Health Collector: one immediate poll per discovered pack
+    at startup, then a real, continuously-running background task
+    (``ai_os_kernel.capability_manager.health_poller.run_health_polling_loop``)
+    that re-polls every ``POLL_INTERVAL_SECONDS`` for the life of the
+    process — genuinely stopped, not merely abandoned, on shutdown.
 
 As further Stage B/C components land, their construction and startup
 order is added here, not scattered across
@@ -314,6 +319,7 @@ Docker image, Kubernetes) starts the process from the repository root.
 """
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -331,7 +337,9 @@ from ai_os_kernel.capability_manager.errors import (
 )
 from ai_os_kernel.capability_manager.health_poller import (
     CONSECUTIVE_FAILURE_THRESHOLD,
+    POLL_INTERVAL_SECONDS,
     poll_pack_health,
+    run_health_polling_loop,
 )
 from ai_os_kernel.capability_manager.repository import (
     PackLifecycleRepository,
@@ -1138,18 +1146,26 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     A missing/misconfigured database degrades to an empty
     ``AgentRegistry`` and **no** ``database_engine``,
     ``trigger_prompted_agent_workflow``, ``workflow_instance_repository``,
-    ``context_manager``, or ``pack_lifecycle_repository`` at all — there
-    is nothing real for any of them to run against without one, unlike a
-    missing LLM secret alone (handled inside
-    ``_build_prompted_agent_registry``), which still leaves a real
-    database for the Workflow Engine components to use. The token
-    verifier degrades independently of all five (see
-    ``_build_token_verifier``), since authentication needs neither a
-    database nor an LLM secret.
+    ``context_manager``, ``pack_lifecycle_repository``, or
+    ``pack_health_polling_task`` at all — there is nothing real for any
+    of them to run against without one, unlike a missing LLM secret
+    alone (handled inside ``_build_prompted_agent_registry``), which
+    still leaves a real database for the Workflow Engine components to
+    use. The token verifier degrades independently of all six, since
+    authentication needs neither a database nor an LLM secret.
+
+    **The Pack Health Collector's own background polling loop
+    (``ai_os_kernel.capability_manager.health_poller.run_health_polling_loop``)
+    is started here and stopped in this function's own ``finally``
+    block** — the first real, continuously-running background task
+    this composition root has ever started. Cancelled and genuinely
+    awaited before ``engine.dispose()`` runs, so no query it makes can
+    ever race a closed connection pool.
     """
     app.state.token_verifier = await _build_token_verifier()
 
     engine: AsyncEngine | None = None
+    health_polling_task: asyncio.Task[None] | None = None
     try:
         engine = build_engine(DatabaseSettings().database_url)
     except Exception as exc:
@@ -1247,6 +1263,32 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             health_check_agent_registry,
             discovered_pack_ids,
         )
+        # The real background scheduler enforcing POLL_INTERVAL_SECONDS
+        # — the one-shot poll just above covers "healthy the instant
+        # the Kernel starts"; this covers "still healthy an hour into a
+        # long-running process." Reuses the identical health_check_agent_registry
+        # and discovered_pack_ids the one-shot poll already used —
+        # scheduling, not re-deciding what gets polled or how. Stored on
+        # app.state so a caller (a test today) can inspect/await it
+        # directly, the same "expose the real object" reasoning
+        # database_engine above already establishes. Started here, never
+        # awaited to completion — it runs for the lifetime of the
+        # process and is cancelled cleanly in this function's own
+        # ``finally`` block below.
+        health_polling_interval = app.state.config.pack_health_poll_interval_seconds
+        if health_polling_interval is None:
+            health_polling_interval = POLL_INTERVAL_SECONDS
+        health_polling_task = asyncio.create_task(
+            run_health_polling_loop(
+                engine=engine,
+                pack_lifecycle_repository=app.state.pack_lifecycle_repository,
+                agent_registry=health_check_agent_registry,
+                pack_ids=discovered_pack_ids,
+                actor=_PACK_DISCOVERY_ACTOR,
+                interval_seconds=health_polling_interval,
+            )
+        )
+        app.state.pack_health_polling_task = health_polling_task
         # se.delivery_pipeline's own registry — real and
         # credential-gated, built here (not for the health poll above,
         # which needs an always-answering one instead — see its own
@@ -1267,6 +1309,16 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        # The polling loop is cancelled and genuinely awaited *before*
+        # the engine it queries is disposed — it uses that same engine
+        # on every iteration, so disposing first would race a live
+        # query against a closed pool. asyncio.CancelledError is the
+        # loop's own expected exit signal (see its own docstring), not
+        # a real error to log here.
+        if health_polling_task is not None:
+            health_polling_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await health_polling_task
         if engine is not None:
             await engine.dispose()
 

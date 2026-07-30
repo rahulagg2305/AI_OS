@@ -35,3 +35,12 @@ class PlatformConfig(BaseModel):
 
     manifest_schema_path: str = "platform_sdk/schemas/manifest.schema.json"
     """Path to the authoritative manifest JSON Schema, relative to the repository root."""
+
+    pack_health_poll_interval_seconds: float | None = None
+    """Overrides :data:`ai_os_kernel.capability_manager.health_poller.POLL_INTERVAL_SECONDS`
+    for the real background polling loop (`ai_os_kernel.bootstrap._lifespan`).
+    ``None`` (the default, every real deployment) means "use the real,
+    decided policy constant" — this field exists only so a test can run
+    the loop against a short interval without waiting out the real
+    30-second production cadence; it is not itself a second policy
+    decision."""
