@@ -139,6 +139,30 @@ class WorkflowInstanceService:
         so this is a pure, additive wiring change, not new orchestration
         logic — see :mod:`ai_os_kernel.workflow_engine.step_executor`'s
         own module docstring.
+
+        **A genuinely failed attempt is now genuinely recorded (added
+        2026-07-30) — closing quality_gate_engine.md §9's own "every
+        gate execution must record ... error details" requirement,
+        which a *raised* step exception used to defeat entirely: this
+        method used to call the executor with nothing written if it
+        raised, since :meth:`~ai_os_kernel.workflow_engine.repository.
+        WorkflowInstanceRepository.advance_workflow` — the only method
+        that ever wrote a ``workflow_steps`` row — was never reached.**
+        The executor call is now wrapped in a ``try``/``except``: on any
+        exception, :meth:`~ai_os_kernel.workflow_engine.repository.
+        WorkflowInstanceRepository.record_failed_attempt` writes a real
+        ``workflow_steps`` row (``status="failed"``, real error detail,
+        a real computed ``attempt`` number from the same
+        ``MAX(attempt)+1`` query :meth:`advance_workflow` already uses)
+        before the *original* exception is re-raised, byte-for-byte
+        unchanged (bare ``raise``) — every existing caller
+        (:class:`~ai_os_kernel.workflow_engine.advance_runner.
+        WorkflowAdvanceRunner`'s own retry/failure logic) sees the exact
+        same exception it always has; only a new, genuine side effect
+        (the persisted row) is added. A subsequent successful attempt
+        (a bounded retry, or any future general step retry) still gets
+        its own correct, higher ``attempt`` number, since both write
+        paths compute it from the same table.
         """
         instance = await self._repository.get_instance(workflow_id)
         if instance is None:
@@ -150,7 +174,18 @@ class WorkflowInstanceService:
 
         outputs: dict[str, Any] = {}
         if next_step is not None:
-            outputs = await self._step_executor.execute(next_step, workflow_id=workflow_id)
+            try:
+                outputs = await self._step_executor.execute(next_step, workflow_id=workflow_id)
+            except Exception as exc:
+                await self._repository.record_failed_attempt(
+                    workflow_id=workflow_id,
+                    definition_id=definition.id,
+                    definition_version=definition.version,
+                    expected_current_step_id=instance.current_step_id,
+                    step=next_step,
+                    error={"type": type(exc).__name__, "message": str(exc)},
+                )
+                raise
 
         return await self._repository.advance_workflow(
             workflow_id=workflow_id,

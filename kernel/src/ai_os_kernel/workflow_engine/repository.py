@@ -60,16 +60,21 @@ _STATE_TRANSITIONED_SCHEMA_VERSION = 1
 
 _STEP_STARTED_EVENT_TYPE = "step.started"
 _STEP_COMPLETED_EVENT_TYPE = "step.completed"
+_STEP_FAILED_EVENT_TYPE = "step.failed"
 _STEP_EVENT_SCHEMA_VERSION = 1
 
 _STEP_RETRY_SCHEDULED_EVENT_TYPE = "workflow.step_retry_scheduled"
 _STEP_RETRY_SCHEDULED_SCHEMA_VERSION = 1
 
-# The only status a workflow_steps row can ever be written with today:
-# the executor already ran to completion (or raised, in which case
-# nothing is written at all) before advance_workflow's transaction
-# opens, so there is no persisted "running" phase to model yet.
+# workflow_steps.status has no CHECK constraint (data_model.md §4.3
+# gives it no canonical value list — see the column's own comment on
+# the table definition), so a second real value needs no migration.
+# "completed" was the only value that could ever exist while a raised
+# step exception meant `advance_workflow` — the only writer — was never
+# reached; `record_failed_attempt` (added 2026-07-30) is what makes
+# "failed" a real, written value now.
 _STEP_STATUS_COMPLETED = "completed"
+_STEP_STATUS_FAILED = "failed"
 
 
 class WorkflowInstanceRepository(Protocol):
@@ -119,6 +124,17 @@ class WorkflowInstanceRepository(Protocol):
         retry_to_step_id: str | None,
         reason: str,
     ) -> WorkflowInstance: ...
+
+    async def record_failed_attempt(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        step: WorkflowStep,
+        error: dict[str, Any],
+    ) -> None: ...
 
     async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]: ...
 
@@ -609,6 +625,155 @@ class SqlWorkflowInstanceRepository:
             ) from exc
 
         return WorkflowInstance.model_validate(dict(instance_row))
+
+    async def record_failed_attempt(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        step: WorkflowStep,
+        error: dict[str, Any],
+    ) -> None:
+        """Writes a real ``workflow_steps`` row (``status="failed"``)
+        and a real ``step.failed`` event for a step whose executor
+        genuinely raised — closing quality_gate_engine.md §9's own
+        "every gate execution must record ... error details"
+        requirement, and the identical gap for every other kind of step
+        failure (:class:`~ai_os_kernel.workflow_engine.errors.
+        AgentOutputValidationError`, etc.): before this method existed,
+        a raised exception meant :meth:`advance_workflow` — the only
+        writer — was never reached, so a failed attempt left no trace
+        in ``workflow_steps`` at all, only the eventual successful one
+        (if there ever was one).
+
+        Called by :meth:`~ai_os_kernel.workflow_engine.service.
+        WorkflowInstanceService.advance` from inside its own
+        ``except Exception`` block, immediately before it re-raises the
+        *original* exception unchanged — this method's own job is
+        purely the recording side effect, never the failure decision
+        itself (that remains :class:`~ai_os_kernel.workflow_engine.
+        advance_runner.WorkflowAdvanceRunner`'s, unaffected by this
+        method existing at all).
+
+        The real ``attempt`` number is computed identically to
+        :meth:`advance_workflow`'s own ``MAX(attempt)+1`` query against
+        the same ``(workflow_id, step_name)`` — the two writers share
+        one source of truth for "how many real attempts has this step
+        had," so a failed attempt followed by a retried, successful one
+        gets two distinct, correctly-numbered rows, and a step that
+        never fails is completely unaffected (this method is never
+        called for it).
+
+        Guarded by the identical ``UPDATE ... WHERE`` CAS pattern
+        :meth:`advance_workflow`/:meth:`reset_current_step` already
+        use — the instance must still be ``running``, on the same
+        definition, at the expected ``current_step_id``.
+        ``current_step_id`` itself is never changed here: the step
+        genuinely did not complete, so the instance's own position must
+        not move.
+        """
+        occurred_at = datetime.now(UTC)
+        current_step_clause = (
+            workflow_instances.c.current_step_id.is_(None)
+            if expected_current_step_id is None
+            else workflow_instances.c.current_step_id == expected_current_step_id
+        )
+
+        try:
+            async with self._engine.begin() as connection:
+                result = await connection.execute(
+                    sa.update(workflow_instances)
+                    .where(
+                        workflow_instances.c.workflow_id == workflow_id,
+                        workflow_instances.c.status == WorkflowInstanceStatus.RUNNING.value,
+                        workflow_instances.c.definition_id == definition_id,
+                        workflow_instances.c.definition_version == definition_version,
+                        current_step_clause,
+                    )
+                    .values(last_event_seq=workflow_instances.c.last_event_seq + 2)
+                    .returning(*workflow_instances.columns)
+                )
+                instance_row = result.mappings().one_or_none()
+
+                if instance_row is None:
+                    raise WorkflowInvalidTransitionError(
+                        await self._describe_rejected_advance(
+                            connection,
+                            workflow_id,
+                            definition_id,
+                            definition_version,
+                            expected_current_step_id,
+                        )
+                    )
+
+                prior_attempts = await connection.execute(
+                    sa.select(sa.func.max(workflow_steps.c.attempt)).where(
+                        workflow_steps.c.workflow_id == workflow_id,
+                        workflow_steps.c.step_name == step.id,
+                    )
+                )
+                attempt = (prior_attempts.scalar_one_or_none() or 0) + 1
+
+                failed_seq = instance_row["last_event_seq"]
+                started_seq = failed_seq - 1
+                started_payload = {
+                    "stepId": step.id,
+                    "stepType": step.type.value,
+                    "attempt": attempt,
+                }
+                failed_payload = {**started_payload, "error": error}
+                await connection.execute(
+                    sa.insert(workflow_events).values(
+                        event_id=new_event_id(),
+                        workflow_id=workflow_id,
+                        seq=started_seq,
+                        event_type=_STEP_STARTED_EVENT_TYPE,
+                        schema_version=_STEP_EVENT_SCHEMA_VERSION,
+                        payload=started_payload,
+                        step_id=step.id,
+                        occurred_at=occurred_at,
+                    )
+                )
+                await connection.execute(
+                    sa.insert(workflow_events).values(
+                        event_id=new_event_id(),
+                        workflow_id=workflow_id,
+                        seq=failed_seq,
+                        event_type=_STEP_FAILED_EVENT_TYPE,
+                        schema_version=_STEP_EVENT_SCHEMA_VERSION,
+                        payload=failed_payload,
+                        step_id=step.id,
+                        occurred_at=occurred_at,
+                    )
+                )
+                await connection.execute(
+                    sa.insert(workflow_steps).values(
+                        step_id=new_step_id(),
+                        workflow_id=workflow_id,
+                        step_name=step.id,
+                        step_type=step.type.value,
+                        status=_STEP_STATUS_FAILED,
+                        attempt=attempt,
+                        agent_id=step.agent_id,
+                        tool_id=step.tool_id,
+                        prompt_id=step.prompt_id,
+                        prompt_version=step.prompt_version,
+                        model_alias=step.model_alias,
+                        inputs={},
+                        outputs=None,
+                        error=error,
+                        idempotency_key=f"{workflow_id}:{step.id}:{attempt}",
+                        usage={},
+                        started_at=occurred_at,
+                        completed_at=occurred_at,
+                    )
+                )
+        except sa.exc.SQLAlchemyError as exc:
+            raise WorkflowInstanceCreationError(
+                f"failed to record a failed attempt for workflow instance '{workflow_id}': {exc}"
+            ) from exc
 
     @staticmethod
     async def _describe_rejected_transition(connection: AsyncConnection, workflow_id: str) -> str:

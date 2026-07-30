@@ -134,6 +134,9 @@ class _FakeRepository:
     ) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
+    async def record_failed_attempt(self, **kwargs: Any) -> None:
+        raise NotImplementedError("not exercised by these tests")
+
     async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]:
         return self._steps
 

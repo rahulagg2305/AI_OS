@@ -546,6 +546,15 @@ async def test_a_genuinely_failing_test_run_halts_the_pipeline_before_documentat
         assert test_outputs["passed"] is False
         assert test_outputs["exitCode"] == 1
 
+        # Every genuinely failed gate attempt is genuinely persisted
+        # (the observability-gap fix, 2026-07-30) — at least one real,
+        # distinct "failed" row, not silently discarded.
+        gate_rows = [s for s in steps if s.step_name == "quality-gate-tests-pass"]
+        assert len(gate_rows) >= 1
+        for gate_row in gate_rows:
+            assert gate_row.status == "failed"
+            assert gate_row.error is not None
+
         # The real proof this step blocks progression, not merely
         # records the failure after the fact: Documentation never runs.
         assert not any(s.step_name == "documentation" for s in steps)
@@ -564,7 +573,16 @@ async def test_a_gate_failure_within_the_retry_bound_eventually_succeeds(
     file on disk), not a coin flip. `delivery_pipeline.yaml`'s own
     `retryPolicy` (`maxAttempts: 2`) allows exactly the one retry this
     needs; the pipeline completes within the bound, Documentation
-    genuinely runs."""
+    genuinely runs.
+
+    **Also the real proof for the observability-gap step (added
+    2026-07-30): the gate's own first, genuinely failed attempt is now
+    genuinely persisted, not silently discarded.** `record_failed_attempt`
+    means `quality-gate-tests-pass` now has two real, distinct
+    `workflow_steps` rows — attempt 1, `status="failed"` with real
+    error detail, and attempt 2, `status="completed"` with
+    `passed=True` — not just the one, eventually-successful row this
+    test used to see before that fix."""
 
     requirements_analyst_template = "ANALYSIS: refined and structured.\nRaw ask was: {{context}}"
     architecture_template = "DESIGN: a single Python script.\nContext was: {{context}}"
@@ -642,13 +660,26 @@ async def test_a_gate_failure_within_the_retry_bound_eventually_succeeds(
         assert second_test_outputs["passed"] is True
         assert second_test_outputs["exitCode"] == 0
 
-        # The gate's own first (failed) attempt is never persisted — it
-        # raised before advance_workflow ever wrote a row for it, the
-        # same pre-existing shape every other step failure already has.
-        # Only the second, passing attempt is.
-        gate_rows = [s for s in steps if s.step_name == "quality-gate-tests-pass"]
-        assert len(gate_rows) == 1
-        gate_outputs = gate_rows[0].outputs
+        # The real proof this feature step exists for: the gate's own
+        # first, genuinely failed attempt is now genuinely persisted —
+        # a real, distinct row, not silently discarded — alongside the
+        # second, passing attempt.
+        gate_rows = sorted(
+            (s for s in steps if s.step_name == "quality-gate-tests-pass"),
+            key=lambda s: s.attempt,
+        )
+        assert [s.attempt for s in gate_rows] == [1, 2]
+
+        failed_gate_row, passed_gate_row = gate_rows
+        assert failed_gate_row.status == "failed"
+        assert failed_gate_row.outputs is None
+        assert failed_gate_row.error is not None
+        assert failed_gate_row.error["type"] == "QualityGateFailedError"
+        assert "quality-gate-tests-pass" in failed_gate_row.error["message"]
+
+        assert passed_gate_row.status == "completed"
+        assert passed_gate_row.error is None
+        gate_outputs = passed_gate_row.outputs
         assert gate_outputs is not None
         assert gate_outputs["passed"] is True
 
@@ -728,9 +759,18 @@ async def test_a_gate_that_fails_every_attempt_exhausts_the_retry_bound_and_halt
             assert test_row.outputs is not None
             assert test_row.outputs["passed"] is False
 
-        # Neither gate attempt is persisted (both raised); Documentation
-        # never ran — the real proof this halts, not silently continues.
-        assert not any(s.step_name == "quality-gate-tests-pass" for s in steps)
+        # Both genuinely failed gate attempts are now genuinely
+        # persisted (the observability-gap fix, 2026-07-30) — real,
+        # distinct "failed" rows, not silently discarded just because
+        # the bound was exhausted. Documentation never ran — the real
+        # proof this halts, not silently continues.
+        gate_rows = [s for s in steps if s.step_name == "quality-gate-tests-pass"]
+        assert sorted(s.attempt for s in gate_rows) == [1, 2]
+        for gate_row in gate_rows:
+            assert gate_row.status == "failed"
+            assert gate_row.outputs is None
+            assert gate_row.error is not None
+            assert gate_row.error["type"] == "QualityGateFailedError"
         assert not any(s.step_name == "documentation" for s in steps)
         assert not (tmp_path / "solution.py.md").exists()
     finally:
@@ -811,9 +851,19 @@ async def test_a_genuinely_lint_violating_build_halts_retries_and_exhausts_befor
             assert lint_row.outputs is not None
             assert lint_row.outputs["passed"] is False
 
+        # Both genuinely failed lint-gate attempts are now genuinely
+        # persisted (the observability-gap fix, 2026-07-30) — real,
+        # distinct "failed" rows.
+        lint_gate_rows = [s for s in steps if s.step_name == "quality-gate-lint-clean"]
+        assert sorted(s.attempt for s in lint_gate_rows) == [1, 2]
+        for lint_gate_row in lint_gate_rows:
+            assert lint_gate_row.status == "failed"
+            assert lint_gate_row.outputs is None
+            assert lint_gate_row.error is not None
+            assert lint_gate_row.error["type"] == "QualityGateFailedError"
+
         # Lint sits before Test in this pipeline — a failing lint gate
         # must halt before Test ever runs, not just before Documentation.
-        assert not any(s.step_name == "quality-gate-lint-clean" for s in steps)
         assert not any(s.step_name == "test" for s in steps)
         assert not any(s.step_name == "quality-gate-tests-pass" for s in steps)
         assert not any(s.step_name == "documentation" for s in steps)

@@ -10,7 +10,10 @@ from typing import Any
 import pytest
 
 from ai_os_kernel.workflow_engine import WorkflowInputValidationError
-from ai_os_kernel.workflow_engine.errors import WorkflowInvalidTransitionError
+from ai_os_kernel.workflow_engine.errors import (
+    QualityGateFailedError,
+    WorkflowInvalidTransitionError,
+)
 from ai_os_kernel.workflow_engine.event_record import WorkflowEventRecord
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance, WorkflowInstanceStatus
 from ai_os_kernel.workflow_engine.models import WorkflowDefinition, WorkflowStep
@@ -83,6 +86,7 @@ class _FakeRepository:
         self.transition_calls: list[dict[str, Any]] = []
         self.advance_calls: list[dict[str, Any]] = []
         self.reset_calls: list[dict[str, Any]] = []
+        self.record_failed_attempt_calls: list[dict[str, Any]] = []
         self._instance = instance
 
     async def create(
@@ -196,6 +200,27 @@ class _FakeRepository:
             current_step_id=retry_to_step_id,
         )
 
+    async def record_failed_attempt(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        step: WorkflowStep,
+        error: dict[str, Any],
+    ) -> None:
+        self.record_failed_attempt_calls.append(
+            {
+                "workflow_id": workflow_id,
+                "definition_id": definition_id,
+                "definition_version": definition_version,
+                "expected_current_step_id": expected_current_step_id,
+                "step_id": step.id,
+                "error": error,
+            }
+        )
+
     async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]:
         raise NotImplementedError("not exercised by these tests")
 
@@ -209,17 +234,24 @@ class _FakeRepository:
 
 
 class _FakeStepExecutor:
-    """Records every step it was asked to execute; never does real work."""
+    """Records every step it was asked to execute; never does real work.
+    ``error``, when supplied, makes ``execute`` raise it instead of
+    returning — the real caller (`WorkflowInstanceService.advance`) is
+    what needs a genuinely raising executor to prove it records a
+    failed attempt before re-raising."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, error: Exception | None = None) -> None:
         self.executed_steps: list[WorkflowStep] = []
         self.received_workflow_ids: list[str | None] = []
+        self._error = error
 
     async def execute(
         self, step: WorkflowStep, *, workflow_id: str | None = None
     ) -> dict[str, Any]:
         self.executed_steps.append(step)
         self.received_workflow_ids.append(workflow_id)
+        if self._error is not None:
+            raise self._error
         return {}
 
 
@@ -442,6 +474,53 @@ async def test_advance_completes_the_workflow_after_the_final_step() -> None:
     assert step_executor.executed_steps == []  # nothing left to execute
     assert repository.advance_calls[0]["expected_current_step_id"] == "implement"
     assert repository.advance_calls[0]["next_step_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_advance_records_a_failed_attempt_when_the_executor_raises_then_reraises() -> None:
+    """The real proof this feature step exists for: a step executor
+    that genuinely raises still leaves a real, recorded trace
+    (`record_failed_attempt`) — closing quality_gate_engine.md §9's own
+    recording requirement — and the *original* exception still
+    propagates completely unchanged, so every existing caller
+    (`WorkflowAdvanceRunner`'s own retry/failure logic) is unaffected."""
+    current = _instance(
+        workflow_id="wf_fake", status=WorkflowInstanceStatus.RUNNING, inputs={}, last_event_seq=2
+    )
+    failure = QualityGateFailedError("gate failed", gate_step_id="analyze_requirements")
+    service, repository, step_executor, _ = _service(
+        instance=current, step_executor=_FakeStepExecutor(error=failure)
+    )
+
+    with pytest.raises(QualityGateFailedError) as exc_info:
+        await service.advance(workflow_id="wf_fake", definition=_DEFINITION)
+
+    assert exc_info.value is failure  # the exact same exception, not a copy or a wrapper
+    assert repository.advance_calls == []  # advance_workflow is never reached
+    assert repository.record_failed_attempt_calls == [
+        {
+            "workflow_id": "wf_fake",
+            "definition_id": "se.product_creation",
+            "definition_version": "1.0.0",
+            "expected_current_step_id": None,
+            "step_id": "analyze_requirements",
+            "error": {"type": "QualityGateFailedError", "message": "gate failed"},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_advance_records_no_failed_attempt_when_the_executor_succeeds() -> None:
+    """Zero regression, made explicit: a normal, successful advance
+    never calls `record_failed_attempt` at all."""
+    current = _instance(
+        workflow_id="wf_fake", status=WorkflowInstanceStatus.RUNNING, inputs={}, last_event_seq=2
+    )
+    service, repository, _, _ = _service(instance=current)
+
+    await service.advance(workflow_id="wf_fake", definition=_DEFINITION)
+
+    assert repository.record_failed_attempt_calls == []
 
 
 @pytest.mark.asyncio
