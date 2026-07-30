@@ -36,9 +36,16 @@ this file top to bottom is meant to tell the whole startup story:
    (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`) was promoted
    here from ``tests/integration/_delivery_pipeline.py`` this same
    step — see that module's own docstring for why.
+10. Real pack discovery: every schema-valid manifest
+    ``manifest_loader.scan()`` finds under the configured pack
+    directories is genuinely registered (deriving real catalog rows via
+    the manifest -> catalog installer) and activated
+    (``_register_and_activate_discovered_packs``) — no manual ``POST
+    /api/v1/packs`` call or test-harness seeding required for a real
+    Kernel startup to make a real pack's agents genuinely resolvable.
 
-As further Stage B/C components land (pack discovery, ...), their
-construction and startup order is added here, not scattered across
+As further Stage B/C components land, their construction and startup
+order is added here, not scattered across
 entrypoints.
 
 **The LLM Gateway now has a second real, network-calling provider.**
@@ -245,6 +252,61 @@ the write route from the previous step and three read-only routes
 already had; every other documented endpoint in api_architecture.md §6
 still does not exist.
 
+**Real pack discovery now genuinely registers and activates every
+schema-valid pack it finds — no more manual ``POST /api/v1/packs`` call
+or test-harness seeding required.** ``_lifespan`` now calls
+``_register_and_activate_discovered_packs`` (once a real database
+engine exists — the same "nothing real to run without one" gating
+every other engine-dependent piece of this file already follows) with
+the already-built ``manifest_loader`` (``app.state.manifest_loader``,
+built once at import time in ``build_app``) and the freshly-built
+``pack_lifecycle_repository``. For each pack ``manifest_loader.scan()``
+reports as discovered, it calls
+:meth:`~ai_os_kernel.capability_manager.repository.SqlPackLifecycleRepository.register`
+with ``pack_root`` set to that manifest's own directory — the real
+manifest -> catalog installer path from the previous step
+(:mod:`ai_os_kernel.capability_manager.manifest_catalog_installer`),
+genuinely deriving ``catalog.agents``/``catalog.prompts``/``catalog.tools``
+rows, not a bare pack row — then calls
+:meth:`~ai_os_kernel.capability_manager.repository.SqlPackLifecycleRepository.activate`.
+``sdk_version``/``min_kernel_version`` are read from the manifest's own
+``dependencies.sdkVersion``/``compatibility.minKernelVersion`` fields
+(schema-validated already, since only ``report.discovered`` entries
+reach this function), never hardcoded literals — the earlier
+test-harness code this step's predecessor step touched used to write
+these as separate string literals that merely happened to match.
+
+**Idempotent across restarts, by construction, not by a new special
+case.** A restart against the same pack directory re-runs
+``register()``, which raises :class:`PackAlreadyRegisteredError` on the
+now-duplicate ``pack_id`` primary key — caught and logged at ``info``,
+the expected steady state, not an error. ``activate()`` on an
+already-``activated`` pack raises
+:class:`InvalidPackTransitionError` for the identical reason (its own
+``_ACTIVATABLE_FROM_STATES`` excludes ``ACTIVATED``) — also caught and
+logged at ``info``. Neither duplicates a row nor crashes startup.
+**One real, documented consequence of activating unconditionally
+rather than only on first discovery**: a pack an operator manually
+``deactivate()``'d through the HTTP route is, by design,
+re-activatable (capability_manager.md §4's own state table calls
+``deactivated`` "reactivatable" — see ``repository.py``'s own
+docstring), so a Kernel restart genuinely re-activates it. There is no
+"stay deactivated across restarts" mechanism in this codebase yet; this
+is a known, documented limitation, not a bug this step silently
+introduced.
+
+**Per-pack resilience, not all-or-nothing.** A manifest that fails
+schema validation (``report.failed``) is logged at ``warning`` and
+skipped — the identical severity ``manifest_loader_check`` already uses
+for the same fact. A genuine registration/activation failure for an
+otherwise-valid, discovered manifest (a real database error, for
+example) is logged at ``error`` — visible, distinguishable from the
+benign idempotent-restart cases above, never silently swallowed — but
+does not abort the loop or crash Kernel startup, the same per-item
+resilience :meth:`ManifestLoader.scan` already guarantees ("one broken
+pack must not prevent discovering every other pack"), now extended one
+step further to registration/activation.
+
 Paths to configuration files, the manifest schema, and pack directories
 are resolved relative to the current working directory — every
 documented way of running the Kernel (``uv run uvicorn ...``, the
@@ -260,6 +322,11 @@ from typing import Any
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_os_kernel.capability_manager.errors import (
+    CapabilityManagerError,
+    InvalidPackTransitionError,
+    PackAlreadyRegisteredError,
+)
 from ai_os_kernel.capability_manager.repository import SqlPackLifecycleRepository
 from ai_os_kernel.configuration_manager import BootstrapEnv, ConfigurationManager, PlatformConfig
 from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextManager
@@ -425,6 +492,15 @@ _DEMO_WORKFLOW_MODEL_ALIAS = "fast-cheap"
 _DEMO_WORKFLOW_MAX_ITERATIONS = 5
 _DEMO_WORKFLOW_LEASE_DURATION_SECONDS = 30
 _DEMO_WORKFLOW_WORKER_ID = "bootstrap-trigger"
+
+# The audit trail actor/reason for every register()/activate() call this
+# file makes on a discovered pack's behalf — a real Kernel process, not
+# a human/test/route caller, so it gets its own identity rather than
+# reusing "test" (every real test's own literal) or inventing a
+# per-call reason. Named, documented constants, the identical carve-out
+# every other literal in this file already uses.
+_PACK_DISCOVERY_ACTOR = "kernel-bootstrap"
+_PACK_DISCOVERY_REASON = "automatic discovery at Kernel startup"
 
 
 def _build_demo_workflow_definition() -> WorkflowDefinition:
@@ -761,6 +837,63 @@ async def _build_token_verifier() -> JWTBearerTokenVerifier | None:
         return None
 
 
+async def _register_and_activate_discovered_packs(
+    manifest_loader: ManifestLoader, pack_lifecycle_repository: SqlPackLifecycleRepository
+) -> None:
+    """Real pack discovery -> registration -> activation, with zero
+    manual intervention — see this module's own docstring for the full
+    design (idempotency, degrade behaviour, why ``sdk_version``/
+    ``min_kernel_version`` are read from the manifest rather than
+    hardcoded).
+
+    Only called once a real database engine exists (see ``_lifespan``,
+    the only caller) — there is nothing real for ``register()``/
+    ``activate()`` to write to without one, the identical "a missing
+    database is handled one level up" reasoning
+    ``_build_prompted_agent_registry``'s own docstring already states.
+    """
+    report = manifest_loader.scan()
+    for failure in report.failed:
+        logger.warning(
+            "kernel.bootstrap.pack_manifest_invalid",
+            manifest_path=failure.manifest_path,
+            error=failure.error,
+        )
+
+    for discovered in report.discovered:
+        pack_id = discovered.metadata.id
+        pack_root = Path(discovered.manifest_path).parent
+        try:
+            await pack_lifecycle_repository.register(
+                pack_id=pack_id,
+                version=discovered.metadata.version,
+                manifest=discovered.raw,
+                sdk_version=discovered.raw["dependencies"]["sdkVersion"],
+                min_kernel_version=discovered.raw["compatibility"]["minKernelVersion"],
+                actor=_PACK_DISCOVERY_ACTOR,
+                reason=_PACK_DISCOVERY_REASON,
+                pack_root=pack_root,
+            )
+            logger.info("kernel.bootstrap.pack_registered", pack_id=pack_id)
+        except PackAlreadyRegisteredError:
+            logger.info("kernel.bootstrap.pack_already_registered", pack_id=pack_id)
+        except CapabilityManagerError as exc:
+            logger.error(
+                "kernel.bootstrap.pack_registration_failed", pack_id=pack_id, error=str(exc)
+            )
+            continue
+
+        try:
+            await pack_lifecycle_repository.activate(
+                pack_id=pack_id, actor=_PACK_DISCOVERY_ACTOR, reason=_PACK_DISCOVERY_REASON
+            )
+            logger.info("kernel.bootstrap.pack_activated", pack_id=pack_id)
+        except InvalidPackTransitionError:
+            logger.info("kernel.bootstrap.pack_already_activated", pack_id=pack_id)
+        except CapabilityManagerError as exc:
+            logger.error("kernel.bootstrap.pack_activation_failed", pack_id=pack_id, error=str(exc))
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Runs once when the API process actually starts serving requests
@@ -828,6 +961,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # through the real composition root instead of only through a
         # hand-built engine.
         app.state.pack_lifecycle_repository = SqlPackLifecycleRepository(engine)
+        # Real pack discovery -> registration -> activation — see this
+        # module's own docstring and _register_and_activate_discovered_packs'
+        # for the full design (idempotency, per-pack degrade behaviour).
+        # Uses the manifest_loader already built and attached in
+        # build_app(), reused rather than rebuilt.
+        await _register_and_activate_discovered_packs(
+            app.state.manifest_loader, app.state.pack_lifecycle_repository
+        )
         # se.delivery_pipeline's own real trigger (ai_os_kernel.routes.delivery_pipeline)
         # — a second, independent trigger closure alongside
         # trigger_prompted_agent_workflow above. Always attached once a
