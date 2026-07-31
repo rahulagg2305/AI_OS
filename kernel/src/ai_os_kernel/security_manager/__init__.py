@@ -12,7 +12,7 @@ Manager's pack lifecycle routes (:mod:`ai_os_kernel.routes.packs`):
   full model (see :mod:`ai_os_kernel.security_manager.models`).
 - :func:`permissions_for_roles` — the role -> permission grants this
   step enforces (``workflow:read``, ``workflow:start``, ``pack:read``,
-  ``pack:manage`` only; see
+  ``pack:manage``, ``secret:access`` only; see
   :mod:`ai_os_kernel.security_manager.permissions`).
 - :class:`TokenVerifier` (``Protocol``) / :class:`JWTBearerTokenVerifier`
   — bearer-token authentication via a pre-shared HS256 signing key, not
@@ -40,6 +40,7 @@ from ai_os_kernel.security_manager.models import Principal, PrincipalType, Secur
 from ai_os_kernel.security_manager.permissions import (
     PACK_MANAGE,
     PACK_READ,
+    SECRET_ACCESS,
     WORKFLOW_READ,
     WORKFLOW_START,
     permissions_for_roles,
@@ -53,6 +54,7 @@ from ai_os_kernel.security_manager.token_verifier import (
 __all__ = [
     "PACK_MANAGE",
     "PACK_READ",
+    "SECRET_ACCESS",
     "WORKFLOW_READ",
     "WORKFLOW_START",
     "InvalidTokenError",

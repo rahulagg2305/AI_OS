@@ -9,3 +9,12 @@ class SecretResolutionError(Exception):
     *value* — there is never one to name at this point) and the reason,
     so a missing or malformed reference fails clearly.
     """
+
+
+class AccessDeniedError(Exception):
+    """A principal without ``secret:access`` attempted to resolve a
+    secret through :class:`~ai_os_kernel.secrets_manager.access_broker.
+    AccessBroker`. The attempt is still audited as denied
+    (secrets_management.md §8) — this exception is raised *after* that
+    audit row is written, never instead of it.
+    """

@@ -22,24 +22,41 @@ Implemented so far (Stage A):
   present. **Plaintext mounted file, not age/SOPS decryption** — see
   that module's own docstring for why the distinction is stated rather
   than implied.
+- :class:`AccessBroker` (added 2026-07-31, ``P01-S02-M19-T04``) — gates
+  every resolution on ``security_manager``'s own
+  ``secret:access`` permission (``admin`` role only) and audits every
+  attempt, allowed or denied, as a real, hash-chained
+  ``governance.audit_log`` row (reusing
+  :mod:`ai_os_kernel.observability.audit`, not reimplementing it). See
+  :mod:`ai_os_kernel.secrets_manager.access_broker`.
+- **Wired into the Configuration Manager** (``P01-S02-M01-T06``):
+  :func:`ai_os_kernel.configuration_manager.resolve_secret_references`
+  resolves every ``secret://`` reference surviving that module's own
+  layer 1-6 merge through a ``SecretProvider`` — not yet routed through
+  :class:`AccessBroker`, since that resolution path has no
+  :class:`~ai_os_kernel.security_manager.models.SecurityContext` to
+  gate with today.
 
 Not yet implemented: age/SOPS encrypted-file decryption, HashiCorp
-Vault, cloud secret managers, the Access Broker (authorization + audit
-per access), TTL caching with rotation invalidation, the prompt-assembly
-scan that rejects a resolved secret value reaching a model, and wiring
-into any consumer (LLM Gateway, Git Integration Service, Configuration
-Manager, ...). None of those exist yet, so none of them use this module
-yet.
+Vault, cloud secret managers, TTL caching with rotation invalidation,
+the prompt-assembly scan that rejects a resolved secret value reaching
+a model, and wiring into any consumer that resolves through
+:class:`AccessBroker` specifically (LLM Gateway, Git Integration
+Service, ...). None of those exist yet, so none of them use this
+module yet.
 """
 
+from ai_os_kernel.secrets_manager.access_broker import AccessBroker
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
-from ai_os_kernel.secrets_manager.errors import SecretResolutionError
+from ai_os_kernel.secrets_manager.errors import AccessDeniedError, SecretResolutionError
 from ai_os_kernel.secrets_manager.file_provider import FileSecretProvider
 from ai_os_kernel.secrets_manager.provider import SecretProvider
 from ai_os_kernel.secrets_manager.reference import SecretReference, parse_secret_reference
 from ai_os_kernel.secrets_manager.value import SecretValue
 
 __all__ = [
+    "AccessBroker",
+    "AccessDeniedError",
     "EnvSecretProvider",
     "FileSecretProvider",
     "SecretProvider",

@@ -5,13 +5,14 @@ authentication_authorization.md §4.2 documents five roles (``viewer``,
 closed permission vocabulary published in the SDK
 (``platform_sdk/schemas/manifest.schema.json``). Modelling that entire
 vocabulary here would be speculative — no route exists yet for most of
-those permissions to guard. This step models four permissions —
-:data:`WORKFLOW_READ`/:data:`WORKFLOW_START` (from an earlier step) and
-now :data:`PACK_READ`/:data:`PACK_MANAGE` (api_architecture.md §5:
+those permissions to guard. This step models five permissions —
+:data:`WORKFLOW_READ`/:data:`WORKFLOW_START` (from an earlier step),
+:data:`PACK_READ`/:data:`PACK_MANAGE` (api_architecture.md §5:
 "``pack:read`` / ``pack:manage`` | Read / install, activate, deactivate
-packs") — and the role grants the docs give for them; a later step adds
-more permissions and role grants as more routes are built, without
-changing this module's shape.
+packs"), and now :data:`SECRET_ACCESS` (``P01-S02-M19-T04``) — and the
+role grants the docs give for them; a later step adds more permissions
+and role grants as more routes are built, without changing this
+module's shape.
 
 **Why only ``maintainer``/``admin`` get ``pack:read``/``pack:manage``.**
 authentication_authorization.md §4.2's role table gives `viewer`
@@ -26,6 +27,22 @@ pack requires being able to read it) is the "closest documented
 permission" reasoning this step's own approved framing anticipated,
 not an invented grant; `viewer`/`operator`/`approver` get neither,
 since nothing in their documented grants mentions packs.
+
+**Why only ``admin`` gets ``secret:access``.** §4.2's role table names
+*only* `admin` in connection with secrets at all: "All, including
+security policy, role assignment, and secret management. Every action
+audited." `viewer`/`operator`/`approver`/`maintainer`'s documented
+grants say nothing about secrets — the same "nothing documented, no
+grant" discipline already applied to packs, not a narrower reading
+invented for this step. The exact string `secret:access` is not itself
+spelled out in the docs (only the prose "secret management" and the
+design-goal example "secret access" at §2/§3) — chosen over the
+literal example `secret:manage` (authentication_authorization.md line
+92) because *resolving* a secret to use it is a routine read, not
+administering the secrets subsystem; a future `secret:manage`
+permission for backend/rotation administration would be a distinct,
+narrower-still concept layered on top of this one, not this one
+renamed.
 
 This is deliberately **not** the full ADR-0023 monotonic-narrowing
 chain (principal ∩ workflow ∩ agent ∩ tool declared permissions) — only
@@ -42,16 +59,17 @@ WORKFLOW_READ = "workflow:read"
 WORKFLOW_START = "workflow:start"
 PACK_READ = "pack:read"
 PACK_MANAGE = "pack:manage"
+SECRET_ACCESS = "secret:access"  # noqa: S105 -- a permission string, not a credential
 
 # authentication_authorization.md §4.2's role table, reduced to the
-# four permissions modelled above. Unknown roles grant nothing (deny by
+# five permissions modelled above. Unknown roles grant nothing (deny by
 # default) — see permissions_for_roles.
 _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "viewer": frozenset({WORKFLOW_READ}),
     "operator": frozenset({WORKFLOW_READ, WORKFLOW_START}),
     "approver": frozenset({WORKFLOW_READ}),
     "maintainer": frozenset({WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE}),
-    "admin": frozenset({WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE}),
+    "admin": frozenset({WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE, SECRET_ACCESS}),
 }
 
 

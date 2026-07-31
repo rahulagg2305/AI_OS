@@ -5,6 +5,7 @@ this step models — see ai_os_kernel.security_manager.permissions)."""
 from ai_os_kernel.security_manager.permissions import (
     PACK_MANAGE,
     PACK_READ,
+    SECRET_ACCESS,
     WORKFLOW_READ,
     WORKFLOW_START,
     permissions_for_roles,
@@ -34,7 +35,7 @@ def test_maintainer_and_admin_can_read_and_start_workflows() -> None:
         {WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE}
     )
     assert permissions_for_roles(["admin"]) == frozenset(
-        {WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE}
+        {WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE, SECRET_ACCESS}
     )
 
 
@@ -48,6 +49,13 @@ def test_only_maintainer_and_admin_can_read_or_manage_packs() -> None:
         permissions = permissions_for_roles([role])
         assert PACK_READ in permissions
         assert PACK_MANAGE in permissions
+
+
+def test_only_admin_can_access_secrets() -> None:
+    for role in ("viewer", "operator", "approver", "maintainer"):
+        assert SECRET_ACCESS not in permissions_for_roles([role])
+
+    assert SECRET_ACCESS in permissions_for_roles(["admin"])
 
 
 def test_multiple_roles_union_their_permissions() -> None:
