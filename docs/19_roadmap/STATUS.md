@@ -66,15 +66,13 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-122 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+64 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P01-S01-M40-T04` Runtime container image
 - `P01-S02-M01-T03` Pack-defaults precedence layer
 - `P01-S02-M01-T04` Runtime-overrides precedence layer
-- `P01-S02-M01-T05` Experiment-overrides precedence layer
 - `P01-S02-M01-T06` Secrets layer integration
 - `P01-S02-M01-T07` Feature flags
-- `P01-S02-M01-T08` Configuration change-audit trail
 - `P01-S02-M19-T04` Access broker
 - `P01-S02-M19-T05` TTL cache and rotation
 - `P01-S02-M19-T06` Prompt-assembly secret leak scan
@@ -82,9 +80,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P01-S03-M02-T04` Remaining semantic manifest rules
 - `P01-S04-M03-T06` Graceful-shutdown coordinator
 - `P01-S05-M04-T03` OTLP export to a Collector
-- `P01-S05-M04-T04` Compose observability profile
 - `P01-S05-M04-T05` Audit log writer with hash chain
-- `P01-S05-M04-T06` Audit chain verification job
 - `P01-S06-M42-T04` tests/security by threat id
 - `P01-S06-M42-T05` tests/performance against NFR targets
 - `P01-S06-M43-T04` Green integration stage on Linux
@@ -93,4 +89,15 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S01-M05-T10` parallel step type
 - `P02-S01-M05-T11` sub_workflow step type
 - `P02-S01-M05-T12` Multi-instance worker loop
-- ... and 97 more
+- `P02-S01-M05-T13` Scheduler for delayed workflow starts
+- `P02-S02-M06-T08` Streaming completions
+- `P02-S02-M06-T09` Embeddings
+- `P02-S02-M06-T10` Provider token counting
+- ... and 39 more
+
+## Dependency review signal
+
+2 `todo` Task(s) record no dependency although an earlier Task in the same module is unfinished. **Advisory only** — some Tasks genuinely start from nothing. Review when touching that module.
+
+- `P01-S06-M42-T05` tests/performance against NFR targets
+- `P01-S06-M43-T05` Roadmap generated-doc check in CI

@@ -23,7 +23,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from scripts.roadmap.model import Ticket, load_all
+from scripts.roadmap.model import Ticket, load_all, suspicious_empty_dependencies
 from scripts.roadmap.stages import MODULES, PHASES, phase_label, stage_title
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -109,6 +109,22 @@ def render_status(tickets: list[Ticket]) -> str:
     lines += [f"- `{t.id}` {t.title}" for t in sorted(ready, key=lambda x: x.id)[:25]]
     if len(ready) > 25:
         lines.append(f"- ... and {len(ready) - 25} more")
+
+    # A review signal, never a gate — see suspicious_empty_dependencies'
+    # own docstring for why this is advisory.
+    flagged = suspicious_empty_dependencies(tickets)
+    lines += [
+        "",
+        "## Dependency review signal",
+        "",
+        f"{len(flagged)} `todo` Task(s) record no dependency although an earlier Task in "
+        "the same module is unfinished. **Advisory only** — some Tasks genuinely start "
+        "from nothing. Review when touching that module.",
+        "",
+    ]
+    lines += [f"- `{t.id}` {t.title}" for t in flagged[:15]]
+    if len(flagged) > 15:
+        lines.append(f"- ... and {len(flagged) - 15} more")
     return "\n".join(lines) + "\n"
 
 

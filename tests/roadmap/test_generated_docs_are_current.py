@@ -81,6 +81,26 @@ def test_every_ticket_maps_to_a_real_phase_stage_and_module() -> None:
         assert t.module not in RETIRED_MODULES, f"{t.id}: retired module"
 
 
+def test_the_dependency_graph_is_acyclic() -> None:
+    """160 edges were recorded by hand in Phase R3c; a cycle would make
+    every ticket in it permanently un-startable."""
+    from scripts.roadmap.model import find_dependency_cycle
+
+    cycle = find_dependency_cycle(load_all(TICKETS_ROOT))
+    assert cycle is None, f"dependency cycle: {' -> '.join(cycle or [])}"
+
+
+def test_the_suspicious_empty_dependency_signal_is_computable() -> None:
+    """The check itself must keep working — it is advisory, so it never
+    asserts a count, only that it produces a sane, reviewable answer."""
+    from scripts.roadmap.model import suspicious_empty_dependencies
+
+    tickets = load_all(TICKETS_ROOT)
+    flagged = suspicious_empty_dependencies(tickets)
+    assert all(t.status == "todo" and not t.depends_on for t in flagged)
+    assert len(flagged) <= sum(1 for t in tickets if t.status == "todo")
+
+
 def test_generated_docs_are_current() -> None:
     """Guard 2: a hand edit to a generated rollup fails the build."""
     assert main(["--check"]) == 0, (

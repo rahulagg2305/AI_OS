@@ -207,3 +207,76 @@ def seen_status(tickets: list[Ticket], ticket_id: str) -> Ticket:
         if t.id == ticket_id:
             return t
     raise TicketError(f"unknown ticket {ticket_id}")
+
+
+def find_dependency_cycle(tickets: list[Ticket]) -> list[str] | None:
+    """The first dependency cycle found, or ``None``.
+
+    Added 2026-07-31 (Phase R3c) alongside the real dependency graph: a
+    cycle makes every ticket in it permanently un-startable, and with 160
+    edges recorded by hand that is a real hazard rather than a
+    theoretical one. Iterative DFS — a 219-node graph is small, but
+    recursion would make a genuine cycle surface as a
+    ``RecursionError`` instead of a readable message.
+    """
+    graph = {t.id: [d for d in t.depends_on if d != t.id] for t in tickets}
+    self_deps = [t.id for t in tickets if t.id in t.depends_on]
+    if self_deps:
+        return [self_deps[0], self_deps[0]]
+
+    WHITE, GREY, BLACK = 0, 1, 2
+    colour = dict.fromkeys(graph, WHITE)
+
+    for root in graph:
+        if colour[root] != WHITE:
+            continue
+        stack: list[tuple[str, int]] = [(root, 0)]
+        path: list[str] = [root]
+        colour[root] = GREY
+        while stack:
+            node, index = stack[-1]
+            if index < len(graph[node]):
+                stack[-1] = (node, index + 1)
+                nxt = graph[node][index]
+                if colour.get(nxt) == GREY:
+                    return [*path[path.index(nxt) :], nxt]
+                if colour.get(nxt) == WHITE:
+                    colour[nxt] = GREY
+                    stack.append((nxt, 0))
+                    path.append(nxt)
+            else:
+                colour[node] = BLACK
+                stack.pop()
+                path.pop()
+    return None
+
+
+def suspicious_empty_dependencies(tickets: list[Ticket]) -> list[Ticket]:
+    """``todo`` tickets recording **no** dependency that probably should.
+
+    A **signal for review, never a hard failure** — some Tasks genuinely
+    start from nothing (``P02-S07-M21-T01``, a standalone artifact store,
+    is a real example). The heuristic is deliberately narrow and
+    explainable: flag a ``todo`` ticket with no dependencies when an
+    *earlier-numbered Task in its own module* is not yet ``done``. That
+    combination almost always means unrecorded intra-module sequencing —
+    which is exactly the gap Phase R3b found, where 217 of 219 tickets
+    recorded no dependency at all and "ready to start" therefore
+    overstated real readiness by roughly double.
+    """
+    by_module: dict[int, list[Ticket]] = {}
+    for t in tickets:
+        by_module.setdefault(t.module, []).append(t)
+
+    flagged = []
+    for t in tickets:
+        if t.status != "todo" or t.depends_on:
+            continue
+        earlier_unfinished = [
+            o
+            for o in by_module[t.module]
+            if (o.phase, o.stage, o.task) < (t.phase, t.stage, t.task) and o.status != "done"
+        ]
+        if earlier_unfinished:
+            flagged.append(t)
+    return sorted(flagged, key=lambda x: x.id)
