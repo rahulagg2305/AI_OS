@@ -1,4 +1,4 @@
-"""Unit tests for the Configuration Manager (layers 1, 2, 3, 4)."""
+"""Unit tests for the Configuration Manager (layers 1, 2, 3, 4, 5)."""
 
 from pathlib import Path
 from typing import Any
@@ -252,3 +252,54 @@ def test_a_pack_manifest_with_no_config_schema_contributes_nothing(tmp_path: Pat
     config = manager.load(role="api", pack_manifests=[pack_with_no_config_schema])
 
     assert config.log_level == "INFO"  # the built-in default, layer 1, still applies
+
+
+def test_a_runtime_override_wins_over_pack_default_platform_and_environment_config(
+    tmp_path: Path,
+) -> None:
+    """The real proof this Task requires: layer 5 outranks every lower
+    layer — pack defaults (2), platform config (3), and environment
+    config (4) all set `log_level`, and the runtime override still
+    wins."""
+    _write_yaml(tmp_path / "platform.yaml", {"kernel": {"log_level": "WARNING"}})
+    _write_yaml(tmp_path / "environments" / "local.yaml", {"kernel": {"log_level": "ERROR"}})
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+    pack = _pack_manifest(
+        config_schema_properties={"log_level": {"type": "string", "default": "DEBUG"}}
+    )
+
+    config = manager.load(
+        role="api", pack_manifests=[pack], runtime_overrides={"log_level": "CRITICAL"}
+    )
+
+    assert config.log_level == "CRITICAL"
+
+
+def test_no_runtime_overrides_behaves_exactly_as_before(tmp_path: Path) -> None:
+    _write_yaml(tmp_path / "platform.yaml", {"kernel": {"log_level": "WARNING"}})
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+
+    config = manager.load(role="api", runtime_overrides=None)
+
+    assert config.log_level == "WARNING"
+
+
+def test_env_and_role_cannot_be_overridden_by_a_runtime_override(tmp_path: Path) -> None:
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+
+    config = manager.load(role="api", runtime_overrides={"env": "production", "role": "worker"})
+
+    assert config.env == "local"
+    assert config.role == "api"

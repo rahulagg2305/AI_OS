@@ -3,13 +3,21 @@
 Layered precedence: built-in defaults -> pack defaults -> platform
 config -> environment config -> runtime overrides -> experiment
 overrides -> secrets (docs/03_architecture/kernel/configuration_manager.md
-§4). Layers 1, 2, 3, and 4 are implemented at this stage.
+§4). Layers 1, 2, 3, 4, and 5 are implemented at this stage.
 
 **Layer 2, pack-level defaults** (added 2026-07-31, ``P01-S02-M01-T03``):
 :func:`extract_pack_defaults` reads the ``default`` values declared in a
 pack manifest's own ``configSchema``; :meth:`ConfigurationManager.load`'s
 ``pack_manifests`` argument merges them in ahead of the platform and
 environment files, so either can still override a pack's suggestion.
+
+**Layer 5, runtime overrides** (added 2026-07-31, ``P01-S02-M01-T04``):
+:class:`RuntimeOverrideStore` is the live, in-memory state this layer
+reads from; its ``apply`` audits the change (writing a real
+``governance.config_changes`` row) before applying it.
+:meth:`ConfigurationManager.load`'s ``runtime_overrides`` argument
+merges a plain snapshot in above every file layer. See
+:mod:`ai_os_kernel.configuration_manager.runtime_overrides`.
 
 No component should read a configuration file directly — everything
 goes through :class:`ConfigurationManager` and the resulting
@@ -38,6 +46,7 @@ from ai_os_kernel.configuration_manager.bootstrap_env import BootstrapEnv
 from ai_os_kernel.configuration_manager.errors import ConfigChangeAuditError, ConfigurationError
 from ai_os_kernel.configuration_manager.loader import ConfigurationManager, extract_pack_defaults
 from ai_os_kernel.configuration_manager.models import PlatformConfig
+from ai_os_kernel.configuration_manager.runtime_overrides import RuntimeOverrideStore
 
 __all__ = [
     "BootstrapEnv",
@@ -48,6 +57,7 @@ __all__ = [
     "ConfigurationError",
     "ConfigurationManager",
     "PlatformConfig",
+    "RuntimeOverrideStore",
     "SqlConfigChangeWriter",
     "compute_value_digest",
     "extract_pack_defaults",

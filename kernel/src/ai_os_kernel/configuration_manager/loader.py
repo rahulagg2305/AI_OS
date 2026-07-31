@@ -6,13 +6,13 @@ built-in defaults -> pack defaults -> platform config -> environment
 config -> runtime overrides -> experiment overrides -> secrets.
 
 Layers 1 (built-in defaults, via the ``PlatformConfig`` model), 2
-(pack-level defaults, ``P01-S02-M01-T03``), 3 (platform config file) and
-4 (environment config file) are implemented at this stage. Runtime
-overrides, experiment overrides, and secret resolution are added when
-the components that produce them exist (the configuration API, the
-Experiment Manager, Secrets Management) — callers depend on
-``PlatformConfig``, not on how it was assembled, so none of that will
-require changes here at the call site.
+(pack-level defaults, ``P01-S02-M01-T03``), 3 (platform config file), 4
+(environment config file), and 5 (runtime overrides,
+``P01-S02-M01-T04``) are implemented at this stage. Experiment
+overrides and secret resolution are added when the components that
+produce them exist (the Experiment Manager, Secrets Management) —
+callers depend on ``PlatformConfig``, not on how it was assembled, so
+none of that will require changes here at the call site.
 
 **Layer 2, concretely** (§4: "Pack-level defaults — Capability Pack
 manifests and their ``configSchema`` defaults"): each activated pack's
@@ -27,6 +27,22 @@ suggested default — exactly "layer 3 and 4 outrank layer 2." Discovering
 integration; this layer takes already-discovered manifests as plain
 input, matching how layers 3/4 take already-resolved file paths rather
 than discovering them.
+
+**Layer 5, concretely** (§4: "Runtime overrides — ``PATCH
+/api/v1/config``, audited"): unlike layers 2-4, §4 requires this layer
+to be *audited*, so it is not a plain data merge like the others.
+:class:`~ai_os_kernel.configuration_manager.runtime_overrides.
+RuntimeOverrideStore` is the live, in-memory state layer 5 reads from;
+its ``apply`` records a real ``governance.config_changes`` row via the
+already-proven :class:`~ai_os_kernel.configuration_manager.audit.
+ConfigChangeWriter` (``P01-S02-M01-T08``) *before* the override takes
+effect. :meth:`ConfigurationManager.load` itself stays synchronous —
+it only merges a plain snapshot (``runtime_overrides``), never talks to
+the writer or the store directly, exactly as layers 2-4 merge
+already-resolved input rather than discovering it themselves. Building
+the ``PATCH /api/v1/config`` route itself is separate, later work (§6:
+"Order is therefore: writer, then route" — the writer now exists; this
+layer is what the route would call into).
 """
 
 from collections.abc import Mapping, Sequence
@@ -75,7 +91,11 @@ class ConfigurationManager:
         self._environments_dir = environments_dir
 
     def load(
-        self, *, role: str, pack_manifests: Sequence[Mapping[str, Any]] = ()
+        self,
+        *,
+        role: str,
+        pack_manifests: Sequence[Mapping[str, Any]] = (),
+        runtime_overrides: Mapping[str, Any] | None = None,
     ) -> PlatformConfig:
         """Merge all layers and return a validated, immutable ``PlatformConfig``.
 
@@ -84,6 +104,12 @@ class ConfigurationManager:
         earlier pack's default for the same key, the same "later entry
         wins" rule every other layer already follows. Empty by default,
         so an existing caller that passes none behaves exactly as before.
+
+        ``runtime_overrides`` is a plain snapshot of layer 5's current
+        state (see :class:`~ai_os_kernel.configuration_manager.
+        runtime_overrides.RuntimeOverrideStore`) — this method never
+        applies or audits an override itself, only merges an
+        already-applied one in above every file layer.
         """
         merged: dict[str, Any] = {}
         for manifest in pack_manifests:
@@ -91,6 +117,7 @@ class ConfigurationManager:
         merged = _deep_merge(merged, self._read_section(self._platform_config_path))
         env_file = self._environments_dir / f"{self._environment}.yaml"
         merged = _deep_merge(merged, self._read_section(env_file))
+        merged = _deep_merge(merged, dict(runtime_overrides or {}))
 
         # env/role are bootstrap identity, never file-driven — always the
         # caller-supplied values, overwriting anything a file might set.
