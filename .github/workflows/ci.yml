@@ -183,14 +183,22 @@ jobs:
     name: Build image
     runs-on: ubuntu-latest
     needs: [integration, security]
-    # Gated: no Dockerfile exists yet.
-    if: hashFiles('Dockerfile') != ''
+    # Gated: no Dockerfile exists yet. The existence check is applied
+    # per-step, never as a job-level `if:` — `hashFiles()` is only
+    # available once a workspace exists, and a job-level `if:` is
+    # evaluated *before* checkout, so GitHub rejects the whole workflow
+    # file with "Unrecognized function: 'hashFiles'" (which is exactly
+    # what silently kept every job in this file from ever running; see
+    # run 30600439059). This matches the per-step gating the contract/
+    # integration/security stages above already use.
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+        if: hashFiles('Dockerfile') != ''
       # uv sync --frozen inside the Dockerfile fails the build if uv.lock is
       # stale, so an image can never contain unlocked dependencies.
       - name: docker build
+        if: hashFiles('Dockerfile') != ''
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -202,31 +210,38 @@ jobs:
   frontend:
     name: Dashboard
     runs-on: ubuntu-latest
-    # Gated: no dashboard/ exists yet, so the original trigger condition
-    # (dashboard-related commits, or any PR) is combined with an existence
-    # check — once dashboard/ lands, behavior reverts to exactly that
-    # original condition. Nothing else depends on this job, so a job-level
-    # gate — rather than per-step — is safe here.
+    # Gated: no dashboard/ exists yet. The original trigger condition
+    # (dashboard-related commits, or any PR) stays at job level, where it
+    # is genuinely valid; the *existence* half moved to per-step `if:`
+    # for the same reason as the `build` job above — `hashFiles()` is not
+    # available in a job-level `if:`, and using it there made GitHub
+    # reject this entire workflow file. Once dashboard/ lands, behaviour
+    # reverts to exactly the original condition.
     if: >-
-      hashFiles('dashboard/package.json') != '' &&
-      (contains(github.event.head_commit.message, 'dashboard') || github.event_name == 'pull_request')
+      contains(github.event.head_commit.message, 'dashboard') || github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        if: hashFiles('dashboard/package.json') != ''
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
       - run: npm ci
+        if: hashFiles('dashboard/package.json') != ''
         working-directory: dashboard
       - run: npx tsc --noEmit
+        if: hashFiles('dashboard/package.json') != ''
         working-directory: dashboard
       - run: npm run lint
+        if: hashFiles('dashboard/package.json') != ''
         working-directory: dashboard
       - run: npm run test -- --run
+        if: hashFiles('dashboard/package.json') != ''
         working-directory: dashboard
       # Fails if the generated client has drifted from the published OpenAPI
       # document (ADR-0018).
       - name: OpenAPI client drift check
+        if: hashFiles('dashboard/package.json') != ''
         run: npm run check:api-client
         working-directory: dashboard
