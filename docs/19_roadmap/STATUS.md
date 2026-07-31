@@ -6,11 +6,11 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-07-31 from 219 Task tickets.
+**Generated:** 2026-07-31 from 224 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 42%** (93 of 219 Task-equivalents complete)
+**Overall: 44%** (99 of 224 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -19,7 +19,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S03 Manifest Discovery and Schema | 6 | 3 | 0 | 3 | 50% |
 | P01 (A) | S04 Health and Lifecycle | 6 | 5 | 0 | 1 | 83% |
 | P01 (A) | S05 Observability and Audit | 6 | 2 | 0 | 4 | 33% |
-| P01 (A) | S06 CI and Test Infrastructure | 10 | 6 | 0 | 4 | 60% |
+| P01 (A) | S06 CI and Test Infrastructure | 10 | 7 | 0 | 3 | 70% |
 | P02 (B) | S01 Workflow Execution Core | 13 | 8 | 0 | 5 | 62% |
 | P02 (B) | S02 LLM Gateway | 12 | 6 | 1 | 5 | 54% |
 | P02 (B) | S03 Prompt and Context Assembly | 16 | 8 | 0 | 8 | 50% |
@@ -50,12 +50,13 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P07 (G) | S03 Performance, Chaos and Coverage | 2 | 0 | 0 | 2 | 0% |
 | P08 (H) | S01 Remaining Pack Agents | 7 | 0 | 0 | 7 | 0% |
 | P08 (H) | S02 Remaining Pack Workflows | 2 | 0 | 0 | 2 | 0% |
+| P09 (-) | S01 Roadmap System Restructuring (R1-R4) | 5 | 5 | 0 | 0 | 100% |
 
 ## Phase totals
 
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
-| P01 (Stage A) - Platform Skeleton | 46 | 23 | 51% |
+| P01 (Stage A) - Platform Skeleton | 46 | 24 | 53% |
 | P02 (Stage B) - Minimum Viable Kernel | 93 | 51 | 55% |
 | P03 (Stage C) - First Real Capability Pack | 27 | 15 | 56% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
@@ -63,10 +64,11 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 0 | 0% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 0 | 0% |
 | P08 (Stage H) - Expansion | 9 | 0 | 0% |
+| P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |
 
 ## Ready to start
 
-64 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+63 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P01-S01-M40-T04` Runtime container image
 - `P01-S02-M01-T03` Pack-defaults precedence layer
@@ -84,7 +86,6 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P01-S06-M42-T04` tests/security by threat id
 - `P01-S06-M42-T05` tests/performance against NFR targets
 - `P01-S06-M43-T04` Green integration stage on Linux
-- `P01-S06-M43-T05` Roadmap generated-doc check in CI
 - `P02-S01-M05-T09` decision step type
 - `P02-S01-M05-T10` parallel step type
 - `P02-S01-M05-T11` sub_workflow step type
@@ -93,11 +94,11 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S02-M06-T08` Streaming completions
 - `P02-S02-M06-T09` Embeddings
 - `P02-S02-M06-T10` Provider token counting
-- ... and 39 more
+- `P02-S02-M06-T11` Rate limiter
+- ... and 38 more
 
 ## Dependency review signal
 
-2 `todo` Task(s) record no dependency although an earlier Task in the same module is unfinished. **Advisory only** — some Tasks genuinely start from nothing. Review when touching that module.
+1 `todo` Task(s) record no dependency although an earlier Task in the same module is unfinished. **Advisory only** — some Tasks genuinely start from nothing. Review when touching that module.
 
 - `P01-S06-M42-T05` tests/performance against NFR targets
-- `P01-S06-M43-T05` Roadmap generated-doc check in CI

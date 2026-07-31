@@ -25,6 +25,12 @@ PHASES: dict[int, tuple[str, str]] = {
     6: ("F", "Dashboard, Voice, Notifications"),
     7: ("G", "Hardening and Production Readiness"),
     8: ("H", "Expansion"),
+    # P09 has no roadmap Stage letter: the restructuring that built this
+    # ticket system is process work, not one of implementation_roadmap.md
+    # §3's product delivery Stages. Recorded as its own Phase (2026-07-31,
+    # R4) so the work is visible to the very system it created rather
+    # than existing only in commit history.
+    9: ("-", "Roadmap System and Process"),
 }
 
 # (phase, stage) -> stage title. Named work-slices, derived from the
@@ -66,6 +72,7 @@ STAGES: dict[tuple[int, int], str] = {
     (7, 3): "Performance, Chaos and Coverage",
     (8, 1): "Remaining Pack Agents",
     (8, 2): "Remaining Pack Workflows",
+    (9, 1): "Roadmap System Restructuring (R1-R4)",
 }
 
 # Module number -> name. Frozen: these are feature_inventory.md §5's own
@@ -114,6 +121,12 @@ MODULES: dict[int, str] = {
     42: "Testing Infrastructure",
     43: "CI Pipeline",
     44: "Platform-wide AiOsError hierarchy",
+    # M45 appended 2026-07-31 (R4). Existing module numbers are frozen;
+    # *appending* a new one is how a genuinely new module is added. This
+    # is the ticket system, generator, and process rules themselves —
+    # none of M01-M44 covers them, and filing them under Testing
+    # Infrastructure or CI Pipeline would have been wrong.
+    45: "Roadmap & Process System",
 }
 
 
@@ -173,6 +186,7 @@ MODULE_PATHS: dict[int, str] = {
     42: "tests",
     43: ".github/workflows",
     44: "platform_sdk/src/ai_os_sdk/errors",
+    45: "scripts/roadmap",
 }
 
 

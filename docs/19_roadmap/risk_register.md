@@ -10,19 +10,23 @@ change its status field, or add a new entry.
 Severity: **H** (can cause real harm or data loss) · **M** (can cause
 significant rework) · **L** (contained).
 
+**Reviewed 2026-07-31 (R4 closeout).** 5 closed, 6 open.
+
 | ID | Risk | Sev | Status | Owner decision |
 |---|---|---|---|---|
-| R-001 | Deploy capability shipping before the approval guardrail | H | **Open — hard rule** | Product owner, 2026-07-31 |
+| R-001 | Deploy capability shipping before the approval guardrail | H | **Open — permanent hard rule** | Product owner, 2026-07-31 |
 | R-002 | Docker exception-catching inconsistency across test guards | L | **Closed** 2026-07-31 | — |
-| R-003 | CI integration job red on Linux, green locally | M | Open | Needs `gh auth login` |
-| R-004 | `gh` CLI unauthenticated — CI logs unreadable | M | Open | Needs product-owner action |
-| R-005 | Generated-doc staleness not yet gated in CI | M | Open | Scheduled P01-S06-M43-T05 |
-| R-006 | 36 of 60 MUST requirements untouched | H | Open — accepted baseline | Product owner, 2026-07-31 |
-| R-007 | `functional_requirements.md` status block drifts from reality | M | Mitigated 2026-07-31 | — |
-| R-008 | No `AiOsError` hierarchy; error contract is per-module | M | Open | Scheduled P02-S07-M44-T01 |
-| R-009 | Audit log is schema-only — no writer, no hash chain | H | Open | Scheduled P01-S05-M04-T05/T06 |
-| R-010 | CI type-checks only a subset of `[tool.mypy] files` | M | Open | Found 2026-07-31 |
-| R-011 | `ai_os_kernel` ships no `py.typed` marker | L | Open | Found 2026-07-31 |
+| R-003 | CI integration job red on Linux, green locally | M | **Open** | Blocked on R-004 |
+| R-004 | `gh` CLI unauthenticated — CI logs unreadable | M | **Open** | **Needs product-owner action** |
+| R-005 | Generated-doc staleness not gated in CI | M | **Closed** 2026-07-31 | — |
+| R-006 | 36 of 60 MUST requirements untouched | H | **Open — accepted baseline** | Product owner, 2026-07-31 |
+| R-007 | `functional_requirements.md` status block drifts from reality | M | **Closed** 2026-07-31 | — |
+| R-008 | No `AiOsError` hierarchy; error contract is per-module | M | **Open** | Ready: `P02-S07-M44-T01` |
+| R-009 | Audit log is schema-only — no writer, no hash chain | H | **Open** | Ready: `P01-S05-M04-T05` |
+| R-010 | CI type-checks only a subset of `[tool.mypy] files` | M | **Open** | Found 2026-07-31 |
+| R-011 | `ai_os_kernel` ships no `py.typed` marker | L | **Closed** 2026-07-31 | Superseded by R-010 |
+| R-012 | Ticket dependency graph had no recorded edges | M | **Closed** 2026-07-31 | — |
+| R-013 | Two dependency edges are judgement calls, not verified | L | **Open** | Found 2026-07-31 |
 
 ---
 
@@ -71,6 +75,60 @@ device-code flow — see the Phase R2 report for the exact steps.
 Accepted as the real backlog baseline (product owner, 2026-07-31). By
 phase: B=1, C=8, D=11, E=7, F=9. Tracked as Tasks; visible in
 `STATUS.md`.
+
+### R-005 — Generated-doc staleness not gated in CI *(closed)*
+
+Closed 2026-07-31. `ci.yml` runs `scripts.roadmap.generate --check` and
+`pytest tests/roadmap`; both ran green on a real Ubuntu runner (Actions
+run 30611974824). A hand edit to a generated rollup, or an oversized
+ticket, now fails the build for real rather than only locally. The
+tracking ticket `P01-S06-M43-T05` was stale at `todo` and was corrected
+to `done` in this step — found by the R3c advisory check on its first run.
+
+### R-007 — `functional_requirements.md` status block drift *(closed)*
+
+Closed 2026-07-31. The three defects R1 found are fixed: the stale FR-012
+classification refreshed, the three silently-omitted FRs (FR-030, FR-112,
+FR-113) classified, and FR-030's misrepresentation corrected. The
+document now points at the generated `STATUS.md`/`MODULE_BOARD.md` rather
+than the retired hand-maintained trackers, so the *class* of drift this
+risk described no longer has a place to accumulate.
+
+### R-011 — `ai_os_kernel` ships no `py.typed` *(closed)*
+
+Closed 2026-07-31 as **superseded by R-010**, not as fixed. The marker is
+still absent. The practical consequence — that per-directory type-checking
+is misleading — is entirely contained by R-010's finding that CI does not
+type-check those directories anyway. Tracking it twice added no signal.
+Reopen if a distribution outside this repository ever imports
+`ai_os_kernel`.
+
+### R-012 — Ticket dependency graph had no recorded edges *(closed)*
+
+Closed 2026-07-31. R3b found only 2 of 219 tickets carried 2+
+dependencies, so "ready to start" reported unrecorded sequencing rather
+than genuine readiness — overstating it by roughly double. R3c recorded
+160 real edges across 113 tickets; ready dropped 122 → 64. Guarded
+permanently by an acyclicity test and an advisory empty-dependency
+signal surfaced in `STATUS.md`.
+
+### R-013 — Two dependency edges are judgement calls
+
+Recorded honestly rather than presented as verified. Both were named in
+the R3c report:
+
+- **`P02-S01-M05-T13`** (scheduler for delayed workflow starts) depends
+  only on instance management. An argument exists that it also needs the
+  multi-instance worker loop (`P02-S01-M05-T12`) to be genuinely useful —
+  a scheduler that starts workflows nothing then runs is of limited
+  value.
+- **`P06-S06-M25-T01`** (Speech Gateway) records no dependency. An
+  argument exists that it needs the HTTP surface it would control.
+
+Low severity: both are *possibly-too-permissive* edges, so the failure
+mode is a Task appearing ready slightly early, caught on first contact —
+not a Task being wrongly blocked. Resolve when either Task is next
+considered.
 
 ### R-010 — CI type-checks only a subset of the configured files
 
