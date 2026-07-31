@@ -57,12 +57,19 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
       - run: uv sync --frozen --all-packages
-      # Mirrors [tool.mypy] files in pyproject.toml exactly: only paths
-      # that exist and contain type-checkable Python source today.
-      # platform_sdk/capability_packs currently hold only schema/manifest
-      # files (no Python); platform_services does not exist yet.
+      # R-010 (found 2026-07-31, fixed same day): this step used to name
+      # an explicit path list ("kernel/src kernel/alembic tests") under a
+      # comment claiming it mirrored [tool.mypy] files in pyproject.toml
+      # "exactly" — it did not. That list has held platform_sdk/src,
+      # platform_sdk/tests, capability_packs/software-engineering/src,
+      # that pack's tests, and scripts since the Platform SDK and this
+      # roadmap tooling were built; none of the five were ever
+      # type-checked in CI. The canonical, no-argument invocation reads
+      # [tool.mypy] files itself, so this step can never silently drift
+      # from that config again — the config is the one place scope is
+      # decided. Proven locally at 378 source files.
       - name: mypy --strict
-        run: uv run mypy --strict kernel/src kernel/alembic tests
+        run: uv run mypy --strict
 
   unit:
     name: Unit tests

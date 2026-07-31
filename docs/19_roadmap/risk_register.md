@@ -10,7 +10,7 @@ change its status field, or add a new entry.
 Severity: **H** (can cause real harm or data loss) · **M** (can cause
 significant rework) · **L** (contained).
 
-**Reviewed 2026-07-31 (R4 closeout).** 5 closed, 6 open.
+**Reviewed 2026-07-31 (R1–R4 closeout).** 7 closed, 4 open.
 
 | ID | Risk | Sev | Status | Owner decision |
 |---|---|---|---|---|
@@ -23,10 +23,10 @@ significant rework) · **L** (contained).
 | R-007 | `functional_requirements.md` status block drifts from reality | M | **Closed** 2026-07-31 | — |
 | R-008 | No `AiOsError` hierarchy; error contract is per-module | M | **Open** | Ready: `P02-S07-M44-T01` |
 | R-009 | Audit log is schema-only — no writer, no hash chain | H | **Open** | Ready: `P01-S05-M04-T05` |
-| R-010 | CI type-checks only a subset of `[tool.mypy] files` | M | **Open** | Found 2026-07-31 |
+| R-010 | CI type-checks only a subset of `[tool.mypy] files` | M | **Closed** 2026-07-31 | — |
 | R-011 | `ai_os_kernel` ships no `py.typed` marker | L | **Closed** 2026-07-31 | Superseded by R-010 |
 | R-012 | Ticket dependency graph had no recorded edges | M | **Closed** 2026-07-31 | — |
-| R-013 | Two dependency edges are judgement calls, not verified | L | **Open** | Found 2026-07-31 |
+| R-013 | Two dependency edges were judgement calls | L | **Closed** 2026-07-31 | Both decided, no change |
 
 ---
 
@@ -112,37 +112,50 @@ than genuine readiness — overstating it by roughly double. R3c recorded
 permanently by an acyclicity test and an advisory empty-dependency
 signal surfaced in `STATUS.md`.
 
-### R-013 — Two dependency edges are judgement calls
+### R-013 — Two dependency edges were judgement calls *(closed — both decided)*
 
-Recorded honestly rather than presented as verified. Both were named in
-the R3c report:
+Closed 2026-07-31. Both edges named in the R3c report were investigated
+against real design documents, not left as a guess:
 
-- **`P02-S01-M05-T13`** (scheduler for delayed workflow starts) depends
-  only on instance management. An argument exists that it also needs the
-  multi-instance worker loop (`P02-S01-M05-T12`) to be genuinely useful —
-  a scheduler that starts workflows nothing then runs is of limited
-  value.
-- **`P06-S06-M25-T01`** (Speech Gateway) records no dependency. An
-  argument exists that it needs the HTTP surface it would control.
+- **`P02-S01-M05-T13`** (scheduler for delayed workflow starts) → does
+  **not** depend on `P02-S01-M05-T12` (multi-instance worker loop).
+  **Decision, with reasoning:** T13's own stated Output is "a started
+  instance at the right time" — the temporal decision of *when* to fire,
+  not *how many* to drive concurrently. Every existing trigger in this
+  codebase (`build_pipeline_trigger`, the platform demo trigger) already
+  starts and drives one instance to completion synchronously, using
+  `WorkflowAdvanceRunner.run_once`/`run_to_completion` — the exact
+  mechanism T13's own dependency (`P02-S01-M05-T02`, instance management)
+  already provides. A Scheduler can fire on a timer and drive each fired
+  instance the same way, sequentially or via independent `asyncio.Task`s,
+  with no need for T12's specific lease-scanning worker-pool concept.
+  "When to start" and "how many run at once" are orthogonal; T13 needs
+  the first, not the second. `depends_on` is correct unchanged.
+- **`P06-S06-M25-T01`** (Speech Gateway) → does **not** depend on
+  `P06-S01-M36` (the HTTP API surface). **Decision, with reasoning:**
+  ADR-0019 is explicit that the Speech Gateway is "**structurally
+  parallel to the LLM Gateway**" — a platform service exposed through
+  the SDK (`SpeechGateway`) and consumed directly by the Voice Capability
+  Pack, never through `/api/v1`. The LLM Gateway (M06), its own direct
+  structural analogue, likewise has no dependency on M36. `depends_on`
+  is correct unchanged.
 
-Low severity: both are *possibly-too-permissive* edges, so the failure
-mode is a Task appearing ready slightly early, caught on first contact —
-not a Task being wrongly blocked. Resolve when either Task is next
-considered.
+Neither ticket was edited — both dependency lists were already correct;
+what was missing was the recorded reasoning, now here rather than left
+as an open question.
 
-### R-010 — CI type-checks only a subset of the configured files
+### R-010 — CI type-checks only a subset of the configured files *(closed)*
 
-`ci.yml`'s mypy step runs `mypy --strict kernel/src kernel/alembic tests`
-under a comment claiming it *"Mirrors [tool.mypy] files in pyproject.toml
-exactly"*. It does not: the configured list also includes
-`platform_sdk/src`, `platform_sdk/tests`,
+Closed 2026-07-31. `ci.yml`'s mypy step ran `mypy --strict kernel/src
+kernel/alembic tests` under a comment claiming it *"Mirrors [tool.mypy]
+files in pyproject.toml exactly"* — it did not: the configured list also
+includes `platform_sdk/src`, `platform_sdk/tests`,
 `capability_packs/software-engineering/src`, that pack's `tests`, and
-`scripts`. **None of those are type-checked in CI today** — a real hole
-in the quality gate, and the comment is false. Found 2026-07-31 while
-completing Phase R2. Not fixed in that step: changing what CI enforces
-is its own approved change, not a mechanical completion item. The
-canonical local invocation (`mypy --strict`, no arguments) does cover
-all of them and passes — 370 source files.
+`scripts`, none of which were type-checked in CI. Fixed by changing the
+step to the canonical, no-argument invocation (`uv run mypy --strict`),
+which reads `[tool.mypy] files` itself and therefore cannot silently
+drift from that config again — proven locally, `Success: no issues
+found in 378 source files`.
 
 ### R-011 — `ai_os_kernel` ships no `py.typed`
 
