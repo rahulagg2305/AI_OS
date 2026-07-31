@@ -93,7 +93,7 @@ class TestBindPackContextIfReceiver:
     def test_a_declared_permission_with_no_real_backing_raises_agent_registry_error(self) -> None:
         receiver = _FakeReceiver()
 
-        with pytest.raises(AgentRegistryError, match="sandbox:execute"):
+        with pytest.raises(AgentRegistryError, match="sandbox:execute") as exc_info:
             _bind_pack_context_if_receiver(
                 receiver,
                 kind="agent",
@@ -105,13 +105,18 @@ class TestBindPackContextIfReceiver:
                 prompt_engine=None,
                 sandbox=None,
             )
+        # A structural, permanent cause — never retriable (the
+        # retriable-split step, 2026-07-31): this registry's own
+        # construction, not this specific call, is missing the backing
+        # object; retrying the identical call hits the identical gap.
+        assert exc_info.value.retriable is False
 
     def test_the_same_gap_for_a_tool_raises_tool_registry_error(self) -> None:
         """Same helper, same rule, the other error family -- used by
         SqlToolRegistry."""
         receiver = _FakeReceiver()
 
-        with pytest.raises(ToolRegistryError, match="sandbox:execute"):
+        with pytest.raises(ToolRegistryError, match="sandbox:execute") as exc_info:
             _bind_pack_context_if_receiver(
                 receiver,
                 kind="tool",
@@ -123,3 +128,4 @@ class TestBindPackContextIfReceiver:
                 prompt_engine=None,
                 sandbox=None,
             )
+        assert exc_info.value.retriable is False

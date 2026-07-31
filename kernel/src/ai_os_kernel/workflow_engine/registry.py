@@ -214,6 +214,11 @@ def _bind_pack_context_if_receiver(
             sandbox=sandbox,
         )
     except ValueError as exc:
+        # A structural, permanent cause (retriable=False, the default)
+        # — this registry's own construction is missing a real backing
+        # object (llm_gateway/prompt_engine/sandbox) a declared
+        # permission needs; an identical retry hits the identical,
+        # still-missing object.
         error_type = AgentRegistryError if kind == "agent" else ToolRegistryError
         raise error_type(
             f"{kind} '{declared_id}' could not be granted its own declared "
@@ -323,8 +328,24 @@ class SqlAgentRegistry:
                     .where(agents_table.c.agent_id == agent_id)
                 )
                 row = result.one_or_none()
-        except sa.exc.SQLAlchemyError as exc:
-            raise AgentRegistryError(f"failed to look up agent '{agent_id}': {exc}") from exc
+        except (sa.exc.SQLAlchemyError, OSError) as exc:
+            # The one genuinely transient cause this exception type
+            # covers (retriable=True, added 2026-07-31) — a connection
+            # error, timeout, or pool exhaustion may well not reproduce
+            # on a later retry of the identical query, unlike the two
+            # structural causes below. `OSError` (not only
+            # `sa.exc.SQLAlchemyError`) is deliberate, discovered while
+            # proving this: a failure to *establish* the connection at
+            # all (refused, unreachable, DNS failure — `TimeoutError` is
+            # itself a real `OSError` subclass) surfaces as the driver's
+            # own raw exception, never wrapped by SQLAlchemy, since no
+            # `Connection` object yet exists for it to attach its own
+            # DBAPI-error-wrapping to — the identical broad catch
+            # `ai_os_kernel.bootstrap._build_health_service`'s own
+            # `database_check` already uses for the identical reason.
+            raise AgentRegistryError(
+                f"failed to look up agent '{agent_id}': {exc}", retriable=True
+            ) from exc
 
         if row is None:
             raise AgentNotRegisteredError(f"no agent registered for agentId={agent_id!r}")
@@ -336,6 +357,10 @@ class SqlAgentRegistry:
         loaded = await asyncio.to_thread(self._loader.load, row.entrypoint)
 
         if not isinstance(loaded, Agent):
+            # A structural, permanent cause (retriable=False, the
+            # default) — the entrypoint's own class definition is
+            # missing what the Agent Protocol requires; an identical
+            # retry reconstructs the identical, still-incomplete object.
             raise AgentRegistryError(
                 f"agent '{agent_id}' entrypoint {row.entrypoint!r} did not resolve to a "
                 "valid Agent (missing output_schema/execute)"
@@ -405,8 +430,13 @@ class SqlToolRegistry:
                     .where(tools_table.c.tool_id == tool_id)
                 )
                 row = result.one_or_none()
-        except sa.exc.SQLAlchemyError as exc:
-            raise ToolRegistryError(f"failed to look up tool '{tool_id}': {exc}") from exc
+        except (sa.exc.SQLAlchemyError, OSError) as exc:
+            # The one genuinely transient cause (retriable=True, added
+            # 2026-07-31) — see SqlAgentRegistry.resolve_agent's own,
+            # identical comment on why `OSError` is caught here too.
+            raise ToolRegistryError(
+                f"failed to look up tool '{tool_id}': {exc}", retriable=True
+            ) from exc
 
         if row is None:
             raise ToolNotRegisteredError(f"no tool registered for toolId={tool_id!r}")
@@ -418,6 +448,9 @@ class SqlToolRegistry:
         loaded = await asyncio.to_thread(self._loader.load, row.entrypoint)
 
         if not isinstance(loaded, Tool):
+            # A structural, permanent cause (retriable=False, the
+            # default) — see SqlAgentRegistry.resolve_agent's own,
+            # identical comment.
             raise ToolRegistryError(
                 f"tool '{tool_id}' entrypoint {row.entrypoint!r} did not resolve to a "
                 "valid Tool (missing trust_tier/output_schema/execute)"
@@ -425,6 +458,10 @@ class SqlToolRegistry:
 
         declared_trust_tier = TrustTier(row.trust_tier)
         if loaded.trust_tier is not declared_trust_tier:
+            # Another structural, permanent cause (retriable=False, the
+            # default) — a mismatch between the entrypoint's own code
+            # and its catalog row; neither changes between attempts
+            # within one workflow run.
             raise ToolRegistryError(
                 f"tool '{tool_id}' entrypoint {row.entrypoint!r} declares trust_tier="
                 f"{loaded.trust_tier.value!r}, but catalog.tools records "

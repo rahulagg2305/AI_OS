@@ -95,12 +95,46 @@ class ToolNotRegisteredError(Exception):
 class AgentRegistryError(Exception):
     """An :class:`~ai_os_kernel.workflow_engine.registry.AgentRegistry`
     lookup failed for a reason other than "no such id" — a
-    persistence-layer failure (e.g. a connection error), or a loaded
+    persistence-layer failure (e.g. a connection error), a loaded
     entrypoint that does not satisfy the
-    :class:`~ai_os_kernel.workflow_engine.agent.Agent` Protocol. A
-    missing id is :class:`AgentNotRegisteredError`, not this; a
-    malformed or unimportable entrypoint string is
-    :class:`EntrypointLoadError`, not this."""
+    :class:`~ai_os_kernel.workflow_engine.agent.Agent` Protocol, or one
+    that declares a ``required_permissions`` capability this registry
+    was not itself given a real backing object for. A missing id is
+    :class:`AgentNotRegisteredError`, not this; a malformed or
+    unimportable entrypoint string is :class:`EntrypointLoadError`, not
+    this.
+
+    ``retriable`` (added 2026-07-31, resolving the split deliberately
+    left undecided two steps ago) follows the identical per-instance
+    self-declaration convention :class:`~ai_os_kernel.llm_gateway.
+    errors.LLMProviderError` already established — a constructor
+    parameter each real raise site sets explicitly, not a fixed value,
+    since this one exception type genuinely covers causes with
+    different natures. **The investigation found a real, structural way
+    to tell them apart after all** (the "no structural way to
+    distinguish" framing from two steps ago undersold it): each raise
+    site in :mod:`~ai_os_kernel.workflow_engine.registry` already knows
+    exactly which real cause it represents — no ambiguity ever reaches
+    a caller, because each ``raise`` statement is written at the one
+    place that already has the answer. Splitting into separate
+    exception *classes* was considered and rejected: nothing in this
+    codebase catches ``AgentRegistryError``/``ToolRegistryError`` by
+    anything narrower than their own type today (only the generic
+    ``except Exception`` boundary in
+    :meth:`~ai_os_kernel.workflow_engine.service.WorkflowInstanceService.advance`,
+    which reads the generic ``retriable`` attribute, never a type), so
+    a type split would add real code with no real consumer to justify
+    it — the identical reasoning `error_handling_retry.md` already
+    applies against inventing a severity taxonomy nothing documents a
+    need for. Defaults ``False`` (the *opposite* default from
+    ``LLMProviderError``, deliberately — three of this exception's four
+    real causes are structural/permanent, only one is genuinely
+    transient) — see each raise site's own comment for which case
+    overrides it to ``True``."""
+
+    def __init__(self, message: str, *, retriable: bool = False) -> None:
+        super().__init__(message)
+        self.retriable = retriable
 
 
 class ToolRegistryError(Exception):
@@ -108,12 +142,26 @@ class ToolRegistryError(Exception):
     lookup failed for a reason other than "no such id" — a
     persistence-layer failure (e.g. a connection error), a loaded
     entrypoint that does not satisfy the
-    :class:`~ai_os_kernel.workflow_engine.tool.Tool` Protocol, or one
-    whose own declared ``trust_tier`` disagrees with what
-    ``catalog.tools`` records for it. A missing id is
-    :class:`ToolNotRegisteredError`, not this; a malformed or
-    unimportable entrypoint string is :class:`EntrypointLoadError`, not
-    this."""
+    :class:`~ai_os_kernel.workflow_engine.tool.Tool` Protocol, one whose
+    own declared ``trust_tier`` disagrees with what ``catalog.tools``
+    records for it, or one that declares a ``required_permissions``
+    capability this registry was not itself given a real backing object
+    for. A missing id is :class:`ToolNotRegisteredError`, not this; a
+    malformed or unimportable entrypoint string is
+    :class:`EntrypointLoadError`, not this.
+
+    ``retriable`` (added 2026-07-31) is the identical per-instance
+    self-declaration :class:`AgentRegistryError` now carries — see that
+    class's own docstring for the full reasoning (a real, structural way
+    to tell this exception's own distinct real causes apart, found by
+    investigation, not left undecided; no type split, since nothing
+    catches this type any narrower than itself today). Defaults
+    ``False``; the one genuinely transient raise site (a persistence-
+    layer failure) overrides it to ``True``."""
+
+    def __init__(self, message: str, *, retriable: bool = False) -> None:
+        super().__init__(message)
+        self.retriable = retriable
 
 
 class EntrypointLoadError(Exception):

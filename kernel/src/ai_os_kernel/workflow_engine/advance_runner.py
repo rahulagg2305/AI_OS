@@ -61,18 +61,27 @@ exception's class alone:
   ``getattr(exc, "retriable", None)`` on any of these is ``None``, not
   ``True``, so they fall through to the exact same immediate-``FAILED``
   behavior this codebase already had before gate retry existed.
-- **Deliberately left undecided, not silently defaulted either way**:
-  :class:`AgentRegistryError`/:class:`ToolRegistryError` — each one's
-  own docstring already names two genuinely different natures it can
-  represent ("a persistence-layer failure (e.g. a connection error)",
-  genuinely transient, *or* "a loaded entrypoint that does not satisfy
-  the Agent/Tool Protocol", genuinely permanent) under one exception
-  type with no way to tell them apart structurally today. Defaulting
-  to non-retriable (by not adding ``retriable`` to either class) is the
-  safe choice: a false negative here costs a human one manual retry; a
-  false positive would spend a real, bounded retry budget on a
-  permanently broken entrypoint. Splitting this exception into two real,
-  distinct types is future work, not invented here.
+- **Retriable per real cause, decided explicitly, not left undecided**
+  (added 2026-07-31, resolving the gap the retry-widening step itself
+  named): :class:`AgentRegistryError`/:class:`ToolRegistryError` now
+  each carry the identical ``retriable`` constructor parameter
+  :class:`~ai_os_kernel.llm_gateway.errors.LLMProviderError` already
+  established, defaulted ``False`` (the *opposite* default, since three
+  of this exception's four real causes are structural/permanent — a
+  loaded entrypoint failing the ``Agent``/``Tool`` Protocol check, a
+  tool's own ``trust_tier`` disagreeing with its catalog row, or a
+  missing backing object for a declared permission — and only one, a
+  genuine persistence-layer failure during the catalog lookup itself,
+  is transient). **Investigation found a real, structural way to tell
+  the causes apart after all** — the "no way to tell them apart
+  structurally" framing two steps ago undersold it: every raise site in
+  :mod:`~ai_os_kernel.workflow_engine.registry` already knows exactly
+  which real cause it represents, so each sets ``retriable`` explicitly
+  at the one place that already has the answer, the identical
+  per-instance pattern ``LLMProviderError`` uses across its own several
+  real causes. No type split: nothing in this codebase catches either
+  exception any narrower than its own type today, so splitting into two
+  classes would add real code with no real consumer to justify it.
 
 Which step a retriable failure retries *from* remains exactly the
 composition-level config :mod:`~ai_os_kernel.workflow_engine.

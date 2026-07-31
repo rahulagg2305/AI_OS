@@ -229,8 +229,14 @@ def test_resolve_agent_rejects_an_entrypoint_that_is_not_a_valid_agent(
         try:
             registry = SqlAgentRegistry(engine)
 
-            with pytest.raises(AgentRegistryError, match="did not resolve to a valid Agent"):
+            with pytest.raises(
+                AgentRegistryError, match="did not resolve to a valid Agent"
+            ) as exc_info:
                 await registry.resolve_agent("se.software_engineering/not-an-agent")
+            # A structural, permanent cause — never retriable (the
+            # retriable-split step, 2026-07-31): retrying would
+            # reconstruct the identical, still-incomplete object.
+            assert exc_info.value.retriable is False
         finally:
             await engine.dispose()
 
@@ -301,8 +307,14 @@ def test_resolve_tool_rejects_a_trust_tier_disagreement(database_url: str) -> No
         try:
             registry = SqlToolRegistry(engine)
 
-            with pytest.raises(ToolRegistryError, match="refusing to trust either value alone"):
+            with pytest.raises(
+                ToolRegistryError, match="refusing to trust either value alone"
+            ) as exc_info:
                 await registry.resolve_tool("se.mismatched_tool")
+            # A structural, permanent cause — never retriable (the
+            # retriable-split step, 2026-07-31): neither the entrypoint's
+            # own code nor the catalog row changes between attempts.
+            assert exc_info.value.retriable is False
         finally:
             await engine.dispose()
 
@@ -337,8 +349,13 @@ def test_resolve_tool_rejects_an_entrypoint_that_is_not_a_valid_tool(
         try:
             registry = SqlToolRegistry(engine)
 
-            with pytest.raises(ToolRegistryError, match="did not resolve to a valid Tool"):
+            with pytest.raises(
+                ToolRegistryError, match="did not resolve to a valid Tool"
+            ) as exc_info:
                 await registry.resolve_tool("se.not_a_tool")
+            # A structural, permanent cause — never retriable (the
+            # retriable-split step, 2026-07-31).
+            assert exc_info.value.retriable is False
         finally:
             await engine.dispose()
 
@@ -470,6 +487,49 @@ def test_resolve_tool_rejects_a_pack_missing_from_catalog_packs(database_url: st
 
             with pytest.raises(PackNotActivatedError, match="no such pack is registered"):
                 await registry.resolve_tool("se.no_such_pack_tool")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+# A well-formed URL with nothing listening on the given port — the
+# identical technique test_health_database_check.py already uses for a
+# genuinely unreachable database, not a mock.
+_UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://user:pass@127.0.0.1:1/nonexistent"
+
+
+def test_resolve_agent_raises_a_retriable_error_for_a_genuine_connection_failure() -> None:
+    """The one genuinely transient real cause `AgentRegistryError` covers
+    (the retriable-split step, 2026-07-31): a real, unreachable database
+    — not a mock, not a simulated exception — raises with `retriable is
+    True`, unlike the structural causes above."""
+
+    async def _run() -> None:
+        engine = build_engine(_UNREACHABLE_DATABASE_URL)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            with pytest.raises(AgentRegistryError, match="failed to look up agent") as exc_info:
+                await registry.resolve_agent("se.software_engineering/anything")
+            assert exc_info.value.retriable is True
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_raises_a_retriable_error_for_a_genuine_connection_failure() -> None:
+    """The identical real, transient cause for `ToolRegistryError`."""
+
+    async def _run() -> None:
+        engine = build_engine(_UNREACHABLE_DATABASE_URL)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            with pytest.raises(ToolRegistryError, match="failed to look up tool") as exc_info:
+                await registry.resolve_tool("se.anything")
+            assert exc_info.value.retriable is True
         finally:
             await engine.dispose()
 
