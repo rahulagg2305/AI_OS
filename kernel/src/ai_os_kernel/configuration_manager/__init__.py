@@ -3,7 +3,7 @@
 Layered precedence: built-in defaults -> pack defaults -> platform
 config -> environment config -> runtime overrides -> experiment
 overrides -> secrets (docs/03_architecture/kernel/configuration_manager.md
-§4). Layers 1, 2, 3, 4, 5, and 7 are implemented at this stage.
+§4). All 7 layers are implemented at this stage.
 
 **Layer 2, pack-level defaults** (added 2026-07-31, ``P01-S02-M01-T03``):
 :func:`extract_pack_defaults` reads the ``default`` values declared in a
@@ -28,6 +28,17 @@ each in a ``SecretValue`` (ADR-0024 rule 2 — never a raw string).
 sibling to :meth:`ConfigurationManager.load` that wires it in — async
 because resolving is real I/O, unlike every other layer here. See
 :mod:`ai_os_kernel.configuration_manager.secrets`.
+
+**Layer 6, feature flags / experiment overrides** (added 2026-07-31,
+``P01-S02-M01-T07``): unlike every other layer, this one is never
+merged into the shared, process-wide dict — §4 requires it "isolated
+to that run... never leak into concurrent workflows."
+:class:`ExperimentOverrideStore` keys overrides by ``run_id``;
+:func:`resolve_feature_flag` resolves one flag through, in order, a
+run's isolated override, a live runtime override (layer 5, reused
+directly), the last pack manifest declaring it, then a caller default
+— "experiment overrides (6) beat runtime overrides (5)" (ADR-0022). See
+:mod:`ai_os_kernel.configuration_manager.feature_flags`.
 
 No component should read a configuration file directly — everything
 goes through :class:`ConfigurationManager` and the resulting
@@ -54,6 +65,11 @@ from ai_os_kernel.configuration_manager.audit import (
 )
 from ai_os_kernel.configuration_manager.bootstrap_env import BootstrapEnv
 from ai_os_kernel.configuration_manager.errors import ConfigChangeAuditError, ConfigurationError
+from ai_os_kernel.configuration_manager.feature_flags import (
+    ExperimentOverrideStore,
+    extract_feature_flag_defaults,
+    resolve_feature_flag,
+)
 from ai_os_kernel.configuration_manager.loader import ConfigurationManager, extract_pack_defaults
 from ai_os_kernel.configuration_manager.models import PlatformConfig
 from ai_os_kernel.configuration_manager.runtime_overrides import RuntimeOverrideStore
@@ -67,11 +83,14 @@ __all__ = [
     "ConfigChangeWriter",
     "ConfigurationError",
     "ConfigurationManager",
+    "ExperimentOverrideStore",
     "PlatformConfig",
     "RuntimeOverrideStore",
     "SqlConfigChangeWriter",
     "compute_value_digest",
+    "extract_feature_flag_defaults",
     "extract_pack_defaults",
+    "resolve_feature_flag",
     "resolve_secret_references",
     "verify_config_change",
 ]
