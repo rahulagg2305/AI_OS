@@ -3,7 +3,7 @@
 Layered precedence: built-in defaults -> pack defaults -> platform
 config -> environment config -> runtime overrides -> experiment
 overrides -> secrets (docs/03_architecture/kernel/configuration_manager.md
-§4). Layers 1, 2, 3, 4, and 5 are implemented at this stage.
+§4). Layers 1, 2, 3, 4, 5, and 7 are implemented at this stage.
 
 **Layer 2, pack-level defaults** (added 2026-07-31, ``P01-S02-M01-T03``):
 :func:`extract_pack_defaults` reads the ``default`` values declared in a
@@ -18,6 +18,16 @@ reads from; its ``apply`` audits the change (writing a real
 :meth:`ConfigurationManager.load`'s ``runtime_overrides`` argument
 merges a plain snapshot in above every file layer. See
 :mod:`ai_os_kernel.configuration_manager.runtime_overrides`.
+
+**Layer 7, secret resolution** (added 2026-07-31, ``P01-S02-M01-T06``):
+:func:`resolve_secret_references` resolves every ``secret://``
+reference surviving the layer 1-6 merge through an injected
+``SecretProvider`` (the already-proven ``secrets_manager``), wrapping
+each in a ``SecretValue`` (ADR-0024 rule 2 — never a raw string).
+:meth:`ConfigurationManager.load_with_secrets_resolved` is the async
+sibling to :meth:`ConfigurationManager.load` that wires it in — async
+because resolving is real I/O, unlike every other layer here. See
+:mod:`ai_os_kernel.configuration_manager.secrets`.
 
 No component should read a configuration file directly — everything
 goes through :class:`ConfigurationManager` and the resulting
@@ -47,6 +57,7 @@ from ai_os_kernel.configuration_manager.errors import ConfigChangeAuditError, Co
 from ai_os_kernel.configuration_manager.loader import ConfigurationManager, extract_pack_defaults
 from ai_os_kernel.configuration_manager.models import PlatformConfig
 from ai_os_kernel.configuration_manager.runtime_overrides import RuntimeOverrideStore
+from ai_os_kernel.configuration_manager.secrets import resolve_secret_references
 
 __all__ = [
     "BootstrapEnv",
@@ -61,5 +72,6 @@ __all__ = [
     "SqlConfigChangeWriter",
     "compute_value_digest",
     "extract_pack_defaults",
+    "resolve_secret_references",
     "verify_config_change",
 ]

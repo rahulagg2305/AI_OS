@@ -7,12 +7,12 @@ config -> runtime overrides -> experiment overrides -> secrets.
 
 Layers 1 (built-in defaults, via the ``PlatformConfig`` model), 2
 (pack-level defaults, ``P01-S02-M01-T03``), 3 (platform config file), 4
-(environment config file), and 5 (runtime overrides,
-``P01-S02-M01-T04``) are implemented at this stage. Experiment
-overrides and secret resolution are added when the components that
-produce them exist (the Experiment Manager, Secrets Management) —
-callers depend on ``PlatformConfig``, not on how it was assembled, so
-none of that will require changes here at the call site.
+(environment config file), 5 (runtime overrides, ``P01-S02-M01-T04``),
+and 7 (secret resolution, ``P01-S02-M01-T06``) are implemented at this
+stage. Layer 6 (experiment overrides) is added when the Experiment
+Manager exists — callers depend on ``PlatformConfig``, not on how it
+was assembled, so none of that will require changes here at the call
+site.
 
 **Layer 2, concretely** (§4: "Pack-level defaults — Capability Pack
 manifests and their ``configSchema`` defaults"): each activated pack's
@@ -43,6 +43,19 @@ already-resolved input rather than discovering it themselves. Building
 the ``PATCH /api/v1/config`` route itself is separate, later work (§6:
 "Order is therefore: writer, then route" — the writer now exists; this
 layer is what the route would call into).
+
+**Layer 7, concretely** (§4: "Secret values — Resolved at point of use
+from ``secret://`` references"; ``P01-S02-M01-T06``): resolving a
+secret is real I/O (:class:`~ai_os_kernel.secrets_manager.provider.
+SecretProvider` is ``async``), so it cannot be one more step inside the
+synchronous :meth:`load` without breaking every existing caller — the
+documented "one call site in ``ConfigurationManager.load()``" is
+therefore a sibling async method, :meth:`load_with_secrets_resolved`,
+reusing the exact same layer 1-6 merge via the shared
+``_merge_layers`` helper. It returns a plain ``dict``, not a
+``PlatformConfig`` — see :mod:`ai_os_kernel.configuration_manager.secrets`
+for why a resolved, ``SecretValue``-wrapped value cannot validate into
+today's model, and is not supposed to.
 """
 
 from collections.abc import Mapping, Sequence
@@ -54,6 +67,8 @@ from pydantic import ValidationError
 
 from ai_os_kernel.configuration_manager.errors import ConfigurationError
 from ai_os_kernel.configuration_manager.models import PlatformConfig
+from ai_os_kernel.configuration_manager.secrets import resolve_secret_references
+from ai_os_kernel.secrets_manager.provider import SecretProvider
 
 # The set of valid environments is a structural constant of the platform
 # (docs/11_deployment/deployment_architecture.md §4), not itself
@@ -97,7 +112,7 @@ class ConfigurationManager:
         pack_manifests: Sequence[Mapping[str, Any]] = (),
         runtime_overrides: Mapping[str, Any] | None = None,
     ) -> PlatformConfig:
-        """Merge all layers and return a validated, immutable ``PlatformConfig``.
+        """Merge layers 1-5 and return a validated, immutable ``PlatformConfig``.
 
         ``pack_manifests`` is every activated pack's raw manifest mapping
         (layer 2), in activation order — a pack listed later overrides an
@@ -111,6 +126,51 @@ class ConfigurationManager:
         applies or audits an override itself, only merges an
         already-applied one in above every file layer.
         """
+        merged = self._merge_layers(
+            role=role, pack_manifests=pack_manifests, runtime_overrides=runtime_overrides
+        )
+        try:
+            return PlatformConfig.model_validate(merged)
+        except ValidationError as exc:
+            raise ConfigurationError(
+                f"Invalid configuration after merging layers 1-5 for "
+                f"{self._platform_config_path}: {exc}"
+            ) from exc
+
+    async def load_with_secrets_resolved(
+        self,
+        *,
+        role: str,
+        secret_provider: SecretProvider,
+        pack_manifests: Sequence[Mapping[str, Any]] = (),
+        runtime_overrides: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Merges layers 1-6 exactly as :meth:`load` does, then resolves
+        layer 7: every ``secret://`` reference surviving that merge —
+        the one real value precedence already decided, never a
+        lower-layer value a higher layer overrode — is resolved through
+        ``secret_provider`` into a
+        :class:`~ai_os_kernel.secrets_manager.value.SecretValue`.
+
+        Returns the merged, secret-resolved ``dict`` rather than a
+        ``PlatformConfig`` — see :mod:`ai_os_kernel.configuration_manager.
+        secrets` for why.
+        """
+        merged = self._merge_layers(
+            role=role, pack_manifests=pack_manifests, runtime_overrides=runtime_overrides
+        )
+        return await resolve_secret_references(merged, secret_provider)
+
+    def _merge_layers(
+        self,
+        *,
+        role: str,
+        pack_manifests: Sequence[Mapping[str, Any]],
+        runtime_overrides: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Layers 1-5, deep-merged in precedence order — the one merge
+        both :meth:`load` and :meth:`load_with_secrets_resolved` share,
+        so the two can never silently drift apart on ordering."""
         merged: dict[str, Any] = {}
         for manifest in pack_manifests:
             merged = _deep_merge(merged, extract_pack_defaults(manifest))
@@ -123,14 +183,7 @@ class ConfigurationManager:
         # caller-supplied values, overwriting anything a file might set.
         merged["env"] = self._environment
         merged["role"] = role
-
-        try:
-            return PlatformConfig.model_validate(merged)
-        except ValidationError as exc:
-            raise ConfigurationError(
-                f"Invalid configuration after merging {self._platform_config_path} "
-                f"and {env_file}: {exc}"
-            ) from exc
+        return merged
 
     def _read_section(self, path: Path) -> dict[str, Any]:
         """Read the ``kernel:`` mapping from a YAML file.

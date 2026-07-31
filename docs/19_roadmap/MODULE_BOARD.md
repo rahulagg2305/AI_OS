@@ -12,7 +12,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 
 | # | Module | Phase(s) | Tasks | Done | % |
 |---|---|---|---:|---:|---:|
-| M01 | Configuration Manager | P01 | 8 | 1 | 38% |
+| M01 | Configuration Manager | P01 | 8 | 1 | 44% |
 | M02 | Manifest Loader (+ Schema) | P01 | 4 | 2 | 50% |
 | M03 | Health & Lifecycle | P01 | 6 | 5 | 83% |
 | M04 | Observability & Audit | P01 | 6 | 4 | 67% |

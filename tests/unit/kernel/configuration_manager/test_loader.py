@@ -1,5 +1,6 @@
-"""Unit tests for the Configuration Manager (layers 1, 2, 3, 4, 5)."""
+"""Unit tests for the Configuration Manager (layers 1, 2, 3, 4, 5, 7)."""
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from ai_os_kernel.configuration_manager import (
     ConfigurationManager,
     extract_pack_defaults,
 )
+from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 
 
 def _write_yaml(path: Path, content: dict[str, Any]) -> None:
@@ -303,3 +305,40 @@ def test_env_and_role_cannot_be_overridden_by_a_runtime_override(tmp_path: Path)
 
     assert config.env == "local"
     assert config.role == "api"
+
+
+def test_a_secret_reference_resolves_through_the_real_provider_at_the_correct_layer(
+    tmp_path: Path,
+) -> None:
+    """The real proof this Task requires: `some_key` is set by both a
+    pack default (layer 2, secret://env/pack-value) and platform.yaml
+    (layer 3, secret://env/platform-value). Layer 3 outranks layer 2,
+    so only platform.yaml's reference should ever reach the provider —
+    proving resolution happens *after* precedence is decided, at the
+    correct position, not on every candidate value."""
+    _write_yaml(tmp_path / "platform.yaml", {"kernel": {"some_key": "secret://env/platform-value"}})
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+    pack = _pack_manifest(
+        config_schema_properties={
+            "some_key": {"type": "string", "default": "secret://env/pack-value"}
+        }
+    )
+    provider = EnvSecretProvider(
+        env={
+            "AIOS_SECRET_PACK_VALUE": "the-pack-secret",
+            "AIOS_SECRET_PLATFORM_VALUE": "the-platform-secret",
+        }
+    )
+
+    resolved = asyncio.run(
+        manager.load_with_secrets_resolved(
+            role="api", secret_provider=provider, pack_manifests=[pack]
+        )
+    )
+
+    assert resolved["some_key"].reveal() == "the-platform-secret"
+    assert str(resolved["some_key"]) == "***"  # never logged, even by accident
