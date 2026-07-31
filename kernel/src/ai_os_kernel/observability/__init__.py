@@ -15,8 +15,10 @@ evident and never sampled (ADR-0017) — kept in its own module,
 :mod:`ai_os_kernel.observability.audit`. :class:`SqlAuditLogWriter`
 writes ``governance.audit_log`` rows whose ``row_hash`` chains to the
 previous row's; :func:`~ai_os_kernel.observability.audit.verify_chain`
-detects a row modified after it was written. The scheduled job that
-runs verification on an interval and alerts is separate, later work.
+detects a row modified after it was written. **The scheduled job that
+runs verification on an interval and alerts** (added 2026-07-31,
+``P01-S05-M04-T06``) lives in
+:mod:`ai_os_kernel.observability.audit_verification_job`.
 
 See docs/03_architecture/kernel/observability.md, ADR-0017.
 """
@@ -28,6 +30,11 @@ from ai_os_kernel.observability.audit import (
     ChainVerificationResult,
     SqlAuditLogWriter,
     verify_chain,
+)
+from ai_os_kernel.observability.audit_verification_job import (
+    AuditChainReader,
+    run_audit_chain_verification_once,
+    run_periodic_audit_chain_verification,
 )
 from ai_os_kernel.observability.errors import AuditLogError
 from ai_os_kernel.observability.logging import configure_logging, get_logger
@@ -41,6 +48,7 @@ from ai_os_kernel.observability.trace import TraceContext, generate_trace_id, ge
 from ai_os_kernel.observability.tracing import configure_tracing, get_tracer
 
 __all__ = [
+    "AuditChainReader",
     "AuditLogError",
     "AuditLogRecord",
     "AuditLogWriter",
@@ -58,5 +66,7 @@ __all__ = [
     "get_meter",
     "get_trace_id",
     "get_tracer",
+    "run_audit_chain_verification_once",
+    "run_periodic_audit_chain_verification",
     "verify_chain",
 ]

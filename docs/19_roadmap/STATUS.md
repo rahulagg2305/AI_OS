@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 45%** (100 of 224 Task-equivalents complete)
+**Overall: 45%** (101 of 224 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -18,7 +18,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S02 Configuration and Secrets | 14 | 4 | 1 | 9 | 32% |
 | P01 (A) | S03 Manifest Discovery and Schema | 6 | 3 | 0 | 3 | 50% |
 | P01 (A) | S04 Health and Lifecycle | 6 | 5 | 0 | 1 | 83% |
-| P01 (A) | S05 Observability and Audit | 6 | 3 | 0 | 3 | 50% |
+| P01 (A) | S05 Observability and Audit | 6 | 4 | 0 | 2 | 67% |
 | P01 (A) | S06 CI and Test Infrastructure | 10 | 7 | 0 | 3 | 70% |
 | P02 (B) | S01 Workflow Execution Core | 13 | 8 | 0 | 5 | 62% |
 | P02 (B) | S02 LLM Gateway | 12 | 6 | 1 | 5 | 54% |
@@ -56,7 +56,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
-| P01 (Stage A) - Platform Skeleton | 46 | 25 | 55% |
+| P01 (Stage A) - Platform Skeleton | 46 | 26 | 58% |
 | P02 (Stage B) - Minimum Viable Kernel | 93 | 51 | 55% |
 | P03 (Stage C) - First Real Capability Pack | 27 | 15 | 56% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
@@ -68,7 +68,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-65 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+64 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P01-S01-M40-T04` Runtime container image
 - `P01-S02-M01-T03` Pack-defaults precedence layer
@@ -83,7 +83,6 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P01-S03-M02-T04` Remaining semantic manifest rules
 - `P01-S04-M03-T06` Graceful-shutdown coordinator
 - `P01-S05-M04-T03` OTLP export to a Collector
-- `P01-S05-M04-T06` Audit chain verification job
 - `P01-S06-M42-T04` tests/security by threat id
 - `P01-S06-M42-T05` tests/performance against NFR targets
 - `P01-S06-M43-T04` Green integration stage on Linux
@@ -95,7 +94,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S02-M06-T08` Streaming completions
 - `P02-S02-M06-T09` Embeddings
 - `P02-S02-M06-T10` Provider token counting
-- ... and 40 more
+- `P02-S02-M06-T11` Rate limiter
+- ... and 39 more
 
 ## Dependency review signal
 

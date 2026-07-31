@@ -16,6 +16,7 @@ status: todo                  # done | partial | todo | blocked
 depends_on: [P02-S01-M05-T06] # other ticket ids, may be empty
 evidence: [path/to/real/file] # required once status is done or partial
 module_path: kernel/src/ai_os_kernel/workflow_engine
+time_spent: 12m                # optional, honest real elapsed time; filled in at Task end
 ---
 **Goal:** <what changes about the system, in one sentence>
 **Input:** <the exact thing this Task consumes>
@@ -30,6 +31,14 @@ that without it a working session had to derive the location from the
 module *number*, which only worked because the mapping happened to be
 known. Some registry paths are marked PLANNED and do not exist on disk
 yet; the Task that fills one creates it there.
+
+**`time_spent:`** (added 2026-07-31) is the real elapsed wall-clock time
+a Task took, e.g. `12m` or `1h30m`. Optional, and **not validated** —
+unlike `module_path` there is no authoritative source to check it
+against, only honesty. Fill it in at the end of the step, from real
+elapsed time, not an estimate. An older ticket with no `time_spent:`
+still parses; the point is to accumulate genuine timing data across
+enough real Tasks to be useful, not to enforce it retroactively.
 
 ### Hard structural limits (enforced, not advisory)
 

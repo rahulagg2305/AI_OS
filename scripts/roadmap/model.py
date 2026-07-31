@@ -59,6 +59,7 @@ class Ticket:
     depends_on: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
     module_path: str = ""
+    time_spent: str = ""
     goal: str = ""
     body: str = ""
     path: Path | None = None
@@ -161,6 +162,14 @@ def parse_ticket(path: Path) -> Ticket:
                 "scripts/roadmap/stages.py, not the ticket."
             )
 
+    # `time_spent` (added 2026-07-31) records real elapsed time on a Task,
+    # honestly filled in at the end of a step — e.g. `12m`, `1h30m`. Unlike
+    # `module_path` it is not validated against anything: there is no
+    # authoritative source to check it against, only the honesty of
+    # whoever fills it in. Purely additive data collection so that after
+    # enough real Tasks there is genuine timing data instead of guesswork.
+    time_spent = str(meta.get("time_spent") or "")
+
     return Ticket(
         id=ticket_id,
         title=str(meta["title"]),
@@ -172,6 +181,7 @@ def parse_ticket(path: Path) -> Ticket:
         depends_on=_tuple("depends_on"),
         evidence=_tuple("evidence"),
         module_path=module_path,
+        time_spent=time_spent,
         goal=goal,
         body=body.strip(),
         path=path,
