@@ -10,14 +10,17 @@ change its status field, or add a new entry.
 Severity: **H** (can cause real harm or data loss) · **M** (can cause
 significant rework) · **L** (contained).
 
-**Reviewed 2026-07-31 (R1–R4 closeout).** 7 closed, 4 open.
+**Reviewed 2026-07-31 (R1–R4 final closeout).** 9 closed, 2 open. Zero
+open process-defect risks: everything remaining is a real
+product-development gap (R-006, R-008, R-009), not a defect in the
+process itself.
 
 | ID | Risk | Sev | Status | Owner decision |
 |---|---|---|---|---|
 | R-001 | Deploy capability shipping before the approval guardrail | H | **Open — permanent hard rule** | Product owner, 2026-07-31 |
 | R-002 | Docker exception-catching inconsistency across test guards | L | **Closed** 2026-07-31 | — |
-| R-003 | CI integration job red on Linux, green locally | M | **Open** | Blocked on R-004 |
-| R-004 | `gh` CLI unauthenticated — CI logs unreadable | M | **Open** | **Needs product-owner action** |
+| R-003 | CI integration job red on Linux, green locally | M | **Closed** 2026-07-31 | — |
+| R-004 | `gh` CLI unauthenticated — CI logs unreadable | M | **Closed** 2026-07-31 | Product owner ran `gh auth login` |
 | R-005 | Generated-doc staleness not gated in CI | M | **Closed** 2026-07-31 | — |
 | R-006 | 36 of 60 MUST requirements untouched | H | **Open — accepted baseline** | Product owner, 2026-07-31 |
 | R-007 | `functional_requirements.md` status block drifts from reality | M | **Closed** 2026-07-31 | — |
@@ -57,18 +60,33 @@ narrower guard could have errored instead of skipping. Closed in Phase
 R2 by widening the postgres fixture to match. Same root cause as the
 `registry.py` fix of 2026-07-31.
 
-### R-003 — CI integration job red on Linux, green locally
+### R-003 — CI integration job red on Linux, green locally *(closed)*
 
-Run 30600653411: 6 of 8 jobs green; `Integration tests` fails. The exact
-CI command reproduces **green** locally (989 passed, 12 skipped, coverage
-96.93% against a 90% gate), so it is neither a coverage nor a test-logic
-failure. Environment-specific to the Linux runner. Blocked on R-004.
+Closed 2026-07-31. Root cause found from real, authenticated logs
+(`gh run view 30611974824 --log-failed`), not guessed: `DockerSandbox`
+runs its container as a fixed non-root UID (`65534:65534`, ADR-0016),
+but the bind-mounted `working_directory` is created host-side and owned
+by whatever real account created it — on the GitHub Actions Ubuntu
+runner, an account with no relationship to that UID. The kernel's own
+permission check on the bind mount genuinely refused the write
+(`sh: cannot create output.txt: Permission denied`,
+`PermissionError: [Errno 13]`) — a real Linux-vs-Windows difference:
+Docker Desktop's bind-mount layer does not enforce host POSIX
+permission bits the way a real Linux daemon does, so the identical test
+passed unchanged in local development. Five failures in the real log
+all traced to this one cause. Fixed by `chmod`-ing the mounted directory
+to `0o777` before container creation — narrow, touches only that one
+per-invocation directory, and does not weaken any other isolation
+control. **Proof: Actions run
+[30635476406](https://github.com/rahulagg2305/AI_OS/actions/runs/30635476406)
+— `Integration tests` conclusion `success`** (was `failure` on
+30611974824, identical command).
 
-### R-004 — `gh` CLI unauthenticated
+### R-004 — `gh` CLI unauthenticated *(closed)*
 
-`gh` v2.96.0 is installed but not logged in, so job logs return HTTP 403
-and the R-003 cause cannot be read. Requires an interactive browser
-device-code flow — see the Phase R2 report for the exact steps.
+Closed 2026-07-31. Product owner ran `gh auth login` (account
+`rahulagg2305`); `gh auth status` now confirms an active, keyring-backed
+session. This is what made the real R-003 root cause readable at all.
 
 ### R-006 — 36 of 60 MUST requirements untouched
 
