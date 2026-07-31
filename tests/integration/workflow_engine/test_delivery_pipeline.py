@@ -94,11 +94,14 @@ import contextlib
 import os
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
+import sqlalchemy as sa
 import yaml
 from alembic import command
 from alembic.config import Config
+from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.capability_manager.errors import CapabilityManagerError
@@ -114,6 +117,7 @@ from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProto
 from ai_os_kernel.llm_gateway.models import LLMRequest, LLMResponse
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 from ai_os_kernel.persistence.engine import build_engine
+from ai_os_kernel.persistence.evaluation_schema import gate_results
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine, PromptEngine
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
@@ -143,6 +147,24 @@ _PACK_VERSION = "0.1.0"
 _API_KEY_ENV_VAR = "AIOS_SECRET_LLM_ANTHROPIC_API_KEY"
 _CONFIG_PATH = REPO_ROOT / "config" / "llm.yaml"
 _API_KEY_SECRET_REFERENCE = "secret://env/llm/anthropic-api-key"  # noqa: S105 — a reference URI, not a credential
+
+
+async def _real_gate_results(
+    engine: AsyncEngine, *, workflow_id: str, step_id: str
+) -> list[Row[Any]]:
+    """Reads back real, persisted ``evaluation.gate_results`` rows for
+    one gate step, ordered by insertion — the general-step-retry step's
+    own real proof that `WorkflowInstanceService`'s injected
+    `SqlGateResultRecorder` (`build_pipeline_trigger`'s own composition)
+    genuinely wrote them, not a re-derivation of what the pipeline
+    itself already asserts via `workflow_steps`."""
+    async with engine.connect() as connection:
+        result = await connection.execute(
+            sa.select(gate_results)
+            .where(gate_results.c.workflow_id == workflow_id, gate_results.c.step_id == step_id)
+            .order_by(gate_results.c.result_id)
+        )
+        return list(result.all())
 
 
 async def _build_real_llm_gateway_and_prompt_engine(
@@ -524,6 +546,27 @@ async def test_all_six_agent_steps_and_both_gates_genuinely_chain_through_real_p
         assert lint_gate_outputs is not None
         assert lint_gate_outputs["passed"] is True
 
+        # The real proof this feature step exists for: both real,
+        # passing gates each genuinely wrote their own
+        # evaluation.gate_results row — the Evaluation Engine's first
+        # real consumer, not merely a workflow_steps-level record.
+        for gate_step_id in ("quality-gate-lint-clean", "quality-gate-tests-pass"):
+            rows = await _real_gate_results(
+                engine, workflow_id=result.last_instance.workflow_id, step_id=gate_step_id
+            )
+            assert len(rows) == 1
+            row = rows[0]
+            assert row.gate_id == gate_step_id
+            # se.delivery_pipeline's own real, current definition version —
+            # read from the instance itself, never hardcoded, so this
+            # assertion survives the next version bump unchanged.
+            assert row.gate_version == result.last_instance.definition_version
+            assert row.status == "completed"
+            assert row.severity == "blocking"
+            assert row.metrics == {"attempt": 1}
+            assert row.messages == []
+            assert row.duration_ms == 0  # honest: started_at == completed_at at this write path
+
         doc_file = tmp_path / "solution.py.md"
         assert doc_file.is_file()
         doc_text = doc_file.read_text(encoding="utf-8")
@@ -617,6 +660,30 @@ async def test_a_genuinely_failing_test_run_halts_the_pipeline_before_documentat
         for gate_row in gate_rows:
             assert gate_row.status == "failed"
             assert gate_row.error is not None
+
+        # The other real proof this feature step exists for: every one
+        # of those same real, failed attempts also genuinely wrote its
+        # own evaluation.gate_results row — reading it back and tying it
+        # directly to the identical, already-asserted workflow_steps
+        # error, not a second, independent guess at what happened.
+        gate_result_rows = await _real_gate_results(
+            engine,
+            workflow_id=result.last_instance.workflow_id,
+            step_id="quality-gate-tests-pass",
+        )
+        assert len(gate_result_rows) == len(gate_rows)
+        for gate_row, result_row in zip(
+            sorted(gate_rows, key=lambda s: s.attempt),
+            sorted(gate_result_rows, key=lambda r: r.metrics["attempt"]),
+            strict=True,
+        ):
+            assert result_row.gate_id == "quality-gate-tests-pass"
+            assert result_row.gate_version == result.last_instance.definition_version
+            assert result_row.status == "failed"
+            assert result_row.severity == "blocking"
+            assert result_row.metrics == {"attempt": gate_row.attempt}
+            assert gate_row.error is not None
+            assert result_row.messages == [gate_row.error["message"]]
 
         # The real proof this step blocks progression, not merely
         # records the failure after the fact: Documentation never runs.

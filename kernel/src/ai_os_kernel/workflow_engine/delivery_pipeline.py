@@ -187,6 +187,7 @@ from ai_os_kernel.context_manager.resolvers import (
 from ai_os_kernel.sandbox.default_executor import default_python_command
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner, WorkflowRunResult
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
+from ai_os_kernel.workflow_engine.gate_result_recorder import SqlGateResultRecorder
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
 from ai_os_kernel.workflow_engine.loader import WorkflowDefinitionLoader
 from ai_os_kernel.workflow_engine.models import WorkflowDefinition
@@ -444,6 +445,7 @@ def build_pipeline_trigger(
             quality_gate_executor=QualityGateStepExecutor(repository, gate_sources=_GATE_SOURCES),
         ),
         definition_catalog=SqlWorkflowDefinitionCatalog(engine),
+        gate_result_recorder=SqlGateResultRecorder(engine),
     )
     advance_runner = WorkflowAdvanceRunner(
         instance_service=instance_service,

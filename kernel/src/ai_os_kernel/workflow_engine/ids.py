@@ -21,3 +21,7 @@ def new_lease_id() -> str:
 
 def new_step_id() -> str:
     return f"stp_{ULID()}"
+
+
+def new_gate_result_id() -> str:
+    return f"gr_{ULID()}"

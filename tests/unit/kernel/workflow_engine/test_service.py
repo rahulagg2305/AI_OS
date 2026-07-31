@@ -16,7 +16,7 @@ from ai_os_kernel.workflow_engine.errors import (
 )
 from ai_os_kernel.workflow_engine.event_record import WorkflowEventRecord
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance, WorkflowInstanceStatus
-from ai_os_kernel.workflow_engine.models import WorkflowDefinition, WorkflowStep
+from ai_os_kernel.workflow_engine.models import StepType, WorkflowDefinition, WorkflowStep
 from ai_os_kernel.workflow_engine.repository import WorkflowListCursor
 from ai_os_kernel.workflow_engine.service import WorkflowInstanceService
 from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
@@ -44,6 +44,53 @@ _DEFINITION_RAW: dict[str, Any] = {
 }
 
 _DEFINITION = WorkflowDefinition.model_validate(_DEFINITION_RAW)
+
+_GATE_DEFINITION = WorkflowDefinition.model_validate(
+    {
+        "id": "se.gated_pipeline",
+        "name": "Gated Pipeline",
+        "description": "One agent step, then one real, blocking quality gate.",
+        "version": "1.2.0",
+        "inputs": {"type": "object"},
+        "outputs": {"type": "object"},
+        "steps": [
+            {"id": "build", "type": "agent", "agentId": "se.software_engineering/build"},
+            {"id": "gate", "type": "quality_gate"},
+        ],
+        "failureHandling": {"onError": "halt"},
+    }
+)
+
+
+def _step_record(
+    *,
+    step_name: str,
+    status: str,
+    attempt: int,
+    outputs: dict[str, Any] | None,
+    error: dict[str, Any] | None,
+) -> WorkflowStepRecord:
+    now = datetime.now(UTC)
+    return WorkflowStepRecord(
+        step_id=f"stp_fake_{attempt}",
+        workflow_id="wf_fake",
+        step_name=step_name,
+        step_type=StepType.QUALITY_GATE,
+        status=status,
+        attempt=attempt,
+        agent_id=None,
+        tool_id=None,
+        prompt_id=None,
+        prompt_version=None,
+        model_alias=None,
+        inputs={},
+        outputs=outputs,
+        error=error,
+        idempotency_key=f"wf_fake:{step_name}:{attempt}",
+        usage={},
+        started_at=now,
+        completed_at=now,
+    )
 
 
 def _instance(
@@ -81,13 +128,18 @@ class _FakeRepository:
     just enough state (an in-memory instance) for `advance()` tests to
     read a realistic `current_step_id` back via `get_instance`."""
 
-    def __init__(self, instance: WorkflowInstance | None = None) -> None:
+    def __init__(
+        self,
+        instance: WorkflowInstance | None = None,
+        steps: list[WorkflowStepRecord] | None = None,
+    ) -> None:
         self.create_calls: list[dict[str, Any]] = []
         self.transition_calls: list[dict[str, Any]] = []
         self.advance_calls: list[dict[str, Any]] = []
         self.reset_calls: list[dict[str, Any]] = []
         self.record_failed_attempt_calls: list[dict[str, Any]] = []
         self._instance = instance
+        self._steps = steps or []
 
     async def create(
         self,
@@ -222,7 +274,7 @@ class _FakeRepository:
         )
 
     async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]:
-        raise NotImplementedError("not exercised by these tests")
+        return self._steps
 
     async def list_events(self, workflow_id: str) -> list[WorkflowEventRecord]:
         raise NotImplementedError("not exercised by these tests")
@@ -270,16 +322,34 @@ class _FakeDefinitionCatalog:
             raise self._error
 
 
+class _FakeGateResultRecorder:
+    """Records every call made to it; never touches a database."""
+
+    def __init__(self) -> None:
+        self.record_calls: list[dict[str, Any]] = []
+
+    async def record(
+        self, *, workflow_id: str, gate_version: str, step: WorkflowStepRecord
+    ) -> None:
+        self.record_calls.append(
+            {"workflow_id": workflow_id, "gate_version": gate_version, "step": step}
+        )
+
+
 def _service(
     instance: WorkflowInstance | None = None,
     step_executor: _FakeStepExecutor | None = None,
     definition_catalog: _FakeDefinitionCatalog | None = None,
+    steps: list[WorkflowStepRecord] | None = None,
+    gate_result_recorder: _FakeGateResultRecorder | None = None,
 ) -> tuple[WorkflowInstanceService, _FakeRepository, _FakeStepExecutor, _FakeDefinitionCatalog]:
-    repository = _FakeRepository(instance)
+    repository = _FakeRepository(instance, steps)
     step_executor = step_executor or _FakeStepExecutor()
     definition_catalog = definition_catalog or _FakeDefinitionCatalog()
     return (
-        WorkflowInstanceService(repository, step_executor, definition_catalog),
+        WorkflowInstanceService(
+            repository, step_executor, definition_catalog, gate_result_recorder
+        ),
         repository,
         step_executor,
         definition_catalog,
@@ -521,6 +591,131 @@ async def test_advance_records_no_failed_attempt_when_the_executor_succeeds() ->
     await service.advance(workflow_id="wf_fake", definition=_DEFINITION)
 
     assert repository.record_failed_attempt_calls == []
+
+
+@pytest.mark.asyncio
+async def test_advance_records_a_gate_result_when_a_quality_gate_step_passes() -> None:
+    """The real proof this feature step exists for: a passing
+    `quality_gate` step's own real, just-written `WorkflowStepRecord`
+    is read back and handed to the injected `GateResultRecorder` —
+    `gate_version` sourced from the real `definition.version`, never
+    invented."""
+    current = _instance(
+        workflow_id="wf_fake",
+        status=WorkflowInstanceStatus.RUNNING,
+        inputs={},
+        last_event_seq=2,
+        current_step_id="build",
+    )
+    passing_output = {"gateId": "gate", "sourceStepId": "build", "passed": True}
+    recorder = _FakeGateResultRecorder()
+    service, repository, _, _ = _service(
+        instance=current,
+        step_executor=_FakeStepExecutor(),
+        steps=[
+            _step_record(
+                step_name="gate", status="completed", attempt=1, outputs=passing_output, error=None
+            )
+        ],
+        gate_result_recorder=recorder,
+    )
+    # `_FakeStepExecutor()` (no error) always returns `{}` — close enough
+    # for this test's own purpose, since `_maybe_record_gate_result`
+    # reads the just-written row back from `list_steps`, not from the
+    # executor's own return value directly.
+
+    await service.advance(workflow_id="wf_fake", definition=_GATE_DEFINITION)
+
+    assert len(recorder.record_calls) == 1
+    call = recorder.record_calls[0]
+    assert call["workflow_id"] == "wf_fake"
+    assert call["gate_version"] == "1.2.0"  # _GATE_DEFINITION.version, not invented
+    assert call["step"].step_name == "gate"
+    assert call["step"].status == "completed"
+    assert call["step"].outputs == passing_output
+
+
+@pytest.mark.asyncio
+async def test_advance_records_a_gate_result_when_a_quality_gate_step_fails() -> None:
+    """The other real proof: a failing `quality_gate` step's own real,
+    just-written, `status="failed"` row (with real `error` detail) is
+    also read back and recorded — not only the passing case — and the
+    original exception still propagates unchanged."""
+    current = _instance(
+        workflow_id="wf_fake",
+        status=WorkflowInstanceStatus.RUNNING,
+        inputs={},
+        last_event_seq=2,
+        current_step_id="build",
+    )
+    failure = QualityGateFailedError("gate failed", gate_step_id="gate")
+    real_error = {"type": "QualityGateFailedError", "message": "gate failed"}
+    recorder = _FakeGateResultRecorder()
+    service, repository, _, _ = _service(
+        instance=current,
+        step_executor=_FakeStepExecutor(error=failure),
+        steps=[
+            _step_record(
+                step_name="gate", status="failed", attempt=1, outputs=None, error=real_error
+            )
+        ],
+        gate_result_recorder=recorder,
+    )
+
+    with pytest.raises(QualityGateFailedError):
+        await service.advance(workflow_id="wf_fake", definition=_GATE_DEFINITION)
+
+    assert len(recorder.record_calls) == 1
+    call = recorder.record_calls[0]
+    assert call["gate_version"] == "1.2.0"
+    assert call["step"].step_name == "gate"
+    assert call["step"].status == "failed"
+    assert call["step"].error == real_error
+
+
+@pytest.mark.asyncio
+async def test_advance_does_not_record_a_gate_result_for_a_non_gate_step() -> None:
+    """A plain `agent` step never reaches the recorder, even when one is
+    injected — `list_steps` (which would raise for an unconfigured
+    workflow_id in the real repository) is never even called."""
+    current = _instance(
+        workflow_id="wf_fake", status=WorkflowInstanceStatus.RUNNING, inputs={}, last_event_seq=2
+    )
+    recorder = _FakeGateResultRecorder()
+    service, repository, _, _ = _service(instance=current, gate_result_recorder=recorder)
+
+    await service.advance(workflow_id="wf_fake", definition=_DEFINITION)
+
+    assert recorder.record_calls == []
+
+
+@pytest.mark.asyncio
+async def test_advance_does_not_record_an_unconfigured_gates_empty_result() -> None:
+    """`QualityGateStepExecutor`'s own documented no-op case (a
+    `quality_gate` step absent from its `gate_sources`) returns `{}` —
+    genuinely never evaluated, so no `evaluation.gate_results` row
+    should be written for it, even though the step itself completes
+    successfully."""
+    current = _instance(
+        workflow_id="wf_fake",
+        status=WorkflowInstanceStatus.RUNNING,
+        inputs={},
+        last_event_seq=2,
+        current_step_id="build",
+    )
+    recorder = _FakeGateResultRecorder()
+    service, repository, _, _ = _service(
+        instance=current,
+        step_executor=_FakeStepExecutor(),
+        steps=[
+            _step_record(step_name="gate", status="completed", attempt=1, outputs={}, error=None)
+        ],
+        gate_result_recorder=recorder,
+    )
+
+    await service.advance(workflow_id="wf_fake", definition=_GATE_DEFINITION)
+
+    assert recorder.record_calls == []
 
 
 @pytest.mark.asyncio

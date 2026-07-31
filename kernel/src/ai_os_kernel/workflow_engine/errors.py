@@ -195,3 +195,15 @@ class WorkflowLeaseUnavailableError(Exception):
     it is trying to release, or when a persistence failure occurs
     while reaping expired leases.
     """
+
+
+class GateResultRecordingError(Exception):
+    """An ``evaluation.gate_results`` row could not be recorded.
+
+    Wraps a persistence-layer failure (e.g. a constraint violation, a
+    missing ``workflow_id`` row for the real foreign key) with a clear
+    message; the underlying exception is chained via ``from`` — the
+    identical shape :class:`~ai_os_kernel.llm_gateway.errors.
+    LLMCallRecordingError` already established for its own, analogous
+    writer.
+    """

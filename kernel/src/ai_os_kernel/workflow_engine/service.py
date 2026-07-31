@@ -16,6 +16,7 @@ from typing import Any
 
 from ai_os_kernel.workflow_engine.definition_catalog import WorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.errors import WorkflowInvalidTransitionError
+from ai_os_kernel.workflow_engine.gate_result_recorder import GateResultRecorder
 from ai_os_kernel.workflow_engine.input_validation import (
     validate_inputs,
     validate_pack_id,
@@ -23,7 +24,7 @@ from ai_os_kernel.workflow_engine.input_validation import (
     validate_reason,
 )
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance
-from ai_os_kernel.workflow_engine.models import WorkflowDefinition, WorkflowStep
+from ai_os_kernel.workflow_engine.models import StepType, WorkflowDefinition, WorkflowStep
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.step_executor import StepExecutor
 
@@ -41,10 +42,12 @@ class WorkflowInstanceService:
         repository: WorkflowInstanceRepository,
         step_executor: StepExecutor,
         definition_catalog: WorkflowDefinitionCatalog,
+        gate_result_recorder: GateResultRecorder | None = None,
     ) -> None:
         self._repository = repository
         self._step_executor = step_executor
         self._definition_catalog = definition_catalog
+        self._gate_result_recorder = gate_result_recorder
 
     async def create_instance(
         self,
@@ -211,15 +214,59 @@ class WorkflowInstanceService:
                     step=next_step,
                     error={"type": type(exc).__name__, "message": str(exc)},
                 )
+                await self._maybe_record_gate_result(
+                    workflow_id=workflow_id, definition=definition, step=next_step
+                )
                 raise
 
-        return await self._repository.advance_workflow(
+        result = await self._repository.advance_workflow(
             workflow_id=workflow_id,
             definition_id=definition.id,
             definition_version=definition.version,
             expected_current_step_id=instance.current_step_id,
             next_step=next_step,
             outputs=outputs,
+        )
+        if next_step is not None:
+            await self._maybe_record_gate_result(
+                workflow_id=workflow_id, definition=definition, step=next_step
+            )
+        return result
+
+    async def _maybe_record_gate_result(
+        self, *, workflow_id: str, definition: WorkflowDefinition, step: WorkflowStep
+    ) -> None:
+        """Reads back ``step``'s own just-written :class:`~ai_os_kernel.
+        workflow_engine.step_record.WorkflowStepRecord` (the highest
+        ``attempt`` for its ``step_name`` — guaranteed to be the row
+        :meth:`advance_workflow`/``record_failed_attempt`` just
+        committed, since attempts only ever increase) and, when it is a
+        genuinely-evaluated ``quality_gate`` step, hands it to the
+        injected :class:`~ai_os_kernel.workflow_engine.
+        gate_result_recorder.GateResultRecorder` — see that module's own
+        docstring for the full placement reasoning and column mapping.
+        A no-op when no recorder was injected (every existing caller),
+        when ``step`` is not a ``quality_gate`` step, or when it is one
+        whose own id has no configured source (``QualityGateStepExecutor``'s
+        documented no-op case: an empty ``outputs`` on an attempt that
+        did *not* fail is the real, structural "never genuinely
+        evaluated" signal — a genuine failure always carries real
+        ``error`` detail instead, so this never mistakes a failed gate
+        for an unconfigured one).
+        """
+        if step.type is not StepType.QUALITY_GATE or self._gate_result_recorder is None:
+            return
+
+        steps = await self._repository.list_steps(workflow_id)
+        matching = [s for s in steps if s.step_name == step.id]
+        if not matching:
+            return
+        step_record = max(matching, key=lambda s: s.attempt)
+        if step_record.error is None and not step_record.outputs:
+            return
+
+        await self._gate_result_recorder.record(
+            workflow_id=workflow_id, gate_version=definition.version, step=step_record
         )
 
     @staticmethod
