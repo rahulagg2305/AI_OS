@@ -10,12 +10,12 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 42%** (91 of 219 Task-equivalents complete)
+**Overall: 42%** (92 of 219 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
 | P01 (A) | S01 Process, Packaging and Persistence Baseline | 4 | 3 | 0 | 1 | 75% |
-| P01 (A) | S02 Configuration and Secrets | 14 | 3 | 1 | 10 | 25% |
+| P01 (A) | S02 Configuration and Secrets | 14 | 4 | 1 | 9 | 32% |
 | P01 (A) | S03 Manifest Discovery and Schema | 6 | 3 | 0 | 3 | 50% |
 | P01 (A) | S04 Health and Lifecycle | 6 | 5 | 0 | 1 | 83% |
 | P01 (A) | S05 Observability and Audit | 6 | 2 | 0 | 4 | 33% |
@@ -55,7 +55,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
-| P01 (Stage A) - Platform Skeleton | 46 | 22 | 49% |
+| P01 (Stage A) - Platform Skeleton | 46 | 23 | 51% |
 | P02 (Stage B) - Minimum Viable Kernel | 93 | 50 | 54% |
 | P03 (Stage C) - First Real Capability Pack | 27 | 15 | 56% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
@@ -66,7 +66,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-124 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+123 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P01-S01-M40-T04` Runtime container image
 - `P01-S02-M01-T03` Pack-defaults precedence layer
@@ -75,7 +75,6 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P01-S02-M01-T06` Secrets layer integration
 - `P01-S02-M01-T07` Feature flags
 - `P01-S02-M01-T08` Configuration change-audit trail
-- `P01-S02-M19-T03` file secret backend
 - `P01-S02-M19-T04` Access broker
 - `P01-S02-M19-T05` TTL cache and rotation
 - `P01-S02-M19-T06` Prompt-assembly secret leak scan
@@ -93,4 +92,5 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S01-M05-T09` decision step type
 - `P02-S01-M05-T10` parallel step type
 - `P02-S01-M05-T11` sub_workflow step type
-- ... and 99 more
+- `P02-S01-M05-T12` Multi-instance worker loop
+- ... and 98 more
