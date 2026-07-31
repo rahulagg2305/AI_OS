@@ -19,6 +19,11 @@ detects a row modified after it was written. **The scheduled job that
 runs verification on an interval and alerts** (added 2026-07-31,
 ``P01-S05-M04-T06``) lives in
 :mod:`ai_os_kernel.observability.audit_verification_job`.
+:func:`~ai_os_kernel.observability.audit.canonical_json_sha256` is the
+shared hashing primitive underneath ``row_hash``; the ``config_changes``
+writer (:mod:`ai_os_kernel.configuration_manager.audit`,
+``P01-S02-M01-T08``) reuses it directly for per-value digests rather
+than reimplementing hashing for a second table.
 
 See docs/03_architecture/kernel/observability.md, ADR-0017.
 """
@@ -29,6 +34,7 @@ from ai_os_kernel.observability.audit import (
     AuditOutcome,
     ChainVerificationResult,
     SqlAuditLogWriter,
+    canonical_json_sha256,
     verify_chain,
 )
 from ai_os_kernel.observability.audit_verification_job import (
@@ -57,6 +63,7 @@ __all__ = [
     "SqlAuditLogWriter",
     "TraceContext",
     "TraceIdMiddleware",
+    "canonical_json_sha256",
     "configure_logging",
     "configure_metrics",
     "configure_tracing",

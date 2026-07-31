@@ -115,6 +115,20 @@ class ChainVerificationResult(BaseModel):
     reason: str | None = None
 
 
+def canonical_json_sha256(payload: Any) -> str:
+    """SHA-256 hex digest of ``payload`` serialised as canonical JSON
+    (sorted keys, no incidental whitespace) — the one hashing primitive
+    every tamper-evident writer in this codebase uses, so a second
+    table never reimplements it independently.
+    :func:`compute_row_hash` is a thin wrapper over this for
+    ``audit_log``'s own row shape; :mod:`ai_os_kernel.configuration_manager.
+    audit` reuses this same function directly for ``config_changes``'
+    per-value digests (``P01-S02-M01-T08``).
+    """
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def compute_row_hash(
     *,
     audit_id: str,
@@ -154,8 +168,7 @@ def compute_row_hash(
         "occurred_at": occurred_at.astimezone(UTC).isoformat(),
         "prev_hash": prev_hash,
     }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return canonical_json_sha256(payload)
 
 
 def verify_chain(records: Sequence[AuditLogRecord]) -> ChainVerificationResult:

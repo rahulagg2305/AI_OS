@@ -8,3 +8,12 @@ class ConfigurationError(Exception):
     misconfigured deployment fails clearly rather than starting with a
     silently wrong value.
     """
+
+
+class ConfigChangeAuditError(Exception):
+    """A ``governance.config_changes`` row could not be written.
+
+    Wraps a persistence-layer failure with a clear message; the
+    underlying exception is chained via ``from`` — the same shape as
+    :class:`~ai_os_kernel.observability.errors.AuditLogError`.
+    """
