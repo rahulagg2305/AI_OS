@@ -285,6 +285,32 @@ class DockerSandbox:
                 f"working_directory {working_directory!r} does not exist or is not a directory"
             )
 
+        # A real bug, found from real, authenticated CI logs (R-003):
+        # this bind mount is written to by the container's own process,
+        # which runs as `self._user` — `65534:65534` (nobody:nogroup) by
+        # default, deliberately never root (ADR-0016). `working_directory`
+        # itself, though, is created host-side by whatever caller is
+        # about to invoke this method, and owned by *that* host account —
+        # a real, unprivileged Linux user account has no relationship to
+        # UID 65534 inside the container, so the kernel's own permission
+        # check on the bind mount genuinely refuses the container's write
+        # ("Permission denied"), independent of anything Docker itself
+        # does. This surfaced only on the real GitHub Actions Ubuntu
+        # runner, never in local development on Windows: Docker
+        # Desktop's own bind-mount translation layer does not enforce
+        # host-side POSIX permission bits the way a real Linux Docker
+        # daemon does, so the identical test silently passed here while
+        # genuinely failing there. Making the directory the container is
+        # about to use world-writable is narrow and safe: it affects only
+        # this one, per-invocation, already-bind-mounted directory — no
+        # other host path is touched, and every other isolation control
+        # (`network_mode="none"`, `cap_drop=["ALL"]`,
+        # `no-new-privileges`, the non-root user itself) is unchanged.
+        # `0o777` rather than a group-only bit because the container's
+        # UID is fixed and arbitrary — it is never the host's own group,
+        # so a `chmod` scoped to "group" would not actually help.
+        await asyncio.to_thread(working_directory.chmod, 0o777)
+
         client = await self._ensure_client()
         container_env = _minimal_container_env(env)
         start = time.monotonic()
