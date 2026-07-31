@@ -115,6 +115,22 @@ jobs:
       - name: Import boundary check
         if: hashFiles('scripts/check_import_boundaries.py') != ''
         run: uv run python scripts/check_import_boundaries.py
+      # Phase R2: the roadmap rollups are generated from the Task tickets.
+      # A hand edit to a generated file, or a ticket change that was not
+      # regenerated, fails the build here — this is what makes the R1
+      # append-only-paragraph pathology structurally impossible rather
+      # than merely discouraged.
+      - name: Roadmap generated docs are current
+        if: hashFiles('scripts/roadmap/generate.py') != ''
+        run: uv run python -m scripts.roadmap.generate --check
+      # The ticket structural invariants themselves (line/size caps,
+      # unique ids, resolvable dependencies, evidence required for
+      # done/partial). Without this the guards exist but nothing in CI
+      # runs them — the `unit` and `integration` jobs name explicit
+      # paths and never picked up `tests/roadmap`.
+      - name: Roadmap ticket invariants
+        if: hashFiles('tests/roadmap/**') != ''
+        run: uv run pytest tests/roadmap -q
 
   integration:
     name: Integration tests

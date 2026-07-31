@@ -2,11 +2,20 @@
 
 Auto-read every session. Keep this short — detail lives in the linked files, not here.
 
-## Core process rule
+## Core process rule (replaced 2026-07-31, Phase R2)
 
-**Read `docs/19_roadmap/implementation_status.md` first, every session, before anything else.** It is short by design and links to `docs/19_roadmap/history/INDEX.md` for full chronological detail. Read any other document only when the current task specifically needs it — see `docs/process/files_to_read_first.md` for what to reach for and when. Do not rely on prior chat history; if something matters, it must be written down somewhere in this tree.
+**Read ONLY your own Task ticket and its direct dependencies' tickets. Nothing else.**
 
-**Update `docs/19_roadmap/feature_inventory.md`'s completion table and overall percentage at the end of every step**, alongside `implementation_status.md` — it is the living, granular tracker for every feature/module/phase (44 modules as of 2026-07-28); `implementation_status.md` stays short and links to it.
+- Your ticket: `docs/19_roadmap/tickets/P{nn}/P{nn}-S{nn}-M{nn}-T{nn}.md` (~10 lines, capped at 24).
+- Then one file per id in its `depends_on`. Then the source files its Input/Output actually name. **That is the whole reading list.**
+- **Do not read** `docs/19_roadmap/STATUS.md` or `MODULE_BOARD.md` (generated rollups — product-owner navigation, not step input), `docs/19_roadmap/history/**`, or other modules' tickets.
+- **Exceptions, only these two:** a step whose approved scope *is* a roadmap/planning/audit step; or a genuine cross-cutting conflict the ticket cannot resolve — then **stop and report**, don't read around it.
+
+**Why:** the old rule ("read `implementation_status.md` first, every session") cost ~64,600 tokens before any work began, 44% of it one hand-typed 67,634-character paragraph that grew every step. Full measurements: `docs/process/standing_rules.md` Rule 1.
+
+**Update your ticket's `status:` field in the same step as the code change.** Never hand-edit a generated file — `STATUS.md`/`MODULE_BOARD.md` come from `python -m scripts.roadmap.generate`, `docs/07_api/openapi.json` from `python -m scripts.export_openapi`. A real test fails the build if one is stale or edited.
+
+Do not rely on prior chat history; if something matters, it must be written down in this tree.
 
 ## Approval workflow
 

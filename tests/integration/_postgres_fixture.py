@@ -41,7 +41,17 @@ def postgres_container() -> Iterator[PostgresContainer]:
     try:
         container = PostgresContainer(_IMAGE, driver=_DRIVER)
         container.start()
-    except docker.errors.DockerException as exc:
+    except (docker.errors.DockerException, OSError) as exc:
+        # `OSError` as well as `DockerException` (widened 2026-07-31,
+        # Phase R2 — the inconsistency the Phase R1 audit found between
+        # this guard and `test_docker_sandbox_live.py`'s own, which
+        # already caught both). A failure to *establish* the connection
+        # — refused, unreachable, DNS failure; `TimeoutError` is itself
+        # an `OSError` subclass — surfaces as the driver's own raw
+        # exception rather than a wrapped `DockerException`, so the
+        # narrower catch could let a genuinely-absent daemon error the
+        # suite instead of skipping it. Same root cause as the
+        # `registry.py` widening of the same date.
         pytest.skip(
             "Docker daemon is not reachable — this test's own PostgresContainer "
             f"fixture is opt-in (ADR-0015): {exc}"

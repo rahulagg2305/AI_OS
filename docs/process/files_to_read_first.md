@@ -1,17 +1,22 @@
 # Files to Read First – AI_OS
 
-**Status:** Active | **Last Updated:** 2026-07-28
+**Status:** Active | **Last Updated:** 2026-07-31 (Phase R2 — §1 replaced)
 
 For any new session (human or AI) picking up work on this repository. Read in this order; stop once you have what the current task needs — do not read the whole documentation tree "to be safe."
 
 ---
 
-## 1. Always read first, every session
+## 1. A normal development step: read your ticket, and nothing else
 
-1. `docs/19_roadmap/implementation_status.md` — the living record of what is *actually built*, right now. This is the single most important document in the repository for continuing work correctly. It is short by design (2026-07-28 restructuring) and links to `docs/19_roadmap/history/INDEX.md` for the full, detailed, chronological build history if you need it.
-2. `docs/DOCUMENTATION_INDEX.md` — the master index. Use it to find the authoritative document for whatever the current task touches.
+1. **Your own Task ticket** — `docs/19_roadmap/tickets/P{nn}/P{nn}-S{nn}-M{nn}-T{nn}.md` (~10 lines).
+2. **One file per id in its `depends_on`.**
+3. **The specific source files its Input/Output name.**
 
-That's it for "always." Everything below is "read only if the task needs it."
+**That is the entire reading list.** Do **not** read `docs/19_roadmap/STATUS.md` or `MODULE_BOARD.md` (generated rollups — product-owner navigation, not step input), and do not read `docs/19_roadmap/history/**`.
+
+**Superseded 2026-07-31:** this section previously said to always read `implementation_status.md` first, every session. Phase R1 measured that at ~37,900 tokens — 44% of it a single hand-typed 67,634-character paragraph that grew every step. Both that file and `feature_inventory.md` are retired as trackers, replaced by the generated `STATUS.md`/`MODULE_BOARD.md`. Full rationale: `standing_rules.md` Rule 1.
+
+**Two exceptions only:** a step whose approved scope *is* a roadmap/planning/audit step (read `STATUS.md` freely), or a genuine cross-cutting conflict your ticket cannot resolve — in which case **stop and report**, don't read around it.
 
 ---
 
@@ -26,9 +31,14 @@ That's it for "always." Everything below is "read only if the task needs it."
 ## 3. Read only if you need process/convention context
 
 - `docs/process/coding_standards.md` — the load-bearing subset of `docs/21_templates/CODING_STANDARDS_AND_BEST_PRACTICES.md`, which remains the full authority.
-- `docs/process/standing_rules.md` — approval workflow, scope discipline, commit discipline.
+- `docs/process/standing_rules.md` — **Rule 1 (what a step may read)**, approval workflow, scope discipline, commit discipline.
+- `docs/process/ticket_templates.md` — the Task ticket template, Definition of Ready, Definition of Done.
 - `docs/process/reporting_format.md` — the report shape expected at the end of an implementation step.
 - `docs/process/folder_structure.md` — what actually exists on disk vs. what is only planned.
+- `docs/process/interface_stability.md` — before changing anything another module or pack depends on.
+- `docs/process/api_contract_boundary.md` — if the task touches the HTTP surface, or is a Dashboard/CLI task.
+- `docs/process/acceptance_checkpoints.md` — what Stage-level "done" must demonstrate.
+- `docs/19_roadmap/risk_register.md` — open risks, including the **hard deploy/approval rule (R-001)**.
 
 ## 4. Never rely on prior chat history
 

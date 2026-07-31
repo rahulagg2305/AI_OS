@@ -1,0 +1,189 @@
+"""Parsing, validation, and invariants for Phase R2 Task tickets.
+
+One ticket = one Task = one file under ``docs/19_roadmap/tickets/``.
+Tickets are the **only** hand-authored source of roadmap truth; every
+rollup view is generated from them by :mod:`scripts.roadmap.generate`.
+
+**The structural guard this module exists to enforce.** Phase R1 measured
+the real pathology in the files this replaces: ``implementation_status.md``
+carried a single hand-typed ``**Last Updated:**`` paragraph of 67,634
+characters (~16,900 tokens, 44% of the whole file) that grew by one
+append every step, and ``feature_inventory.md`` had the same shape in
+three table cells (19,546 / 12,892 / 12,396 chars). Both were read every
+session. Prose limits alone would not have prevented that — a habit is
+not a mechanism — so the limits below are enforced by
+:func:`validate_ticket` and asserted by a real test, which fails CI the
+moment any ticket exceeds them. An append-only paragraph cannot reach
+17k characters without tripping :data:`MAX_LINE_CHARS` on its very first
+overflow.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import yaml
+
+# A ticket is a fixed-size unit of meaning, not a growing log. These two
+# limits are what make the R1 pathology structurally impossible rather
+# than merely discouraged: no line may become a paragraph, and no ticket
+# may become a history.
+MAX_LINE_CHARS = 200
+MAX_TICKET_LINES = 24
+
+TICKET_ID_RE = re.compile(r"^P(\d{2})-S(\d{2})-M(\d{2})-T(\d{2})$")
+VALID_STATUSES = ("done", "partial", "todo", "blocked")
+
+# Module 35 (Analytics Pack) was investigated and removed 2026-07-28.
+# Its number is permanently retired: never reused, never re-issued.
+RETIRED_MODULES = frozenset({35})
+
+
+class TicketError(ValueError):
+    """A ticket file is malformed, or violates a structural invariant."""
+
+
+@dataclass(frozen=True)
+class Ticket:
+    """One parsed Task ticket."""
+
+    id: str
+    title: str
+    status: str
+    phase: int
+    stage: int
+    module: int
+    task: int
+    depends_on: tuple[str, ...] = ()
+    evidence: tuple[str, ...] = ()
+    goal: str = ""
+    body: str = ""
+    path: Path | None = None
+
+    @property
+    def is_done(self) -> bool:
+        return self.status == "done"
+
+
+@dataclass
+class Stage:
+    """A named work-slice inside a Phase — the level R1 identified as
+    genuinely missing (what the ``Platform SDK v1.0.0`` initiative was,
+    with no place to record it)."""
+
+    phase: int
+    stage: int
+    title: str
+    tickets: list[Ticket] = field(default_factory=list)
+
+    @property
+    def id(self) -> str:
+        return f"P{self.phase:02d}-S{self.stage:02d}"
+
+
+def parse_ticket(path: Path) -> Ticket:
+    """Parse one ticket file, enforcing every structural invariant."""
+    raw = path.read_text(encoding="utf-8")
+    lines = raw.splitlines()
+
+    if len(lines) > MAX_TICKET_LINES:
+        raise TicketError(
+            f"{path.name}: {len(lines)} lines exceeds MAX_TICKET_LINES="
+            f"{MAX_TICKET_LINES}. A ticket is a fixed-size unit of work, not a "
+            "running log — split it into another Task instead of appending."
+        )
+    for n, line in enumerate(lines, 1):
+        if len(line) > MAX_LINE_CHARS:
+            raise TicketError(
+                f"{path.name}:{n}: line is {len(line)} chars, over "
+                f"MAX_LINE_CHARS={MAX_LINE_CHARS}. This is the exact "
+                "append-only-paragraph pathology Phase R1 measured; write a "
+                "new Task rather than growing this line."
+            )
+
+    if not raw.startswith("---\n"):
+        raise TicketError(f"{path.name}: must open with a YAML frontmatter block")
+    try:
+        _, fm_text, body = raw.split("---\n", 2)
+    except ValueError as exc:
+        raise TicketError(f"{path.name}: unterminated frontmatter") from exc
+
+    meta = yaml.safe_load(fm_text) or {}
+    for required in ("id", "title", "status"):
+        if required not in meta:
+            raise TicketError(f"{path.name}: frontmatter missing required key '{required}'")
+
+    ticket_id = str(meta["id"])
+    m = TICKET_ID_RE.match(ticket_id)
+    if not m:
+        raise TicketError(f"{path.name}: id '{ticket_id}' does not match P00-S00-M00-T00")
+    if path.stem != ticket_id:
+        raise TicketError(f"{path.name}: filename must equal id '{ticket_id}'")
+
+    status = str(meta["status"])
+    if status not in VALID_STATUSES:
+        raise TicketError(f"{ticket_id}: status '{status}' not in {VALID_STATUSES}")
+
+    phase, stage, module, task = (int(g) for g in m.groups())
+    if module in RETIRED_MODULES:
+        raise TicketError(f"{ticket_id}: module M{module:02d} is permanently retired")
+
+    def _tuple(key: str) -> tuple[str, ...]:
+        value = meta.get(key) or []
+        if isinstance(value, str):
+            value = [value]
+        return tuple(str(v) for v in value)
+
+    goal = ""
+    for line in body.splitlines():
+        if line.startswith("**Goal:**"):
+            goal = line.removeprefix("**Goal:**").strip()
+            break
+
+    return Ticket(
+        id=ticket_id,
+        title=str(meta["title"]),
+        status=status,
+        phase=phase,
+        stage=stage,
+        module=module,
+        task=task,
+        depends_on=_tuple("depends_on"),
+        evidence=_tuple("evidence"),
+        goal=goal,
+        body=body.strip(),
+        path=path,
+    )
+
+
+def load_all(tickets_root: Path) -> list[Ticket]:
+    """Parse every ticket, then check cross-ticket invariants."""
+    tickets = [parse_ticket(p) for p in sorted(tickets_root.rglob("P*-S*-M*-T*.md"))]
+
+    seen: dict[str, Path] = {}
+    for t in tickets:
+        if t.id in seen:
+            raise TicketError(f"duplicate ticket id {t.id}: {seen[t.id]} and {t.path}")
+        seen[t.id] = t.path  # type: ignore[assignment]
+
+    known = set(seen)
+    for t in tickets:
+        for dep in t.depends_on:
+            if dep not in known:
+                raise TicketError(f"{t.id}: depends_on unknown ticket '{dep}'")
+        if t.is_done:
+            unmet = [d for d in t.depends_on if not seen_status(tickets, d).is_done]
+            if unmet:
+                raise TicketError(
+                    f"{t.id} is done but depends on not-done ticket(s): {', '.join(unmet)}"
+                )
+    return tickets
+
+
+def seen_status(tickets: list[Ticket], ticket_id: str) -> Ticket:
+    for t in tickets:
+        if t.id == ticket_id:
+            return t
+    raise TicketError(f"unknown ticket {ticket_id}")

@@ -1,0 +1,1415 @@
+{
+  "components": {
+    "schemas": {
+      "ComponentStatus": {
+        "properties": {
+          "critical": {
+            "default": false,
+            "title": "Critical",
+            "type": "boolean"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "ComponentStatus",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "PackLifecycleActionRequest": {
+        "description": "Shared by activate/deactivate \u2014 just ``reason``. ``actor`` is\ndeliberately not a client-supplied field: it is the authenticated\nprincipal's own id, the same \"who did this comes from\nauthentication, not client-declared honesty\" convention\n``start_workflow`` already established.",
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "PackLifecycleActionRequest",
+        "type": "object"
+      },
+      "PackRecord": {
+        "description": "One ``catalog.packs`` row, as read back immediately after a\nregister/activate/deactivate call, or by a plain lookup.",
+        "properties": {
+          "activated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated At"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health"
+          },
+          "installed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed At"
+          },
+          "manifest": {
+            "additionalProperties": true,
+            "title": "Manifest",
+            "type": "object"
+          },
+          "min_kernel_version": {
+            "title": "Min Kernel Version",
+            "type": "string"
+          },
+          "pack_id": {
+            "title": "Pack Id",
+            "type": "string"
+          },
+          "sdk_version": {
+            "title": "Sdk Version",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PackState"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pack_id",
+          "version",
+          "state",
+          "manifest",
+          "sdk_version",
+          "min_kernel_version",
+          "installed_at",
+          "activated_at",
+          "health"
+        ],
+        "title": "PackRecord",
+        "type": "object"
+      },
+      "PackState": {
+        "description": "One state in the canonical Capability Pack lifecycle. Only\n``ACTIVATED`` is meaningful to\n:class:`~ai_os_kernel.workflow_engine.registry.SqlAgentRegistry`/\n:class:`~ai_os_kernel.workflow_engine.registry.SqlToolRegistry`\ntoday \u2014 the other seven exist here only so this enum is a complete,\nhonest mirror of the documented lifecycle, not a partial one\nreverse-engineered from this step's own narrow need.",
+        "enum": [
+          "discovered",
+          "validated",
+          "installed",
+          "configured",
+          "activated",
+          "deactivated",
+          "failed",
+          "uninstalled"
+        ],
+        "title": "PackState",
+        "type": "string"
+      },
+      "ReadinessReport": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/ComponentStatus"
+            },
+            "title": "Components",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "components"
+        ],
+        "title": "ReadinessReport",
+        "type": "object"
+      },
+      "RegisterPackRequest": {
+        "description": "Deliberately just the fields\n:meth:`~ai_os_kernel.capability_manager.repository.PackLifecycleRepository.register`\nalready takes \u2014 no discovery, no manifest schema validation (that\nremains the Manifest Loader's job at a different point in the\npipeline this step does not touch).",
+        "properties": {
+          "manifest": {
+            "additionalProperties": true,
+            "title": "Manifest",
+            "type": "object"
+          },
+          "min_kernel_version": {
+            "title": "Min Kernel Version",
+            "type": "string"
+          },
+          "pack_id": {
+            "title": "Pack Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "sdk_version": {
+            "title": "Sdk Version",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pack_id",
+          "version",
+          "sdk_version",
+          "min_kernel_version",
+          "reason"
+        ],
+        "title": "RegisterPackRequest",
+        "type": "object"
+      },
+      "StartWorkflowRequest": {
+        "description": "Deliberately just ``inputs`` \u2014 see module docstring for the\nfields the full documented contract has that this does not yet.",
+        "properties": {
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          }
+        },
+        "title": "StartWorkflowRequest",
+        "type": "object"
+      },
+      "StartWorkflowResponse": {
+        "description": "A reduced, JSON-safe projection of\n:class:`~ai_os_kernel.workflow_engine.advance_runner.WorkflowRunResult`\n\u2014 not that model itself, since its ``last_instance``/``error`` fields\ncarry internal shapes (a full ``WorkflowInstance``, a raw exception\nobject) that are not this endpoint's documented response and should\nnot cross the API boundary unfiltered.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "iterations": {
+            "title": "Iterations",
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/WorkflowRunOutcome"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow_id",
+          "outcome",
+          "iterations",
+          "error"
+        ],
+        "title": "StartWorkflowResponse",
+        "type": "object"
+      },
+      "StepType": {
+        "description": "The seven Supported Step Types (workflow_architecture.md).",
+        "enum": [
+          "agent",
+          "tool",
+          "decision",
+          "parallel",
+          "sub_workflow",
+          "quality_gate",
+          "human_approval"
+        ],
+        "title": "StepType",
+        "type": "string"
+      },
+      "TriggerDeliveryPipelineRequest": {
+        "description": "Mirrors ``capability_packs/software-engineering/workflows/delivery_pipeline.yaml``'s\nown declared ``inputs`` schema exactly\n(``ai_os_pack_software_engineering.workflows.models:PipelineInput``).",
+        "properties": {
+          "requirement": {
+            "description": "The raw software requirement or ask to design, build, test, and document \u2014 analyzed and refined by Requirements Analyst before Architecture ever sees it.",
+            "title": "Requirement",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement"
+        ],
+        "title": "TriggerDeliveryPipelineRequest",
+        "type": "object"
+      },
+      "TriggerDeliveryPipelineResponse": {
+        "description": "A reduced, JSON-safe projection of\n:class:`~ai_os_kernel.workflow_engine.advance_runner.WorkflowRunResult`\n\u2014 the identical shape :class:`~ai_os_kernel.routes.workflows.StartWorkflowResponse`\nalready establishes \u2014 extended with ``documentation_path``, this\npipeline's own real, known output field (``None`` unless the run\ngenuinely completed and a real documentation artifact path was\npersisted).",
+        "properties": {
+          "documentation_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documentation Path"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "iterations": {
+            "title": "Iterations",
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/WorkflowRunOutcome"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow_id",
+          "outcome",
+          "iterations",
+          "error",
+          "documentation_path"
+        ],
+        "title": "TriggerDeliveryPipelineResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkflowEventRecord": {
+        "description": "One ``workflow_events`` row.\n\n``event_type`` is a plain ``str``, not an enum: data_model.md \u00a74.2\nlists example values (``workflow.started``, ``step.started``, \u2026)\nending in an ellipsis \u2014 an explicitly open-ended, illustrative set,\nnot a closed list like ``step_type``'s seven values. Enumerating\none here would invent a closed vocabulary the doc deliberately\ndoes not declare, and the table itself has no ``CHECK`` constraint\non this column either.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Id"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "workflow_id",
+          "seq",
+          "event_type",
+          "schema_version",
+          "payload",
+          "trace_id",
+          "step_id",
+          "agent_id",
+          "occurred_at"
+        ],
+        "title": "WorkflowEventRecord",
+        "type": "object"
+      },
+      "WorkflowInstance": {
+        "description": "One ``workflow_instances`` row, as read back immediately after\ncreation.",
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Step Id"
+          },
+          "definition_id": {
+            "title": "Definition Id",
+            "type": "string"
+          },
+          "definition_version": {
+            "title": "Definition Version",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "experiment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experiment Id"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "last_event_seq": {
+            "title": "Last Event Seq",
+            "type": "integer"
+          },
+          "outputs": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outputs"
+          },
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "run_manifest_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Manifest Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkflowInstanceStatus"
+          },
+          "total_cost_usd": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Cost Usd",
+            "type": "string"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow_id",
+          "definition_id",
+          "definition_version",
+          "status",
+          "current_step_id",
+          "inputs",
+          "outputs",
+          "experiment_id",
+          "run_manifest_id",
+          "principal_id",
+          "last_event_seq",
+          "error",
+          "total_cost_usd",
+          "total_tokens",
+          "created_at",
+          "updated_at",
+          "completed_at"
+        ],
+        "title": "WorkflowInstance",
+        "type": "object"
+      },
+      "WorkflowInstanceStatus": {
+        "description": "The canonical nine-state list (workflow_engine.md \u00a77).",
+        "enum": [
+          "created",
+          "running",
+          "waiting_for_human",
+          "waiting_for_retry",
+          "quality_gate_failed",
+          "compensating",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "WorkflowInstanceStatus",
+        "type": "string"
+      },
+      "WorkflowListResponse": {
+        "description": "api_architecture.md \u00a79's documented collection envelope:\n``{\"items\": [...], \"next_cursor\": \"\u2026\" | null}``.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowInstance"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "WorkflowListResponse",
+        "type": "object"
+      },
+      "WorkflowRunOutcome": {
+        "description": "How a :meth:`WorkflowAdvanceRunner.run_to_completion` call ended.",
+        "enum": [
+          "completed",
+          "max_iterations_reached",
+          "failed"
+        ],
+        "title": "WorkflowRunOutcome",
+        "type": "string"
+      },
+      "WorkflowStepRecord": {
+        "description": "One ``workflow_steps`` row.\n\n``status`` is a plain ``str``, not an enum: unlike\n``workflow_instances.status``, data_model.md \u00a74.3 gives\n``workflow_steps.status`` no canonical value list, so typing it as\nan enum here would invent one. ``step_type`` *is* typed as\n:class:`StepType` \u2014 its seven values are already documented\n(workflow_architecture.md's Supported Step Types) and already\nenforced by the table's own ``CHECK`` constraint.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "model_alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Alias"
+          },
+          "outputs": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outputs"
+          },
+          "prompt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Id"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "step_id": {
+            "title": "Step Id",
+            "type": "string"
+          },
+          "step_name": {
+            "title": "Step Name",
+            "type": "string"
+          },
+          "step_type": {
+            "$ref": "#/components/schemas/StepType"
+          },
+          "tool_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Id"
+          },
+          "usage": {
+            "additionalProperties": true,
+            "title": "Usage",
+            "type": "object"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step_id",
+          "workflow_id",
+          "step_name",
+          "step_type",
+          "status",
+          "attempt",
+          "agent_id",
+          "tool_id",
+          "prompt_id",
+          "prompt_version",
+          "model_alias",
+          "inputs",
+          "outputs",
+          "error",
+          "idempotency_key",
+          "usage",
+          "started_at",
+          "completed_at"
+        ],
+        "title": "WorkflowStepRecord",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Transport layer for the AI_OS Platform Kernel. No business logic lives here \u2014 see docs/07_api/api_architecture.md.",
+    "title": "AI_OS Kernel API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/health/live": {
+      "get": {
+        "description": "Liveness probe. Must never depend on an external service \u2014 a brief\ndependency blip must not cause a container restart (Deployment\nArchitecture \u00a76).",
+        "operationId": "health_live_api_v1_health_live_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Live Api V1 Health Live Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Live",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/health/ready": {
+      "get": {
+        "description": "Readiness probe. Returns HTTP 200 for \"ready\"/\"degraded\" \u2014 a\nreduced-capability Kernel can still usefully serve some traffic \u2014\nand HTTP 503 for \"not_ready\": at least one critical component (the\ndatabase, today \u2014 see ``ai_os_kernel.health.service``'s own\ndocstring for why it is a real hard dependency, not an assumed one)\nhas failed, and every functional route in this codebase already\nindependently 503s without one anyway.",
+        "operationId": "health_ready_api_v1_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Ready",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/packs": {
+      "post": {
+        "operationId": "register_pack_api_v1_packs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterPackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Register Pack",
+        "tags": [
+          "packs"
+        ]
+      }
+    },
+    "/api/v1/packs/{pack_id}": {
+      "get": {
+        "operationId": "get_pack_api_v1_packs__pack_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pack_id",
+            "required": true,
+            "schema": {
+              "title": "Pack Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Pack",
+        "tags": [
+          "packs"
+        ]
+      }
+    },
+    "/api/v1/packs/{pack_id}/activate": {
+      "post": {
+        "operationId": "activate_pack_api_v1_packs__pack_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pack_id",
+            "required": true,
+            "schema": {
+              "title": "Pack Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackLifecycleActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Activate Pack",
+        "tags": [
+          "packs"
+        ]
+      }
+    },
+    "/api/v1/packs/{pack_id}/deactivate": {
+      "post": {
+        "operationId": "deactivate_pack_api_v1_packs__pack_id__deactivate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pack_id",
+            "required": true,
+            "schema": {
+              "title": "Pack Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackLifecycleActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Deactivate Pack",
+        "tags": [
+          "packs"
+        ]
+      }
+    },
+    "/api/v1/version": {
+      "get": {
+        "operationId": "get_version_api_v1_version_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Get Version Api V1 Version Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Version",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/workflows": {
+      "get": {
+        "operationId": "list_workflows_api_v1_workflows_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "exclusiveMinimum": 0,
+              "maximum": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Workflows",
+        "tags": [
+          "workflows"
+        ]
+      },
+      "post": {
+        "operationId": "start_workflow_api_v1_workflows_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartWorkflowResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Workflow",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/se.delivery_pipeline": {
+      "post": {
+        "operationId": "trigger_delivery_pipeline_api_v1_workflows_se_delivery_pipeline_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerDeliveryPipelineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerDeliveryPipelineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Trigger Delivery Pipeline",
+        "tags": [
+          "delivery-pipeline"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}": {
+      "get": {
+        "operationId": "get_workflow_api_v1_workflows__workflow_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowInstance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Workflow",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/events": {
+      "get": {
+        "operationId": "get_workflow_events_api_v1_workflows__workflow_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkflowEventRecord"
+                  },
+                  "title": "Response Get Workflow Events Api V1 Workflows  Workflow Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Workflow Events",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/steps": {
+      "get": {
+        "operationId": "get_workflow_steps_api_v1_workflows__workflow_id__steps_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkflowStepRecord"
+                  },
+                  "title": "Response Get Workflow Steps Api V1 Workflows  Workflow Id  Steps Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Workflow Steps",
+        "tags": [
+          "workflows"
+        ]
+      }
+    }
+  }
+}

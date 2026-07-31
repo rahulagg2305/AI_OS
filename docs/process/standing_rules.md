@@ -28,6 +28,40 @@ The process rules this project has actually operated under, distilled from how e
 
 ---
 
+## 🔒 Rule 1 — What a development step may read (Phase R2, 2026-07-31)
+
+**A normal development step reads ONLY its own Task ticket and its direct
+dependencies' tickets. It does not read the dashboard, and it does not
+read history.**
+
+- **Read:** `docs/19_roadmap/tickets/P{nn}/<your-ticket>.md`, plus one file
+  per id in that ticket's `depends_on`. Then the specific source files the
+  ticket's Input/Output name. That is the whole reading list.
+- **Do not read:** `docs/19_roadmap/STATUS.md` or `MODULE_BOARD.md` (both
+  generated rollups, for the product owner's navigation — not step input),
+  `docs/19_roadmap/history/**`, or any other module's tickets.
+- **Exceptions** (only these): a step whose *approved scope is itself* a
+  roadmap/planning/audit step; and a genuine cross-cutting conflict that
+  the ticket cannot resolve — in which case **stop and report**, per Scope
+  discipline below, rather than reading around it.
+
+**Why, with real numbers.** Phase R1 measured the cost of the old rule
+("read `implementation_status.md` first, every session"): that file is
+151,729 bytes / ~37,900 tokens, of which a **single hand-typed paragraph
+is 67,634 characters — 44% of the file**, and it grew by one append every
+step. With `feature_inventory.md` (~25,300 tokens) the mandatory floor was
+**~64,600 tokens before any work began**, nearly all of it irrelevant to
+the step at hand. A Task ticket is capped at 24 lines.
+
+**This rule replaces** the previous "Read `implementation_status.md` first,
+every session, before anything else" rule in `CLAUDE.md` and the
+`implementation_status.md`/`feature_inventory.md` update obligations under
+Documentation discipline below — those two files are now **generated
+output** (`python -m scripts.roadmap.generate`) and must never be
+hand-edited. You update a **ticket's `status:` field**, not a tracker.
+
+---
+
 ## Scope discipline
 
 - Work proceeds in **small, individually-scoped steps**. Each step has an explicit scope fence from the product owner, usually with explicit "do NOT build X/Y/Z yet" exclusions.
@@ -39,8 +73,8 @@ The process rules this project has actually operated under, distilled from how e
 ## Documentation discipline
 
 - **Documentation is the source of truth.** On a conflict between code and docs, the docs govern unless the current step is explicitly the one correcting the doc.
-- **Update `docs/19_roadmap/implementation_status.md` in the same step as the code change it describes.** This is not a follow-up task.
-- **Update `docs/19_roadmap/feature_inventory.md`'s completion table (Section 5) and overall weighted percentage (Section 6) at the end of every step** (recorded 2026-07-28). It is the living, per-module/per-phase tracker with a percentage and status per module; `implementation_status.md` stays short and links to it rather than duplicating it. A module whose real state changed but whose row wasn't updated in the same step is a gap to flag, not defer.
+- **Update your Task ticket's `status:` field in the same step as the code change it describes** (Phase R2, 2026-07-31). This is not a follow-up task. Set `done` only when every Definition-of-Done item in `docs/process/ticket_templates.md` holds; prefer an honest `partial` over a false `done`.
+- **Never hand-edit a generated file.** `docs/19_roadmap/STATUS.md` and `MODULE_BOARD.md` are produced by `python -m scripts.roadmap.generate` from the tickets; `docs/07_api/openapi.json` by `python -m scripts.export_openapi`. Each carries a DO-NOT-EDIT banner, and a real test fails the build if one is stale or edited. **Superseded (2026-07-31):** the previous obligations to hand-update `implementation_status.md` every step and `feature_inventory.md`'s completion table and weighted percentage every step. Those two files are retired as trackers — see Rule 1 above for why (a 67,634-character hand-typed paragraph, read every session).
 - **Big-file convention, with a concrete threshold (revised 2026-07-30):** any Markdown document exceeding **~500 lines** must be split rather than left to grow further. Two shapes, depending on the document's own nature:
   - **Actively growing** (a running history, a running log): split into a numbered folder alongside the original — `NNN_<topic>.md` files grouped by logical milestone/subsystem (not by date) plus an `INDEX.md`. `docs/19_roadmap/history/` (created 2026-07-28) is the reference implementation.
   - **A closed/completed document** (a finished plan, a finished audit) that merely grew too large while it was active: archive its full content as a new, verbatim numbered entry in the *existing* `docs/19_roadmap/history/` folder (added to `INDEX.md`), and shrink the original file, at its original path, to a short, permanent summary that links to the archived entry for full detail. Do not invent a second, parallel history folder for one document. `docs/03_architecture/platform/platform_sdk_v1_scope.md` (719 → 71 lines, full record archived as `history/027_platform_sdk_v1_scope_plan.md`, 2026-07-30) is the reference implementation of this shape.
