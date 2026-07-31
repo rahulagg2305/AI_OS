@@ -3,7 +3,13 @@
 Layered precedence: built-in defaults -> pack defaults -> platform
 config -> environment config -> runtime overrides -> experiment
 overrides -> secrets (docs/03_architecture/kernel/configuration_manager.md
-§4). Only layers 1, 3, and 4 are implemented at this stage.
+§4). Layers 1, 2, 3, and 4 are implemented at this stage.
+
+**Layer 2, pack-level defaults** (added 2026-07-31, ``P01-S02-M01-T03``):
+:func:`extract_pack_defaults` reads the ``default`` values declared in a
+pack manifest's own ``configSchema``; :meth:`ConfigurationManager.load`'s
+``pack_manifests`` argument merges them in ahead of the platform and
+environment files, so either can still override a pack's suggestion.
 
 No component should read a configuration file directly — everything
 goes through :class:`ConfigurationManager` and the resulting
@@ -30,7 +36,7 @@ from ai_os_kernel.configuration_manager.audit import (
 )
 from ai_os_kernel.configuration_manager.bootstrap_env import BootstrapEnv
 from ai_os_kernel.configuration_manager.errors import ConfigChangeAuditError, ConfigurationError
-from ai_os_kernel.configuration_manager.loader import ConfigurationManager
+from ai_os_kernel.configuration_manager.loader import ConfigurationManager, extract_pack_defaults
 from ai_os_kernel.configuration_manager.models import PlatformConfig
 
 __all__ = [
@@ -44,5 +50,6 @@ __all__ = [
     "PlatformConfig",
     "SqlConfigChangeWriter",
     "compute_value_digest",
+    "extract_pack_defaults",
     "verify_config_change",
 ]

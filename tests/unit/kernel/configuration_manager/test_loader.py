@@ -1,4 +1,4 @@
-"""Unit tests for the Configuration Manager (layers 1, 3, 4 only)."""
+"""Unit tests for the Configuration Manager (layers 1, 2, 3, 4)."""
 
 from pathlib import Path
 from typing import Any
@@ -6,7 +6,11 @@ from typing import Any
 import pytest
 import yaml
 
-from ai_os_kernel.configuration_manager import ConfigurationError, ConfigurationManager
+from ai_os_kernel.configuration_manager import (
+    ConfigurationError,
+    ConfigurationManager,
+    extract_pack_defaults,
+)
 
 
 def _write_yaml(path: Path, content: dict[str, Any]) -> None:
@@ -143,3 +147,108 @@ def test_every_committed_environment_file_is_valid(environment: str) -> None:
     config = manager.load(role="api")
 
     assert config.env == environment
+
+
+def _pack_manifest(*, config_schema_properties: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "metadata": {"id": "some-pack"},
+        "configSchema": {"type": "object", "properties": config_schema_properties},
+    }
+
+
+def test_extract_pack_defaults_pulls_the_declared_default_out_of_config_schema() -> None:
+    manifest = _pack_manifest(
+        config_schema_properties={"log_level": {"type": "string", "default": "DEBUG"}}
+    )
+
+    assert extract_pack_defaults(manifest) == {"log_level": "DEBUG"}
+
+
+def test_extract_pack_defaults_ignores_properties_with_no_default() -> None:
+    manifest = _pack_manifest(config_schema_properties={"log_level": {"type": "string"}})
+
+    assert extract_pack_defaults(manifest) == {}
+
+
+def test_extract_pack_defaults_is_empty_for_a_manifest_with_no_config_schema() -> None:
+    assert extract_pack_defaults({"metadata": {"id": "some-pack"}}) == {}
+
+
+def test_a_pack_default_is_honored_when_nothing_overrides_it(tmp_path: Path) -> None:
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+    pack = _pack_manifest(
+        config_schema_properties={"log_level": {"type": "string", "default": "DEBUG"}}
+    )
+
+    config = manager.load(role="api", pack_manifests=[pack])
+
+    assert config.log_level == "DEBUG"
+
+
+def test_platform_config_overrides_a_pack_default(tmp_path: Path) -> None:
+    _write_yaml(tmp_path / "platform.yaml", {"kernel": {"log_level": "WARNING"}})
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+    pack = _pack_manifest(
+        config_schema_properties={"log_level": {"type": "string", "default": "DEBUG"}}
+    )
+
+    config = manager.load(role="api", pack_manifests=[pack])
+
+    assert config.log_level == "WARNING"
+
+
+def test_environment_config_overrides_a_pack_default(tmp_path: Path) -> None:
+    _write_yaml(tmp_path / "environments" / "local.yaml", {"kernel": {"log_level": "ERROR"}})
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+    pack = _pack_manifest(
+        config_schema_properties={"log_level": {"type": "string", "default": "DEBUG"}}
+    )
+
+    config = manager.load(role="api", pack_manifests=[pack])
+
+    assert config.log_level == "ERROR"
+
+
+def test_a_later_pack_overrides_an_earlier_packs_default_for_the_same_key(
+    tmp_path: Path,
+) -> None:
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+    first_pack = _pack_manifest(
+        config_schema_properties={"log_level": {"type": "string", "default": "DEBUG"}}
+    )
+    second_pack = _pack_manifest(
+        config_schema_properties={"log_level": {"type": "string", "default": "ERROR"}}
+    )
+
+    config = manager.load(role="api", pack_manifests=[first_pack, second_pack])
+
+    assert config.log_level == "ERROR"
+
+
+def test_a_pack_manifest_with_no_config_schema_contributes_nothing(tmp_path: Path) -> None:
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+    pack_with_no_config_schema = {"metadata": {"id": "some-pack"}}
+
+    config = manager.load(role="api", pack_manifests=[pack_with_no_config_schema])
+
+    assert config.log_level == "INFO"  # the built-in default, layer 1, still applies

@@ -5,16 +5,31 @@ docs/03_architecture/kernel/configuration_manager.md §4:
 built-in defaults -> pack defaults -> platform config -> environment
 config -> runtime overrides -> experiment overrides -> secrets.
 
-Only layers 1 (built-in defaults, via the ``PlatformConfig`` model), 3
-(platform config file) and 4 (environment config file) are implemented
-at this stage. Pack defaults, runtime overrides, experiment overrides,
-and secret resolution are added when the components that produce them
-exist (Manifest Loader pack activation, the configuration API, the
+Layers 1 (built-in defaults, via the ``PlatformConfig`` model), 2
+(pack-level defaults, ``P01-S02-M01-T03``), 3 (platform config file) and
+4 (environment config file) are implemented at this stage. Runtime
+overrides, experiment overrides, and secret resolution are added when
+the components that produce them exist (the configuration API, the
 Experiment Manager, Secrets Management) — callers depend on
 ``PlatformConfig``, not on how it was assembled, so none of that will
 require changes here at the call site.
+
+**Layer 2, concretely** (§4: "Pack-level defaults — Capability Pack
+manifests and their ``configSchema`` defaults"): each activated pack's
+manifest may declare a JSON Schema ``configSchema`` whose properties
+carry a ``default`` (the same ``default`` keyword
+``platform_sdk/schemas/manifest.schema.json`` already supports per
+JSON Schema semantics). :func:`extract_pack_defaults` pulls those
+values out; :meth:`ConfigurationManager.load` merges them in *before*
+the platform/environment files, so either can still override a pack's
+suggested default — exactly "layer 3 and 4 outrank layer 2." Discovering
+*which* packs are activated (Manifest Loader) is a separate, later
+integration; this layer takes already-discovered manifests as plain
+input, matching how layers 3/4 take already-resolved file paths rather
+than discovering them.
 """
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -59,9 +74,20 @@ class ConfigurationManager:
         self._platform_config_path = platform_config_path
         self._environments_dir = environments_dir
 
-    def load(self, *, role: str) -> PlatformConfig:
-        """Merge all layers and return a validated, immutable ``PlatformConfig``."""
+    def load(
+        self, *, role: str, pack_manifests: Sequence[Mapping[str, Any]] = ()
+    ) -> PlatformConfig:
+        """Merge all layers and return a validated, immutable ``PlatformConfig``.
+
+        ``pack_manifests`` is every activated pack's raw manifest mapping
+        (layer 2), in activation order — a pack listed later overrides an
+        earlier pack's default for the same key, the same "later entry
+        wins" rule every other layer already follows. Empty by default,
+        so an existing caller that passes none behaves exactly as before.
+        """
         merged: dict[str, Any] = {}
+        for manifest in pack_manifests:
+            merged = _deep_merge(merged, extract_pack_defaults(manifest))
         merged = _deep_merge(merged, self._read_section(self._platform_config_path))
         env_file = self._environments_dir / f"{self._environment}.yaml"
         merged = _deep_merge(merged, self._read_section(env_file))
@@ -104,6 +130,24 @@ class ConfigurationManager:
         if not isinstance(section, dict):
             raise ConfigurationError(f"{path}: '{_CONFIG_SECTION}' must be a mapping.")
         return section
+
+
+def extract_pack_defaults(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Pulls the declared ``default`` out of every property in a pack
+    manifest's own ``configSchema`` (§4 layer 2). A manifest with no
+    ``configSchema``, or a property with no ``default``, contributes
+    nothing — a pack is never required to declare either."""
+    config_schema = manifest.get("configSchema")
+    if not isinstance(config_schema, dict):
+        return {}
+    properties = config_schema.get("properties")
+    if not isinstance(properties, dict):
+        return {}
+    return {
+        key: spec["default"]
+        for key, spec in properties.items()
+        if isinstance(spec, dict) and "default" in spec
+    }
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
