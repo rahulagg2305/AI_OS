@@ -58,6 +58,7 @@ class Ticket:
     task: int
     depends_on: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
+    module_path: str = ""
     goal: str = ""
     body: str = ""
     path: Path | None = None
@@ -142,6 +143,24 @@ def parse_ticket(path: Path) -> Ticket:
             goal = line.removeprefix("**Goal:**").strip()
             break
 
+    # `module_path` (added 2026-07-31, the R3 pilot's own finding) tells
+    # a working session where this Task's code lives without it having
+    # to derive the location from the module number. Optional in the
+    # schema so an older ticket still parses; validated against the
+    # frozen registry when present, so it can never drift into naming a
+    # module it does not belong to.
+    module_path = str(meta.get("module_path") or "")
+    if module_path:
+        from scripts.roadmap.stages import MODULE_PATHS
+
+        expected = MODULE_PATHS.get(module)
+        if expected is not None and module_path != expected:
+            raise TicketError(
+                f"{ticket_id}: module_path '{module_path}' does not match the frozen "
+                f"registry entry for M{module:02d} ('{expected}'). Edit "
+                "scripts/roadmap/stages.py, not the ticket."
+            )
+
     return Ticket(
         id=ticket_id,
         title=str(meta["title"]),
@@ -152,6 +171,7 @@ def parse_ticket(path: Path) -> Ticket:
         task=task,
         depends_on=_tuple("depends_on"),
         evidence=_tuple("evidence"),
+        module_path=module_path,
         goal=goal,
         body=body.strip(),
         path=path,

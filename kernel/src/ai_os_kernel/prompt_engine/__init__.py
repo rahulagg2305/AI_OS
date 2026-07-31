@@ -24,8 +24,18 @@ Implemented so far (Stage B, minimal slice):
   :mod:`ai_os_kernel.prompt_engine.catalog` for exactly what it reads
   and why.
 
-Not yet implemented: version resolution (config/experiment-driven),
-role/alias-based requests, prompt composition/inheritance, the
+- :class:`PromptResolver` (added 2026-07-31, ``P02-S03-M07-T04``) — the
+  Prompt Resolver subsystem (§5): resolves a **role** to a concrete
+  ``(prompt_id, version)`` binding, then renders through any of the
+  above. A wrapper, not a third ``PromptEngine`` — resolution and
+  rendering are different concerns. Bindings are injected
+  composition-level config, and each names an exact version rather than
+  "latest", so two runs of the same workflow cannot silently differ
+  (ADR-0022). See :mod:`ai_os_kernel.prompt_engine.resolver`.
+
+Not yet implemented: config/experiment-driven version resolution (a role
+now binds to an exact version; §9's experiment pinning layers on top and
+is not built), prompt composition/inheritance, the
 cache-boundary split (§12, ADR-0025), prompt writing/admin APIs, and an
 Observability writer recording which prompt version was used (the
 existing ``evaluation.llm_calls`` writer already records
@@ -43,18 +53,23 @@ from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
 from ai_os_kernel.prompt_engine.errors import (
     PromptCatalogError,
     PromptNotFoundError,
+    PromptRoleNotBoundError,
     PromptVariableMissingError,
 )
 from ai_os_kernel.prompt_engine.models import PromptRenderRequest, PromptRenderResponse
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine, PromptEngine, render_template
+from ai_os_kernel.prompt_engine.resolver import PromptBinding, PromptResolver
 
 __all__ = [
     "InMemoryPromptEngine",
+    "PromptBinding",
     "PromptCatalogError",
     "PromptEngine",
     "PromptNotFoundError",
     "PromptRenderRequest",
     "PromptRenderResponse",
+    "PromptResolver",
+    "PromptRoleNotBoundError",
     "PromptVariableMissingError",
     "SqlPromptCatalog",
     "render_template",

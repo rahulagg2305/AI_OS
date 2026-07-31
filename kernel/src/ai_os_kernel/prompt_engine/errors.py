@@ -20,6 +20,18 @@ class PromptCatalogError(Exception):
     """
 
 
+class PromptRoleNotBoundError(Exception):
+    """A role handed to :class:`~ai_os_kernel.prompt_engine.resolver.
+    PromptResolver` is not bound to any prompt.
+
+    Distinct from :class:`PromptNotFoundError`, which means "this role
+    resolved, but the prompt it names does not exist". Keeping them
+    apart matters: the first is a *configuration* gap (a missing or
+    typo'd binding), the second a *catalog* gap (a missing prompt row),
+    and they are fixed in completely different places.
+    """
+
+
 class PromptVariableMissingError(Exception):
     """The template references one or more ``{{variable}}`` placeholders
     that the request's ``variables`` did not supply.

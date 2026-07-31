@@ -117,6 +117,65 @@ MODULES: dict[int, str] = {
 }
 
 
+# Module number -> the repository path that module's work lives in.
+#
+# Added 2026-07-31 from the R3 pilot's own finding: a ticket named no
+# path, so the working session had to derive the location from the
+# module *number* via this file. That worked only because the mapping
+# was already known — a genuine gap for a session without it. Every
+# ticket now carries `module_path:` populated from here.
+#
+# Paths marked PLANNED do not exist on disk yet (git does not track
+# empty directories — see docs/process/folder_structure.md). They are
+# the agreed location, so the Task that fills one creates it there
+# rather than inventing a second convention.
+MODULE_PATHS: dict[int, str] = {
+    1: "kernel/src/ai_os_kernel/configuration_manager",
+    2: "kernel/src/ai_os_kernel/manifest_loader",
+    3: "kernel/src/ai_os_kernel/health",
+    4: "kernel/src/ai_os_kernel/observability",
+    5: "kernel/src/ai_os_kernel/workflow_engine",
+    6: "kernel/src/ai_os_kernel/llm_gateway",
+    7: "kernel/src/ai_os_kernel/prompt_engine",
+    8: "kernel/src/ai_os_kernel/context_manager",
+    9: "kernel/src/ai_os_kernel/knowledge_manager",
+    10: "kernel/src/ai_os_kernel/memory_manager",
+    11: "kernel/src/ai_os_kernel/retrieval",
+    12: "kernel/src/ai_os_kernel/evaluation_engine",
+    13: "kernel/src/ai_os_kernel/capability_manager",
+    14: "kernel/src/ai_os_kernel/security_manager",
+    15: "kernel/src/ai_os_kernel/quality_gate_engine",
+    16: "kernel/src/ai_os_kernel/traceability_engine",
+    17: "kernel/src/ai_os_kernel/event_bus",
+    18: "platform_sdk/src/ai_os_sdk/contracts",
+    19: "kernel/src/ai_os_kernel/secrets_manager",
+    20: "kernel/src/ai_os_kernel/sandbox",
+    21: "kernel/src/ai_os_kernel/storage_service",  # PLANNED
+    22: "platform_services/notification",  # PLANNED
+    23: "kernel/src/ai_os_kernel/caching",  # PLANNED
+    24: "platform_services/git_integration",  # PLANNED
+    25: "platform_services/speech_gateway",  # PLANNED
+    26: "kernel/src/ai_os_kernel/document_processing",  # PLANNED
+    27: "platform_sdk/src/ai_os_sdk",
+    28: "platform_sdk/schemas",
+    29: "capability_packs/software-engineering/src/ai_os_pack_software_engineering/agents",
+    30: "capability_packs/software-engineering/workflows",
+    31: "capability_packs/software-engineering/src/ai_os_pack_software_engineering",
+    32: "capability_packs/project_intelligence",  # PLANNED
+    33: "capability_packs/voice_jarvis",  # PLANNED
+    34: "capability_packs/benchmarking",  # PLANNED
+    36: "kernel/src/ai_os_kernel/routes",
+    37: "kernel/src/ai_os_kernel/routes",
+    38: "tools/aios",  # PLANNED
+    39: "dashboard",  # PLANNED
+    40: "infra",
+    41: "tests/security",  # PLANNED
+    42: "tests",
+    43: ".github/workflows",
+    44: "platform_sdk/src/ai_os_sdk/errors",
+}
+
+
 def phase_label(phase: int) -> str:
     letter, title = PHASES[phase]
     return f"P{phase:02d} (Stage {letter}) - {title}"

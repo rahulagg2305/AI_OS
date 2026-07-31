@@ -18,6 +18,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from scripts.roadmap.stages import MODULE_PATHS
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TICKETS_ROOT = REPO_ROOT / "docs" / "19_roadmap" / "tickets"
 
@@ -2197,6 +2199,7 @@ title: {title}
 status: {status}
 depends_on: [{deps}]
 evidence: [{evidence}]
+module_path: {module_path}
 ---
 **Goal:** {goal}
 **Input:** {inp}
@@ -2221,6 +2224,7 @@ def build() -> list[tuple[Path, str]]:
                                 status=status,
                                 deps=", ".join(deps),
                                 evidence=evidence if evidence else "",
+                                module_path=MODULE_PATHS[module],
                                 goal=goal,
                                 inp=inp,
                                 outp=outp,

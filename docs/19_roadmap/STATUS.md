@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 42%** (92 of 219 Task-equivalents complete)
+**Overall: 42%** (93 of 219 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -22,7 +22,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S06 CI and Test Infrastructure | 10 | 6 | 0 | 4 | 60% |
 | P02 (B) | S01 Workflow Execution Core | 13 | 8 | 0 | 5 | 62% |
 | P02 (B) | S02 LLM Gateway | 12 | 6 | 1 | 5 | 54% |
-| P02 (B) | S03 Prompt and Context Assembly | 16 | 7 | 0 | 9 | 44% |
+| P02 (B) | S03 Prompt and Context Assembly | 16 | 8 | 0 | 8 | 50% |
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 4 | 0 | 10 | 29% |
 | P02 (B) | S05 Capability Manager and Platform SDK | 19 | 16 | 0 | 3 | 84% |
 | P02 (B) | S06 Quality Gate Engine | 8 | 4 | 0 | 4 | 50% |
@@ -56,7 +56,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 46 | 23 | 51% |
-| P02 (Stage B) - Minimum Viable Kernel | 93 | 50 | 54% |
+| P02 (Stage B) - Minimum Viable Kernel | 93 | 51 | 55% |
 | P03 (Stage C) - First Real Capability Pack | 27 | 15 | 56% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
@@ -66,7 +66,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-123 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+122 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P01-S01-M40-T04` Runtime container image
 - `P01-S02-M01-T03` Pack-defaults precedence layer
@@ -93,4 +93,4 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S01-M05-T10` parallel step type
 - `P02-S01-M05-T11` sub_workflow step type
 - `P02-S01-M05-T12` Multi-instance worker loop
-- ... and 98 more
+- ... and 97 more

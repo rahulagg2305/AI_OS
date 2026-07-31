@@ -15,11 +15,21 @@ title: <one line, imperative>
 status: todo                  # done | partial | todo | blocked
 depends_on: [P02-S01-M05-T06] # other ticket ids, may be empty
 evidence: [path/to/real/file] # required once status is done or partial
+module_path: kernel/src/ai_os_kernel/workflow_engine
 ---
 **Goal:** <what changes about the system, in one sentence>
 **Input:** <the exact thing this Task consumes>
 **Output:** <the exact, observable thing this Task produces>
 ```
+
+**`module_path:`** (added 2026-07-31) is where this Task's code lives.
+It comes from the frozen registry in `scripts/roadmap/stages.py`
+(`MODULE_PATHS`) and is validated against it — a ticket may not name a
+path belonging to a different module. Added because the R3 pilot found
+that without it a working session had to derive the location from the
+module *number*, which only worked because the mapping happened to be
+known. Some registry paths are marked PLANNED and do not exist on disk
+yet; the Task that fills one creates it there.
 
 ### Hard structural limits (enforced, not advisory)
 

@@ -63,6 +63,16 @@ def test_cross_ticket_invariants_hold() -> None:
     assert len({t.id for t in tickets}) == len(tickets)
 
 
+def test_every_ticket_names_the_path_its_work_lives_in() -> None:
+    """The R3 pilot's own finding: without `module_path`, a working
+    session had to derive the location from the module number."""
+    from scripts.roadmap.stages import MODULE_PATHS
+
+    for t in load_all(TICKETS_ROOT):
+        assert t.module_path, f"{t.id}: module_path is missing"
+        assert t.module_path == MODULE_PATHS[t.module], f"{t.id}: module_path disagrees"
+
+
 def test_every_ticket_maps_to_a_real_phase_stage_and_module() -> None:
     for t in load_all(TICKETS_ROOT):
         assert t.phase in PHASES, f"{t.id}: unknown phase"
