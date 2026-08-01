@@ -6,6 +6,30 @@ deliverable: the real composition root (``bootstrap.build_app()`` +
 directly, as ``tests/integration/capability_manager/test_pack_lifecycle.py``
 does.
 
+**Exercises pack-lifecycle operations through a dedicated engine, not
+``app.state.pack_lifecycle_repository`` directly** (fixed
+``P01-S06-M43-T04``, root-caused via a real, live CI hang: run
+``30682840924``/``30685613509``/``30686983934``). ``app.state``'s own
+repository is built on ``TestClient``'s own background event loop
+(``_lifespan`` runs there); calling its async methods from this test's
+own separate ``asyncio.run()`` call — a second, independently-running
+event loop on the main thread — is exactly the cross-event-loop hazard
+``test_lease_reap_loop.py``'s own docstring already documents and
+works around the identical way. Both loops share the same real
+Postgres connection pool underneath; two event loops concurrently
+checking connections out of one asyncpg pool is a genuine hang risk,
+not merely a style preference — confirmed live: adding a third
+background loop to ``_lifespan`` (the audit-chain verification job,
+``P01-S04-M03-T06``) tipped this latent, pre-existing hazard into an
+actual, reproducible ~20-minute stall for the first time. This file's
+own two affected tests now assert ``app.state.pack_lifecycle_repository``
+is real and constructed (this file's own stated purpose) via a cheap,
+synchronous, no-event-loop-crossing check, and separately exercise real
+register/activate/deactivate/get_pack behaviour through a dedicated
+``SqlPackLifecycleRepository`` over its own engine, against the same
+real, ``_lifespan``-migrated database — both intents preserved, one
+hazard removed.
+
 Real Postgres via testcontainers (ADR-0015) — no mocking the database.
 """
 
@@ -24,7 +48,9 @@ from ai_os_kernel.capability_manager.errors import (
     InvalidPackTransitionError,
     PackNotFoundError,
 )
+from ai_os_kernel.capability_manager.repository import SqlPackLifecycleRepository
 from ai_os_kernel.configuration_manager import PlatformConfig
+from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.workflow_engine.pack_state import PackState
 from tests.integration._postgres_fixture import postgres_container
 
@@ -66,9 +92,19 @@ def test_the_real_composition_root_registers_and_activates_a_pack(database_url: 
         # _lifespan's real DatabaseSettings()/build_engine() calls
         # resolve to this real, migrated container — the composition
         # root's own env-driven wiring, not a test-supplied override.
-        repository = app.state.pack_lifecycle_repository
+        # Asserted here, synchronously, never awaited from this test's
+        # own separate event loop below (see this module's own
+        # docstring for the cross-event-loop hazard that would create).
+        assert isinstance(app.state.pack_lifecycle_repository, SqlPackLifecycleRepository)
 
-        async def _run() -> None:
+    # A dedicated engine, never app.state's own, against the same real,
+    # already-migrated database — the identical pattern
+    # test_lease_reap_loop.py already establishes.
+    engine = build_engine(database_url)
+
+    async def _run() -> None:
+        repository = SqlPackLifecycleRepository(engine)
+        try:
             registered = await repository.register(
                 pack_id="test.bootstrap_wired_pack",
                 version="1.0.0",
@@ -92,8 +128,10 @@ def test_the_real_composition_root_registers_and_activates_a_pack(database_url: 
 
             fetched = await repository.get_pack("test.bootstrap_wired_pack")
             assert fetched == deactivated
+        finally:
+            await engine.dispose()
 
-        asyncio.run(_run())
+    asyncio.run(_run())
 
 
 def test_the_real_composition_roots_repository_rejects_invalid_transitions(
@@ -102,9 +140,13 @@ def test_the_real_composition_roots_repository_rejects_invalid_transitions(
     app = build_app(_config())
 
     with TestClient(app):
-        repository = app.state.pack_lifecycle_repository
+        assert isinstance(app.state.pack_lifecycle_repository, SqlPackLifecycleRepository)
 
-        async def _run() -> None:
+    engine = build_engine(database_url)
+
+    async def _run() -> None:
+        repository = SqlPackLifecycleRepository(engine)
+        try:
             with pytest.raises(PackNotFoundError):
                 await repository.activate(
                     pack_id="test.bootstrap_never_registered",
@@ -128,8 +170,10 @@ def test_the_real_composition_roots_repository_rejects_invalid_transitions(
                     actor="test-actor",
                     reason="withdraw",
                 )
+        finally:
+            await engine.dispose()
 
-        asyncio.run(_run())
+    asyncio.run(_run())
 
 
 def test_bare_test_client_never_configures_the_pack_lifecycle_repository(

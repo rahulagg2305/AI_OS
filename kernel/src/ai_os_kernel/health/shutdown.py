@@ -55,13 +55,17 @@ purpose if one misbehaving job (a hung query, a genuine bug in a loop
 this module does not control) could make it wait forever: the whole
 process shutdown, and every caller blocked on it (a real deployment's
 own termination, or a test's ``with TestClient(app):`` exit), would
-hang indefinitely with it. Found for real, not hypothetically: CI run
-``30682840924`` hung for 70+ minutes with zero progress the first time
-these three loops ever ran together against a real, live-Docker
-Postgres — the exact shape this gap produces, on whichever job or
-interaction actually stalled. ``grace_period_seconds`` bounds the
-total wait; any job still not finished when it elapses is force-
-cancelled so shutdown can still complete. Its default,
+hang indefinitely with it. Added defensively while investigating CI run
+``30682840924``'s real 70+ minute hang — genuinely valuable regardless,
+but **not itself what caused that hang**: the real cause, found via a
+live-logging diagnostic run and fixed in
+``tests/integration/test_bootstrap_pack_lifecycle.py``, was a
+cross-event-loop hazard in that test's own code (an ``asyncio.run()``
+call reusing an async repository built on a *different* event loop),
+unrelated to this coordinator or its three managed loops — see that
+test file's own docstring for the full root cause. ``grace_period_seconds``
+bounds the total wait; any job still not finished when it elapses is
+force-cancelled so shutdown can still complete. Its default,
 ``deployment_architecture.md``'s own documented drain bound (NFR-036:
 "Up to 300 s for in-flight steps before forced termination") — not a
 number invented for this fix, the platform's own existing policy for

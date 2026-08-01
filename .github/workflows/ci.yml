@@ -169,18 +169,9 @@ jobs:
       # down its own ephemeral container and sets the URL itself. Alembic
       # up/down/up is exercised by tests/integration/persistence/test_migrations.py,
       # not as a separate step.
-      # TEMPORARY DIAGNOSTIC (remove after the run 30682840924/30685613509
-      # hang is root-caused): -s disables pytest's default output
-      # capture so real stdout -- including structlog's plain print()
-      # output (PrintLoggerFactory, observability/logging.py) -- is
-      # visible live in the Actions log instead of being captured and
-      # discarded for passing tests. Needed specifically to see
-      # graceful_shutdown.*/background-loop log lines around the exact
-      # point a prior run silently stalled between two real-Postgres
-      # test files.
       - name: pytest tests/unit + tests/integration (coverage-gated, NFR-060)
         run: >
-          uv run pytest tests/unit tests/integration -v -s
+          uv run pytest tests/unit tests/integration -v
           --cov --cov-branch --cov-report=term-missing --cov-fail-under=90
       # Gated: no end-to-end workflow suite exists yet (needs the LLM
       # Gateway's stubbed-response contract first).
