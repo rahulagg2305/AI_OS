@@ -18,7 +18,12 @@ import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from ai_os_kernel.persistence.schema import workflow_events, workflow_instances, workflow_steps
+from ai_os_kernel.persistence.schema import (
+    workflow_events,
+    workflow_instances,
+    workflow_leases,
+    workflow_steps,
+)
 from ai_os_kernel.workflow_engine.errors import (
     WorkflowInstanceCreationError,
     WorkflowInvalidTransitionError,
@@ -143,6 +148,8 @@ class WorkflowInstanceRepository(Protocol):
     async def list_instances(
         self, *, limit: int, before: WorkflowListCursor | None = None
     ) -> list[WorkflowInstance]: ...
+
+    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]: ...
 
 
 class SqlWorkflowInstanceRepository:
@@ -342,6 +349,50 @@ class SqlWorkflowInstanceRepository:
                 sa.tuple_(workflow_instances.c.created_at, workflow_instances.c.workflow_id)
                 < (before.created_at, before.workflow_id)
             )
+        async with self._engine.connect() as connection:
+            result = await connection.execute(query)
+            rows = result.mappings().all()
+        return [WorkflowInstance.model_validate(dict(row)) for row in rows]
+
+    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]:
+        """A plain, unguarded read — mirrors :meth:`get_instance`; a
+        worker loop's own subsequent :meth:`WorkflowLeaseService.acquire`
+        call is the real exclusivity guard, exactly the same
+        "list unguarded, then guard on the real write" split
+        :meth:`list_instances` already has relative to
+        :meth:`advance_workflow`.
+
+        **Not the same query as `list_instances`.** That method serves
+        api_architecture.md §9's own paginated, newest-first "browse
+        every instance" listing; a worker loop needs the opposite
+        question answered — "which `running` instances have no active
+        claim right now" — so this is a genuinely different filter
+        (``status = 'running'`` and no unexpired ``workflow_leases``
+        row), not a parameter added to the existing method. Ordered
+        ``created_at`` ASC (oldest-runnable-first), the opposite of
+        `list_instances`'s newest-first: a display listing wants recent
+        activity up top; a scheduler wants fairness — the
+        longest-waiting runnable instance should not starve behind a
+        stream of newly-created ones.
+        """
+        query = (
+            sa.select(workflow_instances)
+            .select_from(
+                workflow_instances.outerjoin(
+                    workflow_leases,
+                    workflow_leases.c.workflow_id == workflow_instances.c.workflow_id,
+                )
+            )
+            .where(
+                workflow_instances.c.status == WorkflowInstanceStatus.RUNNING.value,
+                sa.or_(
+                    workflow_leases.c.lease_id.is_(None),
+                    workflow_leases.c.expires_at < sa.func.now(),
+                ),
+            )
+            .order_by(workflow_instances.c.created_at)
+            .limit(limit)
+        )
         async with self._engine.connect() as connection:
             result = await connection.execute(query)
             rows = result.mappings().all()
