@@ -611,9 +611,7 @@ def test_resolve_agent_is_refused_when_its_permissions_exceed_its_packs_grant(
         try:
             registry = SqlAgentRegistry(engine)
 
-            with pytest.raises(
-                AgentRegistryError, match="pack's own manifest never grants"
-            ) as exc_info:
+            with pytest.raises(AgentRegistryError, match="own manifest never grants") as exc_info:
                 await registry.resolve_agent("se.narrow_pack/over_grant_agent")
 
             assert "llm:invoke" in str(exc_info.value)
@@ -656,7 +654,7 @@ def test_resolve_agent_over_grant_refusal_happens_before_the_entrypoint_is_ever_
             # If the over-grant check did not fire first, this would
             # raise EntrypointLoadError instead (the malformed entrypoint
             # string) — the over-grant refusal must win the race.
-            with pytest.raises(AgentRegistryError, match="pack's own manifest never grants"):
+            with pytest.raises(AgentRegistryError, match="own manifest never grants"):
                 await registry.resolve_agent("se.narrow_pack_2/over_grant_agent")
         finally:
             await engine.dispose()
@@ -718,9 +716,7 @@ def test_resolve_tool_is_refused_when_its_permissions_exceed_its_packs_grant(
         try:
             registry = SqlToolRegistry(engine)
 
-            with pytest.raises(
-                ToolRegistryError, match="pack's own manifest never grants"
-            ) as exc_info:
+            with pytest.raises(ToolRegistryError, match="own manifest never grants") as exc_info:
                 await registry.resolve_tool("se.narrow_tool_pack.over_grant_tool")
 
             assert "secret:access" in str(exc_info.value)
