@@ -447,8 +447,13 @@ def test_upgrade_genuinely_migrates_an_activated_packs_agent_rows(
 
     async def _run() -> None:
         pack_id = "test.upgrade_migrates_agents"
+        # Pack-level `permissions` must cover every agent's own declared
+        # set (P02-S05-M13-T08's real over-grant check, exercised for
+        # real here since this test resolves an agent after upgrading —
+        # not a detail this test can skip).
         manifest_v1 = {
             "name": "test-pack",
+            "permissions": ["llm:invoke", "sandbox:execute"],
             "agents": [
                 _agent_entry("analyst", version="1.0.0", permissions=["llm:invoke"]),
                 _agent_entry("builder", version="1.0.0", permissions=["sandbox:execute"]),
@@ -456,6 +461,7 @@ def test_upgrade_genuinely_migrates_an_activated_packs_agent_rows(
         }
         manifest_v2 = {
             "name": "test-pack",
+            "permissions": ["llm:invoke", "knowledge:read"],
             "agents": [
                 # analyst survives the upgrade with a genuinely different
                 # permission set — must be updated, not left stale.
