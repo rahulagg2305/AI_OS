@@ -5,16 +5,21 @@ actually loaded and constructed (not always ``EchoAgent``/``EchoTool``),
 an unregistered id raises the documented error rather than a bare
 ``None``/``KeyError``, the safety checks (``Agent``/``Tool`` Protocol
 conformance, ``trust_tier`` agreement) reject a bad entrypoint clearly
-instead of silently trusting it, and — the Capability Manager minimal
-slice this step adds — an agent/tool whose declared ``pack_id`` names a
-pack that is missing from ``catalog.packs`` or not ``activated`` is
-refused before its entrypoint is ever loaded.
+instead of silently trusting it, the Capability Manager minimal slice
+that gates on pack activation — an agent/tool whose declared ``pack_id``
+names a pack that is missing from ``catalog.packs`` or not
+``activated`` is refused before its entrypoint is ever loaded — and,
+``P02-S05-M13-T08``, the permission-grant slice: an agent/tool whose
+own declared permissions exceed its pack's own manifest grant is
+refused the identical way, before its entrypoint is ever loaded.
 """
 
 import asyncio
+import json
 import os
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -61,7 +66,12 @@ def database_url() -> Generator[str, None, None]:
 
 
 async def _seed_agent(
-    database_url: str, *, agent_id: str, entrypoint: str, pack_id: str = _DEFAULT_PACK_ID
+    database_url: str,
+    *,
+    agent_id: str,
+    entrypoint: str,
+    pack_id: str = _DEFAULT_PACK_ID,
+    required_permissions: list[str] | None = None,
 ) -> None:
     engine = build_engine(database_url)
     try:
@@ -72,9 +82,14 @@ async def _seed_agent(
                     "(agent_id, pack_id, version, entrypoint, input_schema, output_schema, "
                     " required_permissions, required_tools) "
                     "VALUES (:agent_id, :pack_id, '1.0.0', :entrypoint, "
-                    " '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb)"
+                    " '{}'::jsonb, '{}'::jsonb, CAST(:required_permissions AS jsonb), '[]'::jsonb)"
                 ),
-                {"agent_id": agent_id, "pack_id": pack_id, "entrypoint": entrypoint},
+                {
+                    "agent_id": agent_id,
+                    "pack_id": pack_id,
+                    "entrypoint": entrypoint,
+                    "required_permissions": json.dumps(required_permissions or []),
+                },
             )
     finally:
         await engine.dispose()
@@ -87,6 +102,7 @@ async def _seed_tool(
     entrypoint: str,
     trust_tier: str,
     pack_id: str = _DEFAULT_PACK_ID,
+    required_permissions: list[str] | None = None,
 ) -> None:
     engine = build_engine(database_url)
     try:
@@ -97,20 +113,23 @@ async def _seed_tool(
                     "(tool_id, pack_id, version, entrypoint, trust_tier, input_schema, "
                     " output_schema, required_permissions) "
                     "VALUES (:tool_id, :pack_id, '1.0.0', :entrypoint, "
-                    " :trust_tier, '{}'::jsonb, '{}'::jsonb, '[]'::jsonb)"
+                    " :trust_tier, '{}'::jsonb, '{}'::jsonb, CAST(:required_permissions AS jsonb))"
                 ),
                 {
                     "tool_id": tool_id,
                     "pack_id": pack_id,
                     "entrypoint": entrypoint,
                     "trust_tier": trust_tier,
+                    "required_permissions": json.dumps(required_permissions or []),
                 },
             )
     finally:
         await engine.dispose()
 
 
-async def _seed_pack(database_url: str, *, pack_id: str, state: str) -> None:
+async def _seed_pack(
+    database_url: str, *, pack_id: str, state: str, manifest: dict[str, Any] | None = None
+) -> None:
     engine = build_engine(database_url)
     try:
         async with engine.begin() as connection:
@@ -118,10 +137,11 @@ async def _seed_pack(database_url: str, *, pack_id: str, state: str) -> None:
                 sa.text(
                     "INSERT INTO catalog.packs "
                     "(pack_id, version, state, manifest, sdk_version, min_kernel_version) "
-                    "VALUES (:pack_id, '1.0.0', :state, '{}'::jsonb, '1.0.0', '1.0.0') "
+                    "VALUES (:pack_id, '1.0.0', :state, CAST(:manifest AS jsonb), "
+                    " '1.0.0', '1.0.0') "
                     "ON CONFLICT (pack_id) DO NOTHING"
                 ),
-                {"pack_id": pack_id, "state": state},
+                {"pack_id": pack_id, "state": state, "manifest": json.dumps(manifest or {})},
             )
     finally:
         await engine.dispose()
@@ -530,6 +550,181 @@ def test_resolve_tool_raises_a_retriable_error_for_a_genuine_connection_failure(
             with pytest.raises(ToolRegistryError, match="failed to look up tool") as exc_info:
                 await registry.resolve_tool("se.anything")
             assert exc_info.value.retriable is True
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+# --- Permission-grant enforcement (P02-S05-M13-T08) ---
+
+
+def test_resolve_agent_succeeds_when_its_permissions_are_within_its_packs_grant(
+    database_url: str,
+) -> None:
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.scoped_pack",
+            state="activated",
+            manifest={"permissions": ["llm:invoke", "sandbox:execute"]},
+        )
+        await _seed_agent(
+            database_url,
+            agent_id="se.scoped_pack/legit-agent",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            pack_id="se.scoped_pack",
+            required_permissions=["llm:invoke"],
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            resolved = await registry.resolve_agent("se.scoped_pack/legit-agent")
+
+            assert isinstance(resolved, EchoAgent)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_is_refused_when_its_permissions_exceed_its_packs_grant(
+    database_url: str,
+) -> None:
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.narrow_pack",
+            state="activated",
+            manifest={"permissions": ["sandbox:execute"]},
+        )
+        await _seed_agent(
+            database_url,
+            agent_id="se.narrow_pack/over_grant_agent",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            pack_id="se.narrow_pack",
+            # llm:invoke was never in the pack's own manifest grant above.
+            required_permissions=["sandbox:execute", "llm:invoke"],
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            with pytest.raises(
+                AgentRegistryError, match="pack's own manifest never grants"
+            ) as exc_info:
+                await registry.resolve_agent("se.narrow_pack/over_grant_agent")
+
+            assert "llm:invoke" in str(exc_info.value)
+            # A structural, permanent cause: retrying reconstructs the
+            # identical, still-over-granted row.
+            assert exc_info.value.retriable is False
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_over_grant_refusal_happens_before_the_entrypoint_is_ever_loaded(
+    database_url: str,
+) -> None:
+    """A stronger property than "the caller gets an error": an
+    over-granted agent's own entrypoint is never even imported — the
+    identical "refuse before importing pack code" guarantee
+    `PackNotActivatedError` already provides, extended to this new
+    check."""
+
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.narrow_pack_2",
+            state="activated",
+            manifest={"permissions": []},
+        )
+        await _seed_agent(
+            database_url,
+            agent_id="se.narrow_pack_2/over_grant_agent",
+            entrypoint="this_module_does_not_exist_anywhere:SomeClass",
+            pack_id="se.narrow_pack_2",
+            required_permissions=["secret:access"],
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            # If the over-grant check did not fire first, this would
+            # raise EntrypointLoadError instead (the malformed entrypoint
+            # string) — the over-grant refusal must win the race.
+            with pytest.raises(AgentRegistryError, match="pack's own manifest never grants"):
+                await registry.resolve_agent("se.narrow_pack_2/over_grant_agent")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_succeeds_when_its_permissions_are_within_its_packs_grant(
+    database_url: str,
+) -> None:
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.scoped_tool_pack",
+            state="activated",
+            manifest={"permissions": ["sandbox:execute"]},
+        )
+        await _seed_tool(
+            database_url,
+            tool_id="se.scoped_tool_pack.legit_tool",
+            entrypoint=_ECHO_TOOL_ENTRYPOINT,
+            trust_tier="tier2_trusted",
+            pack_id="se.scoped_tool_pack",
+            required_permissions=["sandbox:execute"],
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            resolved = await registry.resolve_tool("se.scoped_tool_pack.legit_tool")
+
+            assert isinstance(resolved, EchoTool)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_tool_is_refused_when_its_permissions_exceed_its_packs_grant(
+    database_url: str,
+) -> None:
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.narrow_tool_pack",
+            state="activated",
+            manifest={"permissions": ["sandbox:execute"]},
+        )
+        await _seed_tool(
+            database_url,
+            tool_id="se.narrow_tool_pack.over_grant_tool",
+            entrypoint=_ECHO_TOOL_ENTRYPOINT,
+            trust_tier="tier2_trusted",
+            pack_id="se.narrow_tool_pack",
+            # secret:access was never in the pack's own manifest grant above.
+            required_permissions=["sandbox:execute", "secret:access"],
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+
+            with pytest.raises(
+                ToolRegistryError, match="pack's own manifest never grants"
+            ) as exc_info:
+                await registry.resolve_tool("se.narrow_tool_pack.over_grant_tool")
+
+            assert "secret:access" in str(exc_info.value)
+            assert exc_info.value.retriable is False
         finally:
             await engine.dispose()
 

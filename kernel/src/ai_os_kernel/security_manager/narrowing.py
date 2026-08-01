@@ -6,21 +6,20 @@
       ∩ tool declared permissions (manifest)
       = effective permissions for this tool invocation
 
-**Closes the gap :mod:`ai_os_kernel.security_manager.models` has long
-disclosed**: that module's own docstring states this chain "needs
+**Closed part of the gap :mod:`ai_os_kernel.security_manager.models` has
+long disclosed**: that module's own docstring states this chain "needs
 manifest-declared permissions on workflows/agents/tools, which is
 Capability Manager territory not yet built. This models only the first
-term of that intersection." That data-source gap is still real — no
-code anywhere yet parses a workflow's/agent's/tool's declared
-``permissions`` out of a manifest into a runtime value (
-:class:`~ai_os_kernel.manifest_loader.models.DiscoveredManifest` keeps
-everything past ``metadata`` in an untyped ``raw`` dict). This module
-does not invent that data source. It builds the other missing piece:
-**the narrowing computation itself**, real and tested, so that the day
-workflow/agent/tool declared permissions do become available at
-invocation (Capability Manager work, not this module's), computing and
-enforcing the effective set is a call to an already-correct function,
-not new logic written under time pressure.
+term of that intersection." ``P02-S05-M13-T08`` closed the agent/tool
+half of that data-source gap — ``catalog.agents.required_permissions``/
+``catalog.tools.required_permissions`` are real, manifest-sourced values
+the Capability Manager now checks at resolution time (see
+:mod:`ai_os_kernel.capability_manager.permission_grant`, which reuses
+:func:`intersect_declared_permissions` below rather than a bespoke
+subset check). The workflow term is still not sourced from anywhere —
+no code parses a *workflow's* declared ``permissions`` out of a
+manifest — so :func:`narrow_permissions`'s full four-way call still has
+no real data for that one argument.
 
 Authority only ever shrinks: a set intersection can never contain a
 permission absent from any one of its operands, so a workflow, agent, or
@@ -32,6 +31,24 @@ widen the set").
 from __future__ import annotations
 
 from ai_os_kernel.security_manager.models import SecurityContext
+
+
+def intersect_declared_permissions(*permission_sets: frozenset[str]) -> frozenset[str]:
+    """The general n-way permission intersection ADR-0023's formula is
+    one instance of. Reused wherever a broader-scope grant must bound a
+    narrower-scope declaration — the principal/workflow/agent/tool
+    invocation chain (:func:`narrow_permissions`) is one such case; a
+    pack's own manifest grant bounding one of its agent's/tool's
+    declared permissions (:mod:`ai_os_kernel.capability_manager.
+    permission_grant`) is another. An empty ``permission_sets`` returns
+    an empty set — there is nothing to intersect, not "everything."
+    """
+    if not permission_sets:
+        return frozenset()
+    result = permission_sets[0]
+    for permissions in permission_sets[1:]:
+        result = result & permissions
+    return result
 
 
 def narrow_permissions(
@@ -51,7 +68,9 @@ def narrow_permissions(
     permissions — real manifest data once a caller has it, or a smaller,
     explicit set in the meantime.
     """
-    return context.permissions & workflow_permissions & agent_permissions & tool_permissions
+    return intersect_declared_permissions(
+        context.permissions, workflow_permissions, agent_permissions, tool_permissions
+    )
 
 
 def is_permitted(

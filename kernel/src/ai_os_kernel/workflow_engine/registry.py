@@ -86,12 +86,23 @@ is untouched — this is purely additional, caller-side logic in
 ``resolve_agent``/``resolve_tool``, exactly the seam step 6b's own
 design always expected some real caller to fill.
 
-No pack install/upgrade lifecycle, no health monitoring, no permissions
-enforcement (only per-agent *provisioning* by declared permission, not
-runtime enforcement against a grant), no sandboxing, no network or code
-download — an activated pack owning the declared id is the only
-additional thing checked before loading exactly the one ``entrypoint``
-string the row declares; see
+**Real as of ``P02-S05-M13-T08``: an over-grant refusal, not only
+provisioning.** ``_refuse_if_over_granted`` checks a resolving row's own
+``required_permissions`` against its pack's own manifest-declared
+``permissions`` (:mod:`ai_os_kernel.capability_manager.permission_grant`,
+reusing :func:`~ai_os_kernel.security_manager.narrowing.
+intersect_declared_permissions`) before the entrypoint is ever loaded —
+an agent/tool declaring a permission its own pack never granted is
+refused, not silently provisioned with it. This is the pack-grant term
+only, not the full ADR-0023 principal/workflow/agent/tool chain; see
+:mod:`ai_os_kernel.security_manager.narrowing`'s own docstring for what
+is still missing.
+
+No pack install/upgrade lifecycle, no health monitoring, no sandboxing,
+no network or code download — an activated pack owning the declared id,
+and that id's own declared permissions being within its pack's grant,
+are the only two things checked before loading exactly the one
+``entrypoint`` string the row declares; see
 :mod:`ai_os_kernel.workflow_engine.entrypoint_loader` for the loader's
 own, deliberately narrow boundary and
 :mod:`ai_os_kernel.workflow_engine.pack_state` for the lifecycle this
@@ -151,6 +162,46 @@ def _require_activated_pack(
         raise PackNotActivatedError(
             f"{kind} '{declared_id}' declares pack_id={pack_id!r}, whose state is "
             f"{state!r}, not {PackState.ACTIVATED.value!r}"
+        )
+
+
+def _refuse_if_over_granted(
+    *,
+    kind: str,
+    declared_id: str,
+    pack_id: str,
+    required_permissions: Collection[str],
+    pack_manifest: Mapping[str, Any],
+) -> None:
+    """Shared by :class:`SqlAgentRegistry`/:class:`SqlToolRegistry`
+    (``P02-S05-M13-T08``): raise :class:`AgentRegistryError`/
+    :class:`ToolRegistryError` if ``required_permissions`` — the row's
+    own manifest-sourced declared permissions — includes anything
+    ``pack_manifest``'s own top-level ``permissions`` array never
+    granted. Called before an entrypoint is ever loaded, the identical
+    "refuse before importing pack code" discipline
+    :func:`_require_activated_pack` already establishes.
+
+    **Deferred import, not a style choice** — importing
+    :mod:`ai_os_kernel.capability_manager.permission_grant` triggers
+    ``ai_os_kernel.capability_manager``'s own package init, which
+    re-enters this still-mid-import package; see
+    :func:`_bind_pack_context_if_receiver`'s own docstring for the
+    identical, already-diagnosed cycle and why deferring to call time is
+    genuinely safe here too.
+    """
+    from ai_os_kernel.capability_manager.permission_grant import over_granted_permissions
+
+    pack_permissions = frozenset(pack_manifest.get("permissions", []))
+    over_granted = over_granted_permissions(
+        entrypoint_permissions=frozenset(required_permissions), pack_permissions=pack_permissions
+    )
+    if over_granted:
+        error_type = AgentRegistryError if kind == "agent" else ToolRegistryError
+        raise error_type(
+            f"{kind} '{declared_id}' declares permissions {sorted(over_granted)} that pack "
+            f"{pack_id!r}'s own manifest never grants (declares only "
+            f"{sorted(pack_permissions)!r})"
         )
 
 
@@ -319,6 +370,7 @@ class SqlAgentRegistry:
                         agents_table.c.required_permissions,
                         packs_table.c.state,
                         packs_table.c.version,
+                        packs_table.c.manifest,
                     )
                     .select_from(
                         agents_table.outerjoin(
@@ -352,6 +404,13 @@ class SqlAgentRegistry:
 
         _require_activated_pack(
             kind="agent", declared_id=agent_id, pack_id=row.pack_id, state=row.state
+        )
+        _refuse_if_over_granted(
+            kind="agent",
+            declared_id=agent_id,
+            pack_id=row.pack_id,
+            required_permissions=row.required_permissions,
+            pack_manifest=row.manifest,
         )
 
         loaded = await asyncio.to_thread(self._loader.load, row.entrypoint)
@@ -421,6 +480,7 @@ class SqlToolRegistry:
                         tools_table.c.required_permissions,
                         packs_table.c.state,
                         packs_table.c.version,
+                        packs_table.c.manifest,
                     )
                     .select_from(
                         tools_table.outerjoin(
@@ -443,6 +503,13 @@ class SqlToolRegistry:
 
         _require_activated_pack(
             kind="tool", declared_id=tool_id, pack_id=row.pack_id, state=row.state
+        )
+        _refuse_if_over_granted(
+            kind="tool",
+            declared_id=tool_id,
+            pack_id=row.pack_id,
+            required_permissions=row.required_permissions,
+            pack_manifest=row.manifest,
         )
 
         loaded = await asyncio.to_thread(self._loader.load, row.entrypoint)
