@@ -1,6 +1,10 @@
 """Errors raised by the Workflow Engine's definition loading, input
 validation, and instance creation."""
 
+from __future__ import annotations
+
+from typing import Any
+
 
 class WorkflowDefinitionError(Exception):
     """A workflow definition file could not be loaded or is invalid.
@@ -75,6 +79,23 @@ class DecisionConditionError(Exception):
     does not contain the declared ``field``. A structural/configuration
     problem (P02-S01-M05-T09): the identical call against the identical,
     still-missing state reproduces exactly, never retriable."""
+
+
+class ParallelStepFailedError(Exception):
+    """A ``parallel`` step's real join policy was not satisfied
+    (``P02-S01-M05-T10``): every branch genuinely ran concurrently
+    (:class:`~ai_os_kernel.workflow_engine.step_executor.
+    ParallelStepExecutor`), but the outcome does not satisfy
+    ``joinPolicy`` — ``all`` and at least one branch failed, or ``any``
+    and every branch failed. (``collect`` never raises this; it reports
+    every branch's own real outcome, failures included, as a successful
+    result.) ``results`` carries each branch's own real, structured
+    outcome (``branchId``/``status``/``outputs``/``error``) for whoever
+    catches this — never re-parsed out of the message string."""
+
+    def __init__(self, message: str, *, results: list[dict[str, Any]]) -> None:
+        super().__init__(message)
+        self.results = results
 
 
 class ToolSandboxRequiredError(Exception):

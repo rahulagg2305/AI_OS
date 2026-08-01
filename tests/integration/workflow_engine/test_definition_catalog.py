@@ -111,8 +111,9 @@ def test_register_writes_the_documented_columns(database_url: str) -> None:
             assert row["graph"]["name"] == "Definition Catalog Test"
             # model_dump(by_alias=True) includes every field, including
             # every None default (joinPolicy, toolId/promptId/
-            # promptVersion/modelAlias, and now condition/branches, added
-            # by P02-S01-M05-T09, for this agent step) — the graph column
+            # promptVersion/modelAlias, condition/branches added by
+            # P02-S01-M05-T09, and now parallelSteps, added by
+            # P02-S01-M05-T10, for this agent step) — the graph column
             # faithfully mirrors the complete validated definition, not a
             # hand-picked subset of it.
             assert row["graph"]["steps"] == [
@@ -127,6 +128,7 @@ def test_register_writes_the_documented_columns(database_url: str) -> None:
                     "modelAlias": None,
                     "condition": None,
                     "branches": None,
+                    "parallelSteps": None,
                 }
             ]
             assert "id" not in row["graph"]

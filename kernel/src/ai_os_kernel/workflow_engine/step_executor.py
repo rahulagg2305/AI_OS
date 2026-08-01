@@ -3,9 +3,9 @@ work (Agent, Tool, Decision, Parallel, Sub-workflow, Quality Gate, Human
 Approval — workflow_architecture.md "Supported Step Types").
 
 ``NoOpStepExecutor`` always succeeds and does nothing — still the only
-implementation for Parallel/Sub-workflow/Human-Approval steps at this
-stage. ``AgentStepExecutor`` resolves a step's declared ``agentId``
-through an injected
+implementation for Sub-workflow/Human-Approval steps at this stage.
+``AgentStepExecutor`` resolves a step's declared ``agentId`` through an
+injected
 :class:`~ai_os_kernel.workflow_engine.registry.AgentRegistry` and
 invokes the *specific* real (trivial) in-process
 :class:`~ai_os_kernel.workflow_engine.agent.Agent` it resolves to;
@@ -19,10 +19,14 @@ module's own docstring; a caller that does not supply one still routes
 :class:`DecisionStepExecutor` (``P02-S01-M05-T09``) is the real
 implementation for a Decision step, genuinely branching subsequent
 execution — see its own docstring and
-:mod:`ai_os_kernel.workflow_engine.models`'s ``DecisionCondition``; a
-caller that does not supply one still routes ``decision`` steps to
+:mod:`ai_os_kernel.workflow_engine.models`'s ``DecisionCondition``.
+:class:`ParallelStepExecutor` (``P02-S01-M05-T10``) is the real
+implementation for a Parallel step, genuinely running its declared
+``parallelSteps`` concurrently via ``asyncio.gather``/``asyncio.wait``
+and joining per ``joinPolicy`` — see its own docstring. A caller that
+does not supply one still routes ``decision``/``parallel`` steps to
 ``NoOpStepExecutor``, unchanged. ``DispatchingStepExecutor`` routes
-between all five by ``step.type`` — the composition root wires each
+between all six by ``step.type`` — the composition root wires each
 individually (ADR-0004: interface-driven; ADR-0010: no DI container).
 
 **Real dispatch by declared id, not real capability discovery.** The
@@ -55,6 +59,7 @@ assembly for — see its own docstring below); ``NoOpStepExecutor``,
 forward it purely for ``Protocol`` uniformity.
 """
 
+import asyncio
 from typing import Any, Protocol
 
 from jsonschema import Draft202012Validator
@@ -65,10 +70,11 @@ from ai_os_kernel.workflow_engine.agent import Agent
 from ai_os_kernel.workflow_engine.errors import (
     AgentOutputValidationError,
     DecisionConditionError,
+    ParallelStepFailedError,
     ToolOutputValidationError,
     ToolSandboxRequiredError,
 )
-from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
+from ai_os_kernel.workflow_engine.models import JoinPolicy, StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.quality_gate import _latest_completed_output
 from ai_os_kernel.workflow_engine.registry import AgentRegistry, ToolRegistry
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
@@ -322,24 +328,171 @@ class DecisionStepExecutor:
         return {"outcome": outcome, "branch": target_step_id}
 
 
+class ParallelStepExecutor:
+    """Executes a ``parallel``-type step by genuinely running its
+    declared ``parallelSteps`` concurrently — real ``asyncio`` tasks,
+    not a sequential loop dressed up as parallel — and joining the real
+    results per its declared ``joinPolicy`` (``P02-S01-M05-T10``,
+    closing the last of the two step types the module docstring used to
+    list as always ``NoOpStepExecutor``-handled, alongside
+    :class:`DecisionStepExecutor` for ``decision``).
+
+    Each branch is a full, nested ``agent``/``tool`` step (model
+    validation already guarantees no other type reaches here), dispatched
+    to the same injected ``agent_executor``/``tool_executor`` a real
+    workflow-level ``agent``/``tool`` step already uses — no second
+    invocation mechanism.
+
+    **Join policies, exactly as ``workflow_engine.md`` §7.1 documents
+    them:**
+
+    - ``all`` — every branch must succeed; the step fails
+      (:class:`~ai_os_kernel.workflow_engine.errors.
+      ParallelStepFailedError`) if *any* branch does, but only after
+      every branch has genuinely run to completion (a policy about the
+      *outcome*, not early cancellation — ``any`` is where cancellation
+      belongs).
+    - ``any`` — the first branch to *succeed* wins; every branch still
+      running is genuinely cancelled (a real ``asyncio.Task.cancel()``,
+      not merely ignored) the moment a success is observed. Only raises
+      if every branch fails.
+    - ``collect`` — every branch runs to completion; failures are
+      reported as real, structured partial results, never raised — the
+      one policy where a failed branch does not fail the step.
+
+    Never validates the step's own aggregate output against a declared
+    schema — there is no resolved object here (unlike a real ``Agent``/
+    ``Tool``) to own one, the identical reasoning
+    :class:`DecisionStepExecutor` already established for its own
+    output.
+    """
+
+    def __init__(self, agent_executor: StepExecutor, tool_executor: StepExecutor) -> None:
+        self._agent_executor = agent_executor
+        self._tool_executor = tool_executor
+
+    async def execute(
+        self, step: WorkflowStep, *, workflow_id: str | None = None
+    ) -> dict[str, Any]:
+        if step.type is not StepType.PARALLEL:
+            raise ValueError(
+                f"ParallelStepExecutor cannot execute step '{step.id}' of type "
+                f"'{step.type.value}' — it only handles parallel steps"
+            )
+        branches, join_policy = step.parallel_steps, step.join_policy
+        if not branches or join_policy is None:
+            raise ValueError(
+                f"step '{step.id}' declares no parallelSteps/joinPolicy — "
+                "WorkflowStep validation should already have required both for "
+                "a parallel step"
+            )
+
+        if join_policy is JoinPolicy.ANY:
+            results = await self._run_racing_for_first_success(branches, workflow_id=workflow_id)
+        else:
+            results = await asyncio.gather(
+                *(self._run_branch(branch, workflow_id=workflow_id) for branch in branches)
+            )
+
+        if join_policy is JoinPolicy.COLLECT:
+            return {"joinPolicy": join_policy.value, "results": results}
+
+        failed = [r for r in results if r["status"] == "failed"]
+        if join_policy is JoinPolicy.ALL and failed:
+            raise ParallelStepFailedError(
+                f"parallel step '{step.id}' failed: {len(failed)} of {len(results)} "
+                f"branches failed under joinPolicy 'all' "
+                f"({[r['branchId'] for r in failed]!r})",
+                results=results,
+            )
+        if join_policy is JoinPolicy.ANY and not any(r["status"] == "completed" for r in results):
+            raise ParallelStepFailedError(
+                f"parallel step '{step.id}' failed: every branch failed under "
+                "joinPolicy 'any' (no branch to declare a winner)",
+                results=results,
+            )
+        return {"joinPolicy": join_policy.value, "results": results}
+
+    async def _run_branch(self, branch: WorkflowStep, *, workflow_id: str | None) -> dict[str, Any]:
+        executor = self._agent_executor if branch.type is StepType.AGENT else self._tool_executor
+        try:
+            outputs = await executor.execute(branch, workflow_id=workflow_id)
+            return {"branchId": branch.id, "status": "completed", "outputs": outputs, "error": None}
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            return {
+                "branchId": branch.id,
+                "status": "failed",
+                "outputs": None,
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            }
+
+    async def _run_racing_for_first_success(
+        self, branches: list[WorkflowStep], *, workflow_id: str | None
+    ) -> list[dict[str, Any]]:
+        """``joinPolicy: any`` — the first genuine success wins; every
+        branch still in flight at that moment is really cancelled, not
+        merely abandoned. Failed branches observed before a success
+        contribute their own real result; a still-running branch that
+        gets cancelled is reported as ``"cancelled"``, an honest third
+        outcome distinct from ``"completed"``/``"failed"``."""
+        tasks = {
+            asyncio.ensure_future(self._run_branch(branch, workflow_id=workflow_id)): branch
+            for branch in branches
+        }
+        results: dict[str, dict[str, Any]] = {}
+        pending = set(tasks)
+        winner_found = False
+
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                result = task.result()
+                results[result["branchId"]] = result
+                if result["status"] == "completed":
+                    winner_found = True
+            if winner_found:
+                break
+
+        for task in pending:
+            branch = tasks[task]
+            task.cancel()
+            results[branch.id] = {
+                "branchId": branch.id,
+                "status": "cancelled",
+                "outputs": None,
+                "error": None,
+            }
+        # Let cancellation actually propagate through the task before
+        # returning — a fire-and-forget cancel() request is not itself
+        # proof the branch's own coroutine has genuinely stopped running.
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        return [results[branch.id] for branch in branches]
+
+
 class DispatchingStepExecutor:
     """Routes an Agent-type step to ``agent_executor``, a Tool-type step
     to ``tool_executor``, a Quality-Gate-type step to
     ``quality_gate_executor`` (when supplied), a Decision-type step to
-    ``decision_executor`` (when supplied), and every other step type to
+    ``decision_executor`` (when supplied), a Parallel-type step to
+    ``parallel_executor`` (when supplied), and every other step type to
     ``default_executor``.
 
-    The only place that knows all five executors exist; none of them
+    The only place that knows all six executors exist; none of them
     needs to know about the others or about step types it does not
-    handle. ``quality_gate_executor``/``decision_executor`` both default
-    to ``None`` — every existing caller that does not supply one keeps
-    routing that step type to ``default_executor`` exactly as before
-    (:class:`NoOpStepExecutor`, unchanged); only a caller that genuinely
-    wants real, blocking gate evaluation
-    (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`) or real
-    decision-step branching supplies
-    :class:`~ai_os_kernel.workflow_engine.quality_gate.
-    QualityGateStepExecutor`/:class:`DecisionStepExecutor` here.
+    handle. ``quality_gate_executor``/``decision_executor``/
+    ``parallel_executor`` all default to ``None`` — every existing
+    caller that does not supply one keeps routing that step type to
+    ``default_executor`` exactly as before (:class:`NoOpStepExecutor`,
+    unchanged); only a caller that genuinely wants real, blocking gate
+    evaluation (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`),
+    real decision-step branching, or real concurrent parallel execution
+    supplies :class:`~ai_os_kernel.workflow_engine.quality_gate.
+    QualityGateStepExecutor`/:class:`DecisionStepExecutor`/
+    :class:`ParallelStepExecutor` here.
     """
 
     def __init__(
@@ -349,12 +502,14 @@ class DispatchingStepExecutor:
         default_executor: StepExecutor,
         quality_gate_executor: StepExecutor | None = None,
         decision_executor: StepExecutor | None = None,
+        parallel_executor: StepExecutor | None = None,
     ) -> None:
         self._agent_executor = agent_executor
         self._tool_executor = tool_executor
         self._default_executor = default_executor
         self._quality_gate_executor = quality_gate_executor
         self._decision_executor = decision_executor
+        self._parallel_executor = parallel_executor
 
     async def execute(
         self, step: WorkflowStep, *, workflow_id: str | None = None
@@ -367,4 +522,6 @@ class DispatchingStepExecutor:
             return await self._quality_gate_executor.execute(step, workflow_id=workflow_id)
         if step.type is StepType.DECISION and self._decision_executor is not None:
             return await self._decision_executor.execute(step, workflow_id=workflow_id)
+        if step.type is StepType.PARALLEL and self._parallel_executor is not None:
+            return await self._parallel_executor.execute(step, workflow_id=workflow_id)
         return await self._default_executor.execute(step, workflow_id=workflow_id)

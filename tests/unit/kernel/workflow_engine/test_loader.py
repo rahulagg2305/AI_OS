@@ -28,7 +28,15 @@ _VALID_DEFINITION: dict[str, Any] = {
             "type": "agent",
             "agentId": "se.software_engineering/analyst",
         },
-        {"id": "build_and_test", "type": "parallel", "joinPolicy": "all"},
+        {
+            "id": "build_and_test",
+            "type": "parallel",
+            "joinPolicy": "all",
+            "parallelSteps": [
+                {"id": "build", "type": "tool", "toolId": "se.build"},
+                {"id": "test", "type": "tool", "toolId": "se.test"},
+            ],
+        },
     ],
     "agents": ["requirements-analyst", "backend-developer"],
     "qualityGates": ["se.build"],
@@ -176,6 +184,117 @@ def test_parallel_step_without_join_policy_fails_clearly(tmp_path: Path) -> None
 
     with pytest.raises(WorkflowDefinitionError, match="joinPolicy"):
         loader.load(path)
+
+
+def test_parallel_step_without_parallel_steps_fails_clearly(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [{"id": "fan_out", "type": "parallel", "joinPolicy": "all"}],
+    }
+    path = _write_definition(tmp_path / "parallel_no_branches.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="at least two"):
+        loader.load(path)
+
+
+def test_parallel_step_with_a_single_branch_fails_clearly(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {
+                "id": "fan_out",
+                "type": "parallel",
+                "joinPolicy": "all",
+                "parallelSteps": [
+                    {
+                        "id": "only_one",
+                        "type": "agent",
+                        "agentId": "se.software_engineering/analyst",
+                    }
+                ],
+            }
+        ],
+    }
+    path = _write_definition(tmp_path / "parallel_one_branch.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="at least two"):
+        loader.load(path)
+
+
+def test_parallel_step_with_duplicate_branch_ids_fails_clearly(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {
+                "id": "fan_out",
+                "type": "parallel",
+                "joinPolicy": "all",
+                "parallelSteps": [
+                    {"id": "same", "type": "agent", "agentId": "se.software_engineering/analyst"},
+                    {"id": "same", "type": "agent", "agentId": "se.software_engineering/analyst"},
+                ],
+            }
+        ],
+    }
+    path = _write_definition(tmp_path / "parallel_duplicate_branches.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="duplicate parallelSteps"):
+        loader.load(path)
+
+
+def test_parallel_step_with_a_nested_quality_gate_branch_fails_clearly(tmp_path: Path) -> None:
+    """Only agent/tool branches are supported — no nested
+    parallel/quality_gate/etc. A `quality_gate` step is otherwise
+    self-contained (no required fields of its own), so this exercises
+    the *type* check specifically, not a different, unrelated failure
+    from the nested step's own validation."""
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {
+                "id": "fan_out",
+                "type": "parallel",
+                "joinPolicy": "all",
+                "parallelSteps": [
+                    {"id": "a", "type": "agent", "agentId": "se.software_engineering/analyst"},
+                    {"id": "b", "type": "quality_gate"},
+                ],
+            }
+        ],
+    }
+    path = _write_definition(tmp_path / "parallel_nested_quality_gate.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="only agent/tool branches"):
+        loader.load(path)
+
+
+def test_a_well_formed_parallel_step_loads_successfully(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {
+                "id": "fan_out",
+                "type": "parallel",
+                "joinPolicy": "collect",
+                "parallelSteps": [
+                    {"id": "a", "type": "agent", "agentId": "se.software_engineering/analyst"},
+                    {"id": "b", "type": "tool", "toolId": "se.build"},
+                ],
+            }
+        ],
+    }
+    path = _write_definition(tmp_path / "parallel_valid.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    definition = loader.load(path)
+
+    fan_out_step = next(step for step in definition.steps if step.id == "fan_out")
+    assert fan_out_step.parallel_steps is not None
+    assert [branch.id for branch in fan_out_step.parallel_steps] == ["a", "b"]
 
 
 def test_decision_step_without_condition_or_branches_fails_clearly(tmp_path: Path) -> None:

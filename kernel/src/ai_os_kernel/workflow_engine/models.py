@@ -15,17 +15,20 @@ Two deliberate scoping decisions, not omissions:
   referenced by id everywhere else).
 - ``joinPolicy`` (mandatory for a ``parallel`` step,
   ``workflow_engine.md`` §7.1), the five invocation fields below, and —
-  as of ``P02-S01-M05-T09`` — ``condition``/``branches`` (mandatory for
-  a ``decision`` step; see :class:`DecisionCondition`'s own docstring)
-  are the per-step fields validated here. **Sub-workflow linkage remains
-  genuinely undocumented** — no document defines a field-level contract
-  for it yet — and stays deferred; inventing one here would still be
-  architecture this module does not own. Decision-step branching is no
-  longer in that category: no document defined it either, but the
-  product owner explicitly approved a minimal, closed-vocabulary
-  contract as part of that step rather than leaving the ticket blocked,
-  disclosed as a real, deliberate departure from "wait for a document,"
-  not an unreviewed invention.
+  as of ``P02-S01-M05-T09``/``P02-S01-M05-T10`` — ``condition``/
+  ``branches`` (mandatory for a ``decision`` step; see
+  :class:`DecisionCondition`'s own docstring) and ``parallelSteps``
+  (mandatory alongside ``joinPolicy`` for a ``parallel`` step — at
+  least two nested ``agent``/``tool`` branches) are the per-step fields
+  validated here. **Sub-workflow linkage remains genuinely
+  undocumented** — no document defines a field-level contract for it
+  yet — and stays deferred; inventing one here would still be
+  architecture this module does not own. Decision-step branching and
+  parallel-step membership are no longer in that category: no document
+  defined either, but the product owner explicitly approved a minimal,
+  closed-vocabulary contract for each as part of its own step rather
+  than leaving the ticket blocked, disclosed as a real, deliberate
+  departure from "wait for a document," not an unreviewed invention.
 
 ``WorkflowStep``'s five invocation fields (``agentId``, ``toolId``,
 ``promptId``, ``promptVersion``, ``modelAlias``) are a field-for-field
@@ -142,6 +145,7 @@ class WorkflowStep(_CamelModel):
     model_alias: str | None = None
     condition: DecisionCondition | None = None
     branches: dict[str, str] | None = None
+    parallel_steps: list[WorkflowStep] | None = None
 
     @field_validator("agent_id", "tool_id", "prompt_id", "prompt_version", "model_alias")
     @classmethod
@@ -151,18 +155,60 @@ class WorkflowStep(_CamelModel):
         return value
 
     @model_validator(mode="after")
-    def _parallel_step_requires_join_policy(self) -> WorkflowStep:
-        if self.type is StepType.PARALLEL and self.join_policy is None:
-            raise ValueError(
-                f"step '{self.id}': a parallel step must declare joinPolicy "
-                "(all | any | collect) — it fails validation rather than "
-                "defaulting silently (workflow_engine.md §7.1)"
-            )
+    def _parallel_step_requires_join_policy_and_branches(self) -> WorkflowStep:
+        """``P02-S01-M05-T10``: a ``parallel`` step must declare both
+        ``joinPolicy`` (already real) and ``parallelSteps`` (new) — the
+        minimal, closed contract the product owner approved in place of
+        the undocumented one this module's own history already flagged
+        for ``decision``: each entry is a full, nested ``WorkflowStep``
+        (reusing this exact model recursively, not a second one),
+        restricted to ``agent``/``tool`` only — the only two step types
+        with a real, self-contained executor today. No nested
+        ``parallel``/``decision``/etc.: those all carry cross-step
+        reference semantics (a join policy of their own, a
+        ``sourceStepId`` elsewhere in the *outer* sequence) that do not
+        resolve inside an isolated concurrent branch, so allowing them
+        would silently invite a reference that can never work rather
+        than fail loudly at load time.
+        """
+        if self.type is StepType.PARALLEL:
+            if self.join_policy is None:
+                raise ValueError(
+                    f"step '{self.id}': a parallel step must declare joinPolicy "
+                    "(all | any | collect) — it fails validation rather than "
+                    "defaulting silently (workflow_engine.md §7.1)"
+                )
+            if not self.parallel_steps:
+                raise ValueError(
+                    f"step '{self.id}': a parallel step must declare at least two "
+                    "parallelSteps — it fails validation rather than defaulting "
+                    "silently"
+                )
+            if len(self.parallel_steps) < 2:
+                raise ValueError(
+                    f"step '{self.id}': parallelSteps must declare at least two "
+                    "branches — a single branch is not genuinely parallel"
+                )
+            branch_ids = [branch.id for branch in self.parallel_steps]
+            duplicates = {bid for bid in branch_ids if branch_ids.count(bid) > 1}
+            if duplicates:
+                raise ValueError(
+                    f"step '{self.id}': duplicate parallelSteps id(s): {sorted(duplicates)}"
+                )
+            for branch in self.parallel_steps:
+                if branch.type not in (StepType.AGENT, StepType.TOOL):
+                    raise ValueError(
+                        f"step '{self.id}': parallelSteps entry '{branch.id}' declares "
+                        f"type '{branch.type.value}' — only agent/tool branches are "
+                        "supported (no nested parallel/decision/etc.)"
+                    )
+        elif self.parallel_steps is not None:
+            raise ValueError(f"step '{self.id}': only a parallel step may declare parallelSteps")
         return self
 
     @model_validator(mode="after")
     def _decision_step_requires_condition_and_branches(self) -> WorkflowStep:
-        """Mirrors :meth:`_parallel_step_requires_join_policy` exactly,
+        """Mirrors :meth:`_parallel_step_requires_join_policy_and_branches` exactly,
         for the new decision-step fields this step adds: both required
         together, on a ``decision`` step only, failing validation rather
         than defaulting silently."""
