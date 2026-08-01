@@ -32,6 +32,11 @@ dependencies = [
     "pyjwt>=2.9,<3.0",
     "pgvector>=0.3,<1.0",
     "docker>=7.1,<8.0",
+    # PEP 440 range parsing for dependencies.sdkVersion (manifest_schema.md
+    # rule 13, ai_os_kernel.manifest_loader.semantic) — was already present
+    # transitively (packaging tooling's own dependency), now declared
+    # explicitly since the Kernel imports it directly.
+    "packaging>=24.0,<27.0",
 ]
 
 [build-system]

@@ -31,23 +31,18 @@ reach `_extract_metadata` and still fail it. The tests below prove this
 empirically across the real pack manifest and several synthetically
 broken variants, rather than resting on that argument alone.
 
-**One real, genuine, one-directional divergence found and confirmed —
-not a bug, but real enough to need its own explicit test
-(`TestTheOneRealKnownDivergence` below) rather than being silently
-absorbed into the "they agree" claim.** `check_1_manifest_is_valid`
-additionally checks the manifest's declared `dependencies.sdkVersion`
-range against the real, installed `ai-os-sdk` distribution version
-(`platform_sdk_v1_scope.md` step 15's own stated scope) — `ManifestLoader`
-has no such concept and never performs this check at all. The SDK-side
-check is therefore *strictly stricter* on this one field: every manifest
-`ManifestLoader` rejects, `check_1_manifest_is_valid` also rejects (the
-9 cases above prove this), but a manifest declaring an `sdkVersion`
-range the installed SDK cannot satisfy is accepted by `ManifestLoader`
-and rejected by `check_1_manifest_is_valid`. This is intentional — check
-1 is scoped to also cover "dependencies are satisfied," which
-`ManifestLoader` was never built to check — and one-directional only:
-there is no manifest shape `check_1_manifest_is_valid` accepts and
-`ManifestLoader` rejects.
+**The one real, genuine, one-directional divergence this file used to
+document is now closed (`P01-S03-M02-T04`, 2026-08-01).**
+`check_1_manifest_is_valid` checks the manifest's declared
+`dependencies.sdkVersion` range against the real, installed `ai-os-sdk`
+distribution version (`platform_sdk_v1_scope.md` step 15's own stated
+scope); `ManifestLoader` now performs the identical check
+(`ai_os_kernel.manifest_loader.semantic.validate_sdk_version_range`,
+rule 13 in `manifest_schema.md`) — genuinely enforceable as of this step
+since `ai-os-sdk` is a real, installed distribution (it was not when
+this divergence was first documented). `TestTheFormerKnownDivergenceIsNowClosed`
+below keeps the identical real failing case that used to prove the
+divergence, now proving agreement instead.
 
 **A second, real defect found and fixed while writing this test, not
 merely a divergence to document**: `check_1_manifest_is_valid` used to
@@ -202,18 +197,20 @@ class TestAgreementOnSyntheticVariants:
         _assert_both_agree(path, expected=False)
 
 
-class TestTheOneRealKnownDivergence:
-    """`check_1_manifest_is_valid` additionally checks
-    `dependencies.sdkVersion` against the real, installed `ai-os-sdk`
-    version (`platform_sdk_v1_scope.md` step 15's own stated scope,
-    "dependencies are satisfied") — `ManifestLoader` does not check this
-    at all; it has no concept of an installed SDK version to compare
-    against. This is a real, intentional, one-directional divergence:
-    the SDK-side check is *strictly stricter* on this one field, never
-    laxer. Documented here explicitly, with a real failing case, rather
-    than left to be discovered as a surprise."""
+class TestTheFormerKnownDivergenceIsNowClosed:
+    """Closed by ``P01-S03-M02-T04``: ``ManifestLoader`` now also checks
+    ``dependencies.sdkVersion`` against the real, installed ``ai-os-sdk``
+    version (:mod:`ai_os_kernel.manifest_loader.semantic`,
+    ``validate_sdk_version_range`` — rule 13), the identical check
+    ``check_1_manifest_is_valid`` already performed
+    (`platform_sdk_v1_scope.md` step 15's own stated scope, "dependencies
+    are satisfied"). This class used to document a real, one-directional
+    divergence (the SDK-side check was strictly stricter on this one
+    field) with a failing case proving it; that divergence no longer
+    exists, so the same case now proves *agreement* instead of being
+    silently deleted."""
 
-    def test_the_sdk_check_rejects_an_sdk_version_range_the_installed_sdk_does_not_satisfy(
+    def test_both_reject_an_sdk_version_range_the_installed_sdk_does_not_satisfy(
         self, tmp_path: Path
     ) -> None:
         manifest = {
@@ -222,14 +219,4 @@ class TestTheOneRealKnownDivergence:
         }
         path = _write(tmp_path, "manifest.yaml", manifest)
 
-        kernel_result = _kernel_accepts(path)
-        sdk_result = _sdk_accepts(path)
-
-        assert kernel_result is True, (
-            "ManifestLoader has no sdkVersion-satisfaction concept and should still accept "
-            "this manifest on schema grounds alone"
-        )
-        assert sdk_result is False, (
-            "check_1_manifest_is_valid should reject this manifest: the installed ai-os-sdk "
-            "version cannot satisfy '>=99.0.0,<100.0.0'"
-        )
+        _assert_both_agree(path, expected=False)

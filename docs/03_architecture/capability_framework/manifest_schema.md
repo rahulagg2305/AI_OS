@@ -2,11 +2,11 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Manifest Schema
-**Version:** 2.2
+**Version:** 2.3
 **Status:** Approved
-**Last Updated:** 2026-07-28 (added Implementation Status and Related Documents; corrected the Validation Rules section — **none** of the semantic rules 12–21 is enforced by the Loader today — and the discovery section, which claimed entry-point discovery exists)
+**Last Updated:** 2026-08-01 (`P01-S03-M02-T03`/`T04`: entry-point discovery, and semantic rules 13/16, are now real; rule 20 newly identified as currently unenforceable rather than merely unbuilt)
 
-**Previously:** 2026-07-28 (v2.1 — Validation Rules: added rule 11, `modelAlias` required only when an agent declares `llm:invoke`)
+**Previously:** 2026-07-28 (v2.2 — added Implementation Status and Related Documents; corrected the Validation Rules section — **none** of the semantic rules 12–21 is enforced by the Loader today — and the discovery section, which claimed entry-point discovery exists); 2026-07-28 (v2.1 — Validation Rules: added rule 11, `modelAlias` required only when an agent declares `llm:invoke`)
 
 ---
 
@@ -26,14 +26,13 @@ Version 2.0 replaces the earlier illustrative YAML sketch with a typed, enforcea
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (updated 2026-08-01)
 
-**Built:** the schema itself and the validation path around it are among the most genuinely real parts of the platform. `../../../platform_sdk/schemas/manifest.schema.json` exists, is valid draft 2020-12, and is loaded and enforced by `ai_os_kernel/manifest_loader/loader.py` — `ManifestLoader.load_one()` parses the YAML and raises `ManifestError` on any schema violation, and `ManifestLoader.scan()` reports per-pack failures without aborting the scan. **All eleven schema-level rules (1–11) below are genuinely enforced**, including rule 11's conditional `modelAlias` requirement, which is implemented as an `agents[].if`/`then` in the schema file. Filesystem-scan discovery is real (`manifest_loader/discovery.py`). The lifecycle state machine is real to the extent of `register → activate → deactivate`, with every transition recorded in `catalog.pack_state_transitions` by `ai_os_kernel/capability_manager/repository.py`. One real manifest validates and loads: `../../../capability_packs/software-engineering/manifest.yaml`.
+**Built:** the schema itself and the validation path around it are among the most genuinely real parts of the platform. `../../../platform_sdk/schemas/manifest.schema.json` exists, is valid draft 2020-12, and is loaded and enforced by `ai_os_kernel/manifest_loader/loader.py` — `ManifestLoader.load_one()` parses the YAML and raises `ManifestError` on any schema violation, and `ManifestLoader.scan()` reports per-pack failures without aborting the scan. **All eleven schema-level rules (1–11) below are genuinely enforced**, including rule 11's conditional `modelAlias` requirement, which is implemented as an `agents[].if`/`then` in the schema file. **Both ADR-0009 discovery mechanisms are real** (`P01-S03-M02-T03`): filesystem scan and entry-point discovery (`ai_os.capability_packs`, via `importlib.metadata`) — combined and de-duplicated by `ManifestLoader.scan()`, so "both routes validate identically" is genuinely true now, not vacuously. **Two semantic rules are real** (`P01-S03-M02-T04`): rule 13 (SDK version range) and rule 16 (workflow-definition existence + step-reference resolution) — see their own entries above for what each checks. The lifecycle state machine is real to the extent of `register → activate → deactivate`, with every transition recorded in `catalog.pack_state_transitions` by `ai_os_kernel/capability_manager/repository.py`. One real manifest validates and loads: `../../../capability_packs/software-engineering/manifest.yaml`.
 
 **Not built:**
 
-- **None of the semantic rules 12–21 is enforced.** The Manifest Loader performs YAML parse + JSON Schema validation + `metadata` extraction, and nothing else; its own module docstring says so. No kernel-version compatibility check, no `sdkVersion` range check (unenforceable — no SDK exists), no cross-pack global ID uniqueness, no reference resolution for `requiredTools`/`requiredPrompts`/`qualityGates`, no workflow-definition existence or step-reference resolution, no permission-subset checks, no `modelAlias` alias-resolution check, no sub-workflow circularity check, and no comparison of declared components against what `activate()` returns.
-- **Entry-point discovery** (the production mechanism) is not implemented — filesystem scan only. So "both routes validate identically" is currently true only because one route does not exist.
+- **Eight of the ten semantic rules remain unenforced: 12, 14, 15, 17, 18, 19, 21, and 20 (the last currently unenforceable, not merely unbuilt — see its own entry above).** No kernel-version compatibility check, no cross-pack global ID uniqueness, no reference resolution for `requiredTools`/`requiredPrompts`/`qualityGates`, no permission-subset checks, no `modelAlias` alias-resolution check, and no comparison of declared components against what `activate()` returns.
 - **Nothing calls a pack's `entryPoint`.** No code imports a pack's `CapabilityPack` class or calls `activate()`; the lifecycle repository only flips `catalog.packs.state`. It also does not parse a manifest's `agents`/`tools`/`workflows` arrays into `catalog.agents`/`catalog.tools` rows — those are written directly by tests and composition code today.
 - **Of the lifecycle states below, `discovered`, `validated`, `activated`, and `deactivated` have real code paths; `installed`, `configured`, `failed`, and `uninstalled` do not have distinct implemented transitions.** "Activation of a pack that affects platform behaviour requires human approval" has no implementation at all — there is no approvals writer or reader anywhere (see `../governance/human_approval_points.md`).
 - The `events`, `commands`, `qualityGates`, `tools`, `secrets`, and `health` manifest sections are all schema-valid and declarable but have **no consuming runtime**: no Event Bus, no command dispatcher, no Quality Gate Engine, no pack-declared Tool path, no per-pack secret resolution, and no health-check caller.
@@ -56,10 +55,10 @@ capability_packs/<pack_id>/manifest.yaml
 
 Discovered by ([ADR-0009](../../18_decision_log/adr/ADR-0009-packaging-and-dependency-management.md)):
 
-1. **Entry point** — installed packs register under the `ai_os.capability_packs` group. Production mechanism; supports packs installed from a package index. *Specification only; not yet implemented* — it requires real installable pack distributions from outside the repository, which do not exist yet (`manifest_loader/discovery.py` records the same).
+1. **Entry point** — installed packs register under the `ai_os.capability_packs` group. Production mechanism; supports packs installed from a package index. **Implemented** (`P01-S03-M02-T03`, `manifest_loader/discovery.py`, `discover_entry_point_manifests()`) — no pack in this repository is actually distributed via a registered entry point yet, so this is proven against a real, synthetic installed distribution in tests rather than a real pack today.
 2. **Filesystem scan** — configured directories are scanned for `manifest.yaml`, one level deep. Development mechanism. **Implemented** (`manifest_loader/discovery.py`); a configured directory that does not exist is skipped rather than raised on.
 
-Both routes validate identically. A pack without a valid manifest is never loaded, and a pack that fails validation leaves no partial registration.
+Both routes validate identically — genuinely, not vacuously, now that both exist. `ManifestLoader.scan()` de-duplicates a manifest reachable by both. A pack without a valid manifest is never loaded, and a pack that fails validation leaves no partial registration.
 
 ---
 
@@ -196,7 +195,7 @@ health:
 
 The Manifest Loader is specified to enforce all of the following. Any failure rejects the pack.
 
-**Status of enforcement (2026-07-28):** rules 1–11 are genuinely enforced today; **rules 12–21 are specification only and are enforced by nothing.** `ManifestLoader.load_one()` performs a YAML parse, a JSON Schema validation, and a `metadata` extraction — no more. Treat 12–21 as the rule set to be built, not as checks a manifest has already passed.
+**Status of enforcement (updated 2026-08-01, `P01-S03-M02-T04`):** rules 1–11 are genuinely enforced today, and so are **rules 13 and 16** — `ManifestLoader.load_one()` now also runs `ai_os_kernel.manifest_loader.semantic.validate_sdk_version_range` and `validate_workflow_definitions` after schema validation and `metadata` extraction. **Rules 12, 14, 15, 17, 18, 19, and 21 remain specification only.** Rule 20 is a distinct case — see its own entry below: currently *unenforceable*, not merely unbuilt.
 
 **Schema-level** (enforced by the JSON Schema — **all implemented**):
 1. `apiVersion` is `ai-os/v1` and `kind` is `CapabilityPack`.
@@ -211,16 +210,16 @@ The Manifest Loader is specified to enforce all of the following. Any failure re
 10. `entryPoint` is required when the pack declares agents or workflows.
 11. `modelAlias` is required on an `agents[]` entry only when that entry's own `permissions` declares `llm:invoke`; an agent that declares no `llm:invoke` permission (because it genuinely makes no LLM call) may omit `modelAlias` entirely (fixed 2026-07-28 — a genuine, discovered gap: the schema originally required `modelAlias` unconditionally on every agent, forcing an agent with no LLM call to declare a syntactically-valid but unused decoy value; see `docs/19_roadmap/implementation_status.md` for the discovery and `platform_sdk/schemas/manifest.schema.json`'s own `agents[].if`/`then` for the fix).
 
-**Semantic-level** (to be enforced by the Loader beyond the schema — **none of rules 12–21 is implemented**; see the status note above):
+**Semantic-level** (to be enforced by the Loader beyond the schema — see the status note above for which of 12–21 are actually built):
 12. `compatibility.minKernelVersion` ≤ running Kernel version ≤ `maxKernelVersion`.
-13. `dependencies.sdkVersion` range includes the running SDK version. *Currently unenforceable rather than merely unimplemented: there is no SDK distribution and therefore no running SDK version to compare against (`../platform/platform_sdk.md` §1a).*
+13. `dependencies.sdkVersion` range includes the running SDK version. **Built** (`P01-S03-M02-T04`, `ai_os_kernel.manifest_loader.semantic.validate_sdk_version_range`) — genuinely enforceable as of this step: `ai-os-sdk` is a real, installed distribution (the Platform SDK initiative), so its real version is compared via `importlib.metadata.version("ai-os-sdk")` against the declared PEP 440 range. Was previously unenforceable, not merely unimplemented, before that package existed.
 14. All IDs are globally unique across installed packs.
 15. Every `requiredTools`, `requiredPrompts`, and `qualityGates` reference resolves within this pack or the Kernel.
-16. Every workflow definition file exists, parses, and its step references resolve.
+16. Every workflow definition file exists, parses, and its step references resolve. **Built** (`P01-S03-M02-T04`, `ai_os_kernel.manifest_loader.semantic.validate_workflow_definitions`) — reuses the real `WorkflowDefinitionLoader`/`WorkflowDefinition` for existence/parsing/structural validation, then resolves each step's `agentId`/`toolId`/`promptId` against this manifest's own declared `agents[]`/`tools[]`/`prompts[]`.
 17. Every agent's declared `permissions` is a **subset** of every workflow that uses it ([ADR-0023](../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md)).
 18. Every tool's declared `permissions` is a subset of the agents that require it.
 19. `modelAlias`, when declared, resolves to a configured alias and is not a literal provider model ID.
-20. No circular dependency among workflows and sub-workflows.
+20. No circular dependency among workflows and sub-workflows. **Currently unenforceable, not merely unimplemented** (confirmed `P01-S03-M02-T04`, the identical distinction rule 13 was previously in): `ai_os_kernel.workflow_engine.models.WorkflowStep`'s own docstring states plainly that sub-workflow linkage "remain[s] genuinely undocumented — no document defines a field-level contract for them yet." A `sub_workflow`-typed step declares none of the five invocation fields, so no field in the real data model today names *which* workflow a `sub_workflow` step would call — nothing to detect a cycle through. Revisit once sub-workflow linkage has a real field-level contract.
 21. Declared components match the implementations returned by `activate()` exactly.
 
 Rules 17 and 18 are what make the monotonic narrowing rule checkable at install time rather than discovered at runtime. **Because they are unimplemented, monotonic narrowing is currently not checked at install time or at runtime** — a real, open gap, tracked as part of the Security Manager (`../../19_roadmap/feature_inventory.md` row 14) and traced to FR-018.

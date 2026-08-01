@@ -15,11 +15,16 @@ present in a configured directory *and* separately registered as an
 installed distribution pointing at the same real file) is validated
 once, not twice.
 
-Semantic validation (kernel-version compatibility, global ID uniqueness
-across packs, permission-subset checks, resolving agent/tool/workflow
-references) is not implemented at this stage — see
+**Two semantic rules are enforced as of ``P01-S03-M02-T04``**: SDK
+version range (manifest_schema.md rule 13) and workflow-definition
+existence plus step-reference resolution (rule 16) — see
+:mod:`ai_os_kernel.manifest_loader.semantic` for what each checks and,
+for rule 16's sibling rule 20 (workflow/sub-workflow circularity), why
+it is not implemented there. Kernel-version compatibility, global ID
+uniqueness across packs, and permission-subset checks (rules 12, 14,
+17, 18) remain unimplemented — see
 docs/03_architecture/capability_framework/manifest_schema.md for the
-full rule set this will eventually enforce.
+full rule set.
 """
 
 import json
@@ -39,6 +44,10 @@ from ai_os_kernel.manifest_loader.models import (
     ManifestLoadFailure,
     ManifestScanReport,
     PackMetadata,
+)
+from ai_os_kernel.manifest_loader.semantic import (
+    validate_sdk_version_range,
+    validate_workflow_definitions,
 )
 
 
@@ -82,11 +91,16 @@ class ManifestLoader:
         return ManifestScanReport(discovered=discovered, failed=failed)
 
     def load_one(self, manifest_path: Path) -> DiscoveredManifest:
-        """Parse and schema-validate a single manifest. Raises
-        ``ManifestError`` with a clear reason on any failure."""
+        """Parse, schema-validate, and semantically validate a single
+        manifest. Raises ``ManifestError`` with a clear reason on any
+        failure — schema violations first, then the semantic rules
+        (:mod:`ai_os_kernel.manifest_loader.semantic`), since the
+        semantic rules assume a schema-valid manifest."""
         raw = self._parse_yaml(manifest_path)
         self._validate_schema(manifest_path, raw)
         metadata = self._extract_metadata(manifest_path, raw)
+        validate_sdk_version_range(raw)
+        validate_workflow_definitions(raw, manifest_path)
         return DiscoveredManifest(manifest_path=str(manifest_path), metadata=metadata, raw=raw)
 
     def _parse_yaml(self, manifest_path: Path) -> dict[str, Any]:
