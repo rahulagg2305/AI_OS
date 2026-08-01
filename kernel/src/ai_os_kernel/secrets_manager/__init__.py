@@ -29,24 +29,33 @@ Implemented so far (Stage A):
   ``governance.audit_log`` row (reusing
   :mod:`ai_os_kernel.observability.audit`, not reimplementing it). See
   :mod:`ai_os_kernel.secrets_manager.access_broker`.
+- :class:`CachingSecretProvider` (added 2026-08-01, ``P01-S02-M19-T05``) —
+  wraps any :class:`SecretProvider` with a per-reference,
+  bounded-lifetime (TTL) cache, plus an explicit
+  :meth:`~ai_os_kernel.secrets_manager.cache.CachingSecretProvider.invalidate`
+  hook for a caller that learns a secret was rotated at its source
+  before the TTL naturally expires. See
+  :mod:`ai_os_kernel.secrets_manager.cache`.
 - **Wired into the Configuration Manager** (``P01-S02-M01-T06``):
   :func:`ai_os_kernel.configuration_manager.resolve_secret_references`
   resolves every ``secret://`` reference surviving that module's own
   layer 1-6 merge through a ``SecretProvider`` — not yet routed through
-  :class:`AccessBroker`, since that resolution path has no
+  :class:`AccessBroker` or :class:`CachingSecretProvider`, since that
+  resolution path has no
   :class:`~ai_os_kernel.security_manager.models.SecurityContext` to
-  gate with today.
+  gate with today, and every layer-1-6 merge already re-reads current
+  values on every call.
 
 Not yet implemented: age/SOPS encrypted-file decryption, HashiCorp
-Vault, cloud secret managers, TTL caching with rotation invalidation,
-the prompt-assembly scan that rejects a resolved secret value reaching
-a model, and wiring into any consumer that resolves through
-:class:`AccessBroker` specifically (LLM Gateway, Git Integration
-Service, ...). None of those exist yet, so none of them use this
-module yet.
+Vault, cloud secret managers, the prompt-assembly scan that rejects a
+resolved secret value reaching a model, and wiring
+:class:`AccessBroker`/:class:`CachingSecretProvider` into any specific
+consumer (LLM Gateway, Git Integration Service, ...). None of those
+exist yet, so none of them use this module yet.
 """
 
 from ai_os_kernel.secrets_manager.access_broker import AccessBroker
+from ai_os_kernel.secrets_manager.cache import CachingSecretProvider
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 from ai_os_kernel.secrets_manager.errors import AccessDeniedError, SecretResolutionError
 from ai_os_kernel.secrets_manager.file_provider import FileSecretProvider
@@ -57,6 +66,7 @@ from ai_os_kernel.secrets_manager.value import SecretValue
 __all__ = [
     "AccessBroker",
     "AccessDeniedError",
+    "CachingSecretProvider",
     "EnvSecretProvider",
     "FileSecretProvider",
     "SecretProvider",

@@ -6,16 +6,16 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-07-31 from 224 Task tickets.
+**Generated:** 2026-08-01 from 224 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 48%** (107.5 of 224 Task-equivalents complete)
+**Overall: 48%** (108.5 of 224 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
 | P01 (A) | S01 Process, Packaging and Persistence Baseline | 4 | 3 | 0 | 1 | 75% |
-| P01 (A) | S02 Configuration and Secrets | 14 | 11 | 0 | 3 | 79% |
+| P01 (A) | S02 Configuration and Secrets | 14 | 12 | 0 | 2 | 86% |
 | P01 (A) | S03 Manifest Discovery and Schema | 6 | 3 | 0 | 3 | 50% |
 | P01 (A) | S04 Health and Lifecycle | 6 | 5 | 0 | 1 | 83% |
 | P01 (A) | S05 Observability and Audit | 6 | 4 | 0 | 2 | 67% |
@@ -56,7 +56,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
-| P01 (Stage A) - Platform Skeleton | 46 | 33 | 72% |
+| P01 (Stage A) - Platform Skeleton | 46 | 34 | 74% |
 | P02 (Stage B) - Minimum Viable Kernel | 93 | 51 | 55% |
 | P03 (Stage C) - First Real Capability Pack | 27 | 15 | 56% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
@@ -68,10 +68,9 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-59 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+58 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P01-S01-M40-T04` Runtime container image
-- `P01-S02-M19-T05` TTL cache and rotation
 - `P01-S02-M19-T06` Prompt-assembly secret leak scan
 - `P01-S03-M02-T03` Entry-point discovery
 - `P01-S03-M02-T04` Remaining semantic manifest rules
@@ -95,7 +94,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S03-M08-T08` Runtime-config resolver
 - `P02-S03-M08-T09` Filter and ranker
 - `P02-S03-M08-T10` Persisted context audit logger
-- ... and 34 more
+- `P02-S04-M09-T03` Indexing component
+- ... and 33 more
 
 ## Dependency review signal
 
