@@ -53,6 +53,13 @@ this file top to bottom is meant to tell the whole startup story:
     that proactively reclaims expired ``workflow_leases`` rows every
     ``LEASE_REAP_INTERVAL_SECONDS``, the identical start/cancel pattern
     step 11 established.
+13. The scheduled audit-chain verification job
+    (``ai_os_kernel.observability.audit_verification_job.run_periodic_audit_chain_verification``)
+    — built and unit-tested in an earlier step but never started in a
+    real Kernel process until now. All three background loops (11, 12,
+    13) are drained on shutdown through one
+    ``ai_os_kernel.health.shutdown.GracefulShutdownCoordinator``
+    (``P01-S04-M03-T06``), not three duplicated cancel-and-await blocks.
 
 As further Stage B/C components land, their construction and startup
 order is added here, not scattered across
@@ -324,7 +331,6 @@ Docker image, Kubernetes) starts the process from the repository root.
 """
 
 import asyncio
-import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -353,7 +359,7 @@ from ai_os_kernel.capability_manager.repository import (
 from ai_os_kernel.configuration_manager import BootstrapEnv, ConfigurationManager, PlatformConfig
 from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextManager
 from ai_os_kernel.context_manager.resolvers import WorkflowStateResolver
-from ai_os_kernel.health import ComponentStatus, HealthService
+from ai_os_kernel.health import ComponentStatus, GracefulShutdownCoordinator, HealthService
 from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
     PROVIDER_NAME,
     build_anthropic_adapter,
@@ -371,11 +377,14 @@ from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGatew
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter, build_routing_chain
 from ai_os_kernel.manifest_loader import ManifestLoader
 from ai_os_kernel.observability import (
+    AUDIT_CHAIN_VERIFICATION_INTERVAL_SECONDS,
+    SqlAuditLogWriter,
     TraceIdMiddleware,
     configure_logging,
     configure_metrics,
     configure_tracing,
     get_logger,
+    run_periodic_audit_chain_verification,
 )
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.persistence.settings import DatabaseSettings
@@ -1165,22 +1174,27 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     verifier degrades independently of all seven, since authentication
     needs neither a database nor an LLM secret.
 
-    **Two real, continuously-running background tasks are started here
-    and stopped in this function's own ``finally`` block** — the Pack
-    Health Collector's own polling loop
-    (``ai_os_kernel.capability_manager.health_poller.run_health_polling_loop``)
-    and, as of this step, the Lease Reaper's own reap loop
-    (``ai_os_kernel.workflow_engine.lease_reaper.run_reap_loop``), the
-    "future worker process framework" that module's own docstring used
-    to defer to. Both are cancelled and genuinely awaited before
-    ``engine.dispose()`` runs, so no query either makes can ever race a
-    closed connection pool.
+    **Three real, continuously-running background tasks are started
+    here and drained through a single
+    :class:`~ai_os_kernel.health.shutdown.GracefulShutdownCoordinator`
+    (``P01-S04-M03-T06``) in this function's own ``finally`` block** —
+    the Pack Health Collector's own polling loop
+    (``ai_os_kernel.capability_manager.health_poller.run_health_polling_loop``),
+    the Lease Reaper's own reap loop
+    (``ai_os_kernel.workflow_engine.lease_reaper.run_reap_loop``), and,
+    as of this step, the audit-chain verification job
+    (``ai_os_kernel.observability.audit_verification_job.run_periodic_audit_chain_verification``,
+    built and unit-tested in ``P01-S05-M04-T06`` but never started
+    anywhere until now). All three are genuinely stopped — cancelled or
+    signalled to stop, then awaited — before ``engine.dispose()`` runs,
+    so no query any of them makes can ever race a closed connection
+    pool.
     """
     app.state.token_verifier = await _build_token_verifier()
+    shutdown_coordinator = GracefulShutdownCoordinator()
+    app.state.shutdown_coordinator = shutdown_coordinator
 
     engine: AsyncEngine | None = None
-    health_polling_task: asyncio.Task[None] | None = None
-    lease_reap_task: asyncio.Task[None] | None = None
     try:
         engine = build_engine(DatabaseSettings().database_url)
     except Exception as exc:
@@ -1236,6 +1250,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         )
         app.state.lease_reap_task = lease_reap_task
+        shutdown_coordinator.register_task("lease_reap", lease_reap_task)
         # The same read accessors GET /workflows/{id}(/steps|/events)
         # use (ai_os_kernel.routes.workflows) — a plain, stateless
         # wrapper over the engine, safe to construct separately from the
@@ -1326,6 +1341,37 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         )
         app.state.pack_health_polling_task = health_polling_task
+        shutdown_coordinator.register_task("pack_health_poll", health_polling_task)
+        # The scheduled audit-chain verification job
+        # (P01-S05-M04-T06) — built and unit-tested before this step
+        # but never started in a real Kernel process until now
+        # (P01-S04-M03-T06). Uses the identical, already-proven
+        # SqlAuditLogWriter (P01-S05-M04-T05/T06) as both the writer
+        # and the read side (AuditChainReader), since it structurally
+        # satisfies that Protocol via its own list_all(). Registered
+        # as a stop-event job, not a cancelled one, per
+        # GracefulShutdownCoordinator's own docstring: this loop
+        # already accepts a cooperative stop signal and drains its
+        # current pass before exiting on its own.
+        audit_chain_verification_interval = (
+            app.state.config.audit_chain_verification_interval_seconds
+        )
+        if audit_chain_verification_interval is None:
+            audit_chain_verification_interval = AUDIT_CHAIN_VERIFICATION_INTERVAL_SECONDS
+        audit_chain_verification_stop_event = asyncio.Event()
+        audit_chain_verification_task = asyncio.create_task(
+            run_periodic_audit_chain_verification(
+                SqlAuditLogWriter(engine),
+                interval_seconds=audit_chain_verification_interval,
+                stop_event=audit_chain_verification_stop_event,
+            )
+        )
+        app.state.audit_chain_verification_task = audit_chain_verification_task
+        shutdown_coordinator.register_stop_event_task(
+            "audit_chain_verification",
+            audit_chain_verification_task,
+            audit_chain_verification_stop_event,
+        )
         # se.delivery_pipeline's own registry — real and
         # credential-gated, built here (not for the health poll above,
         # which needs an always-answering one instead — see its own
@@ -1346,20 +1392,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        # Both background loops are cancelled and genuinely awaited
+        # Every registered background loop is genuinely drained
         # *before* the engine they query is disposed — each uses that
         # same engine on every iteration, so disposing first would race
-        # a live query against a closed pool. asyncio.CancelledError is
-        # each loop's own expected exit signal (see their own
-        # docstrings), not a real error to log here.
-        if health_polling_task is not None:
-            health_polling_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await health_polling_task
-        if lease_reap_task is not None:
-            lease_reap_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await lease_reap_task
+        # a live query against a closed pool. A Kernel process with no
+        # database registered nothing, so this is a genuine no-op for
+        # that case (GracefulShutdownCoordinator.shutdown's own
+        # docstring).
+        await shutdown_coordinator.shutdown()
         if engine is not None:
             await engine.dispose()
 

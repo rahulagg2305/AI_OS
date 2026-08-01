@@ -52,3 +52,13 @@ class PlatformConfig(BaseModel):
     shape ``pack_health_poll_interval_seconds`` already establishes —
     ``None`` (every real deployment) means "use the real, decided
     15-second policy constant"."""
+
+    audit_chain_verification_interval_seconds: float | None = None
+    """Overrides
+    :data:`ai_os_kernel.observability.audit_verification_job.AUDIT_CHAIN_VERIFICATION_INTERVAL_SECONDS`
+    for the real background audit-chain verification loop
+    (`ai_os_kernel.bootstrap._lifespan`). The identical "test-only
+    override, never a second policy decision" shape
+    ``lease_reap_interval_seconds`` already establishes — ``None``
+    (every real deployment) means "use the real, decided 300-second
+    policy constant"."""

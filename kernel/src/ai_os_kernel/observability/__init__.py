@@ -38,6 +38,7 @@ from ai_os_kernel.observability.audit import (
     verify_chain,
 )
 from ai_os_kernel.observability.audit_verification_job import (
+    AUDIT_CHAIN_VERIFICATION_INTERVAL_SECONDS,
     AuditChainReader,
     run_audit_chain_verification_once,
     run_periodic_audit_chain_verification,
@@ -54,6 +55,7 @@ from ai_os_kernel.observability.trace import TraceContext, generate_trace_id, ge
 from ai_os_kernel.observability.tracing import configure_tracing, get_tracer
 
 __all__ = [
+    "AUDIT_CHAIN_VERIFICATION_INTERVAL_SECONDS",
     "AuditChainReader",
     "AuditLogError",
     "AuditLogRecord",

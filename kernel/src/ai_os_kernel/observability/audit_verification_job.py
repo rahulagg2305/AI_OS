@@ -12,6 +12,13 @@ interval loop and the alert, kept genuinely small on purpose.
 codebase's own alerting idiom (:mod:`ai_os_kernel.observability.logging`:
 "the only supported way to obtain a logger"), not a new notification
 channel invented for this one job.
+
+**Wired into a real Kernel process as of ``P01-S04-M03-T06``.** Before
+that step this job was built and unit-tested but never started
+anywhere — ``ai_os_kernel.bootstrap._lifespan`` now starts it alongside
+the Pack Health Collector and Lease Reaper loops, stopped on shutdown
+through the same :class:`~ai_os_kernel.health.shutdown.GracefulShutdownCoordinator`
+those two already use.
 """
 
 from __future__ import annotations
@@ -24,6 +31,12 @@ from ai_os_kernel.observability.audit import AuditLogRecord, ChainVerificationRe
 from ai_os_kernel.observability.logging import get_logger
 
 logger = get_logger(__name__)
+
+# An integrity check, not an operational reap/health mechanism (contrast
+# LEASE_REAP_INTERVAL_SECONDS=15.0, POLL_INTERVAL_SECONDS=30.0) — frequent
+# enough to catch tampering promptly, infrequent enough to avoid scanning
+# the whole, ever-growing audit_log table on every pass.
+AUDIT_CHAIN_VERIFICATION_INTERVAL_SECONDS = 300.0
 
 
 class AuditChainReader(Protocol):
@@ -66,8 +79,24 @@ async def run_periodic_audit_chain_verification(
     controls the lifetime" shape already used wherever this codebase
     runs a background loop. Neither the interval nor the reader is
     hardcoded here; both are the caller's real configuration.
+
+    **A genuine per-pass failure (a real database error) is logged and
+    does not stop the loop** — the identical per-pass resilience
+    :func:`~ai_os_kernel.workflow_engine.lease_reaper.run_reap_loop`/
+    :func:`~ai_os_kernel.capability_manager.health_poller.run_health_polling_loop`
+    already establish for their own background loops. Discovered as a
+    real, missing gap while wiring this job into a live process for the
+    first time (``P01-S04-M03-T06``): without it, one transient
+    connection failure would silently kill this entire background job
+    for the rest of the process's life, and would surface through
+    :class:`~ai_os_kernel.health.shutdown.GracefulShutdownCoordinator`
+    as an uncaught exception out of a *shutdown* call — the opposite of
+    graceful.
     """
     while not stop_event.is_set():
-        await run_audit_chain_verification_once(reader)
+        try:
+            await run_audit_chain_verification_once(reader)
+        except Exception as exc:  # noqa: BLE001 -- a genuine per-pass failure must never kill the loop
+            logger.error("audit_chain_verification.pass_failed", error=str(exc))
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
