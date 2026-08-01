@@ -10,12 +10,31 @@ suite (``tests/integration/llm_gateway/test_anthropic_adapter_live.py``,
 ``tests/integration/workflow_engine/test_prompted_agent_live.py``).
 This file is the only one of the four that goes through the real
 composition root itself, rather than constructing the chain by hand.
+
+**Exercises the resolved agent through a dedicated engine, not
+``app.state.agent_registry`` directly** — the identical cross-event-loop
+fix ``test_bootstrap_pack_lifecycle.py`` applies (see that file's own
+docstring for the full root cause: CI run ``30682840924`` and
+follow-ups). ``app.state.agent_registry`` is built on ``TestClient``'s
+own background event loop; calling its async methods from this test's
+own separate ``asyncio.run()`` — a second, independently-running event
+loop on the main thread — is the same hazard, sharing the same real
+Postgres connection pool underneath. Rebuilt here via the real
+:func:`~ai_os_kernel.bootstrap._build_prompted_agent_registry` — the
+actual composition-root function, not a hand-rolled duplicate — against
+a fresh, dedicated engine, entirely within this test's own
+``asyncio.run()`` call. **Not directly exercised in this repository's
+CI** (credential-gated, skipped without a live Anthropic key) — this
+fix is confirmed correct by code review and by the identical pattern
+already proven live in ``test_bootstrap_pack_lifecycle.py``, not by a
+live run of this specific file.
 """
 
 import asyncio
 import os
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -23,7 +42,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 
-from ai_os_kernel.bootstrap import build_app
+from ai_os_kernel.bootstrap import _build_prompted_agent_registry, build_app
 from ai_os_kernel.configuration_manager import PlatformConfig
 from ai_os_kernel.persistence.engine import build_engine
 from tests.integration._postgres_fixture import postgres_container
@@ -92,19 +111,32 @@ def test_the_real_composition_root_registers_a_working_prompted_agent(database_u
         # AIOS_DATABASE_URL is set by the database_url fixture above, so
         # _lifespan's real DatabaseSettings()/build_engine() calls
         # resolve to this real, migrated container — the composition
-        # root's own env-driven wiring, not a test-supplied override.
-        registry = app.state.agent_registry
-        agent = asyncio.run(registry.resolve_agent(_PROMPTED_AGENT_ID))
+        # root's own env-driven wiring. Asserted here, synchronously,
+        # never awaited from this test's own separate event loop below
+        # (see this module's own docstring for the cross-event-loop
+        # hazard that would create).
+        assert app.state.agent_registry is not None
 
-        outputs = asyncio.run(
-            agent.execute(
+    # A dedicated engine and a freshly-built registry — the real
+    # _build_prompted_agent_registry, never app.state's own copy —
+    # against the same real, already-migrated database.
+    engine = build_engine(database_url)
+
+    async def _run() -> dict[str, Any]:
+        try:
+            registry = await _build_prompted_agent_registry(engine)
+            agent = await registry.resolve_agent(_PROMPTED_AGENT_ID)
+            return await agent.execute(
                 {
                     "promptId": _PROMPT_ID,
                     "promptVersion": "1.0.0",
                     "modelAlias": "fast-cheap",
                 }
             )
-        )
+        finally:
+            await engine.dispose()
+
+    outputs = asyncio.run(_run())
 
     assert "content" in outputs
     assert outputs["content"].strip() != ""

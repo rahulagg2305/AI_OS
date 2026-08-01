@@ -9,6 +9,26 @@ Skipped unless a real key is available at the documented local-dev
 secret reference, exactly mirroring
 ``tests/integration/test_bootstrap_prompted_agent_live.py`` and the
 other opt-in live tests in this suite.
+
+**Drives a dedicated trigger, not ``app.state.trigger_prompted_agent_workflow``
+directly** — the identical cross-event-loop fix
+``test_bootstrap_pack_lifecycle.py``/``test_bootstrap_prompted_agent_live.py``
+apply (see the former's own docstring for the full root cause: CI run
+``30682840924`` and follow-ups). ``app.state.trigger_prompted_agent_workflow``
+is built on ``TestClient``'s own background event loop; calling it from
+this test's own separate ``asyncio.run()`` — a second,
+independently-running event loop on the main thread — is the same
+hazard, sharing the same real Postgres connection pool underneath.
+Rebuilt here via the real composition-root functions
+(:func:`~ai_os_kernel.bootstrap._build_prompted_agent_registry`,
+:func:`~ai_os_kernel.bootstrap._build_workflow_trigger`), not a
+hand-rolled duplicate, against a fresh, dedicated engine, entirely
+within this test's own ``asyncio.run()`` call. **Not directly exercised
+in this repository's CI** (credential-gated, skipped without a live
+Anthropic key) — this fix is confirmed correct by code review and by
+the identical pattern already proven live in
+``test_bootstrap_pack_lifecycle.py``, not by a live run of this
+specific file.
 """
 
 import asyncio
@@ -23,15 +43,21 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from ai_os_kernel.bootstrap import (
+    _CONTEXT_TOKEN_BUDGET,
     _DEMO_WORKFLOW_PACK_ID,
     _DEMO_WORKFLOW_PROMPT_ID,
     _DEMO_WORKFLOW_PROMPT_VERSION,
+    _build_prompted_agent_registry,
+    _build_workflow_trigger,
     build_app,
 )
 from ai_os_kernel.configuration_manager import PlatformConfig
+from ai_os_kernel.context_manager.manager import DefaultContextManager
+from ai_os_kernel.context_manager.resolvers import WorkflowStateResolver
 from ai_os_kernel.persistence.engine import build_engine
-from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
+from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome, WorkflowRunResult
 from ai_os_kernel.workflow_engine.instance import WorkflowInstanceStatus
+from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from tests.integration._postgres_fixture import postgres_container
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -102,9 +128,31 @@ def test_the_real_trigger_drives_the_demo_workflow_to_a_real_completion(
         # AIOS_DATABASE_URL is set by the database_url fixture above, so
         # _lifespan's real DatabaseSettings()/build_engine() calls
         # resolve to this real, migrated container — the composition
-        # root's own env-driven wiring, not a test-supplied override.
-        trigger = app.state.trigger_prompted_agent_workflow
-        result = asyncio.run(trigger({}, "test-user"))
+        # root's own env-driven wiring. Asserted here, synchronously,
+        # never awaited from this test's own separate event loop below
+        # (see this module's own docstring for the cross-event-loop
+        # hazard that would create).
+        assert app.state.trigger_prompted_agent_workflow is not None
+
+    # A dedicated engine and freshly-built registry/context
+    # manager/trigger — the real _build_prompted_agent_registry/
+    # _build_workflow_trigger, never app.state's own copies — against
+    # the same real, already-migrated database.
+    engine = build_engine(database_url)
+
+    async def _run() -> WorkflowRunResult:
+        try:
+            agent_registry = await _build_prompted_agent_registry(engine)
+            context_manager = DefaultContextManager(
+                resolvers=[WorkflowStateResolver(SqlWorkflowInstanceRepository(engine))],
+                default_token_budget=_CONTEXT_TOKEN_BUDGET,
+            )
+            trigger = _build_workflow_trigger(engine, agent_registry, context_manager)
+            return await trigger({}, "test-user")
+        finally:
+            await engine.dispose()
+
+    result = asyncio.run(_run())
 
     assert result.outcome is WorkflowRunOutcome.COMPLETED
     assert result.last_instance is not None
