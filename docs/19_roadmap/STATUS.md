@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 50%** (111.5 of 224 Task-equivalents complete)
+**Overall: 50%** (112.5 of 224 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -19,7 +19,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S03 Manifest Discovery and Schema | 6 | 3 | 0 | 3 | 50% |
 | P01 (A) | S04 Health and Lifecycle | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S05 Observability and Audit | 6 | 4 | 0 | 2 | 67% |
-| P01 (A) | S06 CI and Test Infrastructure | 10 | 7 | 0 | 3 | 70% |
+| P01 (A) | S06 CI and Test Infrastructure | 10 | 8 | 0 | 2 | 80% |
 | P02 (B) | S01 Workflow Execution Core | 13 | 8 | 0 | 5 | 62% |
 | P02 (B) | S02 LLM Gateway | 12 | 6 | 1 | 5 | 54% |
 | P02 (B) | S03 Prompt and Context Assembly | 16 | 8 | 0 | 8 | 50% |
@@ -56,7 +56,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
-| P01 (Stage A) - Platform Skeleton | 46 | 36 | 78% |
+| P01 (Stage A) - Platform Skeleton | 46 | 37 | 80% |
 | P02 (Stage B) - Minimum Viable Kernel | 93 | 52 | 56% |
 | P03 (Stage C) - First Real Capability Pack | 27 | 15 | 56% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
@@ -68,7 +68,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-56 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+55 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P01-S01-M40-T04` Runtime container image
 - `P01-S03-M02-T03` Entry-point discovery
@@ -76,7 +76,6 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P01-S05-M04-T03` OTLP export to a Collector
 - `P01-S06-M42-T04` tests/security by threat id
 - `P01-S06-M42-T05` tests/performance against NFR targets
-- `P01-S06-M43-T04` Green integration stage on Linux
 - `P02-S01-M05-T09` decision step type
 - `P02-S01-M05-T10` parallel step type
 - `P02-S01-M05-T11` sub_workflow step type
@@ -95,7 +94,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S04-M09-T03` Indexing component
 - `P02-S04-M09-T05` Provenance and versioning
 - `P02-S04-M10-T01` Memory store
-- ... and 31 more
+- `P02-S05-M13-T07` Pack upgrade path
+- ... and 30 more
 
 ## Dependency review signal
 
