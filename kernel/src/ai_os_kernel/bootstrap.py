@@ -386,6 +386,7 @@ from ai_os_kernel.observability import (
     get_logger,
     run_periodic_audit_chain_verification,
 )
+from ai_os_kernel.observability.settings import ObservabilitySettings
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.persistence.settings import DatabaseSettings
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
@@ -1412,8 +1413,13 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     """
     config = config or _load_configuration()
     configure_logging(config.log_level)
-    configure_tracing()
-    configure_metrics()
+    # OTEL_EXPORTER_OTLP_ENDPOINT is a bootstrap-minimum env var
+    # (configuration_management.md §3.3), read directly here — the
+    # identical reasoning DatabaseSettings().database_url below already
+    # establishes — never a PlatformConfig/YAML value.
+    otlp_endpoint = ObservabilitySettings().otlp_endpoint
+    configure_tracing(otlp_endpoint=otlp_endpoint)
+    configure_metrics(otlp_endpoint=otlp_endpoint)
     logger.info("kernel.bootstrap.start", env=config.env, role=config.role)
 
     manifest_loader = _build_manifest_loader(config)

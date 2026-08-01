@@ -10,12 +10,14 @@ never touch or depend on the shared, once-per-process global provider
 configure_tracing() installs.
 """
 
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import Tracer
 
 from ai_os_kernel.observability.tracing import (
+    _build_span_exporter,
     bind_otel_span_context,
     configure_tracing,
     get_tracer,
@@ -69,3 +71,16 @@ def test_two_spans_from_the_same_trace_share_a_trace_id_but_not_a_span_id() -> N
 def test_configure_tracing_is_safe_to_call_more_than_once() -> None:
     configure_tracing()
     configure_tracing()  # must not raise
+
+
+def test_build_span_exporter_defaults_to_console_with_no_endpoint() -> None:
+    exporter = _build_span_exporter(None)
+
+    assert isinstance(exporter, ConsoleSpanExporter)
+
+
+def test_build_span_exporter_uses_otlp_with_an_endpoint() -> None:
+    exporter = _build_span_exporter("http://localhost:4318")
+
+    assert isinstance(exporter, OTLPSpanExporter)
+    assert exporter._endpoint == "http://localhost:4318/v1/traces"

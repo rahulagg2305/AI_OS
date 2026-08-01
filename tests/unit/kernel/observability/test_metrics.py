@@ -8,9 +8,12 @@ what's meaningfully testable without touching the process-global
 provider these functions install.
 """
 
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.metrics import Counter, Meter
+from opentelemetry.sdk.metrics.export import ConsoleMetricExporter
 
 from ai_os_kernel.observability.metrics import (
+    _build_metric_exporter,
     configure_metrics,
     get_http_requests_counter,
     get_meter,
@@ -39,3 +42,16 @@ def test_get_http_requests_counter_is_created_once_and_reused() -> None:
 def test_configure_metrics_is_safe_to_call_more_than_once() -> None:
     configure_metrics()
     configure_metrics()  # must not raise
+
+
+def test_build_metric_exporter_defaults_to_console_with_no_endpoint() -> None:
+    exporter = _build_metric_exporter(None)
+
+    assert isinstance(exporter, ConsoleMetricExporter)
+
+
+def test_build_metric_exporter_uses_otlp_with_an_endpoint() -> None:
+    exporter = _build_metric_exporter("http://localhost:4318")
+
+    assert isinstance(exporter, OTLPMetricExporter)
+    assert exporter._endpoint == "http://localhost:4318/v1/metrics"

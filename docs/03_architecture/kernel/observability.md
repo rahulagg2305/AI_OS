@@ -8,11 +8,11 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (updated 2026-08-01)
 
-**Partially built.** Real: `structlog` JSON logging with trace-context binding, a real OpenTelemetry `TracerProvider` creating a genuine span per HTTP request, and **exactly one** metric (`aios.http.requests`). All exporters are **console only**.
+**Partially built.** Real: `structlog` JSON logging with trace-context binding, a real OpenTelemetry `TracerProvider` creating a genuine span per HTTP request, and **exactly one** metric (`aios.http.requests`). **Real OTLP/HTTP export exists** (`P01-S05-M04-T03`, `ai_os_kernel/observability/tracing.py`/`metrics.py`) — console exporters remain the default (`PlatformConfig.otlp_endpoint` is `None` in every environment today), used automatically whenever an endpoint is configured, proven against a real receiver in tests. The audit path is real too (`P01-S05-M04-T05`/`T06`): a hash-chained writer and a scheduled verification job, both started in `_lifespan`.
 
-**Not built:** OTLP export and the OpenTelemetry Collector (so nothing leaves the process), the Prometheus/Tempo/Loki/Grafana backends, the Compose observability profile, and every metric in `../../16_observability/observability_stack.md` §3.1 beyond the one above — no workflow, LLM, gate, or sandbox metrics. **The audit path does not exist at all**: `governance.audit_log` is a table with no writer, no `row_hash`/`prev_hash` computed, and no daily verification job, so the append-only hash-chain guarantee is unenforced. Outstanding Stage A/G work.
+**Not built:** the OpenTelemetry Collector itself is not deployed anywhere (no Compose observability profile), so nothing in a real environment sets `otlp_endpoint` yet; the Prometheus/Tempo/Loki/Grafana reference backends do not exist; every metric in `../../16_observability/observability_stack.md` §3.1 beyond `aios.http.requests` — no workflow, LLM, gate, or sandbox metrics. Outstanding Stage A/G work.
 
 Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 

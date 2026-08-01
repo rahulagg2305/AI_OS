@@ -8,15 +8,11 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (updated 2026-08-01)
 
-**Barely built — telemetry is produced but never leaves the process, and the audit path does not exist.**
+**Built:** `structlog` JSON logging with trace-context binding; a real OpenTelemetry `TracerProvider` producing a genuine span per HTTP request with the documented attributes; **exactly one** metric, `aios.http.requests`. **Real OTLP/HTTP export exists** (`P01-S05-M04-T03`) — `configure_tracing()`/`configure_metrics()` use a real `OTLPSpanExporter`/`OTLPMetricExporter` when `PlatformConfig.otlp_endpoint` is configured, proven against a real receiver in tests; the console exporters remain the default. The audit path (`governance.audit_log`) is real too (`P01-S05-M04-T05`/`T06`): a hash-chained writer, `row_hash`/`prev_hash` computed per row, and a scheduled verification job started in `_lifespan`.
 
-**Built:** `structlog` JSON logging with trace-context binding; a real OpenTelemetry `TracerProvider` producing a genuine span per HTTP request with the documented attributes; **exactly one** metric, `aios.http.requests`. Both exporters are the OTel **console** exporters.
-
-**Not built:** the entire collection and storage half of this document — **no OTLP export, no OpenTelemetry Collector**, and therefore no Prometheus, Tempo, Loki, or Grafana; no Compose observability profile. Of the metrics named in the metric-catalogue section, **only `aios.http.requests` exists** — none of the workflow, LLM, gate, sandbox, outbox, or authz metrics do. No alerting and no dashboards.
-
-**The audit path (`governance.audit_log`) is 0% built:** the table exists, but nothing writes a row, no `row_hash`/`prev_hash` chain is computed, UPDATE/DELETE revocation for an application role is not applied (no such role exists), there is no daily verification job, and no offsite export. The tamper-evidence guarantee this document and [ADR-0017](../18_decision_log/adr/ADR-0017-observability-stack.md) describe is therefore **entirely unenforced today**. Outstanding Stage A/G work.
+**Not built:** the OpenTelemetry Collector itself is not deployed anywhere — no Compose observability profile exists, so nothing in a real environment sets `otlp_endpoint` yet, and therefore no Prometheus, Tempo, Loki, or Grafana. Of the metrics named in the metric-catalogue section, **only `aios.http.requests` exists** — none of the workflow, LLM, gate, sandbox, outbox, or authz metrics do. No alerting and no dashboards. UPDATE/DELETE revocation for a dedicated application database role is not applied (no such role exists yet) and there is no offsite audit-log export.
 
 Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
 

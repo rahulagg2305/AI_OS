@@ -3,20 +3,29 @@
 that :mod:`ai_os_kernel.observability.tracing` wires spans into
 (ADR-0017) — the platform's second telemetry pillar, alongside traces.
 
-Export is the OTel **console exporter** for now, for exactly the reason
-:mod:`ai_os_kernel.observability.tracing` gives for spans: ADR-0017's
-actual target is OTLP to a Collector, and none is deployed yet. The
-console exporter is a real OpenTelemetry SDK exporter; swapping it for
-an OTLP one later is a one-line change in :func:`configure_metrics` and
-nowhere else.
+**Real OTLP/HTTP export to a Collector, as of ``P01-S05-M04-T03``,**
+when ``otlp_endpoint`` is configured — the identical choice
+:mod:`ai_os_kernel.observability.tracing` makes for spans, for the
+identical reason. ``None`` (every environment with no Collector
+deployed, including every test in this repo) keeps the console
+exporter. :func:`_build_metric_exporter` is the one place this choice
+is made.
 """
 
 from __future__ import annotations
 
 from opentelemetry import metrics
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+    DEFAULT_METRICS_EXPORT_PATH,
+    OTLPMetricExporter,
+)
 from opentelemetry.metrics import Counter, Meter
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.export import (
+    ConsoleMetricExporter,
+    MetricExporter,
+    PeriodicExportingMetricReader,
+)
 from opentelemetry.sdk.resources import Resource
 
 # Same Resource identity as configure_tracing() — both are the same
@@ -33,7 +42,20 @@ _HTTP_REQUESTS_COUNTER_NAME = "aios.http.requests"
 _http_requests_counter: Counter | None = None
 
 
-def configure_metrics() -> None:
+def _build_metric_exporter(otlp_endpoint: str | None) -> MetricExporter:
+    """The one place export target selection happens — a pure
+    constructor, deliberately separate from :func:`configure_metrics`'s
+    own process-wide-singleton concern, so it is directly unit-testable
+    without fighting the OpenTelemetry API's "global provider set once
+    per process" rule. Mirrors
+    :func:`~ai_os_kernel.observability.tracing._build_span_exporter`
+    exactly."""
+    if otlp_endpoint is None:
+        return ConsoleMetricExporter()
+    return OTLPMetricExporter(endpoint=f"{otlp_endpoint}/{DEFAULT_METRICS_EXPORT_PATH}")
+
+
+def configure_metrics(*, otlp_endpoint: str | None = None) -> None:
     """Install the process-wide ``MeterProvider``. Call once, at process
     startup (see :func:`ai_os_kernel.bootstrap.build_app`).
 
@@ -44,7 +66,7 @@ def configure_metrics() -> None:
     """
     if isinstance(metrics.get_meter_provider(), MeterProvider):
         return
-    reader = PeriodicExportingMetricReader(ConsoleMetricExporter())
+    reader = PeriodicExportingMetricReader(_build_metric_exporter(otlp_endpoint))
     provider = MeterProvider(
         resource=Resource.create({"service.name": _SERVICE_NAME}),
         metric_readers=[reader],

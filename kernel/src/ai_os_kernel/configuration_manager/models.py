@@ -62,3 +62,9 @@ class PlatformConfig(BaseModel):
     ``lease_reap_interval_seconds`` already establishes — ``None``
     (every real deployment) means "use the real, decided 300-second
     policy constant"."""
+
+    # No `otlp_endpoint` field here: `OTEL_EXPORTER_OTLP_ENDPOINT` is one
+    # of §3.3's named "bootstrap minimum" environment variables, read
+    # directly (`ai_os_kernel.observability.settings.ObservabilitySettings`),
+    # the identical reasoning `AIOS_DATABASE_URL`/`DatabaseSettings`
+    # already establishes — never a `PlatformConfig`/YAML value.

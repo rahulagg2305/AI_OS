@@ -71,10 +71,10 @@ Complies with the Constitution (Observability by Default), the Logging/Audit/Obs
 
 ---
 
-## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+## Implementation Status (appended 2026-07-28, updated 2026-08-01 — not part of the Accepted decision)
 
 **Status in code:** Partially implemented
 
-Real OpenTelemetry spans and one metric are emitted, with `structlog` configured to emit JSON carrying trace context (`ai_os_kernel/observability/`) — but export is to **console exporters only**: there is no OTLP exporter, no Collector, and no Compose observability profile, so no backend receives telemetry. On the audit side the `audit_log` table exists from migration `0004_governance_audit_log`, with no writer, no hash chaining, and no verification job.
+Real OpenTelemetry spans and one metric are emitted, with `structlog` configured to emit JSON carrying trace context (`ai_os_kernel/observability/`). **Real OTLP/HTTP export is now built** (`P01-S05-M04-T03`): when `PlatformConfig.otlp_endpoint` is configured, both `configure_tracing()`/`configure_metrics()` use a real `OTLPSpanExporter`/`OTLPMetricExporter` (proven against a real, in-process HTTP receiver, not merely asserted as configured) instead of the console exporters — the identical "one-line change, nowhere else" swap both functions' own docstrings already anticipated. `otlp_endpoint` defaults to `None` (console exporters) in every environment today: **no Collector is actually deployed** — there is still no Compose observability profile and no Prometheus/Tempo/Loki/Grafana reference backend, so nothing currently sets the new config field to a real value. On the audit side the audit log path (`governance.audit_log`) now has a real hash-chained writer and a scheduled verification job (`P01-S05-M04-T05`/`T06`), started in `_lifespan`.
 
 Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)
