@@ -36,3 +36,14 @@ class PackRegistrationError(CapabilityManagerError):
     ``catalog.pack_state_transitions`` — never raised for a rejected
     transition or a missing pack, which get their own, more specific
     errors above."""
+
+
+class InvalidPackUpgradeError(CapabilityManagerError):
+    """:meth:`~ai_os_kernel.capability_manager.repository.PackLifecycleRepository.upgrade`
+    was called with a ``version`` that is not strictly greater than the
+    pack's current, real ``catalog.packs.version`` — a distinct failure
+    mode from :class:`InvalidPackTransitionError` (which is about
+    *lifecycle state*, not version ordering). Never silently proceeds:
+    an upgrade that cannot prove real forward progress is refused before
+    any row is touched, not accepted and left to quietly overwrite a
+    pack with an equal or older version."""

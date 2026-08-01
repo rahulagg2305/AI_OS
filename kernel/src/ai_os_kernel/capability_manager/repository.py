@@ -46,10 +46,16 @@ record shape ``activate``/``deactivate`` already establish.
 **The smallest useful slice of the full canonical lifecycle**
 (capability_manager.md §4: ``discovered -> validated -> installed ->
 configured -> activated -> {deactivated, failed} -> uninstalled``) —
-register/install, activate, deactivate, and (as of this step) the one
-real ``-> failed`` transition. Still no ``configured``/``uninstalled``
-transitions, no upgrade path, no permissions matrix, no sandboxing, no
-remote download.
+register/install, activate, deactivate, and the one real ``-> failed``
+transition. Still no ``configured``/``uninstalled`` transitions, no
+permissions matrix, no sandboxing, no remote download.
+
+**``upgrade()`` (``P02-S05-M13-T07``) closes capability_manager.md §9's
+own "Upgrade strategies" row — the real, buildable slice of it.** See
+that method's own docstring for exactly which of its three named open
+questions this settles (two, by the schema's own existing structure) and
+which it deliberately leaves open (in-flight workflow instances of the
+old version, still genuinely undecided).
 
 **Why ``register()`` records ``discovered -> installed``, not
 ``validated -> installed`` or two separate transitions.** Nothing in
@@ -89,10 +95,13 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import sqlalchemy as sa
+from packaging.version import InvalidVersion, Version
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ai_os_kernel.capability_manager.errors import (
     InvalidPackTransitionError,
+    InvalidPackUpgradeError,
     PackAlreadyRegisteredError,
     PackNotFoundError,
     PackRegistrationError,
@@ -130,6 +139,20 @@ _DEACTIVATABLE_FROM_STATES = frozenset({PackState.ACTIVATED})
 # health polling, not something reachable from every other state.
 _FAILABLE_FROM_STATES = frozenset({PackState.ACTIVATED})
 
+# capability_manager.md §9's own Upgrade Strategies row settles question
+# (a) by omission, not by a new ADR: no `upgrading` state exists in the
+# canonical 8-value lifecycle (`_PACK_STATES`, catalog_schema.py's own
+# `CHECK` constraint), so upgrading a pack that is not already serving
+# traffic has no real, observable meaning yet to build against — you
+# upgrade a pack that is live, matching this ticket's own Goal ("Upgrade
+# an *activated* pack"). Restricting to this one state, rather than also
+# allowing `installed`/`deactivated`, keeps the real, decided question
+# (c) — "no two versions of one pack may be simultaneously activated,
+# `catalog.packs` is keyed on `pack_id` alone" — the only version
+# question this method answers; question (b) (in-flight workflow
+# instances of the old version) remains genuinely open, unanswered here.
+_UPGRADABLE_FROM_STATES = frozenset({PackState.ACTIVATED})
+
 
 class PackLifecycleRepository(Protocol):
     """Persistence boundary for the Capability Pack lifecycle's write
@@ -152,6 +175,19 @@ class PackLifecycleRepository(Protocol):
     async def activate(self, *, pack_id: str, actor: str, reason: str) -> PackRecord: ...
 
     async def deactivate(self, *, pack_id: str, actor: str, reason: str) -> PackRecord: ...
+
+    async def upgrade(
+        self,
+        *,
+        pack_id: str,
+        version: str,
+        manifest: dict[str, Any],
+        sdk_version: str,
+        min_kernel_version: str,
+        pack_root: Path,
+        actor: str,
+        reason: str,
+    ) -> PackRecord: ...
 
     async def mark_failed(self, *, pack_id: str, actor: str, reason: str) -> PackRecord: ...
 
@@ -300,6 +336,164 @@ class SqlPackLifecycleRepository:
                 )
         except sa.exc.SQLAlchemyError as exc:
             raise PackRegistrationError(f"failed to deactivate pack '{pack_id}': {exc}") from exc
+
+        return PackRecord.model_validate(dict(pack_row))
+
+    async def upgrade(
+        self,
+        *,
+        pack_id: str,
+        version: str,
+        manifest: dict[str, Any],
+        sdk_version: str,
+        min_kernel_version: str,
+        pack_root: Path,
+        actor: str,
+        reason: str,
+    ) -> PackRecord:
+        """Migrates an already-``activated`` pack to a new version, in
+        place — capability_manager.md §9's own real, buildable slice of
+        "Upgrade strategies" (see :data:`_UPGRADABLE_FROM_STATES`'s own
+        comment for the two of its three open questions this method
+        settles, and the one — in-flight workflow instances of the old
+        version — it deliberately does not).
+
+        **Unlike :meth:`register`, ``pack_root`` is required, not
+        optional.** An upgrade that updated ``catalog.packs.manifest``
+        without re-deriving ``catalog.agents``/``catalog.prompts``/
+        ``catalog.tools`` would leave the pack claiming a new version
+        while every real component row still reflected the old one —
+        exactly the silent state corruption this ticket's own proof
+        requirement names. There is no safe partial upgrade.
+
+        **Refuses a same-or-older ``version``** (:class:`InvalidPackUpgradeError`)
+        before touching any row — an upgrade must prove real forward
+        progress, per PEP 440 ordering (:mod:`packaging.version`, the
+        same library ``manifest_loader.semantic`` already uses for
+        version-range checks).
+
+        **Reconciles, not replaces, ``catalog.agents``/``catalog.tools``**:
+        an id present in the new manifest is upserted (its row's content
+        may have genuinely changed between versions); an id no longer
+        declared is deleted outright, not left orphaned pointing at a
+        pack that no longer claims it. ``catalog.prompts`` is
+        append-only instead, matching its own "versions are immutable"
+        rule (data_model.md §5) — a prompt version already on disk is
+        inserted idempotently (``ON CONFLICT DO NOTHING`` on its real
+        composite key), never overwritten.
+        """
+        try:
+            new_version = Version(version)
+        except InvalidVersion as exc:
+            raise InvalidPackUpgradeError(
+                f"cannot upgrade pack '{pack_id}': {version!r} is not a valid version: {exc}"
+            ) from exc
+
+        # Derived before the transaction opens — the identical "a bad
+        # manifest reference must never leave a half-migrated pack
+        # behind" discipline `register()` already establishes.
+        agent_rows = derive_agent_rows(manifest, pack_id=pack_id)
+        prompt_rows = derive_prompt_rows(manifest, pack_id=pack_id, pack_root=pack_root)
+        tool_rows = derive_tool_rows(manifest, pack_id=pack_id)
+        new_agent_ids = {row["agent_id"] for row in agent_rows}
+        new_tool_ids = {row["tool_id"] for row in tool_rows}
+
+        occurred_at = datetime.now(UTC)
+        try:
+            async with self._engine.begin() as connection:
+                from_state = await self._lock_current_state(connection, pack_id)
+                if from_state not in _UPGRADABLE_FROM_STATES:
+                    raise InvalidPackTransitionError(
+                        f"cannot upgrade pack '{pack_id}': current state is "
+                        f"{from_state.value!r}, expected one of "
+                        f"({', '.join(sorted(s.value for s in _UPGRADABLE_FROM_STATES))})"
+                    )
+
+                current_version_row = await connection.execute(
+                    sa.select(packs.c.version).where(packs.c.pack_id == pack_id)
+                )
+                current_version = Version(current_version_row.scalar_one())
+                if new_version <= current_version:
+                    raise InvalidPackUpgradeError(
+                        f"cannot upgrade pack '{pack_id}' from {current_version} to "
+                        f"{new_version}: an upgrade must be a strictly newer version"
+                    )
+
+                result = await connection.execute(
+                    sa.update(packs)
+                    .where(packs.c.pack_id == pack_id)
+                    .values(
+                        version=version,
+                        manifest=manifest,
+                        sdk_version=sdk_version,
+                        min_kernel_version=min_kernel_version,
+                    )
+                    .returning(*packs.columns)
+                )
+                pack_row = result.mappings().one()
+
+                await self._record_transition(
+                    connection,
+                    pack_id=pack_id,
+                    from_state=PackState.ACTIVATED,
+                    to_state=PackState.ACTIVATED,
+                    actor=actor,
+                    reason=f"{reason} (upgrade {current_version} -> {new_version})",
+                    occurred_at=occurred_at,
+                )
+
+                if new_agent_ids:
+                    await connection.execute(
+                        sa.delete(agents).where(
+                            agents.c.pack_id == pack_id, agents.c.agent_id.notin_(new_agent_ids)
+                        )
+                    )
+                else:
+                    await connection.execute(sa.delete(agents).where(agents.c.pack_id == pack_id))
+
+                if new_tool_ids:
+                    await connection.execute(
+                        sa.delete(tools).where(
+                            tools.c.pack_id == pack_id, tools.c.tool_id.notin_(new_tool_ids)
+                        )
+                    )
+                else:
+                    await connection.execute(sa.delete(tools).where(tools.c.pack_id == pack_id))
+
+                if agent_rows:
+                    agent_upsert = pg_insert(agents).values(agent_rows)
+                    await connection.execute(
+                        agent_upsert.on_conflict_do_update(
+                            index_elements=["agent_id"],
+                            set_={
+                                col.name: agent_upsert.excluded[col.name]
+                                for col in agents.columns
+                                if col.name != "agent_id"
+                            },
+                        )
+                    )
+                if tool_rows:
+                    tool_upsert = pg_insert(tools).values(tool_rows)
+                    await connection.execute(
+                        tool_upsert.on_conflict_do_update(
+                            index_elements=["tool_id"],
+                            set_={
+                                col.name: tool_upsert.excluded[col.name]
+                                for col in tools.columns
+                                if col.name != "tool_id"
+                            },
+                        )
+                    )
+                if prompt_rows:
+                    await connection.execute(
+                        pg_insert(prompts)
+                        .values(prompt_rows)
+                        .on_conflict_do_nothing(index_elements=["prompt_id", "version"])
+                    )
+        except (InvalidPackTransitionError, InvalidPackUpgradeError):
+            raise
+        except sa.exc.SQLAlchemyError as exc:
+            raise PackRegistrationError(f"failed to upgrade pack '{pack_id}': {exc}") from exc
 
         return PackRecord.model_validate(dict(pack_row))
 
