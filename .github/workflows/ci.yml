@@ -194,7 +194,9 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
       - run: uv sync --frozen --all-packages
-      # Gated: no threat-model control tests exist yet.
+      # 30 real per-threat tests (T1-T12), P01-S06-M42-T04. `hashFiles`
+      # gate kept as a harmless no-op guard, not because the directory
+      # can be empty again.
       - name: Threat-model control tests
         if: hashFiles('tests/security/**') != ''
         run: uv run pytest tests/security -v
