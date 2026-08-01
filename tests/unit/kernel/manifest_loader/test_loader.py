@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from ai_os_kernel.manifest_loader import ManifestError, ManifestLoader
+from tests.unit.kernel.manifest_loader.conftest import write_dist_info
 
 SCHEMA_PATH = Path("platform_sdk/schemas/manifest.schema.json")
 
@@ -53,6 +54,42 @@ def test_scan_separates_an_invalid_manifest_without_raising(tmp_path: Path) -> N
     assert report.discovered == []
     assert len(report.failed) == 1
     assert "owner" in report.failed[0].error
+
+
+def test_scan_discovers_a_manifest_via_entry_point_discovery_alone(
+    tmp_path: Path, site: Path
+) -> None:
+    """The ticket's own Output: discovered without a filesystem scan
+    finding anything at all -- pack_dirs points somewhere empty."""
+    write_dist_info(site)
+    (site / "manifest.yaml").write_text(yaml.safe_dump(_VALID_MANIFEST), encoding="utf-8")
+    empty_pack_dirs = tmp_path / "empty"
+    empty_pack_dirs.mkdir()
+
+    loader = ManifestLoader(pack_dirs=[str(empty_pack_dirs)], schema_path=SCHEMA_PATH)
+    report = loader.scan()
+
+    assert len(report.discovered) == 1
+    assert report.discovered[0].metadata.id == "example-pack"
+    assert report.failed == []
+
+
+def test_scan_deduplicates_a_manifest_found_by_both_mechanisms(tmp_path: Path, site: Path) -> None:
+    """A pack present in a configured directory *and* separately
+    registered as an installed distribution pointing at the same real
+    file is validated once, not twice -- ADR-0009's "both validated
+    identically" is not "both validated redundantly."""
+    write_dist_info(site)
+    (site / "manifest.yaml").write_text(yaml.safe_dump(_VALID_MANIFEST), encoding="utf-8")
+
+    # site == tmp_path / "site", so pack_dirs=[tmp_path] makes the
+    # filesystem scan find the identical tmp_path/site/manifest.yaml
+    # entry-point discovery already finds.
+    loader = ManifestLoader(pack_dirs=[str(tmp_path)], schema_path=SCHEMA_PATH)
+    report = loader.scan()
+
+    assert len(report.discovered) == 1
+    assert report.failed == []
 
 
 def test_load_one_raises_clearly_on_schema_violation(tmp_path: Path) -> None:

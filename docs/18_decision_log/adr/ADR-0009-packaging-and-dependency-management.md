@@ -67,10 +67,10 @@ Complies with the Capability Pack Contract (independently installable, versioned
 
 ---
 
-## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+## Implementation Status (appended 2026-07-28, updated 2026-08-01 — not part of the Accepted decision)
 
 **Status in code:** Partially implemented
 
-The `uv` workspace is real, with a committed `uv.lock` and shared tool configuration at the root, but only two of the five decided distributions exist (`ai-os-kernel`, `ai-os-pack-software-engineering`) — there is no `ai-os-sdk`, `ai-os-services`, or `ai-os-cli`, and consequently the Software Engineering pack depends on `ai-os-kernel` directly, so the CI-enforced pack-to-kernel dependency prohibition is not yet in force. Of the two decided discovery mechanisms only the filesystem scan for `manifest.yaml` is built; the `ai_os.capability_packs` entry-point group is not implemented.
+The `uv` workspace is real, with a committed `uv.lock` and shared tool configuration at the root. **`ai-os-sdk` now exists** (`platform_sdk/`, built under a separate Platform SDK initiative) alongside `ai-os-kernel` and `ai-os-pack-software-engineering`; `ai-os-services` and `ai-os-cli` still do not. **Both decided discovery mechanisms are now built** (`P01-S03-M02-T03`, 2026-08-01): the filesystem scan for `manifest.yaml`, and the `ai_os.capability_packs` entry-point group (`kernel/src/ai_os_kernel/manifest_loader/discovery.py`, `discover_entry_point_manifests()`), combined and validated identically by `ManifestLoader.scan()`. No pack in this repository registers under that entry-point group yet — proven against a real, synthetic installed distribution in tests, not yet exercised by a real published pack.
 
 Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

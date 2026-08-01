@@ -6,6 +6,15 @@ Fails closed for a single manifest requested directly
 never raises — it is used for status/health reporting, where one
 broken pack must not prevent discovering every other pack.
 
+**:meth:`ManifestLoader.scan` combines both ADR-0009 discovery
+mechanisms** (filesystem scan and entry-point discovery,
+``P01-S03-M02-T03``) and validates whatever either finds through the
+identical path — "both validated identically" is not vacuously true
+now that a second mechanism exists. A path found by both (a pack
+present in a configured directory *and* separately registered as an
+installed distribution pointing at the same real file) is validated
+once, not twice.
+
 Semantic validation (kernel-version compatibility, global ID uniqueness
 across packs, permission-subset checks, resolving agent/tool/workflow
 references) is not implemented at this stage — see
@@ -20,7 +29,10 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator
 
-from ai_os_kernel.manifest_loader.discovery import discover_manifests
+from ai_os_kernel.manifest_loader.discovery import (
+    discover_entry_point_manifests,
+    discover_manifests,
+)
 from ai_os_kernel.manifest_loader.errors import ManifestError
 from ai_os_kernel.manifest_loader.models import (
     DiscoveredManifest,
@@ -46,14 +58,23 @@ class ManifestLoader:
         return Draft202012Validator(schema)
 
     def scan(self) -> ManifestScanReport:
-        """Discover every manifest under the configured pack directories.
+        """Discover every manifest reachable by either ADR-0009
+        mechanism — the configured pack directories (filesystem scan)
+        and installed distributions (entry-point discovery) — and
+        validate all of them through the identical path.
 
         Never raises: each individual failure is captured rather than
         aborting the scan. Used by health/status reporting and listings.
         """
         discovered: list[DiscoveredManifest] = []
         failed: list[ManifestLoadFailure] = []
-        for path in discover_manifests(self._pack_dirs):
+        seen: set[Path] = set()
+        candidates = (*discover_manifests(self._pack_dirs), *discover_entry_point_manifests())
+        for path in candidates:
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
             try:
                 discovered.append(self.load_one(path))
             except ManifestError as exc:
