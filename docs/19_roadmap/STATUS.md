@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 49%** (109.5 of 224 Task-equivalents complete)
+**Overall: 49%** (110.5 of 224 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -26,7 +26,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 4 | 0 | 10 | 29% |
 | P02 (B) | S05 Capability Manager and Platform SDK | 19 | 16 | 0 | 3 | 84% |
 | P02 (B) | S06 Quality Gate Engine | 8 | 4 | 0 | 4 | 50% |
-| P02 (B) | S07 Platform Services and Error Model | 7 | 1 | 0 | 6 | 14% |
+| P02 (B) | S07 Platform Services and Error Model | 7 | 2 | 0 | 5 | 29% |
 | P02 (B) | S08 Kernel HTTP Surface | 4 | 4 | 0 | 0 | 100% |
 | P03 (C) | S01 Sandboxed Tool Execution | 6 | 4 | 0 | 2 | 67% |
 | P03 (C) | S02 Software Engineering Pack Agents | 8 | 6 | 0 | 2 | 75% |
@@ -57,7 +57,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 46 | 35 | 76% |
-| P02 (Stage B) - Minimum Viable Kernel | 93 | 51 | 55% |
+| P02 (Stage B) - Minimum Viable Kernel | 93 | 52 | 56% |
 | P03 (Stage C) - First Real Capability Pack | 27 | 15 | 56% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |

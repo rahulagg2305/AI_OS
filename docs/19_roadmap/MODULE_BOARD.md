@@ -54,5 +54,5 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M41 | Threat Controls (T1-T12) | P03 | 2 | 1 | 50% |
 | M42 | Testing Infrastructure | P01+P07 | 7 | 3 | 43% |
 | M43 | CI Pipeline | P01 | 5 | 4 | 80% |
-| M44 | Platform-wide AiOsError hierarchy | P02 | 1 | 0 | 0% |
+| M44 | Platform-wide AiOsError hierarchy | P02 | 1 | 1 | 100% |
 | M45 | Roadmap & Process System | P09 | 5 | 5 | 100% |

@@ -10,9 +10,9 @@ change its status field, or add a new entry.
 Severity: **H** (can cause real harm or data loss) · **M** (can cause
 significant rework) · **L** (contained).
 
-**Reviewed 2026-07-31 (R1–R4 final closeout).** 9 closed, 2 open. Zero
-open process-defect risks: everything remaining is a real
-product-development gap (R-006, R-008, R-009), not a defect in the
+**Reviewed 2026-07-31 (R1–R4 final closeout); R-008 closed 2026-08-01.**
+10 closed, 1 open. Zero open process-defect risks: everything remaining
+is a real product-development gap (R-006, R-009), not a defect in the
 process itself.
 
 | ID | Risk | Sev | Status | Owner decision |
@@ -24,7 +24,7 @@ process itself.
 | R-005 | Generated-doc staleness not gated in CI | M | **Closed** 2026-07-31 | — |
 | R-006 | 36 of 60 MUST requirements untouched | H | **Open — accepted baseline** | Product owner, 2026-07-31 |
 | R-007 | `functional_requirements.md` status block drifts from reality | M | **Closed** 2026-07-31 | — |
-| R-008 | No `AiOsError` hierarchy; error contract is per-module | M | **Open** | Ready: `P02-S07-M44-T01` |
+| R-008 | No `AiOsError` hierarchy; error contract is per-module | M | **Closed** 2026-08-01 | — |
 | R-009 | Audit log is schema-only — no writer, no hash chain | H | **Open** | Ready: `P01-S05-M04-T05` |
 | R-010 | CI type-checks only a subset of `[tool.mypy] files` | M | **Closed** 2026-07-31 | — |
 | R-011 | `ai_os_kernel` ships no `py.typed` marker | L | **Closed** 2026-07-31 | Superseded by R-010 |
@@ -111,6 +111,26 @@ FR-113) classified, and FR-030's misrepresentation corrected. The
 document now points at the generated `STATUS.md`/`MODULE_BOARD.md` rather
 than the retired hand-maintained trackers, so the *class* of drift this
 risk described no longer has a place to accumulate.
+
+### R-008 — No `AiOsError` hierarchy *(closed)*
+
+Closed 2026-08-01. Verified, not assumed: `platform_sdk/src/ai_os_sdk/errors/taxonomy.py`
+and `models/error.py` were checked field-by-field against
+`error_handling_retry.md` §8's Structured Error Contract — the exact six
+categories, the exact hierarchy (`AiOsError` → `TransientError`,
+`PermanentError`, `QualityError`, `InfrastructureError`,
+`BudgetExceededError`, `SecurityError`), the documented `Retriable`
+table (§3) including `infrastructure`'s case-by-case override, and a
+real 1:1 `to_structured_error()` mapping with no possibility of
+category disagreement — all real and confirmed by 144 passing tests in
+`platform_sdk/tests/test_error_taxonomy.py` (28 of which target this
+module directly), `ruff check`, and `mypy --strict` clean. **Not** part
+of this risk's closure, and remaining as separate, larger, already-
+disclosed gaps (the module's own docstrings say so): the `error_code`
+catalogue (§3) has no populated entries, and no existing Kernel
+exception (`LLMProviderError`, etc.) yet inherits from this hierarchy —
+both need real producers across the codebase, tracked as ongoing
+`feature_inventory.md` module 44 work, not this risk.
 
 ### R-011 — `ai_os_kernel` ships no `py.typed` *(closed)*
 
