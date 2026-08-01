@@ -143,6 +143,17 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     needs: contract
+    # Defensive fail-fast (added after run 30682840924 hung for 70+
+    # minutes with zero step progress and no timeout configured at all
+    # — GitHub's own default is 360 minutes, far too long to silently
+    # burn on a genuine hang). 20 minutes is generous headroom over
+    # this job's own real historical runtime (the full CI workflow,
+    # every job combined, has completed in ~5 minutes) to allow for a
+    # cold Docker image pull for the real Postgres testcontainers this
+    # job's tests provision, while still failing fast enough that a
+    # real hang is caught and investigated the same day, not silently
+    # consumed for hours.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4

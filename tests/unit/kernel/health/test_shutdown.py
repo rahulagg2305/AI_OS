@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import time
 
+import pytest
 import structlog.testing
 
 from ai_os_kernel.health.shutdown import GracefulShutdownCoordinator
@@ -134,5 +135,64 @@ def test_registering_an_already_finished_task_does_not_hang() -> None:
 
         assert task.done()
         assert not task.cancelled()
+
+    asyncio.run(_run())
+
+
+def test_grace_period_seconds_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="grace_period_seconds must be positive"):
+        GracefulShutdownCoordinator(grace_period_seconds=0)
+
+
+def test_a_job_that_never_stops_on_its_own_is_force_cancelled_after_the_grace_period() -> None:
+    """The real fix for CI run 30682840924's own 70+ minute hang: a
+    coordinator with no bound at all lets one stuck job hang the whole
+    shutdown forever. This proves shutdown() always returns -- a job
+    that ignores its own stop_event entirely (simulating exactly a
+    hung background loop, whatever the real cause) is force-cancelled
+    once the grace period elapses, not waited on indefinitely."""
+
+    async def _run() -> None:
+        coordinator = GracefulShutdownCoordinator(grace_period_seconds=0.1)
+
+        async def stuck_loop(stop_event: asyncio.Event) -> None:
+            await asyncio.sleep(3600)  # ignores stop_event entirely -- a genuine hang
+
+        stop_event = asyncio.Event()
+        task = asyncio.create_task(stuck_loop(stop_event))
+        coordinator.register_stop_event_task("stuck", task, stop_event)
+
+        start = time.monotonic()
+        with structlog.testing.capture_logs() as logs:
+            await coordinator.shutdown()  # must return, not hang for 3600s
+        elapsed = time.monotonic() - start
+
+        assert elapsed < 1.0  # bounded by the grace period, not the stuck job's own sleep
+        assert task.done()
+        assert task.cancelled()  # force-cancelled, not left running
+        forced = [e for e in logs if e["event"] == "graceful_shutdown.job_forced"]
+        assert len(forced) == 1
+        assert forced[0]["job"] == "stuck"
+        assert forced[0]["log_level"] == "warning"
+
+    asyncio.run(_run())
+
+
+def test_a_healthy_job_within_the_grace_period_is_not_force_cancelled() -> None:
+    """The grace period must not punish a job that stops normally,
+    just quickly enough -- only a genuinely stuck one is forced."""
+
+    async def _run() -> None:
+        coordinator = GracefulShutdownCoordinator(grace_period_seconds=10.0)
+        task = asyncio.create_task(asyncio.sleep(0.05))
+        coordinator.register_task("quick", task)
+
+        with structlog.testing.capture_logs() as logs:
+            await coordinator.shutdown()
+
+        forced = [e for e in logs if e["event"] == "graceful_shutdown.job_forced"]
+        stopped = [e for e in logs if e["event"] == "graceful_shutdown.job_stopped"]
+        assert forced == []
+        assert len(stopped) == 1
 
     asyncio.run(_run())

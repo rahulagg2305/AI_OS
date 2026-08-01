@@ -48,6 +48,24 @@ lifespan) and already completes before ``_lifespan``'s own shutdown
 phase — the code this module's own docstring can affect — ever runs.
 Reimplementing that here would duplicate, not improve on, infrastructure
 this process does not own.
+
+**``shutdown()`` is itself bounded — never an unconditional wait.** A
+coordinator whose entire purpose is a clean shutdown would defeat that
+purpose if one misbehaving job (a hung query, a genuine bug in a loop
+this module does not control) could make it wait forever: the whole
+process shutdown, and every caller blocked on it (a real deployment's
+own termination, or a test's ``with TestClient(app):`` exit), would
+hang indefinitely with it. Found for real, not hypothetically: CI run
+``30682840924`` hung for 70+ minutes with zero progress the first time
+these three loops ever ran together against a real, live-Docker
+Postgres — the exact shape this gap produces, on whichever job or
+interaction actually stalled. ``grace_period_seconds`` bounds the
+total wait; any job still not finished when it elapses is force-
+cancelled so shutdown can still complete. Its default,
+``deployment_architecture.md``'s own documented drain bound (NFR-036:
+"Up to 300 s for in-flight steps before forced termination") — not a
+number invented for this fix, the platform's own existing policy for
+exactly this situation.
 """
 
 from __future__ import annotations
@@ -59,6 +77,11 @@ from dataclasses import dataclass
 from ai_os_kernel.observability.logging import get_logger
 
 logger = get_logger(__name__)
+
+# deployment_architecture.md / NFR-036's own documented graceful-
+# shutdown drain bound — see this module's own docstring for why a
+# bound exists at all.
+_DEFAULT_GRACE_PERIOD_SECONDS = 300.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,11 +103,16 @@ class GracefulShutdownCoordinator:
 
     Registration order does not matter — every job is stopped
     concurrently, never sequentially (see this module's own docstring
-    for why).
+    for why). ``grace_period_seconds`` bounds the total wait — see this
+    module's own docstring for why a bound exists at all and where its
+    default comes from.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, grace_period_seconds: float = _DEFAULT_GRACE_PERIOD_SECONDS) -> None:
+        if grace_period_seconds <= 0:
+            raise ValueError("grace_period_seconds must be positive")
         self._jobs: list[_CancelledJob | _StopEventJob] = []
+        self._grace_period_seconds = grace_period_seconds
 
     def register_task(self, name: str, task: asyncio.Task[None]) -> None:
         """Registers a loop stopped by cancelling ``task`` directly —
@@ -101,21 +129,37 @@ class GracefulShutdownCoordinator:
         self._jobs.append(_StopEventJob(name=name, task=task, stop_event=stop_event))
 
     async def shutdown(self) -> None:
-        """Stops every registered job and waits for each to genuinely
-        finish before returning — the process must not exit, and the
-        engine/resources those jobs use must not be disposed, until
-        this completes.
+        """Stops every registered job and waits up to
+        ``grace_period_seconds`` for each to genuinely finish before
+        returning — the process must not exit, and the engine/resources
+        those jobs use must not be disposed, until this completes.
+
+        Any job still not done when the grace period elapses is
+        force-cancelled so this method always returns — a stuck job is
+        surfaced as a real ``graceful_shutdown.job_forced`` warning, not
+        an indefinite hang.
 
         Idempotent to call with zero registered jobs (a Kernel process
         with no database, hence none of these loops started at all).
         """
+        if not self._jobs:
+            return
+
         for job in self._jobs:
             if isinstance(job, _StopEventJob):
                 job.stop_event.set()
             else:
                 job.task.cancel()
 
+        tasks = [job.task for job in self._jobs]
+        _done, still_running = await asyncio.wait(tasks, timeout=self._grace_period_seconds)
+        for task in still_running:
+            task.cancel()
+
         for job in self._jobs:
             with contextlib.suppress(asyncio.CancelledError):
                 await job.task
-            logger.info("graceful_shutdown.job_stopped", job=job.name)
+            if job.task in still_running:
+                logger.warning("graceful_shutdown.job_forced", job=job.name)
+            else:
+                logger.info("graceful_shutdown.job_stopped", job=job.name)
