@@ -110,8 +110,14 @@ services:
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./observability/grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
       - aios_grafana_data:/var/lib/grafana
+      # Deliberately NOT nested under the read-only provisioning mount
+      # above (dashboards.yaml's own comment explains why: a real,
+      # discovered "read-only file system" conflict). Nesting under the
+      # writable named volume above works, since Docker creates the
+      # mount point inside a writable parent before mounting the
+      # read-only dashboard JSON onto it.
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "${AIOS_GRAFANA_PORT:-3000}:3000"
     depends_on:

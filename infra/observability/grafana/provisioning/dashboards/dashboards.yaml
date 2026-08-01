@@ -1,6 +1,14 @@
 # Loads every dashboard JSON under grafana/dashboards/ automatically —
 # "Dashboards are defined as code," not clicked together and exported
 # once. P01-S05-M04-T04.
+#
+# `path` is deliberately NOT under /etc/grafana/provisioning — that
+# whole tree is bind-mounted read-only in one piece (docker-compose.yml)
+# so a second, nested bind mount for just the dashboard JSON conflicts
+# with it (a real, discovered failure: "read-only file system" trying
+# to create the nested mount point). /var/lib/grafana is Grafana's own
+# writable data directory, and this JSON is read-only on the host side
+# regardless of where in the container it lands.
 
 apiVersion: 1
 
@@ -10,4 +18,4 @@ providers:
     type: file
     updateIntervalSeconds: 30
     options:
-      path: /etc/grafana/provisioning/dashboards/json
+      path: /var/lib/grafana/dashboards
