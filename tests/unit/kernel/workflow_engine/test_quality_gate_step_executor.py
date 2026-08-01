@@ -84,6 +84,9 @@ class _FakeRepository:
     ) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
+    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]:
+        raise NotImplementedError("not exercised by these tests")
+
 
 @pytest.mark.asyncio
 async def test_a_passing_source_step_lets_the_gate_pass() -> None:

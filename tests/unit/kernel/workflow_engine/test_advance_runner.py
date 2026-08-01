@@ -197,6 +197,9 @@ class _FakeInstanceRepository:
     ) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
+    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]:
+        raise NotImplementedError("not exercised by these tests")
+
 
 class _FakeLeaseRepository:
     """Only `acquire`/`release` are exercised; `renew` is implemented
@@ -303,6 +306,9 @@ class _StatefulInstanceRepository:
     async def list_instances(
         self, *, limit: int, before: WorkflowListCursor | None = None
     ) -> list[WorkflowInstance]:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
 
@@ -422,6 +428,9 @@ class _GateRetryInstanceRepository:
     async def list_instances(
         self, *, limit: int, before: WorkflowListCursor | None = None
     ) -> list[WorkflowInstance]:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
 

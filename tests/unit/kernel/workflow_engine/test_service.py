@@ -320,6 +320,9 @@ class _FakeRepository:
     ) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
+    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]:
+        raise NotImplementedError("not exercised by these tests")
+
 
 class _FakeStepExecutor:
     """Records every step it was asked to execute; never does real work.
