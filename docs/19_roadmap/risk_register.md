@@ -10,10 +10,11 @@ change its status field, or add a new entry.
 Severity: **H** (can cause real harm or data loss) · **M** (can cause
 significant rework) · **L** (contained).
 
-**Reviewed 2026-07-31 (R1–R4 final closeout); R-008 closed 2026-08-01.**
-10 closed, 1 open. Zero open process-defect risks: everything remaining
-is a real product-development gap (R-006, R-009), not a defect in the
-process itself.
+**Reviewed 2026-07-31 (R1–R4 final closeout); R-008 and R-009 closed
+2026-08-01.** 11 closed, 1 open (R-006, an accepted baseline, not
+pending action) plus R-001 (a permanent standing rule, not a risk
+pending closure). Zero open process-defect risks and zero open
+product-development gaps with real, unaddressed impact.
 
 | ID | Risk | Sev | Status | Owner decision |
 |---|---|---|---|---|
@@ -25,7 +26,7 @@ process itself.
 | R-006 | 36 of 60 MUST requirements untouched | H | **Open — accepted baseline** | Product owner, 2026-07-31 |
 | R-007 | `functional_requirements.md` status block drifts from reality | M | **Closed** 2026-07-31 | — |
 | R-008 | No `AiOsError` hierarchy; error contract is per-module | M | **Closed** 2026-08-01 | — |
-| R-009 | Audit log is schema-only — no writer, no hash chain | H | **Open** | Ready: `P01-S05-M04-T05` |
+| R-009 | Audit log is schema-only — no writer, no hash chain | H | **Closed** 2026-08-01 | — |
 | R-010 | CI type-checks only a subset of `[tool.mypy] files` | M | **Closed** 2026-07-31 | — |
 | R-011 | `ai_os_kernel` ships no `py.typed` marker | L | **Closed** 2026-07-31 | Superseded by R-010 |
 | R-012 | Ticket dependency graph had no recorded edges | M | **Closed** 2026-07-31 | — |
@@ -206,9 +207,21 @@ analysis set. This is why `mypy --strict scripts tests/roadmap` fails
 while `mypy --strict` succeeds. Low severity (the canonical invocation is
 correct and green), but it makes per-directory type-checking misleading.
 
-### R-009 — Audit log schema-only
+### R-009 — Audit log schema-only *(closed)*
 
-`governance.audit_log` exists with no writer, no hash computed, and no
-verification job, so FR-110 ("tamper-evident audit log") has no
-implementation. Rated **H** because several governance claims elsewhere
-implicitly assume it exists.
+Closed 2026-08-01, stale for some time before being caught: this entry
+still named `P01-S05-M04-T05` as its own ready path, but that ticket
+(and its follow-on, `T06`) had already been `done` since early this
+same session. Verified, not assumed, before closing: `SqlAuditLogWriter`
+(`kernel/src/ai_os_kernel/observability/audit.py`) genuinely computes
+`row_hash`/`prev_hash` per row under a real `pg_advisory_xact_lock`
+(serializing concurrent writers so two rows can never both claim the
+same predecessor), and `verify_chain()` genuinely detects a tampered
+row — both re-confirmed with a fresh test run (19 passed,
+`test_audit.py`/`test_audit_verification_job.py`) as part of this
+closure, not merely cited from memory. The scheduled verification job
+(`run_periodic_audit_chain_verification`) is genuinely wired into a
+real Kernel process (`P01-S04-M03-T06`, via
+`GracefulShutdownCoordinator`), and `AccessBroker`
+(`P01-S02-M19-T04`) is a real, audited consumer. FR-110
+("tamper-evident audit log") is genuinely implemented.
