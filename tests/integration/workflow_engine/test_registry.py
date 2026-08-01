@@ -27,6 +27,8 @@ from alembic import command
 from alembic.config import Config
 
 from ai_os_kernel.persistence.engine import build_engine
+from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
+from ai_os_kernel.sdk_adapters.tool_invoker_adapter import ToolInvokerAdapter
 from ai_os_kernel.workflow_engine.agent import EchoAgent
 from ai_os_kernel.workflow_engine.errors import (
     AgentNotRegisteredError,
@@ -38,6 +40,7 @@ from ai_os_kernel.workflow_engine.errors import (
 )
 from ai_os_kernel.workflow_engine.registry import SqlAgentRegistry, SqlToolRegistry
 from ai_os_kernel.workflow_engine.tool import EchoTool, TrustTier
+from ai_os_sdk.models.tool import ToolStatus
 from tests.integration._postgres_fixture import postgres_container
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -721,6 +724,42 @@ def test_resolve_tool_is_refused_when_its_permissions_exceed_its_packs_grant(
 
             assert "secret:access" in str(exc_info.value)
             assert exc_info.value.retriable is False
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+# --- ToolInvokerAdapter resolving a manifest-declared Tool through the
+# real registry, not an internal shim (P02-S05-M18-T03) ---
+
+
+def test_a_manifest_declared_tool_resolves_and_invokes_through_the_real_registry(
+    database_url: str,
+) -> None:
+    """The real, end-to-end proof this ticket asks for: a real
+    ``catalog.tools`` row — pack-activation gate, permission-grant
+    check, entrypoint loading, trust-tier agreement, all real, all
+    exercised by the actual `SqlToolRegistry` — resolves and genuinely
+    executes through `ToolInvokerAdapter`, not the platform sandbox
+    shim it previously refused every non-shim `tool_id` in favour of."""
+
+    async def _run() -> None:
+        await _seed_tool(
+            database_url,
+            tool_id="se.manifest_declared_echo",
+            entrypoint=_ECHO_TOOL_ENTRYPOINT,
+            trust_tier="tier2_trusted",
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine)
+            adapter = ToolInvokerAdapter(LocalSubprocessSandbox(), registry=registry)
+
+            result = await adapter.invoke("se.manifest_declared_echo", {})
+
+            assert result.status is ToolStatus.SUCCESS
+            assert result.outputs == {"result": "ok"}
         finally:
             await engine.dispose()
 

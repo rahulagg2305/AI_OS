@@ -30,6 +30,9 @@ import pytest
 
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.sdk_adapters.tool_invoker_adapter import ToolInvokerAdapter, UnknownToolError
+from ai_os_kernel.workflow_engine.errors import ToolSandboxRequiredError
+from ai_os_kernel.workflow_engine.registry import InMemoryToolRegistry
+from ai_os_kernel.workflow_engine.tool import EchoTool, TrustTier
 from ai_os_sdk.contracts import (
     PLATFORM_PYTHON_INTERPRETER,
     PLATFORM_SANDBOX_RUN_COMMAND,
@@ -250,3 +253,136 @@ class TestPlatformPythonInterpreterSubstitution:
 
         assert result.status is ToolStatus.SUCCESS
         assert result.stdout.strip() == "no placeholder used"
+
+
+class _RaisingTool:
+    """A resolved tool whose own `execute()` raises — proves a genuine
+    execution-time failure becomes a `ToolResult(status=FAILURE)`, not
+    an unhandled exception escaping the adapter."""
+
+    output_schema: dict[str, object] = {"type": "object", "additionalProperties": True}
+    trust_tier = TrustTier.TIER2_TRUSTED
+
+    async def execute(self, inputs: dict[str, object]) -> dict[str, object]:
+        raise RuntimeError("this tool's own code failed")
+
+
+class _BadOutputTool:
+    """A resolved tool whose `execute()` genuinely runs but returns
+    something that fails its own declared `output_schema`."""
+
+    output_schema: dict[str, object] = {
+        "type": "object",
+        "properties": {"required_field": {"type": "string"}},
+        "required": ["required_field"],
+        "additionalProperties": False,
+    }
+    trust_tier = TrustTier.TIER2_TRUSTED
+
+    async def execute(self, inputs: dict[str, object]) -> dict[str, object]:
+        return {}
+
+
+class _UnbackedTier1Tool:
+    """Declares `tier1_sandboxed` but exposes no real `sandbox`
+    attribute at all — the exact condition
+    :class:`~ai_os_kernel.workflow_engine.errors.ToolSandboxRequiredError`
+    exists to refuse, mirroring `ToolStepExecutor`'s own identical
+    guard."""
+
+    output_schema: dict[str, object] = {"type": "object", "additionalProperties": True}
+    trust_tier = TrustTier.TIER1_SANDBOXED
+
+    async def execute(self, inputs: dict[str, object]) -> dict[str, object]:
+        return {}  # pragma: no cover - must never be reached
+
+
+class _BackedTier1Tool:
+    """Declares `tier1_sandboxed` and genuinely exposes a real
+    `SandboxExecutor` — must be dispatched normally, the positive case
+    `ToolSandboxRequiredError`'s own guard is narrowed for."""
+
+    output_schema: dict[str, object] = {"type": "object", "additionalProperties": True}
+    trust_tier = TrustTier.TIER1_SANDBOXED
+
+    def __init__(self) -> None:
+        self.sandbox = LocalSubprocessSandbox()
+
+    async def execute(self, inputs: dict[str, object]) -> dict[str, object]:
+        return {}
+
+
+class TestInvokeAgainstARegistryResolvedTool:
+    """``P02-S05-M13-T07``: any ``tool_id`` other than the platform
+    sandbox shim now genuinely resolves through an injected
+    :class:`~ai_os_kernel.workflow_engine.registry.ToolRegistry` — real
+    resolution, real dispatch, not an internal shim. The real,
+    Postgres-backed proof against an actual ``SqlToolRegistry`` lives in
+    ``tests/integration/workflow_engine/test_registry.py``; this file
+    proves every real branch of the adapter's own logic in isolation,
+    against the already-real ``InMemoryToolRegistry``.
+    """
+
+    async def test_a_registry_resolved_tool_is_genuinely_invoked(self) -> None:
+        registry = InMemoryToolRegistry({"pack.echo": EchoTool()})
+        adapter = ToolInvokerAdapter(LocalSubprocessSandbox(), registry=registry)
+
+        result = await adapter.invoke("pack.echo", {})
+
+        assert result.status is ToolStatus.SUCCESS
+        assert result.outputs == {"result": "ok"}
+        assert result.exit_code is None
+        assert result.stdout == ""
+        assert result.stderr == ""
+
+    async def test_a_tool_id_with_no_registry_configured_still_raises_unknown_tool_error(
+        self,
+    ) -> None:
+        adapter = ToolInvokerAdapter(LocalSubprocessSandbox())  # no registry supplied
+
+        with pytest.raises(UnknownToolError, match="no ToolRegistry was supplied"):
+            await adapter.invoke("pack.anything", {})
+
+    async def test_a_tool_id_the_registry_cannot_resolve_raises_unknown_tool_error(self) -> None:
+        registry = InMemoryToolRegistry({})  # genuinely empty
+        adapter = ToolInvokerAdapter(LocalSubprocessSandbox(), registry=registry)
+
+        with pytest.raises(UnknownToolError, match="pack.missing"):
+            await adapter.invoke("pack.missing", {})
+
+    async def test_a_tier1_sandboxed_tool_without_real_sandbox_backing_is_refused(self) -> None:
+        registry = InMemoryToolRegistry({"pack.unbacked": _UnbackedTier1Tool()})
+        adapter = ToolInvokerAdapter(LocalSubprocessSandbox(), registry=registry)
+
+        with pytest.raises(ToolSandboxRequiredError, match="tier1_sandboxed"):
+            await adapter.invoke("pack.unbacked", {})
+
+    async def test_a_tier1_sandboxed_tool_with_real_sandbox_backing_is_dispatched(self) -> None:
+        registry = InMemoryToolRegistry({"pack.backed": _BackedTier1Tool()})
+        adapter = ToolInvokerAdapter(LocalSubprocessSandbox(), registry=registry)
+
+        result = await adapter.invoke("pack.backed", {})
+
+        assert result.status is ToolStatus.SUCCESS
+
+    async def test_the_resolved_tools_own_execution_failure_becomes_a_failure_result(self) -> None:
+        registry = InMemoryToolRegistry({"pack.raises": _RaisingTool()})
+        adapter = ToolInvokerAdapter(LocalSubprocessSandbox(), registry=registry)
+
+        result = await adapter.invoke("pack.raises", {})
+
+        assert result.status is ToolStatus.FAILURE
+        assert result.error is not None
+        assert "this tool's own code failed" in result.error.message
+
+    async def test_output_failing_the_tools_own_declared_schema_becomes_a_failure_result(
+        self,
+    ) -> None:
+        registry = InMemoryToolRegistry({"pack.bad_output": _BadOutputTool()})
+        adapter = ToolInvokerAdapter(LocalSubprocessSandbox(), registry=registry)
+
+        result = await adapter.invoke("pack.bad_output", {})
+
+        assert result.status is ToolStatus.FAILURE
+        assert result.error is not None
+        assert "output_schema" in result.error.message

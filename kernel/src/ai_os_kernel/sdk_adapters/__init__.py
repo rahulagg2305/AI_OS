@@ -23,7 +23,11 @@ designed in steps 3–6:
 - :mod:`tool_invoker_adapter` — wraps a real
   :class:`~ai_os_kernel.sandbox.executor.SandboxExecutor` to satisfy
   :class:`ai_os_sdk.contracts.ToolInvoker`, exposing
-  ``platform.sandbox.run_command``.
+  ``platform.sandbox.run_command`` — and, when constructed with a real
+  :class:`~ai_os_kernel.workflow_engine.registry.ToolRegistry`
+  (``P02-S05-M18-T03``), resolves and invokes any other manifest-declared
+  ``tool_id`` through that registry's own real path, not an internal
+  shim.
 
 **As of step 6b, one more module assembles those three into a real,
 permission-gated context:**
