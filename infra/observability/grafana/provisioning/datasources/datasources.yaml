@@ -1,0 +1,22 @@
+# Real Grafana datasource provisioning (ADR-0017's own "Dashboards are
+# defined as code" consequence) — wired to the real Prometheus/Tempo/
+# Loki instances this same Compose profile brings up. P01-S05-M04-T04.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100

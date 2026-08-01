@@ -1,0 +1,37 @@
+# Real Loki single-binary config (local dev only — local filesystem
+# storage, in-memory ring). P01-S05-M04-T04.
+#
+# Stands up ready to receive, per this ticket's own Goal ("stand up
+# ... Loki ... for local use") — but genuinely receives nothing yet:
+# the Kernel emits structured logs to its own stdout (structlog JSON,
+# ADR-0017) and is not containerised (no Dockerfile exists yet, see
+# deployment_architecture.md's own Implementation Status), so there is
+# no real log-shipping path (a Promtail sidecar scraping container
+# stdout is the standard one) into this instance today. Disclosed here
+# rather than papered over with a producer that does not exist.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h

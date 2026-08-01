@@ -1,0 +1,11 @@
+# Scrapes the real Collector's own Prometheus exporter (port 8889,
+# otel-collector-config.yaml) — a real pull, not a push, the standard
+# Prometheus pattern. P01-S05-M04-T04.
+
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]

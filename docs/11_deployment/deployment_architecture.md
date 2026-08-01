@@ -8,18 +8,18 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (updated 2026-08-01)
 
 **Barely built — this document is close to pure specification.** Read this before treating any deployment artifact below as existing.
 
-**Built:** `infra/docker-compose.yml` (Postgres 16 + pgvector, Redis 7) and `infra/environments/{local,dev,staging,production}.yaml`. Alembic migrations run as a separate command, consistent with the migration-as-Job principle here.
+**Built:** `infra/docker-compose.yml`'s `core` profile (Postgres 16 + pgvector, Redis 7) and, as of `P01-S05-M04-T04`, its real `observability` profile (Collector, Prometheus, Tempo, Loki, a provisioned Grafana — §5's own documented profile table, proven end to end against a real `docker compose up`); `infra/environments/{local,dev,staging,production}.yaml`. Alembic migrations run as a separate command, consistent with the migration-as-Job principle here.
 
 **Not built:**
-- **There is no Dockerfile anywhere in the repository.** Neither documented process role (`api`, `worker`) has an image, so the multi-stage build, digest-pinned bases, non-root uid 10001, and read-only filesystem described below do not exist. CI's image-build stage is deliberately gated off for this reason.
+- **There is no Dockerfile anywhere in the repository.** Neither documented process role (`api`, `worker`) has an image, so the multi-stage build, digest-pinned bases, non-root uid 10001, and read-only filesystem described below do not exist. CI's image-build stage is deliberately gated off for this reason. The `core`/`full` Compose profiles are consequently not literally "everything" §5's own table eventually names — only `observability` is genuinely complete today, since it needs no Kernel image at all (the Kernel runs as a local, non-containerised dev process pointing its real OTLP exporter at the Collector).
 - **No Kubernetes manifests and no Helm chart.** `infra/kubernetes/` and `infra/terraform/` have no tracked content and are absent from a fresh clone. Every K8s object specified here — Deployments, Service, Ingress, HPA, ConfigMap, ExternalSecret, ServiceAccount, PodDisruptionBudget, and the **NetworkPolicy egress allowlist** — is unbuilt.
 - **No separate sandbox image.** `DockerSandbox` is real and live-verified, but pulls the public `python:3.12-slim` tag; it is **tag-pinned, not digest-pinned**, contrary to the hardening target here and in `../09_security/security_architecture.md` §10.
 - **No worker role deployment.** `run_to_completion` drives a single workflow instance; there is no multi-instance worker loop, so lease-based horizontal scaling is untested in a real deployment.
-- **No backup/restore tooling and no rehearsed restore drill**; no PITR configuration; no offsite audit-log export (the audit log itself has no writer).
+- **No backup/restore tooling and no rehearsed restore drill**; no PITR configuration. The audit log itself now has a real writer and hash chain (`P01-S05-M04-T05`/`T06`), but there is still no offsite export of it.
 - **No release pipeline, no staging verification, no canary.**
 
 Consequence: AI_OS currently runs only as a local development process against Compose-provided Postgres. Treat this document as the Stage G target, not a description of a deployable system.

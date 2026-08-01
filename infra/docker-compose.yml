@@ -1,12 +1,23 @@
-# Local development topology only (docs/11_deployment/deployment_architecture.md
-# §5, "core" profile). Brings up Postgres and Redis so the Kernel can be run
-# and tested against real dependencies (ADR-0015: no mocking the database).
+# Local development topology (docs/11_deployment/deployment_architecture.md
+# §5). Profiles keep the footprint proportionate — bring up only what a
+# given step needs:
+#   core          postgres, redis
+#   observability + otel-collector, prometheus, tempo, loki, grafana
+#   full          everything
 #
-# api/worker services are not included yet — no container image exists until
-# a later Stage A/B step builds the Dockerfile.
+# api/worker are not included in any profile yet — no container image
+# exists until a later Stage A/B step builds the Dockerfile (so `core`
+# and `full` are not literally "everything" the table in
+# deployment_architecture.md §5 eventually names, only what exists today).
 #
 # Usage (from the repository root):
-#   docker compose -f infra/docker-compose.yml --env-file .env up -d
+#   docker compose -f infra/docker-compose.yml --env-file .env --profile core up -d
+#   docker compose -f infra/docker-compose.yml --env-file .env --profile observability up -d
+#
+# For the observability profile: the Kernel runs as a local, non-
+# containerised dev process (same as today, no image change) — set
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 (.env.example) so its
+# real OTLP/HTTP exporter (P01-S05-M04-T03) reaches this Collector.
 #
 # Credentials below are local-development placeholders, not managed secrets
 # (ADR-0024 secrets backend is separate, later work). Override any of them
@@ -15,6 +26,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    profiles: ["core", "full"]
     environment:
       POSTGRES_USER: ${AIOS_DB_USER:-aios}
       POSTGRES_PASSWORD: ${AIOS_DB_PASSWORD:-aios_dev_only}
@@ -31,6 +43,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    profiles: ["core", "full"]
     ports:
       - "${AIOS_REDIS_PORT:-6379}:6379"
     healthcheck:
@@ -39,5 +52,76 @@ services:
       timeout: 5s
       retries: 10
 
+  # --- observability profile (P01-S05-M04-T04) ---
+  # ADR-0017's reference backend: OTLP -> Collector -> {Prometheus, Tempo,
+  # Loki} -> Grafana. Config files live in infra/observability/ — see each
+  # one's own header comment for what it does and, for Loki specifically,
+  # the real gap it discloses (no log producer wired to it yet).
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.110.0
+    profiles: ["observability", "full"]
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "${AIOS_OTLP_GRPC_PORT:-4317}:4317"
+      - "${AIOS_OTLP_HTTP_PORT:-4318}:4318"
+      - "${AIOS_OTEL_COLLECTOR_METRICS_PORT:-8889}:8889"
+    depends_on:
+      tempo:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["observability", "full"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - aios_prometheus_data:/prometheus
+    ports:
+      - "${AIOS_PROMETHEUS_PORT:-9090}:9090"
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    profiles: ["observability", "full"]
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - aios_tempo_data:/var/tempo
+    ports:
+      - "${AIOS_TEMPO_HTTP_PORT:-3200}:3200"
+
+  loki:
+    image: grafana/loki:3.2.1
+    profiles: ["observability", "full"]
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./observability/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - aios_loki_data:/loki
+    ports:
+      - "${AIOS_LOKI_PORT:-3100}:3100"
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    profiles: ["observability", "full"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+      - aios_grafana_data:/var/lib/grafana
+    ports:
+      - "${AIOS_GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+
 volumes:
   aios_postgres_data:
+  aios_prometheus_data:
+  aios_tempo_data:
+  aios_loki_data:
+  aios_grafana_data:

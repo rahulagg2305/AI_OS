@@ -1,0 +1,13 @@
+# Loads every dashboard JSON under grafana/dashboards/ automatically —
+# "Dashboards are defined as code," not clicked together and exported
+# once. P01-S05-M04-T04.
+
+apiVersion: 1
+
+providers:
+  - name: AI_OS
+    folder: AI_OS
+    type: file
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

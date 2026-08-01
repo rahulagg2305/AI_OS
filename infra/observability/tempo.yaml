@@ -1,0 +1,25 @@
+# Real Tempo single-binary config (local dev only — one node, local
+# filesystem storage, no object store). Receives traces forwarded by
+# the Collector's own otlp/tempo exporter. P01-S05-M04-T04.
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal
+
+compactor:
+  compaction:
+    block_retention: 24h

@@ -1,0 +1,50 @@
+# Real OpenTelemetry Collector config (ADR-0017: "The Collector — not
+# application code — decides the real backend"). P01-S05-M04-T04.
+#
+# Both OTLP receivers are enabled (grpc:4317, http:4318) — the Kernel's
+# own exporter (ai_os_kernel.observability.tracing/metrics) speaks
+# HTTP/protobuf (P01-S05-M04-T03), but enabling grpc too costs nothing
+# and matches this Collector's own out-of-box default, for any future
+# OTLP client that speaks it instead.
+#
+# Traces forward to Tempo's own native OTLP receiver; metrics export via
+# this Collector's own Prometheus exporter (a real /metrics endpoint on
+# port 8889 that Prometheus scrapes — see prometheus.yml) rather than a
+# push-based remote-write, the simpler of the two standard patterns and
+# sufficient for a single-node local Compose stack.
+#
+# The `debug` exporter writes every received span/metric to this
+# container's own stdout — real, live proof (this ticket's own Output)
+# is capturing that output, not merely asserting the config parses.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus, debug]
