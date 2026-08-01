@@ -442,6 +442,53 @@ def test_a_well_formed_decision_step_loads_successfully(tmp_path: Path) -> None:
     assert decide_step.branches == {"true": "deploy", "false": "rollback"}
 
 
+def test_sub_workflow_step_without_sub_workflow_id_fails_clearly(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [{"id": "invoke_child", "type": "sub_workflow"}],
+    }
+    path = _write_definition(tmp_path / "sub_workflow_no_id.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="must declare subWorkflowId"):
+        loader.load(path)
+
+
+def test_sub_workflow_id_on_a_non_sub_workflow_step_fails_clearly(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {
+                "id": "analyze_requirements",
+                "type": "agent",
+                "agentId": "se.software_engineering/analyst",
+                "subWorkflowId": "se.some_child_workflow",
+            }
+        ],
+    }
+    path = _write_definition(tmp_path / "sub_workflow_id_misplaced.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="only a sub_workflow step may declare"):
+        loader.load(path)
+
+
+def test_a_well_formed_sub_workflow_step_loads_successfully(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {"id": "invoke_child", "type": "sub_workflow", "subWorkflowId": "se.child_workflow"}
+        ],
+    }
+    path = _write_definition(tmp_path / "sub_workflow_valid.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    definition = loader.load(path)
+
+    invoke_step = next(step for step in definition.steps if step.id == "invoke_child")
+    assert invoke_step.sub_workflow_id == "se.child_workflow"
+
+
 def test_malformed_quality_gate_reference_fails_clearly(tmp_path: Path) -> None:
     content = {**_VALID_DEFINITION, "qualityGates": ["Not A Valid Gate Id"]}
     path = _write_definition(tmp_path / "bad_gate.yaml", content)

@@ -98,6 +98,22 @@ class ParallelStepFailedError(Exception):
         self.results = results
 
 
+class SubWorkflowFailedError(Exception):
+    """A ``sub_workflow`` step (:class:`~ai_os_kernel.workflow_engine.
+    step_executor.SubWorkflowStepExecutor`) could not genuinely be
+    satisfied — either its declared ``subWorkflowId`` has no matching
+    entry in the executor's own composition-level ``definitions``
+    mapping (a configuration problem, the identical shape
+    :class:`DecisionConditionError` already covers for an unresolvable
+    reference), or the real child ``WorkflowInstance`` it created and
+    ran to completion did not reach
+    :attr:`~ai_os_kernel.workflow_engine.advance_runner.
+    WorkflowRunOutcome.COMPLETED` (a genuine runtime failure of the
+    invoked child). No type split for the same reason
+    ``AgentRegistryError``/``ToolRegistryError`` already document: two
+    distinct real causes, one class, a clear message per site."""
+
+
 class ToolSandboxRequiredError(Exception):
     """A tool declares ``trust_tier = tier1_sandboxed`` but is not
     genuinely backed by a real :class:`~ai_os_kernel.sandbox.executor.

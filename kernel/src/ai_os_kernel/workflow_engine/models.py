@@ -15,20 +15,20 @@ Two deliberate scoping decisions, not omissions:
   referenced by id everywhere else).
 - ``joinPolicy`` (mandatory for a ``parallel`` step,
   ``workflow_engine.md`` §7.1), the five invocation fields below, and —
-  as of ``P02-S01-M05-T09``/``P02-S01-M05-T10`` — ``condition``/
-  ``branches`` (mandatory for a ``decision`` step; see
-  :class:`DecisionCondition`'s own docstring) and ``parallelSteps``
+  as of ``P02-S01-M05-T09``/``P02-S01-M05-T10``/``P02-S01-M05-T11`` —
+  ``condition``/``branches`` (mandatory for a ``decision`` step; see
+  :class:`DecisionCondition`'s own docstring), ``parallelSteps``
   (mandatory alongside ``joinPolicy`` for a ``parallel`` step — at
-  least two nested ``agent``/``tool`` branches) are the per-step fields
-  validated here. **Sub-workflow linkage remains genuinely
-  undocumented** — no document defines a field-level contract for it
-  yet — and stays deferred; inventing one here would still be
-  architecture this module does not own. Decision-step branching and
-  parallel-step membership are no longer in that category: no document
-  defined either, but the product owner explicitly approved a minimal,
-  closed-vocabulary contract for each as part of its own step rather
-  than leaving the ticket blocked, disclosed as a real, deliberate
-  departure from "wait for a document," not an unreviewed invention.
+  least two nested ``agent``/``tool`` branches), and ``subWorkflowId``
+  (mandatory for a ``sub_workflow`` step — a plain reference string,
+  resolved at the composition level, never read back from the
+  write-only ``catalog.workflow_definitions``; see
+  :class:`~ai_os_kernel.workflow_engine.step_executor.
+  SubWorkflowStepExecutor`'s own docstring) are the per-step fields
+  validated here. None of these three contracts existed in any document
+  before its own step — each is a real, disclosed departure from "wait
+  for a document," approved by the product owner as part of the ticket
+  that needed it, not an unreviewed invention.
 
 ``WorkflowStep``'s five invocation fields (``agentId``, ``toolId``,
 ``promptId``, ``promptVersion``, ``modelAlias``) are a field-for-field
@@ -146,13 +146,39 @@ class WorkflowStep(_CamelModel):
     condition: DecisionCondition | None = None
     branches: dict[str, str] | None = None
     parallel_steps: list[WorkflowStep] | None = None
+    sub_workflow_id: str | None = None
 
-    @field_validator("agent_id", "tool_id", "prompt_id", "prompt_version", "model_alias")
+    @field_validator(
+        "agent_id", "tool_id", "prompt_id", "prompt_version", "model_alias", "sub_workflow_id"
+    )
     @classmethod
     def _invocation_fields_are_not_blank(cls, value: str | None) -> str | None:
         if value is not None and not value.strip():
             raise ValueError("must not be blank when declared")
         return value
+
+    @model_validator(mode="after")
+    def _sub_workflow_step_requires_sub_workflow_id(self) -> WorkflowStep:
+        """``P02-S01-M05-T11``: a ``sub_workflow`` step must declare
+        ``subWorkflowId`` — a plain reference string, the identical
+        shape :class:`DecisionCondition`'s own ``sourceStepId`` already
+        uses, resolved to a real, already-loaded
+        :class:`~ai_os_kernel.workflow_engine.models.WorkflowDefinition`
+        by :class:`~ai_os_kernel.workflow_engine.step_executor.
+        SubWorkflowStepExecutor`'s own composition-level ``definitions``
+        mapping — not read back from ``catalog.workflow_definitions``
+        (write-only today; see that executor's own docstring for the
+        full reasoning and the product-owner decision behind it)."""
+        if self.type is StepType.SUB_WORKFLOW and self.sub_workflow_id is None:
+            raise ValueError(
+                f"step '{self.id}': a sub_workflow step must declare subWorkflowId "
+                "— it fails validation rather than defaulting silently"
+            )
+        if self.type is not StepType.SUB_WORKFLOW and self.sub_workflow_id is not None:
+            raise ValueError(
+                f"step '{self.id}': only a sub_workflow step may declare subWorkflowId"
+            )
+        return self
 
     @model_validator(mode="after")
     def _parallel_step_requires_join_policy_and_branches(self) -> WorkflowStep:

@@ -3,7 +3,7 @@ work (Agent, Tool, Decision, Parallel, Sub-workflow, Quality Gate, Human
 Approval — workflow_architecture.md "Supported Step Types").
 
 ``NoOpStepExecutor`` always succeeds and does nothing — still the only
-implementation for Sub-workflow/Human-Approval steps at this stage.
+implementation for Human-Approval steps at this stage.
 ``AgentStepExecutor`` resolves a step's declared ``agentId`` through an
 injected
 :class:`~ai_os_kernel.workflow_engine.registry.AgentRegistry` and
@@ -23,11 +23,17 @@ execution — see its own docstring and
 :class:`ParallelStepExecutor` (``P02-S01-M05-T10``) is the real
 implementation for a Parallel step, genuinely running its declared
 ``parallelSteps`` concurrently via ``asyncio.gather``/``asyncio.wait``
-and joining per ``joinPolicy`` — see its own docstring. A caller that
-does not supply one still routes ``decision``/``parallel`` steps to
-``NoOpStepExecutor``, unchanged. ``DispatchingStepExecutor`` routes
-between all six by ``step.type`` — the composition root wires each
-individually (ADR-0004: interface-driven; ADR-0010: no DI container).
+and joining per ``joinPolicy`` — see its own docstring.
+:class:`SubWorkflowStepExecutor` (``P02-S01-M05-T11``) is the real
+implementation for a Sub-workflow step, genuinely creating, starting,
+and running a real child :class:`~ai_os_kernel.workflow_engine.
+instance.WorkflowInstance` to completion and joining on its real,
+persisted output — see its own docstring. A caller that does not
+supply one still routes ``decision``/``parallel``/``sub_workflow``
+steps to ``NoOpStepExecutor``, unchanged. ``DispatchingStepExecutor``
+routes between all seven by ``step.type`` — the composition root wires
+each individually (ADR-0004: interface-driven; ADR-0010: no DI
+container).
 
 **Real dispatch by declared id, not real capability discovery.** The
 registry each executor is handed may still only contain
@@ -59,8 +65,11 @@ assembly for — see its own docstring below); ``NoOpStepExecutor``,
 forward it purely for ``Protocol`` uniformity.
 """
 
+from __future__ import annotations
+
 import asyncio
-from typing import Any, Protocol
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Protocol
 
 from jsonschema import Draft202012Validator
 
@@ -71,14 +80,31 @@ from ai_os_kernel.workflow_engine.errors import (
     AgentOutputValidationError,
     DecisionConditionError,
     ParallelStepFailedError,
+    SubWorkflowFailedError,
     ToolOutputValidationError,
     ToolSandboxRequiredError,
 )
-from ai_os_kernel.workflow_engine.models import JoinPolicy, StepType, WorkflowStep
+from ai_os_kernel.workflow_engine.models import (
+    JoinPolicy,
+    StepType,
+    WorkflowDefinition,
+    WorkflowStep,
+)
 from ai_os_kernel.workflow_engine.quality_gate import _latest_completed_output
 from ai_os_kernel.workflow_engine.registry import AgentRegistry, ToolRegistry
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.tool import SandboxBackedTool, Tool, TrustTier
+
+if TYPE_CHECKING:
+    # Both modules import `StepExecutor` (this module) at their own
+    # top level — `service.py` directly, `advance_runner.py`
+    # transitively via `service.py` — so importing either back here at
+    # runtime would be a real circular import, not a style choice.
+    # `from __future__ import annotations` (added to this module for
+    # exactly this reason) makes a TYPE_CHECKING-only import sufficient
+    # for the type hints `SubWorkflowStepExecutor` needs.
+    from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner
+    from ai_os_kernel.workflow_engine.service import WorkflowInstanceService
 
 
 class StepExecutor(Protocol):
@@ -473,6 +499,158 @@ class ParallelStepExecutor:
         return [results[branch.id] for branch in branches]
 
 
+class SubWorkflowStepExecutor:
+    """Executes a ``sub_workflow``-type step by genuinely creating,
+    starting, and running a real, separate child
+    :class:`~ai_os_kernel.workflow_engine.instance.WorkflowInstance` to
+    completion — through the same, unmodified
+    :class:`~ai_os_kernel.workflow_engine.service.WorkflowInstanceService`/
+    :class:`~ai_os_kernel.workflow_engine.advance_runner.
+    WorkflowAdvanceRunner` any top-level workflow already uses, not a
+    second, parallel execution path — and joining on that child's own
+    real, persisted last-step output (``P02-S01-M05-T11``, closing the
+    last of the two step types this module's own docstring used to
+    list as always ``NoOpStepExecutor``-handled).
+
+    **Composition-level injection, not a catalog reader (product-owner
+    decision, ``P02-S01-M05-T11``).** :class:`~ai_os_kernel.
+    workflow_engine.definition_catalog.WorkflowDefinitionCatalog` is,
+    by its own docstring, write-only — "No reader, no update, no
+    delete — registration is the only operation this step approves."
+    Rather than build a new, real catalog-read path (a bigger,
+    separate architectural change no document requests) or invent a
+    second, parallel resolution mechanism, ``definitions`` here is a
+    plain ``{workflow_definition_id: WorkflowDefinition}`` mapping the
+    composition root supplies — the identical shape
+    :class:`~ai_os_kernel.workflow_engine.quality_gate.
+    QualityGateStepExecutor`'s own ``gate_sources`` and
+    :meth:`~ai_os_kernel.workflow_engine.advance_runner.
+    WorkflowAdvanceRunner.run_to_completion`'s own
+    ``step_retry_targets`` already establish for "a cross-step/
+    cross-workflow reference belongs in the composition layer, not as
+    new, workflow-file-facing architecture." A step whose declared
+    ``subWorkflowId`` is absent from this mapping fails clearly
+    (:class:`~ai_os_kernel.workflow_engine.errors.
+    SubWorkflowFailedError`), the same "unconfigured means refused, not
+    silently skipped" shape ``step_retry_targets`` already has.
+
+    **Child outputs, read from the child's own last-executed step —
+    never from ``WorkflowInstance.outputs``.** That field exists on the
+    model but is never actually written by
+    :meth:`~ai_os_kernel.workflow_engine.repository.
+    SqlWorkflowInstanceRepository.advance_workflow`'s completion branch
+    today (verified by reading it directly, not assumed) — so "child
+    outputs in the parent" is obtained the same way
+    :class:`DecisionStepExecutor` already reads a *named* prior step's
+    output: the completed child's own ``current_step_id`` (never
+    touched by the completion branch, so it still names the last step
+    that genuinely ran) plus :func:`~ai_os_kernel.workflow_engine.
+    quality_gate._latest_completed_output` over that child's own
+    persisted step records — a third reuse of that same helper, not a
+    fourth implementation of "read a step's real, persisted output."
+
+    Runs the child with ``max_iterations``/``lease_duration_seconds``
+    the composition root supplies (the same two knobs any top-level
+    ``run_to_completion`` caller already provides) and no
+    ``step_retry_targets`` of its own — a child workflow's own retry
+    policy, if any, is exactly ``definition.retry_policy`` on the
+    resolved child :class:`~ai_os_kernel.workflow_engine.models.
+    WorkflowDefinition`, unrelated to the parent's.
+    """
+
+    def __init__(
+        self,
+        *,
+        definitions: Mapping[str, WorkflowDefinition],
+        instance_service: WorkflowInstanceService,
+        advance_runner: WorkflowAdvanceRunner,
+        repository: WorkflowInstanceRepository,
+        pack_id: str,
+        principal_id: str,
+        lease_duration_seconds: int,
+        max_iterations: int,
+    ) -> None:
+        self._definitions = definitions
+        self._instance_service = instance_service
+        self._advance_runner = advance_runner
+        self._repository = repository
+        self._pack_id = pack_id
+        self._principal_id = principal_id
+        self._lease_duration_seconds = lease_duration_seconds
+        self._max_iterations = max_iterations
+
+    async def execute(
+        self, step: WorkflowStep, *, workflow_id: str | None = None
+    ) -> dict[str, Any]:
+        if step.type is not StepType.SUB_WORKFLOW:
+            raise ValueError(
+                f"SubWorkflowStepExecutor cannot execute step '{step.id}' of type "
+                f"'{step.type.value}' — it only handles sub_workflow steps"
+            )
+        # Model validation (`_sub_workflow_step_requires_sub_workflow_id`)
+        # already guarantees this is set for a well-formed sub_workflow
+        # step; narrowed here only so mypy sees it, never a real runtime gap.
+        sub_workflow_id = step.sub_workflow_id
+        if sub_workflow_id is None:
+            raise ValueError(
+                f"step '{step.id}' declares no subWorkflowId — WorkflowStep "
+                "validation should already have required one for a sub_workflow step"
+            )
+
+        definition = self._definitions.get(sub_workflow_id)
+        if definition is None:
+            raise SubWorkflowFailedError(
+                f"sub_workflow step '{step.id}' declares subWorkflowId "
+                f"'{sub_workflow_id}', which has no entry in this executor's own "
+                f"composition-level definitions mapping (real ids: "
+                f"{sorted(self._definitions)!r})"
+            )
+
+        child_instance = await self._instance_service.create_instance(
+            definition=definition,
+            inputs={},
+            principal_id=self._principal_id,
+            pack_id=self._pack_id,
+        )
+        await self._instance_service.start(
+            workflow_id=child_instance.workflow_id,
+            reason=f"started by sub_workflow step '{step.id}' of workflow '{workflow_id}'",
+        )
+        result = await self._advance_runner.run_to_completion(
+            workflow_id=child_instance.workflow_id,
+            definition=definition,
+            worker_id=f"sub-workflow:{step.id}",
+            lease_duration_seconds=self._lease_duration_seconds,
+            max_iterations=self._max_iterations,
+        )
+        # Compared against the literal string, not `WorkflowRunOutcome.
+        # COMPLETED` — importing that enum at runtime would reimport
+        # `advance_runner.py`, which imports `service.py`, which imports
+        # this module: the same real cycle the TYPE_CHECKING guard above
+        # exists to avoid. `WorkflowRunOutcome` is a `StrEnum`, so its
+        # member's own value *is* this literal — not a guess at its shape.
+        if result.outcome != "completed":
+            raise SubWorkflowFailedError(
+                f"sub_workflow step '{step.id}' invoking '{sub_workflow_id}' "
+                f"(child workflow '{child_instance.workflow_id}') did not complete: "
+                f"outcome={result.outcome}"
+            )
+
+        completed_child = await self._repository.get_instance(child_instance.workflow_id)
+        child_output: dict[str, Any] = {}
+        if completed_child is not None and completed_child.current_step_id is not None:
+            child_steps = await self._repository.list_steps(child_instance.workflow_id)
+            child_output = (
+                _latest_completed_output(child_steps, completed_child.current_step_id) or {}
+            )
+
+        return {
+            "childWorkflowId": child_instance.workflow_id,
+            "subWorkflowId": sub_workflow_id,
+            "outputs": child_output,
+        }
+
+
 class DispatchingStepExecutor:
     """Routes an Agent-type step to ``agent_executor``, a Tool-type step
     to ``tool_executor``, a Quality-Gate-type step to
@@ -481,18 +659,20 @@ class DispatchingStepExecutor:
     ``parallel_executor`` (when supplied), and every other step type to
     ``default_executor``.
 
-    The only place that knows all six executors exist; none of them
+    The only place that knows all seven executors exist; none of them
     needs to know about the others or about step types it does not
     handle. ``quality_gate_executor``/``decision_executor``/
-    ``parallel_executor`` all default to ``None`` — every existing
-    caller that does not supply one keeps routing that step type to
-    ``default_executor`` exactly as before (:class:`NoOpStepExecutor`,
-    unchanged); only a caller that genuinely wants real, blocking gate
-    evaluation (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`),
-    real decision-step branching, or real concurrent parallel execution
-    supplies :class:`~ai_os_kernel.workflow_engine.quality_gate.
+    ``parallel_executor``/``sub_workflow_executor`` all default to
+    ``None`` — every existing caller that does not supply one keeps
+    routing that step type to ``default_executor`` exactly as before
+    (:class:`NoOpStepExecutor`, unchanged); only a caller that
+    genuinely wants real, blocking gate evaluation
+    (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`), real
+    decision-step branching, real concurrent parallel execution, or
+    real child-workflow invocation supplies
+    :class:`~ai_os_kernel.workflow_engine.quality_gate.
     QualityGateStepExecutor`/:class:`DecisionStepExecutor`/
-    :class:`ParallelStepExecutor` here.
+    :class:`ParallelStepExecutor`/:class:`SubWorkflowStepExecutor` here.
     """
 
     def __init__(
@@ -503,6 +683,7 @@ class DispatchingStepExecutor:
         quality_gate_executor: StepExecutor | None = None,
         decision_executor: StepExecutor | None = None,
         parallel_executor: StepExecutor | None = None,
+        sub_workflow_executor: StepExecutor | None = None,
     ) -> None:
         self._agent_executor = agent_executor
         self._tool_executor = tool_executor
@@ -510,6 +691,7 @@ class DispatchingStepExecutor:
         self._quality_gate_executor = quality_gate_executor
         self._decision_executor = decision_executor
         self._parallel_executor = parallel_executor
+        self._sub_workflow_executor = sub_workflow_executor
 
     async def execute(
         self, step: WorkflowStep, *, workflow_id: str | None = None
@@ -524,4 +706,6 @@ class DispatchingStepExecutor:
             return await self._decision_executor.execute(step, workflow_id=workflow_id)
         if step.type is StepType.PARALLEL and self._parallel_executor is not None:
             return await self._parallel_executor.execute(step, workflow_id=workflow_id)
+        if step.type is StepType.SUB_WORKFLOW and self._sub_workflow_executor is not None:
+            return await self._sub_workflow_executor.execute(step, workflow_id=workflow_id)
         return await self._default_executor.execute(step, workflow_id=workflow_id)
