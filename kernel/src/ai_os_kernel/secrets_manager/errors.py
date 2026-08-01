@@ -18,3 +18,16 @@ class AccessDeniedError(Exception):
     (secrets_management.md §8) — this exception is raised *after* that
     audit row is written, never instead of it.
     """
+
+
+class SecretLeakDetectedError(Exception):
+    """A resolved secret value appeared verbatim in an assembled prompt
+    about to be sent to a model — secrets_management.md §6: "A secret
+    is never sent to a model. Prompt assembly rejects content matching
+    a resolved secret value, as defence in depth." Raised by
+    :func:`~ai_os_kernel.secrets_manager.leak_scan.scan_rendered_prompt_for_secret_leak`
+    *after* the blocked-send audit row is written, never instead of it
+    — the same ordering :class:`AccessDeniedError` already establishes.
+    The message names the prompt (id + version), never the leaked
+    value.
+    """

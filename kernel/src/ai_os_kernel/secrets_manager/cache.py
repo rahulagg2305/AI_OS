@@ -21,12 +21,14 @@ the "expiry" half of the ticket's Goal. :meth:`invalidate` is the
 secret was rotated (a future Vault webhook, an admin action) to evict
 it immediately rather than wait out the TTL.
 
-**``ttl_seconds`` has no default.** A silently-applied default would
-be exactly the hardcoded value this codebase's standing rules forbid
-(no doc names a canonical TTL) — every caller must state the bound
-that fits its own risk tolerance, the same reasoning
-:class:`~ai_os_kernel.secrets_manager.file_provider.FileSecretProvider`
-already applies to ``root``.
+**``ttl_seconds`` defaults to 300 (5 minutes).** Not an arbitrary
+number: docs/09_security/secrets_management.md §6 states it
+explicitly — "Rotation takes effect within the cache TTL (default
+300 s) with no restart." A caller that needs a different bound still
+overrides it; the default exists so a caller who has no stronger
+opinion gets the documented value rather than this class inventing
+one, or requiring every call site to repeat a number that already has
+one authoritative home.
 
 **Never logs or exposes a resolved value.** A cache entry holds the
 :class:`~ai_os_kernel.secrets_manager.value.SecretValue` itself, not
@@ -44,6 +46,11 @@ from dataclasses import dataclass
 
 from ai_os_kernel.secrets_manager.provider import SecretProvider
 from ai_os_kernel.secrets_manager.value import SecretValue
+
+# secrets_management.md §6: "Rotation takes effect within the cache
+# TTL (default 300 s) with no restart." The one documented default;
+# everything else about a bound is caller-supplied.
+_DEFAULT_TTL_SECONDS = 300.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +74,7 @@ class CachingSecretProvider:
         self,
         provider: SecretProvider,
         *,
-        ttl_seconds: float,
+        ttl_seconds: float = _DEFAULT_TTL_SECONDS,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if ttl_seconds <= 0:

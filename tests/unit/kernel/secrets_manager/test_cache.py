@@ -52,6 +52,26 @@ def test_ttl_seconds_must_be_positive() -> None:
         CachingSecretProvider(_CountingProvider(), ttl_seconds=0)
 
 
+def test_ttl_seconds_defaults_to_the_documented_300_seconds() -> None:
+    """secrets_management.md §6: "Rotation takes effect within the
+    cache TTL (default 300 s) with no restart.\""""
+
+    async def _run() -> None:
+        clock = _FakeClock()
+        provider = _CountingProvider()
+        cache = CachingSecretProvider(provider, clock=clock)
+
+        await cache.resolve("secret://env/llm-api-key")
+        clock.advance(299)
+        await cache.resolve("secret://env/llm-api-key")  # still within the default TTL
+        clock.advance(2)
+        await cache.resolve("secret://env/llm-api-key")  # past it
+
+        assert provider.call_count == 2
+
+    asyncio.run(_run())
+
+
 def test_a_cached_value_is_served_within_ttl_without_re_resolving() -> None:
     async def _run() -> None:
         clock = _FakeClock()

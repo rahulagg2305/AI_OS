@@ -36,6 +36,11 @@ Implemented so far (Stage A):
   hook for a caller that learns a secret was rotated at its source
   before the TTL naturally expires. See
   :mod:`ai_os_kernel.secrets_manager.cache`.
+- :func:`~ai_os_kernel.secrets_manager.leak_scan.scan_rendered_prompt_for_secret_leak`
+  (added 2026-08-01, ``P01-S02-M19-T06``) — defence-in-depth: refuses
+  to let a rendered prompt reach a model if any secret value resolved
+  for it appears verbatim in the content, and audits the block. See
+  :mod:`ai_os_kernel.secrets_manager.leak_scan`.
 - **Wired into the Configuration Manager** (``P01-S02-M01-T06``):
   :func:`ai_os_kernel.configuration_manager.resolve_secret_references`
   resolves every ``secret://`` reference surviving that module's own
@@ -47,18 +52,22 @@ Implemented so far (Stage A):
   values on every call.
 
 Not yet implemented: age/SOPS encrypted-file decryption, HashiCorp
-Vault, cloud secret managers, the prompt-assembly scan that rejects a
-resolved secret value reaching a model, and wiring
-:class:`AccessBroker`/:class:`CachingSecretProvider` into any specific
-consumer (LLM Gateway, Git Integration Service, ...). None of those
-exist yet, so none of them use this module yet.
+Vault, cloud secret managers, and wiring
+:class:`AccessBroker`/:class:`CachingSecretProvider`/the leak scan into
+any specific consumer (LLM Gateway, Git Integration Service, ...).
+None of those exist yet, so none of them use this module yet.
 """
 
 from ai_os_kernel.secrets_manager.access_broker import AccessBroker
 from ai_os_kernel.secrets_manager.cache import CachingSecretProvider
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
-from ai_os_kernel.secrets_manager.errors import AccessDeniedError, SecretResolutionError
+from ai_os_kernel.secrets_manager.errors import (
+    AccessDeniedError,
+    SecretLeakDetectedError,
+    SecretResolutionError,
+)
 from ai_os_kernel.secrets_manager.file_provider import FileSecretProvider
+from ai_os_kernel.secrets_manager.leak_scan import scan_rendered_prompt_for_secret_leak
 from ai_os_kernel.secrets_manager.provider import SecretProvider
 from ai_os_kernel.secrets_manager.reference import SecretReference, parse_secret_reference
 from ai_os_kernel.secrets_manager.value import SecretValue
@@ -69,9 +78,11 @@ __all__ = [
     "CachingSecretProvider",
     "EnvSecretProvider",
     "FileSecretProvider",
+    "SecretLeakDetectedError",
     "SecretProvider",
     "SecretReference",
     "SecretResolutionError",
     "SecretValue",
     "parse_secret_reference",
+    "scan_rendered_prompt_for_secret_leak",
 ]
