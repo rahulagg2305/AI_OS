@@ -1,14 +1,17 @@
 """The identity/authorization shapes ADR-0023 documents, reduced to
 exactly what this step enforces: a principal's id, type, and roles
 (:class:`Principal`), and the permissions computed from those roles for
-one request (:class:`SecurityContext`).
+one request (:class:`SecurityContext`) — the *principal* term of
+ADR-0023's monotonic-narrowing intersection.
 
-Deliberately excludes the full ADR-0023 monotonic-narrowing chain
-(principal ∩ workflow ∩ agent ∩ tool declared permissions) — that needs
-manifest-declared permissions on workflows/agents/tools, which is
-Capability Manager territory not yet built. This models only the first
-term of that intersection: what the *principal* is allowed, computed
-once per request at the API boundary.
+The narrowing computation itself (principal ∩ workflow ∩ agent ∩ tool)
+now exists, real and tested — see
+:mod:`ai_os_kernel.security_manager.narrowing`. What still does not
+exist is a runtime source for the other three terms: no code anywhere
+yet parses a workflow's/agent's/tool's declared ``permissions`` out of a
+manifest (Capability Manager territory, not this module's). This class
+still carries only the principal term for that reason, not because the
+rest of the chain is unmodelled.
 """
 
 from __future__ import annotations

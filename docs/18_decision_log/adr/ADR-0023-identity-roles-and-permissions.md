@@ -85,6 +85,6 @@ Complies with the Constitution (Article 6: Least Privilege, Secure Defaults) and
 
 **Status in code:** Partially implemented
 
-The Security Manager authenticates bearer JWTs against a **pre-shared signing secret, not OIDC**, and enforces 4 permissions across 9 HTTP routes, deny-by-default. The decision's substance is not yet in force: none of the five roles exist, agents are not derived principals with a `SecurityContext`, and the monotonic narrowing intersection (principal ∩ workflow ∩ agent ∩ tool) is not computed or enforced end to end. Single-tenancy holds trivially, by absence of any tenant concept.
+The Security Manager authenticates bearer JWTs against a **pre-shared signing secret, not OIDC**, and enforces 5 permissions across 9+ HTTP routes, deny-by-default. The decision's substance is partially in force: none of the five roles exist as such (only their permission grants are modelled), agents are not derived principals with a `SecurityContext`, and the monotonic narrowing intersection (principal ∩ workflow ∩ agent ∩ tool) is now computed (`ai_os_kernel.security_manager.narrowing`, `P03-S05-M14-T03`) but not yet enforced end to end — no code parses a workflow's/agent's/tool's declared permissions out of a manifest, so the computation has no real data to run against during an actual invocation. Single-tenancy holds trivially, by absence of any tenant concept.
 
 Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

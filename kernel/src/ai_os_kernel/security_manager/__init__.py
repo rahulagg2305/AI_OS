@@ -21,22 +21,28 @@ Manager's pack lifecycle routes (:mod:`ai_os_kernel.routes.packs`):
 - :func:`require_permission` — the FastAPI dependency chain routes use
   to authenticate and authorize in one call (see
   :mod:`ai_os_kernel.security_manager.dependencies`).
+- :func:`narrow_permissions`/:func:`is_permitted` — ADR-0023's monotonic
+  narrowing intersection (principal ∩ workflow ∩ agent ∩ tool), real and
+  tested (``P03-S05-M14-T03``; see
+  :mod:`ai_os_kernel.security_manager.narrowing`). Not yet wired into a
+  real invocation: nothing yet parses workflow/agent/tool declared
+  permissions out of a manifest, so this computation has no real data
+  to narrow against end to end — Capability Manager territory, still
+  not built.
 
 Not yet implemented: full OIDC (JWKS, issuer/audience validation),
 service-account API keys as a distinct mechanism, the full ADR-0023
-permission vocabulary and monotonic-narrowing chain (principal ∩
-workflow ∩ agent ∩ tool — the "narrowing across principal -> workflow ->
-agent -> tool" this module's own placeholder docstring once described;
-building the full chain needs manifest-declared permissions on
-workflows/agents/tools, which is Capability Manager territory not yet
-built), role assignment/administration, and a ``governance.audit_log``
-writer for authentication/authorization events (logged via structlog
-only, for now).
+permission vocabulary, manifest-sourced workflow/agent/tool declared
+permissions (see :func:`narrow_permissions`'s own docstring), role
+assignment/administration, and a ``governance.audit_log`` writer for
+authentication/authorization events (logged via structlog only, for
+now).
 """
 
 from ai_os_kernel.security_manager.dependencies import require_permission
 from ai_os_kernel.security_manager.errors import InvalidTokenError, SecurityError
 from ai_os_kernel.security_manager.models import Principal, PrincipalType, SecurityContext
+from ai_os_kernel.security_manager.narrowing import is_permitted, narrow_permissions
 from ai_os_kernel.security_manager.permissions import (
     PACK_MANAGE,
     PACK_READ,
@@ -65,6 +71,8 @@ __all__ = [
     "SecurityError",
     "TokenVerifier",
     "build_jwt_bearer_token_verifier",
+    "is_permitted",
+    "narrow_permissions",
     "permissions_for_roles",
     "require_permission",
 ]

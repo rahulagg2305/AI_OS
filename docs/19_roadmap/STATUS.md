@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 52%** (117.5 of 224 Task-equivalents complete)
+**Overall: 53%** (118.5 of 224 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -32,7 +32,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S02 Software Engineering Pack Agents | 8 | 6 | 0 | 2 | 75% |
 | P03 (C) | S03 Software Engineering Pack Workflows | 3 | 1 | 0 | 2 | 33% |
 | P03 (C) | S04 Pack Tools and Declared Quality Gates | 3 | 1 | 0 | 2 | 33% |
-| P03 (C) | S05 Security and Human Approval | 5 | 2 | 0 | 3 | 40% |
+| P03 (C) | S05 Security and Human Approval | 5 | 3 | 0 | 2 | 60% |
 | P03 (C) | S06 Threat Controls | 2 | 1 | 0 | 1 | 50% |
 | P04 (D) | S01 Evaluation Engine | 8 | 3 | 0 | 5 | 38% |
 | P04 (D) | S02 Traceability Engine | 3 | 0 | 0 | 3 | 0% |
@@ -58,7 +58,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 46 | 42 | 91% |
 | P02 (Stage B) - Minimum Viable Kernel | 93 | 52 | 56% |
-| P03 (Stage C) - First Real Capability Pack | 27 | 15 | 56% |
+| P03 (Stage C) - First Real Capability Pack | 27 | 16 | 59% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 0 | 0% |
@@ -91,10 +91,10 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S04-M09-T05` Provenance and versioning
 - `P02-S04-M10-T01` Memory store
 - `P02-S05-M13-T07` Pack upgrade path
+- `P02-S05-M13-T08` Permissions enforcement at resolution
 - `P02-S05-M18-T03` Manifest-declared tool resolution
 - `P02-S06-M15-T05` Gate Registry
 - `P02-S07-M17-T02` In-process asyncio event bus
-- `P02-S07-M21-T01` Content-addressed artifact store
 - ... and 27 more
 
 ## Dependency review signal
