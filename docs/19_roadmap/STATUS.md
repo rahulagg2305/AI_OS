@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 54%** (121.5 of 224 Task-equivalents complete)
+**Overall: 55%** (122.5 of 224 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -20,7 +20,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S04 Health and Lifecycle | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S05 Observability and Audit | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S06 CI and Test Infrastructure | 10 | 9 | 0 | 1 | 90% |
-| P02 (B) | S01 Workflow Execution Core | 13 | 8 | 0 | 5 | 62% |
+| P02 (B) | S01 Workflow Execution Core | 13 | 9 | 0 | 4 | 69% |
 | P02 (B) | S02 LLM Gateway | 12 | 6 | 1 | 5 | 54% |
 | P02 (B) | S03 Prompt and Context Assembly | 16 | 8 | 0 | 8 | 50% |
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 4 | 0 | 10 | 29% |
@@ -57,7 +57,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 46 | 42 | 91% |
-| P02 (Stage B) - Minimum Viable Kernel | 93 | 55 | 60% |
+| P02 (Stage B) - Minimum Viable Kernel | 93 | 56 | 61% |
 | P03 (Stage C) - First Real Capability Pack | 27 | 16 | 59% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
@@ -68,11 +68,10 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-50 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+49 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P01-S01-M40-T04` Runtime container image
 - `P01-S06-M42-T05` tests/performance against NFR targets
-- `P02-S01-M05-T09` decision step type
 - `P02-S01-M05-T10` parallel step type
 - `P02-S01-M05-T11` sub_workflow step type
 - `P02-S01-M05-T12` Multi-instance worker loop
@@ -95,7 +94,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S07-M21-T01` Content-addressed artifact store
 - `P02-S07-M23-T01` Redis client integration
 - `P03-S01-M20-T05` Stronger isolation tier
-- ... and 25 more
+- `P03-S02-M29-T07` code-reviewer agent
+- ... and 24 more
 
 ## Dependency review signal
 

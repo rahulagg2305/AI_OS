@@ -3,9 +3,9 @@ work (Agent, Tool, Decision, Parallel, Sub-workflow, Quality Gate, Human
 Approval — workflow_architecture.md "Supported Step Types").
 
 ``NoOpStepExecutor`` always succeeds and does nothing — still the only
-implementation for Decision/Parallel/Sub-workflow/Human-Approval steps
-at this stage. ``AgentStepExecutor`` resolves a step's declared
-``agentId`` through an injected
+implementation for Parallel/Sub-workflow/Human-Approval steps at this
+stage. ``AgentStepExecutor`` resolves a step's declared ``agentId``
+through an injected
 :class:`~ai_os_kernel.workflow_engine.registry.AgentRegistry` and
 invokes the *specific* real (trivial) in-process
 :class:`~ai_os_kernel.workflow_engine.agent.Agent` it resolves to;
@@ -16,9 +16,14 @@ quality_gate.QualityGateStepExecutor` (added 2026-07-30) is the first
 real, non-no-op implementation for a Quality-Gate step — see that
 module's own docstring; a caller that does not supply one still routes
 ``quality_gate`` steps to ``NoOpStepExecutor``, unchanged.
-``DispatchingStepExecutor`` routes between all four by ``step.type`` —
-the composition root wires each individually (ADR-0004: interface-
-driven; ADR-0010: no DI container).
+:class:`DecisionStepExecutor` (``P02-S01-M05-T09``) is the real
+implementation for a Decision step, genuinely branching subsequent
+execution — see its own docstring and
+:mod:`ai_os_kernel.workflow_engine.models`'s ``DecisionCondition``; a
+caller that does not supply one still routes ``decision`` steps to
+``NoOpStepExecutor``, unchanged. ``DispatchingStepExecutor`` routes
+between all five by ``step.type`` — the composition root wires each
+individually (ADR-0004: interface-driven; ADR-0010: no DI container).
 
 **Real dispatch by declared id, not real capability discovery.** The
 registry each executor is handed may still only contain
@@ -59,11 +64,14 @@ from ai_os_kernel.context_manager.models import ContextRequest
 from ai_os_kernel.workflow_engine.agent import Agent
 from ai_os_kernel.workflow_engine.errors import (
     AgentOutputValidationError,
+    DecisionConditionError,
     ToolOutputValidationError,
     ToolSandboxRequiredError,
 )
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
+from ai_os_kernel.workflow_engine.quality_gate import _latest_completed_output
 from ai_os_kernel.workflow_engine.registry import AgentRegistry, ToolRegistry
+from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.tool import SandboxBackedTool, Tool, TrustTier
 
 
@@ -242,21 +250,96 @@ class ToolStepExecutor:
             )
 
 
+class DecisionStepExecutor:
+    """Executes a ``decision``-type step by genuinely evaluating its
+    declared ``condition`` against a named prior step's own real,
+    persisted output, and resolving to one of its two declared
+    ``branches`` (``P02-S01-M05-T09``, closing the last of the four step
+    types this module's own docstring used to list as always
+    ``NoOpStepExecutor``-handled, alongside ``QualityGateStepExecutor``
+    for ``quality_gate``).
+
+    Reuses :func:`~ai_os_kernel.workflow_engine.quality_gate.
+    _latest_completed_output` — the identical "read a named source
+    step's own, highest-attempt, real persisted output" logic
+    :class:`~ai_os_kernel.workflow_engine.quality_gate.
+    QualityGateStepExecutor` already established for the same real
+    read model, not a second implementation of it.
+
+    **The real branch outcome is this step's own returned output**
+    (``{"outcome": bool, "branch": <resolved step id>}``), persisted the
+    identical way every other step's outputs already are —
+    :meth:`~ai_os_kernel.workflow_engine.service.
+    WorkflowInstanceService._resolve_next_step` reads it back on the
+    *next* ``advance()`` call to decide the real next step, rather than
+    walking the declared sequence positionally. Nothing here mutates
+    control flow directly; it produces the one real fact
+    ``_resolve_next_step`` needs to.
+    """
+
+    def __init__(self, repository: WorkflowInstanceRepository) -> None:
+        self._repository = repository
+
+    async def execute(
+        self, step: WorkflowStep, *, workflow_id: str | None = None
+    ) -> dict[str, Any]:
+        if step.type is not StepType.DECISION:
+            raise ValueError(
+                f"DecisionStepExecutor cannot execute step '{step.id}' of type "
+                f"'{step.type.value}' — it only handles decision steps"
+            )
+        # Model validation (`_decision_step_requires_condition_and_branches`)
+        # already guarantees both are set for a well-formed decision step;
+        # narrowed here only so mypy sees it, never a real runtime gap.
+        condition, branches = step.condition, step.branches
+        if condition is None or branches is None:
+            raise ValueError(
+                f"step '{step.id}' declares no condition/branches — WorkflowStep "
+                "validation should already have required both for a decision step"
+            )
+        if workflow_id is None:
+            raise ValueError(
+                f"decision step '{step.id}' requires a real workflow_id to read its "
+                "condition's source step output"
+            )
+
+        steps = await self._repository.list_steps(workflow_id)
+        source_output = _latest_completed_output(steps, condition.source_step_id)
+        if source_output is None:
+            raise DecisionConditionError(
+                f"decision step '{step.id}' could not evaluate its condition: "
+                f"source step '{condition.source_step_id}' has no persisted output yet"
+            )
+        if condition.field not in source_output:
+            raise DecisionConditionError(
+                f"decision step '{step.id}' could not evaluate its condition: "
+                f"source step '{condition.source_step_id}''s output has no field "
+                f"'{condition.field}' (real keys: {sorted(source_output)!r})"
+            )
+
+        outcome = source_output[condition.field] == condition.equals
+        target_step_id = branches["true" if outcome else "false"]
+        return {"outcome": outcome, "branch": target_step_id}
+
+
 class DispatchingStepExecutor:
     """Routes an Agent-type step to ``agent_executor``, a Tool-type step
     to ``tool_executor``, a Quality-Gate-type step to
-    ``quality_gate_executor`` (when supplied), and every other step type
-    to ``default_executor``.
+    ``quality_gate_executor`` (when supplied), a Decision-type step to
+    ``decision_executor`` (when supplied), and every other step type to
+    ``default_executor``.
 
-    The only place that knows all four executors exist; none of them
+    The only place that knows all five executors exist; none of them
     needs to know about the others or about step types it does not
-    handle. ``quality_gate_executor`` defaults to ``None`` — every
-    existing caller that does not supply one keeps routing
-    ``quality_gate`` steps to ``default_executor`` exactly as before
+    handle. ``quality_gate_executor``/``decision_executor`` both default
+    to ``None`` — every existing caller that does not supply one keeps
+    routing that step type to ``default_executor`` exactly as before
     (:class:`NoOpStepExecutor`, unchanged); only a caller that genuinely
-    wants a real, blocking gate (:mod:`ai_os_kernel.workflow_engine.
-    delivery_pipeline`) supplies :class:`~ai_os_kernel.workflow_engine.
-    quality_gate.QualityGateStepExecutor` here.
+    wants real, blocking gate evaluation
+    (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`) or real
+    decision-step branching supplies
+    :class:`~ai_os_kernel.workflow_engine.quality_gate.
+    QualityGateStepExecutor`/:class:`DecisionStepExecutor` here.
     """
 
     def __init__(
@@ -265,11 +348,13 @@ class DispatchingStepExecutor:
         tool_executor: StepExecutor,
         default_executor: StepExecutor,
         quality_gate_executor: StepExecutor | None = None,
+        decision_executor: StepExecutor | None = None,
     ) -> None:
         self._agent_executor = agent_executor
         self._tool_executor = tool_executor
         self._default_executor = default_executor
         self._quality_gate_executor = quality_gate_executor
+        self._decision_executor = decision_executor
 
     async def execute(
         self, step: WorkflowStep, *, workflow_id: str | None = None
@@ -280,4 +365,6 @@ class DispatchingStepExecutor:
             return await self._tool_executor.execute(step, workflow_id=workflow_id)
         if step.type is StepType.QUALITY_GATE and self._quality_gate_executor is not None:
             return await self._quality_gate_executor.execute(step, workflow_id=workflow_id)
+        if step.type is StepType.DECISION and self._decision_executor is not None:
+            return await self._decision_executor.execute(step, workflow_id=workflow_id)
         return await self._default_executor.execute(step, workflow_id=workflow_id)

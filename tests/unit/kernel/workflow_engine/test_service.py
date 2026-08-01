@@ -11,6 +11,7 @@ import pytest
 
 from ai_os_kernel.workflow_engine import WorkflowInputValidationError
 from ai_os_kernel.workflow_engine.errors import (
+    DecisionConditionError,
     QualityGateFailedError,
     WorkflowInvalidTransitionError,
 )
@@ -19,6 +20,11 @@ from ai_os_kernel.workflow_engine.instance import WorkflowInstance, WorkflowInst
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowDefinition, WorkflowStep
 from ai_os_kernel.workflow_engine.repository import WorkflowListCursor
 from ai_os_kernel.workflow_engine.service import WorkflowInstanceService
+from ai_os_kernel.workflow_engine.step_executor import (
+    DecisionStepExecutor,
+    DispatchingStepExecutor,
+    NoOpStepExecutor,
+)
 from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
 
 _DEFINITION_RAW: dict[str, Any] = {
@@ -56,6 +62,36 @@ _GATE_DEFINITION = WorkflowDefinition.model_validate(
         "steps": [
             {"id": "build", "type": "agent", "agentId": "se.software_engineering/build"},
             {"id": "gate", "type": "quality_gate"},
+        ],
+        "failureHandling": {"onError": "halt"},
+    }
+)
+
+# Deliberately adversarial to a positional-only resolver: "rollback" (the
+# FALSE branch target) sits immediately after "decide" in the declared
+# sequence, while "deploy" (the TRUE branch target) is declared last, not
+# adjacent at all. A resolver that merely walked `steps[index + 1]` would
+# wrongly land on "rollback" regardless of the real, computed outcome —
+# only a genuinely branch-aware resolver reaches "deploy" when the
+# condition is true.
+_DECISION_DEFINITION = WorkflowDefinition.model_validate(
+    {
+        "id": "se.decision_pipeline",
+        "name": "Decision Pipeline",
+        "description": "Analyze, decide, then branch to deploy or rollback.",
+        "version": "1.0.0",
+        "inputs": {"type": "object"},
+        "outputs": {"type": "object"},
+        "steps": [
+            {"id": "analyze", "type": "agent", "agentId": "se.software_engineering/analyst"},
+            {
+                "id": "decide",
+                "type": "decision",
+                "condition": {"sourceStepId": "analyze", "field": "passed", "equals": True},
+                "branches": {"true": "deploy", "false": "rollback"},
+            },
+            {"id": "rollback", "type": "agent", "agentId": "se.software_engineering/analyst"},
+            {"id": "deploy", "type": "agent", "agentId": "se.software_engineering/analyst"},
         ],
         "failureHandling": {"onError": "halt"},
     }
@@ -716,6 +752,176 @@ async def test_advance_does_not_record_an_unconfigured_gates_empty_result() -> N
     await service.advance(workflow_id="wf_fake", definition=_GATE_DEFINITION)
 
     assert recorder.record_calls == []
+
+
+def _decision_step_executor(repository: _FakeRepository) -> DispatchingStepExecutor:
+    """A real `DispatchingStepExecutor` wired with a real
+    `DecisionStepExecutor` against `repository` — every non-decision
+    step still dispatches to a fresh `_FakeStepExecutor`, exactly as
+    every other test in this file already exercises."""
+    return DispatchingStepExecutor(
+        agent_executor=_FakeStepExecutor(),
+        tool_executor=_FakeStepExecutor(),
+        default_executor=NoOpStepExecutor(),
+        decision_executor=DecisionStepExecutor(repository),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_decision_step_genuinely_computes_and_persists_its_own_real_branch_outcome() -> (
+    None
+):
+    """The real proof P02-S01-M05-T09 exists for, part one: the decision
+    step's own execution reads its source step's already-persisted
+    output, evaluates the declared condition for real, and persists a
+    real, computed branch decision — not a hardcoded or ignored value."""
+    current = _instance(
+        workflow_id="wf_fake",
+        status=WorkflowInstanceStatus.RUNNING,
+        inputs={},
+        last_event_seq=2,
+        current_step_id="analyze",
+    )
+    repository = _FakeRepository(
+        current,
+        steps=[
+            _step_record(
+                step_name="analyze",
+                status="completed",
+                attempt=1,
+                outputs={"passed": True},
+                error=None,
+            )
+        ],
+    )
+    service = WorkflowInstanceService(
+        repository, _decision_step_executor(repository), _FakeDefinitionCatalog()
+    )
+
+    await service.advance(workflow_id="wf_fake", definition=_DECISION_DEFINITION)
+
+    assert len(repository.advance_calls) == 1
+    call = repository.advance_calls[0]
+    assert call["next_step_id"] == "decide"
+    assert call["outputs"] == {"outcome": True, "branch": "deploy"}
+
+
+@pytest.mark.asyncio
+async def test_advance_genuinely_branches_to_the_true_target_skipping_the_adjacent_false_step() -> (
+    None
+):
+    """The real proof, part two — and the one that actually matters: a
+    *subsequent* `advance()` call reads the decision step's own
+    just-persisted `branch` output and resolves to `deploy`, even though
+    `rollback` is the step immediately after `decide` in the declared
+    sequence. A resolver that merely walked the list positionally would
+    land on `rollback` regardless of the real outcome; only a genuinely
+    branch-aware one reaches `deploy`."""
+    current = _instance(
+        workflow_id="wf_fake",
+        status=WorkflowInstanceStatus.RUNNING,
+        inputs={},
+        last_event_seq=4,
+        current_step_id="decide",
+    )
+    repository = _FakeRepository(
+        current,
+        steps=[
+            _step_record(
+                step_name="analyze",
+                status="completed",
+                attempt=1,
+                outputs={"passed": True},
+                error=None,
+            ),
+            _step_record(
+                step_name="decide",
+                status="completed",
+                attempt=1,
+                outputs={"outcome": True, "branch": "deploy"},
+                error=None,
+            ),
+        ],
+    )
+    agent_executor = _FakeStepExecutor()
+    step_executor = DispatchingStepExecutor(
+        agent_executor=agent_executor,
+        tool_executor=_FakeStepExecutor(),
+        default_executor=NoOpStepExecutor(),
+        decision_executor=DecisionStepExecutor(repository),
+    )
+    service = WorkflowInstanceService(repository, step_executor, _FakeDefinitionCatalog())
+
+    result = await service.advance(workflow_id="wf_fake", definition=_DECISION_DEFINITION)
+
+    assert result.current_step_id == "deploy"
+    assert repository.advance_calls[0]["next_step_id"] == "deploy"
+    assert [s.id for s in agent_executor.executed_steps] == ["deploy"]
+
+
+@pytest.mark.asyncio
+async def test_advance_genuinely_branches_to_the_false_target_when_the_condition_is_false() -> None:
+    """The mirrored outcome — combined with the true-branch test above,
+    this proves the resolver follows the real, computed condition either
+    way, not a fixed direction."""
+    current = _instance(
+        workflow_id="wf_fake",
+        status=WorkflowInstanceStatus.RUNNING,
+        inputs={},
+        last_event_seq=4,
+        current_step_id="decide",
+    )
+    repository = _FakeRepository(
+        current,
+        steps=[
+            _step_record(
+                step_name="analyze",
+                status="completed",
+                attempt=1,
+                outputs={"passed": False},
+                error=None,
+            ),
+            _step_record(
+                step_name="decide",
+                status="completed",
+                attempt=1,
+                outputs={"outcome": False, "branch": "rollback"},
+                error=None,
+            ),
+        ],
+    )
+    agent_executor = _FakeStepExecutor()
+    step_executor = DispatchingStepExecutor(
+        agent_executor=agent_executor,
+        tool_executor=_FakeStepExecutor(),
+        default_executor=NoOpStepExecutor(),
+        decision_executor=DecisionStepExecutor(repository),
+    )
+    service = WorkflowInstanceService(repository, step_executor, _FakeDefinitionCatalog())
+
+    result = await service.advance(workflow_id="wf_fake", definition=_DECISION_DEFINITION)
+
+    assert result.current_step_id == "rollback"
+    assert [s.id for s in agent_executor.executed_steps] == ["rollback"]
+
+
+@pytest.mark.asyncio
+async def test_a_decision_step_whose_source_has_not_run_yet_raises_clearly() -> None:
+    current = _instance(
+        workflow_id="wf_fake",
+        status=WorkflowInstanceStatus.RUNNING,
+        inputs={},
+        last_event_seq=2,
+        current_step_id="analyze",
+    )
+    repository = _FakeRepository(current, steps=[])  # "analyze" never persisted an output
+
+    service = WorkflowInstanceService(
+        repository, _decision_step_executor(repository), _FakeDefinitionCatalog()
+    )
+
+    with pytest.raises(DecisionConditionError, match="no persisted output yet"):
+        await service.advance(workflow_id="wf_fake", definition=_DECISION_DEFINITION)
 
 
 @pytest.mark.asyncio

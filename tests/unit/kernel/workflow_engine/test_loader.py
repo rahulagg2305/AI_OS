@@ -178,6 +178,151 @@ def test_parallel_step_without_join_policy_fails_clearly(tmp_path: Path) -> None
         loader.load(path)
 
 
+def test_decision_step_without_condition_or_branches_fails_clearly(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {
+                "id": "analyze_requirements",
+                "type": "agent",
+                "agentId": "se.software_engineering/analyst",
+            },
+            {"id": "decide", "type": "decision"},
+        ],
+    }
+    path = _write_definition(tmp_path / "decision_no_condition.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="condition and branches"):
+        loader.load(path)
+
+
+def test_decision_step_with_wrong_branch_keys_fails_clearly(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {
+                "id": "analyze_requirements",
+                "type": "agent",
+                "agentId": "se.software_engineering/analyst",
+            },
+            {
+                "id": "decide",
+                "type": "decision",
+                "condition": {
+                    "sourceStepId": "analyze_requirements",
+                    "field": "passed",
+                    "equals": True,
+                },
+                "branches": {"yes": "deploy", "no": "rollback"},
+            },
+            {"id": "deploy", "type": "agent", "agentId": "se.software_engineering/analyst"},
+            {"id": "rollback", "type": "agent", "agentId": "se.software_engineering/analyst"},
+        ],
+    }
+    path = _write_definition(tmp_path / "decision_wrong_keys.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="exactly the keys"):
+        loader.load(path)
+
+
+def test_decision_step_referencing_a_forward_step_fails_clearly(tmp_path: Path) -> None:
+    """A decision cannot depend on a step that has not run yet —
+    rejected at load time, not discovered as a confusing runtime
+    failure."""
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {
+                "id": "decide",
+                "type": "decision",
+                "condition": {
+                    "sourceStepId": "analyze_requirements",
+                    "field": "passed",
+                    "equals": True,
+                },
+                "branches": {"true": "deploy", "false": "rollback"},
+            },
+            {
+                "id": "analyze_requirements",
+                "type": "agent",
+                "agentId": "se.software_engineering/analyst",
+            },
+            {"id": "deploy", "type": "agent", "agentId": "se.software_engineering/analyst"},
+            {"id": "rollback", "type": "agent", "agentId": "se.software_engineering/analyst"},
+        ],
+    }
+    path = _write_definition(tmp_path / "decision_forward_ref.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="declared earlier"):
+        loader.load(path)
+
+
+def test_decision_step_with_an_unresolvable_branch_target_fails_clearly(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {
+                "id": "analyze_requirements",
+                "type": "agent",
+                "agentId": "se.software_engineering/analyst",
+            },
+            {
+                "id": "decide",
+                "type": "decision",
+                "condition": {
+                    "sourceStepId": "analyze_requirements",
+                    "field": "passed",
+                    "equals": True,
+                },
+                "branches": {"true": "deploy", "false": "does_not_exist"},
+            },
+            {"id": "deploy", "type": "agent", "agentId": "se.software_engineering/analyst"},
+        ],
+    }
+    path = _write_definition(tmp_path / "decision_bad_target.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="not a declared step"):
+        loader.load(path)
+
+
+def test_a_well_formed_decision_step_loads_successfully(tmp_path: Path) -> None:
+    content = {
+        **_VALID_DEFINITION,
+        "steps": [
+            {
+                "id": "analyze_requirements",
+                "type": "agent",
+                "agentId": "se.software_engineering/analyst",
+            },
+            {
+                "id": "decide",
+                "type": "decision",
+                "condition": {
+                    "sourceStepId": "analyze_requirements",
+                    "field": "passed",
+                    "equals": True,
+                },
+                "branches": {"true": "deploy", "false": "rollback"},
+            },
+            {"id": "deploy", "type": "agent", "agentId": "se.software_engineering/analyst"},
+            {"id": "rollback", "type": "agent", "agentId": "se.software_engineering/analyst"},
+        ],
+    }
+    path = _write_definition(tmp_path / "decision_valid.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    definition = loader.load(path)
+
+    decide_step = next(step for step in definition.steps if step.id == "decide")
+    assert decide_step.condition is not None
+    assert decide_step.condition.source_step_id == "analyze_requirements"
+    assert decide_step.branches == {"true": "deploy", "false": "rollback"}
+
+
 def test_malformed_quality_gate_reference_fails_clearly(tmp_path: Path) -> None:
     content = {**_VALID_DEFINITION, "qualityGates": ["Not A Valid Gate Id"]}
     path = _write_definition(tmp_path / "bad_gate.yaml", content)

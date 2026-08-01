@@ -25,6 +25,7 @@ from ai_os_kernel.workflow_engine.input_validation import (
 )
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowDefinition, WorkflowStep
+from ai_os_kernel.workflow_engine.quality_gate import _latest_completed_output
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.step_executor import StepExecutor
 
@@ -188,7 +189,9 @@ class WorkflowInstanceService:
                 f"workflow instance '{workflow_id}' does not exist"
             )
 
-        next_step = self._resolve_next_step(definition, instance.current_step_id)
+        next_step = await self._resolve_next_step(
+            definition, instance.current_step_id, workflow_id=workflow_id
+        )
 
         outputs: dict[str, Any] = {}
         if next_step is not None:
@@ -269,10 +272,21 @@ class WorkflowInstanceService:
             workflow_id=workflow_id, gate_version=definition.version, step=step_record
         )
 
-    @staticmethod
-    def _resolve_next_step(
-        definition: WorkflowDefinition, current_step_id: str | None
+    async def _resolve_next_step(
+        self, definition: WorkflowDefinition, current_step_id: str | None, *, workflow_id: str
     ) -> WorkflowStep | None:
+        """Positional by default (``steps[index + 1]``) — **except when
+        the just-completed step (``current_step_id``) is a
+        ``decision`` step (``P02-S01-M05-T09``)**, in which case the
+        real next step is whichever of its two declared ``branches`` its
+        own, already-persisted output named, read back via the same
+        ``list_steps``/:func:`~ai_os_kernel.workflow_engine.
+        quality_gate._latest_completed_output` mechanism
+        :class:`~ai_os_kernel.workflow_engine.quality_gate.
+        QualityGateStepExecutor` already established for reading a named
+        step's real, persisted output — genuine branching, not a
+        positional walk that happens to look like one.
+        """
         steps = definition.steps
         if current_step_id is None:
             if not steps:
@@ -281,14 +295,52 @@ class WorkflowInstanceService:
                 )
             return steps[0]
 
-        for index, step in enumerate(steps):
-            if step.id == current_step_id:
-                return steps[index + 1] if index + 1 < len(steps) else None
+        index_by_id = {step.id: index for index, step in enumerate(steps)}
+        current_index = index_by_id.get(current_step_id)
+        if current_index is None:
+            raise WorkflowInvalidTransitionError(
+                f"workflow definition '{definition.id}' has no step '{current_step_id}' "
+                "(the instance's current step does not belong to this definition)"
+            )
 
-        raise WorkflowInvalidTransitionError(
-            f"workflow definition '{definition.id}' has no step '{current_step_id}' "
-            "(the instance's current step does not belong to this definition)"
-        )
+        current_step = steps[current_index]
+        if current_step.type is StepType.DECISION:
+            target_id = await self._resolve_decision_branch_target(workflow_id, current_step)
+            target_index = index_by_id.get(target_id)
+            if target_index is None:
+                raise WorkflowInvalidTransitionError(
+                    f"decision step '{current_step.id}' resolved to branch target "
+                    f"'{target_id}', which is not a declared step in definition "
+                    f"'{definition.id}' — WorkflowStep validation should already "
+                    "have rejected this at load time"
+                )
+            return steps[target_index]
+
+        return steps[current_index + 1] if current_index + 1 < len(steps) else None
+
+    async def _resolve_decision_branch_target(
+        self, workflow_id: str, decision_step: WorkflowStep
+    ) -> str:
+        """Reads ``decision_step``'s own, already-persisted output
+        (written by :class:`~ai_os_kernel.workflow_engine.
+        step_executor.DecisionStepExecutor` on the ``advance()`` call
+        that just executed it) and returns its real ``"branch"``
+        value — the step id ``_resolve_next_step`` should genuinely
+        advance to."""
+        steps = await self._repository.list_steps(workflow_id)
+        output = _latest_completed_output(steps, decision_step.id)
+        if output is None or "branch" not in output:
+            raise WorkflowInvalidTransitionError(
+                f"decision step '{decision_step.id}' has no recorded 'branch' "
+                "output yet — cannot resolve the next step"
+            )
+        branch_target = output["branch"]
+        if not isinstance(branch_target, str):
+            raise WorkflowInvalidTransitionError(
+                f"decision step '{decision_step.id}' recorded a non-string "
+                f"'branch' output ({branch_target!r}) — cannot resolve the next step"
+            )
+        return branch_target
 
     async def retry_after_step_failure(
         self,

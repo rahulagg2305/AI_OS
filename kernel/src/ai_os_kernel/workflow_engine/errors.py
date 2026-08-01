@@ -67,6 +67,16 @@ class ToolOutputValidationError(Exception):
     ``output_schema`` (manifest.schema.json ``tools[].outputSchema``)."""
 
 
+class DecisionConditionError(Exception):
+    """A ``decision`` step's declared ``condition`` could not be
+    genuinely evaluated — its ``sourceStepId`` has not executed yet (no
+    matching :class:`~ai_os_kernel.workflow_engine.step_record.
+    WorkflowStepRecord` exists), or that step's own recorded ``outputs``
+    does not contain the declared ``field``. A structural/configuration
+    problem (P02-S01-M05-T09): the identical call against the identical,
+    still-missing state reproduces exactly, never retriable."""
+
+
 class ToolSandboxRequiredError(Exception):
     """A tool declares ``trust_tier = tier1_sandboxed`` but is not
     genuinely backed by a real :class:`~ai_os_kernel.sandbox.executor.

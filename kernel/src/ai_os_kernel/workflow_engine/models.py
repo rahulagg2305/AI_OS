@@ -14,11 +14,18 @@ Two deliberate scoping decisions, not omissions:
   shape (full gate definitions are owned by the pack manifest and
   referenced by id everywhere else).
 - ``joinPolicy`` (mandatory for a ``parallel`` step,
-  ``workflow_engine.md`` §7.1) and the five invocation fields below are
-  the only per-step fields validated here. Decision-step branching and
-  sub-workflow linkage remain genuinely undocumented — no document
-  defines a field-level contract for them yet — and are still deferred;
-  inventing one here would be architecture this module does not own.
+  ``workflow_engine.md`` §7.1), the five invocation fields below, and —
+  as of ``P02-S01-M05-T09`` — ``condition``/``branches`` (mandatory for
+  a ``decision`` step; see :class:`DecisionCondition`'s own docstring)
+  are the per-step fields validated here. **Sub-workflow linkage remains
+  genuinely undocumented** — no document defines a field-level contract
+  for it yet — and stays deferred; inventing one here would still be
+  architecture this module does not own. Decision-step branching is no
+  longer in that category: no document defined it either, but the
+  product owner explicitly approved a minimal, closed-vocabulary
+  contract as part of that step rather than leaving the ticket blocked,
+  disclosed as a real, deliberate departure from "wait for a document,"
+  not an unreviewed invention.
 
 ``WorkflowStep``'s five invocation fields (``agentId``, ``toolId``,
 ``promptId``, ``promptVersion``, ``modelAlias``) are a field-for-field
@@ -103,6 +110,25 @@ class JoinPolicy(StrEnum):
     COLLECT = "collect"
 
 
+class DecisionCondition(_CamelModel):
+    """A ``decision`` step's real, statically-declared condition —
+    genuinely evaluated at runtime against a named prior step's own
+    recorded output, not an expression language (``P02-S01-M05-T09``,
+    closing the gap this module's own docstring used to record: "no
+    document defines a field-level contract for [decision-step
+    branching] yet"). Kept deliberately narrow, matching the Step
+    Contract's own stated design principle for the whole file
+    (workflow_architecture.md: "not a general orchestration language"):
+    one named source step, one field of its output, one literal
+    equality comparison — never a computed expression, template, or
+    arbitrary code.
+    """
+
+    source_step_id: str
+    field: str
+    equals: str | int | float | bool | None
+
+
 class WorkflowStep(_CamelModel):
     """One entry in the workflow's declared step sequence."""
 
@@ -114,6 +140,8 @@ class WorkflowStep(_CamelModel):
     prompt_id: str | None = None
     prompt_version: str | None = None
     model_alias: str | None = None
+    condition: DecisionCondition | None = None
+    branches: dict[str, str] | None = None
 
     @field_validator("agent_id", "tool_id", "prompt_id", "prompt_version", "model_alias")
     @classmethod
@@ -129,6 +157,31 @@ class WorkflowStep(_CamelModel):
                 f"step '{self.id}': a parallel step must declare joinPolicy "
                 "(all | any | collect) — it fails validation rather than "
                 "defaulting silently (workflow_engine.md §7.1)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _decision_step_requires_condition_and_branches(self) -> WorkflowStep:
+        """Mirrors :meth:`_parallel_step_requires_join_policy` exactly,
+        for the new decision-step fields this step adds: both required
+        together, on a ``decision`` step only, failing validation rather
+        than defaulting silently."""
+        if self.type is StepType.DECISION:
+            if self.condition is None or self.branches is None:
+                raise ValueError(
+                    f"step '{self.id}': a decision step must declare both "
+                    "condition and branches — it fails validation rather than "
+                    "defaulting silently"
+                )
+            if set(self.branches) != {"true", "false"}:
+                raise ValueError(
+                    f"step '{self.id}': branches must declare exactly the keys "
+                    f"'true' and 'false', got {sorted(self.branches)!r} — a closed, "
+                    "two-way vocabulary, not an open switch/case"
+                )
+        elif self.condition is not None or self.branches is not None:
+            raise ValueError(
+                f"step '{self.id}': only a decision step may declare condition or branches"
             )
         return self
 
@@ -252,6 +305,54 @@ class WorkflowDefinition(_CamelModel):
             seen.add(step.id)
         if duplicates:
             raise ValueError(f"duplicate step id(s): {sorted(duplicates)}")
+        return value
+
+    @field_validator("steps")
+    @classmethod
+    def _decision_step_references_are_real_and_not_forward(
+        cls, value: list[WorkflowStep]
+    ) -> list[WorkflowStep]:
+        """A decision step's own ``condition.sourceStepId`` and both
+        ``branches`` targets must name real, declared steps in this same
+        definition — the identical "reject a broken reference at load
+        time, not at runtime" discipline the Manifest Loader's own
+        semantic rule 16 already established for workflow/step
+        references. ``sourceStepId`` must additionally appear *earlier*
+        in the declared sequence: a forward reference could never
+        resolve (that step cannot have executed, let alone recorded an
+        output, by the time this one runs) — rejected here, not
+        discovered as a real, confusing runtime failure later.
+        """
+        index_by_id = {step.id: index for index, step in enumerate(value)}
+        for index, step in enumerate(value):
+            condition, branches = step.condition, step.branches
+            if step.type is not StepType.DECISION or condition is None or branches is None:
+                # A decision step with either unset already failed
+                # `_decision_step_requires_condition_and_branches` (which
+                # runs first, per-step, before this definition-level
+                # check ever sees it) — nothing left to validate here.
+                continue
+
+            source_index = index_by_id.get(condition.source_step_id)
+            if source_index is None:
+                raise ValueError(
+                    f"step '{step.id}': condition.sourceStepId "
+                    f"'{condition.source_step_id}' is not a declared step"
+                )
+            if source_index >= index:
+                raise ValueError(
+                    f"step '{step.id}': condition.sourceStepId "
+                    f"'{condition.source_step_id}' must be declared earlier "
+                    "in the sequence — a decision cannot depend on a step that "
+                    "has not run yet"
+                )
+
+            for outcome, target_id in branches.items():
+                if target_id not in index_by_id:
+                    raise ValueError(
+                        f"step '{step.id}': branches[{outcome!r}] '{target_id}' "
+                        "is not a declared step"
+                    )
         return value
 
     @field_validator("inputs", "outputs")
