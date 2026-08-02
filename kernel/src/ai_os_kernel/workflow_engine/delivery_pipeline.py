@@ -243,6 +243,10 @@ from ai_os_kernel.sandbox.default_executor import default_python_command
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner, WorkflowRunResult
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.gate_result_recorder import SqlGateResultRecorder
+from ai_os_kernel.workflow_engine.human_approval import (
+    HumanApprovalStepExecutor,
+    SqlApprovalRepository,
+)
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
 from ai_os_kernel.workflow_engine.loader import WorkflowDefinitionLoader
 from ai_os_kernel.workflow_engine.models import WorkflowDefinition
@@ -474,6 +478,47 @@ def build_pipeline_context_manager(
     )
 
 
+def _build_pipeline_composition(
+    engine: AsyncEngine,
+    agent_registry: AgentRegistry,
+    *,
+    python_command: tuple[str, ...] | None = None,
+) -> tuple[WorkflowInstanceService, WorkflowAdvanceRunner]:
+    """The real composition shared by :func:`build_pipeline_trigger`
+    (create a brand-new instance, then run it) and
+    :func:`resume_pipeline_after_approval` (re-enter an existing one) —
+    factored out so both real callers build the identical
+    ``DispatchingStepExecutor`` (including, since ``P03-S03-M30-T05``,
+    a real ``human_approval_executor``) rather than one drifting from
+    the other. ``agent_registry`` is the one thing a caller must
+    choose — see :func:`build_pipeline_trigger`'s own docstring."""
+    repository = SqlWorkflowInstanceRepository(engine)
+    context_manager = build_pipeline_context_manager(repository, python_command=python_command)
+    definition_catalog = SqlWorkflowDefinitionCatalog(engine)
+    instance_service = WorkflowInstanceService(
+        repository=repository,
+        step_executor=DispatchingStepExecutor(
+            agent_executor=AgentStepExecutor(agent_registry, context_manager=context_manager),
+            tool_executor=ToolStepExecutor(InMemoryToolRegistry({})),
+            default_executor=NoOpStepExecutor(),
+            quality_gate_executor=QualityGateStepExecutor(repository, gate_sources=_GATE_SOURCES),
+            decision_executor=DecisionStepExecutor(repository),
+            human_approval_executor=HumanApprovalStepExecutor(
+                approval_repository=SqlApprovalRepository(engine),
+                instance_repository=repository,
+                definition_catalog=definition_catalog,
+            ),
+        ),
+        definition_catalog=definition_catalog,
+        gate_result_recorder=SqlGateResultRecorder(engine),
+    )
+    advance_runner = WorkflowAdvanceRunner(
+        instance_service=instance_service,
+        lease_service=WorkflowLeaseService(SqlWorkflowLeaseRepository(engine)),
+    )
+    return instance_service, advance_runner
+
+
 def build_pipeline_trigger(
     engine: AsyncEngine,
     agent_registry: AgentRegistry,
@@ -492,24 +537,16 @@ def build_pipeline_trigger(
 
     ``python_command`` is forwarded to :func:`build_pipeline_context_manager`
     unchanged — see that function's own docstring.
+
+    **One-shot: a returned ``WorkflowRunOutcome.WAITING_FOR_HUMAN`` is
+    the trigger's own honest final answer for this call, not an error**
+    (since ``P03-S03-M30-T05``'s new ``approve-git-push`` point, a real,
+    reachable outcome for every run) — resuming that specific instance
+    after a real decision is :func:`resume_pipeline_after_approval`'s
+    own, separate job, not this closure's.
     """
-    repository = SqlWorkflowInstanceRepository(engine)
-    context_manager = build_pipeline_context_manager(repository, python_command=python_command)
-    instance_service = WorkflowInstanceService(
-        repository=repository,
-        step_executor=DispatchingStepExecutor(
-            agent_executor=AgentStepExecutor(agent_registry, context_manager=context_manager),
-            tool_executor=ToolStepExecutor(InMemoryToolRegistry({})),
-            default_executor=NoOpStepExecutor(),
-            quality_gate_executor=QualityGateStepExecutor(repository, gate_sources=_GATE_SOURCES),
-            decision_executor=DecisionStepExecutor(repository),
-        ),
-        definition_catalog=SqlWorkflowDefinitionCatalog(engine),
-        gate_result_recorder=SqlGateResultRecorder(engine),
-    )
-    advance_runner = WorkflowAdvanceRunner(
-        instance_service=instance_service,
-        lease_service=WorkflowLeaseService(SqlWorkflowLeaseRepository(engine)),
+    instance_service, advance_runner = _build_pipeline_composition(
+        engine, agent_registry, python_command=python_command
     )
     definition = load_pipeline_definition()
 
@@ -534,3 +571,42 @@ def build_pipeline_trigger(
         )
 
     return trigger
+
+
+async def resume_pipeline_after_approval(
+    engine: AsyncEngine,
+    agent_registry: AgentRegistry,
+    workflow_id: str,
+    *,
+    python_command: tuple[str, ...] | None = None,
+) -> WorkflowRunResult:
+    """Re-drives an existing, real ``se.delivery_pipeline`` instance to
+    completion after a real ``human_approval`` decision
+    (:meth:`~ai_os_kernel.workflow_engine.human_approval.
+    SqlApprovalRepository.decide`) has already resumed it to
+    ``running`` — the identical ``WorkflowAdvanceRunner.run_to_completion``
+    call :func:`build_pipeline_trigger`'s own ``trigger`` closure makes
+    for a brand-new instance, reused here for an existing one
+    (``P03-S03-M30-T05``).
+
+    A real, disclosed, small addition this step needs: ``trigger()``
+    itself is a one-shot create -> start -> run closure with no way to
+    re-enter an instance it did not just create — resuming after a real
+    approval decision is a genuinely separate operation, not something
+    ``trigger()`` could be made to do without also creating a second,
+    unwanted instance. ``agent_registry``/``python_command`` must match
+    whatever the original ``build_pipeline_trigger`` call used — this
+    function does not remember them, since nothing about a resumed run
+    should silently change composition mid-flight.
+    """
+    _, advance_runner = _build_pipeline_composition(
+        engine, agent_registry, python_command=python_command
+    )
+    return await advance_runner.run_to_completion(
+        workflow_id=workflow_id,
+        definition=load_pipeline_definition(),
+        worker_id=_WORKER_ID,
+        lease_duration_seconds=_LEASE_DURATION_SECONDS,
+        max_iterations=_MAX_ITERATIONS,
+        step_retry_targets=_STEP_RETRY_TARGETS,
+    )

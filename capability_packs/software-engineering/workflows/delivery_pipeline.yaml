@@ -88,16 +88,42 @@
 # `filePath` (delivery_pipeline.py's own `_STEP_SOURCES`) — the
 # identical field pair `lint`/`test` already consume. **Genuinely
 # no-ops (`pushed: false`) for every current real caller**: the
-# `GitPushAgentEntrypoint` this step dispatches to is
-# zero-arg-constructible with `remote_url=None` by default (no real,
-# non-hardcoded default push destination exists), so this step changes
-# nothing about the pipeline's existing, proven behavior for the real
-# HTTP route (`ai_os_kernel.bootstrap`, unchanged — no `git_service`
-# threaded into its own `SqlAgentRegistry` construction, a real,
-# disclosed, deferred piece) or any existing test that does not
-# explicitly configure one. A caller that does configure a real
-# `remote_url` (this pack's own new end-to-end proof test) gets a real
-# commit and push, through the identical Tool dispatch path.
+# `GitPushAgentEntrypoint` this step dispatches to reads
+# `AIOS_GIT_REMOTE_URL` (`P03-S01-M24-T02`) as its bare default, unset
+# in every environment today, so this step changes nothing about the
+# pipeline's existing, proven behavior for the real HTTP route or any
+# existing test that does not explicitly configure one. A caller that
+# does configure a real `remote_url` (this pack's own end-to-end proof
+# test) gets a real commit and push, through the identical Tool
+# dispatch path — gated by a real human approval, immediately below.
+#
+# A real `human_approval` step, `approve-git-push` (added 2026-08-03,
+# `P03-S03-M30-T05`), now sits between `documentation` and `git-push` —
+# closing R-001's own standing concern that `se.delivery_pipeline` ran
+# fully autonomously with no human in the loop before any real,
+# external, irreversible action. Reuses the existing Human Approval
+# Manager (`P03-S05-M14-T04`/`T05`/`T06`) unchanged: the pipeline
+# genuinely pauses (`WorkflowRunOutcome.WAITING_FOR_HUMAN`) the first
+# time it reaches this step, and resumes only on a real, attributable,
+# RBAC-authorized decision (`approver:approve-git-push` or `admin`) —
+# never on a timeout, since nothing anywhere converts one into an
+# implied decision (the same permanent hard rule
+# `test_human_approval_execution.py` already proves generically, reused
+# here unchanged). Declares no `timeout` — an approval to push
+# generated code should wait indefinitely for a real human, not
+# silently expire. This gates the push itself, for every branch: a
+# direct push to a genuinely *protected* branch remains separately,
+# permanently, structurally impossible regardless of any approval
+# (`GitIntegrationService.push`'s own §5.1 refusal, git_integration.md)
+# — this step's own real target is the autonomy gap R-001 names, not a
+# bypass path around that structural refusal. Real, disclosed, deferred
+# scope, unchanged from `human_approval.py`'s own module docstring: no
+# HTTP route exists yet for a real caller to submit a decision against
+# a live Kernel process, and the generic multi-instance worker loop
+# (`bootstrap.py`) is not wired with this pipeline's own executor set —
+# a paused production run resumes today only through the same
+# service-layer call this pack's own tests use, exactly as every other
+# `human_approval` step in this codebase already discloses.
 
 id: se.delivery_pipeline
 name: Software Delivery Pipeline
@@ -109,12 +135,14 @@ description: >-
   Gate blocks on a genuine lint failure, Test verifies it, a second
   real Quality Gate blocks on a genuine test failure (both
   bounded-retry from Build once before giving up), Documentation
-  records it, Git Push commits and pushes it through the real Git
-  Integration Service when configured — seven real agent steps, one
-  real routing decision, plus two real, blocking, retried quality
+  records it, a real Human Approval Point pauses the pipeline for a
+  real, attributable, authorized decision, and Git Push then commits
+  and pushes it through the real Git Integration Service when
+  configured — seven real agent steps, one real routing decision, one
+  real human approval point, plus two real, blocking, retried quality
   gates, each genuinely consuming the previous step's real, persisted
   output.
-version: 1.6.0
+version: 1.7.0
 trigger: manual
 
 inputs:
@@ -149,6 +177,20 @@ agents:
 qualityGates:
   - se.build_lint_clean
   - se.build_tests_pass
+
+humanApprovalPoints:
+  - id: approve-git-push
+    name: Approve Git Push
+    description: >-
+      A human must approve before this pipeline's own generated file is
+      committed and pushed through the real Git Integration Service.
+      Approving a no-op run (no real remote configured) is harmless;
+      approving a real one is this pipeline's one real, external,
+      irreversible action.
+    context:
+      step: git-push
+      reads: [build.workingDirectory, build.filePath]
+    options: [approve, reject]
 
 retryPolicy:
   maxAttempts: 2
@@ -209,6 +251,9 @@ steps:
     promptId: documentation.record_artifact
     promptVersion: 0.1.0
     modelAlias: coding-strong
+
+  - id: approve-git-push
+    type: human_approval
 
   - id: git-push
     type: agent

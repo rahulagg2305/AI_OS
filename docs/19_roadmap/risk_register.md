@@ -116,6 +116,33 @@ deployment sets `AIOS_GIT_REMOTE_URL` for a genuine push destination, a
 real `human_approval` step in whatever workflow drives that push is
 still the operator's own responsibility to wire, exactly as before.
 
+**Update 2026-08-03 (`P03-S03-M30-T05`): the previous update's own
+named remaining gap is closed — `se.delivery_pipeline` itself now wires
+a real `human_approval` step, `approve-git-push`, immediately before
+its own `git-push` step.** Reuses the existing Human Approval Manager
+(`P03-S05-M14-T04`/`T05`/`T06`) unchanged: the pipeline genuinely
+pauses (`WorkflowRunOutcome.WAITING_FOR_HUMAN`) the first time it
+reaches this point, and resumes only on a real, attributable,
+RBAC-authorized decision (`approver:approve-git-push` or `admin`) —
+never on a timeout. Proven end to end, one real run:
+`git-push` (and the real remote it targets) receives nothing while the
+approval is pending; an unauthorized decision attempt is refused with
+the remote still untouched; only a real, authorized decision resumes
+the pipeline to a genuine commit and push
+(`test_delivery_pipeline_git_push.py`). **The rule stays open and
+permanent**: this closes the gap for `se.delivery_pipeline` specifically
+— the one real workflow that reaches this service today — not as a
+generic guarantee every *future* deploy-capability workflow inherits
+automatically; whichever workflow eventually drives
+P07-S01-M40-T01/Kubernetes-Helm still has to wire its own
+`human_approval` step the same way, exactly as this update itself just
+did. Also still real, disclosed, deferred: no HTTP route exists yet for
+a live Kernel process to receive a real decision against a paused
+production run, and the generic multi-instance worker loop
+(`bootstrap.py`) is not wired with this pipeline's own executor set —
+matching `human_approval.py`'s own long-standing disclosed scope,
+unchanged by this step.
+
 ### R-002 — Docker exception-catching inconsistency *(closed)*
 
 `_postgres_fixture.py` caught only `docker.errors.DockerException`, while

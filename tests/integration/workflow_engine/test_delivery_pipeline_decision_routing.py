@@ -291,7 +291,12 @@ def test_a_successful_build_write_takes_the_true_branch_through_lint_unchanged(
 
             result = await trigger({"requirement": "print a friendly message"}, "test-principal")
 
-            assert result.outcome == WorkflowRunOutcome.COMPLETED
+            # A real approve-git-push human_approval point
+            # (P03-S03-M30-T05) now sits between documentation and
+            # git-push — every assertion below reads a step that already
+            # ran and persisted its output before that point, so a
+            # genuine pause here is the correct outcome.
+            assert result.outcome == WorkflowRunOutcome.WAITING_FOR_HUMAN
             assert result.error is None
             assert result.last_instance is not None
 

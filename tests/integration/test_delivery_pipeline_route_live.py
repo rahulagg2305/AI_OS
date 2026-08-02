@@ -106,10 +106,16 @@ def test_an_authorized_request_drives_the_real_five_agent_pipeline_to_completion
 
     assert response.status_code == 200
     body = response.json()
-    assert body["outcome"] == "completed", body["error"]
+    # A real approve-git-push human_approval point (P03-S03-M30-T05)
+    # now sits between documentation and git-push — the route's own
+    # honest outcome for this call is a genuine pause, not completion;
+    # deciding it and resuming is a real, disclosed, deferred gap (no
+    # HTTP route exists yet to submit a decision against a live Kernel
+    # process — see delivery_pipeline.yaml's own comment). documentation
+    # already ran and persisted its real output by this point, so this
+    # route's own real value (the documentation_path field) is only
+    # populated once the run reaches COMPLETED — genuinely `None` here,
+    # not a regression.
+    assert body["outcome"] == "waiting_for_human", body["error"]
     assert body["error"] is None
-    # The real value this route adds over the platform-generic
-    # /workflows route: this pipeline's own real, known output field,
-    # read back from the real, persisted `documentation` step.
-    assert body["documentation_path"]
-    assert body["documentation_path"].endswith(".md")
+    assert body["documentation_path"] is None

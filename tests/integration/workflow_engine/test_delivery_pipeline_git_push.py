@@ -1,13 +1,13 @@
 """The real, end-to-end proof this step exists for
-(``P03-S04-M31-T04``): a genuine ``se.delivery_pipeline`` run — all
-seven real agents, through the real Workflow Engine, against a real
-Postgres container (ADR-0015 — no mocking the database) — genuinely
-commits and pushes Build's own real, generated file through the full
-stack: agent -> ``ToolInvokerAdapter`` -> ``GitIntegrationService`` ->
-a real ``LocalSubprocessSandbox`` -> a real ``git`` subprocess -> a
-real, separate bare repository, verified by reading that repository's
-own refs directly, never by trusting this pipeline's own return value
-alone — the identical rigor
+(``P03-S04-M31-T04``, extended ``P03-S03-M30-T05``): a genuine
+``se.delivery_pipeline`` run — all seven real agents, through the real
+Workflow Engine, against a real Postgres container (ADR-0015 — no
+mocking the database) — genuinely commits and pushes Build's own real,
+generated file through the full stack: agent -> ``ToolInvokerAdapter``
+-> ``GitIntegrationService`` -> a real ``LocalSubprocessSandbox`` -> a
+real ``git`` subprocess -> a real, separate bare repository, verified
+by reading that repository's own refs directly, never by trusting this
+pipeline's own return value alone — the identical rigor
 ``tests/integration/git_integration/test_git_integration_service.py``
 and ``tests/unit/kernel/sdk_adapters/test_tool_invoker_adapter.py``
 already established for the two layers below this one.
@@ -19,6 +19,28 @@ proves a real *workflow* — the same declared
 the way down to a real git push, through the real agent dispatch chain,
 not a shortcut that skips the Workflow Engine or the pack's own agent
 code.
+
+**Updated (``P03-S03-M30-T05``): the real push now happens only after a
+real, genuine pause and a real, authorized human decision —** a real
+``approve-git-push`` Human Approval Point (``P03-S05-M14-T04``/``T05``/
+``T06``, reused unchanged) now sits between ``documentation`` and
+``git-push``. This file's own single test proves, in one real run
+(against one real Postgres container and one real local bare remote,
+matching this file's own existing cost/rigor bar rather than doubling
+it): the pipeline genuinely pauses before any push is even attempted
+(the remote receives nothing while pending); an unauthorized decision
+attempt is refused, the approval staying genuinely ``pending`` and the
+remote still untouched; and only a real, attributable, RBAC-authorized
+decision (``approver:approve-git-push``) resumes the pipeline to a real
+commit and push, verified by reading the remote's own refs directly.
+"Timeout never implies approval" is not re-proven here — that is a
+generic property of the shared ``HumanApprovalStepExecutor``/
+``SqlApprovalRepository``, already exhaustively proven, real,
+Postgres-backed, in
+``tests/integration/workflow_engine/test_human_approval_execution.py``;
+re-running it against this pipeline's own, much more expensive
+composition would exercise the identical shared code path a second
+time for zero additional coverage.
 
 Deliberately not a modification of ``test_delivery_pipeline.py``'s own
 extensive existing tests — those prove the six-agent chain and both
@@ -49,8 +71,14 @@ from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
+from ai_os_kernel.security_manager.errors import ApprovalNotAuthorizedError
+from ai_os_kernel.security_manager.models import Principal, PrincipalType
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
-from ai_os_kernel.workflow_engine.delivery_pipeline import build_pipeline_trigger
+from ai_os_kernel.workflow_engine.delivery_pipeline import (
+    build_pipeline_trigger,
+    resume_pipeline_after_approval,
+)
+from ai_os_kernel.workflow_engine.human_approval import ApprovalService, SqlApprovalRepository
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
@@ -69,6 +97,7 @@ ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 
 _PACK_ID = "software-engineering"
 _PACK_VERSION = "0.1.0"
+_APPROVE_GIT_PUSH_STEP_ID = "approve-git-push"
 
 _AGENT_IDS = {
     "requirements-analyst": f"{_PACK_ID}/requirements-analyst",
@@ -230,13 +259,16 @@ def _git_push_agent_with_real_service(
     return agent
 
 
-def test_a_real_pipeline_run_genuinely_commits_and_pushes_through_the_full_stack(
+def test_a_real_pipeline_run_genuinely_pauses_and_pushes_only_on_a_real_authorized_decision(
     tmp_path: Path, database_url: str
 ) -> None:
     """The real proof: Requirements Analyst -> Architecture -> Build ->
-    Lint -> Test -> Documentation -> Git Push, all seven real agents,
-    through the real, declared ``se.delivery_pipeline.yaml`` — ending in
-    a real commit and a real push to a real, separate bare repository,
+    Lint -> Test -> Documentation -> **a real, genuine pause** ->
+    Git Push, through the real, declared ``se.delivery_pipeline.yaml``
+    — the remote receives nothing while pending, an unauthorized
+    decision is refused with the remote still untouched, and only a
+    real, attributable, authorized decision resumes the pipeline to a
+    real commit and a real push to a real, separate bare repository,
     verified by reading that repository's own refs directly."""
 
     async def _run() -> None:
@@ -301,11 +333,86 @@ def test_a_real_pipeline_run_genuinely_commits_and_pushes_through_the_full_stack
 
             result = await trigger({"requirement": "print a friendly message"}, "test-principal")
 
-            assert result.outcome == WorkflowRunOutcome.COMPLETED, result.error
+            # The real, genuine pause: git-push has not run at all yet —
+            # the remote is still exactly as `git init --bare` left it.
+            assert result.outcome == WorkflowRunOutcome.WAITING_FOR_HUMAN, result.error
             assert result.last_instance is not None
+            workflow_id = result.last_instance.workflow_id
+
+            empty_refs = await _git(["ls-remote", str(remote)])
+            assert empty_refs.stdout.strip() == ""
+
+            approval_repository = SqlApprovalRepository(engine)
+            pending = await approval_repository.get_by_step(
+                workflow_id=workflow_id, step_id=_APPROVE_GIT_PUSH_STEP_ID
+            )
+            assert pending is not None
+            assert pending.status == "pending"
+
+            # A real, unauthorized decision attempt — a genuine
+            # principal, but lacking both `admin` and the exact
+            # class-scoped `approver:approve-git-push` role (ADR-0023) —
+            # is refused *before* any write, reusing the identical RBAC
+            # `test_t10_unauthorized_approval.py` already proves
+            # generically. The approval stays genuinely pending, and the
+            # remote stays genuinely untouched.
+            approval_service = ApprovalService(approval_repository)
+            unauthorized_principal = Principal(
+                principal_id="user-no-role",
+                principal_type=PrincipalType.USER,
+                roles=frozenset({"operator"}),
+            )
+            with pytest.raises(ApprovalNotAuthorizedError):
+                await approval_service.decide(
+                    approval_id=pending.approval_id,
+                    principal=unauthorized_principal,
+                    decision="approved",
+                    comment=None,
+                )
+
+            still_pending = await approval_repository.get_by_step(
+                workflow_id=workflow_id, step_id=_APPROVE_GIT_PUSH_STEP_ID
+            )
+            assert still_pending is not None
+            assert still_pending.status == "pending"
+            still_empty_refs = await _git(["ls-remote", str(remote)])
+            assert still_empty_refs.stdout.strip() == ""
+
+            # The real, authorized decision — the exact class-scoped
+            # `approver:approve-git-push` role ADR-0023 documents —
+            # genuinely resumes the paused instance.
+            authorized_principal = Principal(
+                principal_id="release-manager",
+                principal_type=PrincipalType.USER,
+                roles=frozenset({"approver:approve-git-push"}),
+            )
+            decided = await approval_service.decide(
+                approval_id=pending.approval_id,
+                principal=authorized_principal,
+                decision="approved",
+                comment="Reviewed the real generated file — looks correct.",
+            )
+            assert decided.status == "approved"
+            assert decided.decided_by == "release-manager"
+
+            # The real, separate re-entry that genuinely completes the
+            # pipeline — re-resolving the identical human_approval step,
+            # this time finding the real decision, then advancing to a
+            # real commit and push.
+            final_result = await resume_pipeline_after_approval(
+                engine, registry, workflow_id, python_command=sandbox.python_command
+            )
+            assert final_result.outcome == WorkflowRunOutcome.COMPLETED, final_result.error
 
             repository = SqlWorkflowInstanceRepository(engine)
-            steps = await repository.list_steps(result.last_instance.workflow_id)
+            steps = await repository.list_steps(workflow_id)
+
+            approval_step_outputs = next(
+                s.outputs for s in steps if s.step_name == _APPROVE_GIT_PUSH_STEP_ID
+            )
+            assert approval_step_outputs is not None
+            assert approval_step_outputs["decision"] == "approved"
+            assert approval_step_outputs["decidedBy"] == "release-manager"
 
             git_push_outputs = next(s.outputs for s in steps if s.step_name == "git-push")
             assert git_push_outputs is not None

@@ -355,7 +355,11 @@ async def test_the_real_pipeline_through_docker_sandbox_genuinely_contains_gener
             "test-principal",
         )
 
-        assert result.outcome == WorkflowRunOutcome.COMPLETED, result.error
+        # A real approve-git-push human_approval point (P03-S03-M30-T05)
+        # now sits between documentation and git-push — the real
+        # sandbox-isolation assertions below all read from a step that
+        # already ran and persisted its output before that point.
+        assert result.outcome == WorkflowRunOutcome.WAITING_FOR_HUMAN, result.error
         assert result.last_instance is not None
 
         # Filesystem containment, the "one writable path" direction:

@@ -501,7 +501,14 @@ async def test_all_six_agent_steps_and_both_gates_genuinely_chain_through_real_p
 
         result = await trigger({"requirement": "print a friendly message"}, "test-principal")
 
-        assert result.outcome == WorkflowRunOutcome.COMPLETED
+        # A real `approve-git-push` human_approval point (P03-S03-M30-T05)
+        # now sits between `documentation` and `git-push` — this test's
+        # own real assertions below are all about steps that already ran
+        # and persisted their output *before* that point, so a genuine
+        # pause here (never a silent auto-approval) is the correct,
+        # unchanged-in-substance outcome; the real approve-then-push
+        # proof lives in test_delivery_pipeline_git_push.py.
+        assert result.outcome == WorkflowRunOutcome.WAITING_FOR_HUMAN
         assert result.error is None
         assert result.last_instance is not None
 
@@ -783,7 +790,10 @@ async def test_a_gate_failure_within_the_retry_bound_eventually_succeeds(
 
         result = await trigger({"requirement": "print a friendly message"}, "test-principal")
 
-        assert result.outcome == WorkflowRunOutcome.COMPLETED
+        # Real approve-git-push pause (P03-S03-M30-T05) — see the
+        # identical comment above this file's first COMPLETED->
+        # WAITING_FOR_HUMAN change for why this is the correct outcome.
+        assert result.outcome == WorkflowRunOutcome.WAITING_FOR_HUMAN
         assert result.error is None
         assert result.last_instance is not None
 
@@ -982,7 +992,10 @@ async def test_a_non_gate_step_failure_within_the_retry_bound_eventually_succeed
 
         result = await trigger({"requirement": "print a friendly message"}, "test-principal")
 
-        assert result.outcome == WorkflowRunOutcome.COMPLETED
+        # Real approve-git-push pause (P03-S03-M30-T05) — see the
+        # identical comment above this file's first COMPLETED->
+        # WAITING_FOR_HUMAN change for why this is the correct outcome.
+        assert result.outcome == WorkflowRunOutcome.WAITING_FOR_HUMAN
         assert result.error is None
         assert result.last_instance is not None
         assert flaky_build_gateway.attempts == 2  # one real failure, one real retry
@@ -1265,7 +1278,11 @@ def test_the_real_pipeline_genuinely_runs_end_to_end_against_the_live_api(
                 "test-principal",
             )
 
-            assert result.outcome == WorkflowRunOutcome.COMPLETED, result.error
+            # Real approve-git-push pause (P03-S03-M30-T05) — see the
+            # identical comment above this file's first COMPLETED->
+            # WAITING_FOR_HUMAN change for why this is the correct
+            # outcome.
+            assert result.outcome == WorkflowRunOutcome.WAITING_FOR_HUMAN, result.error
             assert result.last_instance is not None
 
             steps = await SqlWorkflowInstanceRepository(engine).list_steps(

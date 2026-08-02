@@ -4,7 +4,7 @@
 **Document:** Software Engineering Pack – Workflows
 **Version:** 1.2
 **Status:** Approved
-**Last Updated:** 2026-08-02 (`se.delivery_pipeline` gained a real `route-after-build` decision step, `P02-S01-M05-T15` — corrected the "no decisions" claim in the Currently Implemented Subset section below; the section's own graph diagram remains a known-stale pre-Lint/pre-gate snapshot, disclosed rather than silently left wrong. Prior: 2026-07-30, `se.delivery_pipeline` gained Requirements Analyst as its own first step — the graph is now 5 real agent steps, not 4; the raw `requirement` input now reaches Requirements Analyst first, not Architecture directly. Prior: 2026-07-28, added a "Currently Implemented Subset" section documenting the real `se.delivery_pipeline` workflow, and a row for it in §12's own permissions table)
+**Last Updated:** 2026-08-03 (`se.delivery_pipeline` gained a real `human_approval` point, `approve-git-push`, between `documentation` and `git-push` — `P03-S03-M30-T05` — corrected the "none of which this pipeline declares" claim in the Currently Implemented Subset section below for `human_approval` specifically (still accurate for `tool`/`parallel`/`foreach`/`sub_workflow`); also corrected §12's own permissions table row, which was missing `git:write` (declared in the real manifest since `P03-S04-M31-T04`, not itself a change this step made). Prior: 2026-08-02, `se.delivery_pipeline` gained a real `route-after-build` decision step, `P02-S01-M05-T15` — corrected the "no decisions" claim in the Currently Implemented Subset section below; the section's own graph diagram remains a known-stale pre-Lint/pre-gate snapshot, disclosed rather than silently left wrong. Prior: 2026-07-30, `se.delivery_pipeline` gained Requirements Analyst as its own first step — the graph is now 5 real agent steps, not 4; the raw `requirement` input now reaches Requirements Analyst first, not Architecture directly. Prior: 2026-07-28, added a "Currently Implemented Subset" section documenting the real `se.delivery_pipeline` workflow, and a row for it in §12's own permissions table)
 
 ---
 
@@ -54,7 +54,7 @@ Step type vocabulary: `agent`, `tool`, `decision`, `parallel`, `foreach`, `sub_w
 
 **Inputs:** `requirement` (string, the raw ask). **Outputs:** `documentationPath` (string).
 
-**Graph — this section's own diagram below is a known-stale snapshot from before Lint, both Quality Gates, and the routing decision step existed; `capability_packs/software-engineering/workflows/delivery_pipeline.yaml` and `ai_os_kernel.workflow_engine.delivery_pipeline`'s own module docstring are the real, current, authoritative shape (nine declared steps: six agents, one `decision`, two `quality_gate`). Reconciling this diagram in full is a real, separate documentation-reconciliation task, not part of the step that added the decision step.** As of 2026-08-02, `se.delivery_pipeline` **does** include a real `decision` step (`route-after-build`, between `build` and `lint`) — the claim below that it has "no decisions" and none of `se.implement_task`'s step types is no longer accurate for `decision` specifically (still accurate for `tool`/`parallel`/`foreach`/`sub_workflow`/`human_approval`, none of which this pipeline declares).
+**Graph — this section's own diagram below is a known-stale snapshot from before Lint, Git Push, both Quality Gates, the routing decision step, and the human approval point existed; `capability_packs/software-engineering/workflows/delivery_pipeline.yaml` and `ai_os_kernel.workflow_engine.delivery_pipeline`'s own module docstring are the real, current, authoritative shape (eleven declared steps: seven agents, one `decision`, two `quality_gate`, one `human_approval`). Reconciling this diagram in full is a real, separate documentation-reconciliation task, not part of any one step that added a single one of these.** As of 2026-08-03, `se.delivery_pipeline` **does** include a real `decision` step (`route-after-build`, between `build` and `lint`) and a real `human_approval` point (`approve-git-push`, between `documentation` and `git-push`, `P03-S03-M30-T05`) — the claim below that it has "no decisions" and none of `se.implement_task`'s step types is no longer accurate for `decision`/`human_approval` specifically (still accurate for `tool`/`parallel`/`foreach`/`sub_workflow`, none of which this pipeline declares).
 
 ```text
 1  agent   software-engineering/requirements-analyst → a refined requirements analysis (free text)
@@ -315,7 +315,7 @@ Every one of these persists the workflow in `waiting_for_human`, records the con
 | `se.code_review` | `filesystem:read`, `git:read`, `llm:invoke`, `sandbox:execute` |
 | `se.refactoring` | as product_creation |
 | `se.release` | `filesystem:read`, `git:read`, `git:write`, `llm:invoke` |
-| `se.delivery_pipeline` (real today — see "Currently Implemented Subset" above) | `llm:invoke`, `sandbox:execute` |
+| `se.delivery_pipeline` (real today — see "Currently Implemented Subset" above) | `llm:invoke`, `sandbox:execute`, `git:write` |
 
 No workflow in this pack requests `secret:manage`, `pack:manage`, or `config:write`.
 
