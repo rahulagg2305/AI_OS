@@ -74,11 +74,26 @@ protected branch structurally impossible (absent from its own tool
 surface, `git_integration.md` §5.1) rather than merely gating it behind
 a permission — every real integration path onto a protected branch
 still requires a pull request with human approval, a mechanism this
-Task deliberately does not build. **The rule stays open and permanent**:
-no `git.*` Tool exists yet in the Software Engineering pack, so no real
-workflow can reach this service — the deploy-capability exposure this
-rule guards against remains latent, not active, until a Tool wraps it
-and P07-S01-M40-T01 (Kubernetes/Helm) also lands.
+Task deliberately does not build.
+
+**Update 2026-08-02, same day (`P03-S04-M31-T04`/`P03-S03-M30-T04`): a
+real Tool and a real workflow caller both now exist — the rule remains
+genuinely honored, not merely latent.** `se.delivery_pipeline`'s new
+`git-push` step reaches this service for real, through a real agent,
+through real `ToolInvoker` dispatch. The protected-branch refusal is
+still real and still structural (proven end to end at every layer:
+`GitIntegrationService`, `ToolInvokerAdapter`, and now the full pipeline
+run). Production reachability remains narrow by construction, not by
+omission: `bootstrap.py`'s own real `SqlAgentRegistry` — the composition
+behind the live HTTP route — is not threaded a `git_service` at all, so
+the real HTTP route still cannot reach these tools; only a caller that
+explicitly constructs and injects a real `GitIntegrationService` (this
+step's own end-to-end test) can. **The rule stays open and permanent**:
+it still requires that whichever real deploy-capability caller
+eventually reaches this service (via the live route, or
+P07-S01-M40-T01/Kubernetes-Helm) genuinely wires a real, non-empty
+`push_policy` — an empty `protected_branches` set (this step's own
+proof test) is deliberately not a safe production default.
 
 ### R-002 — Docker exception-catching inconsistency *(closed)*
 

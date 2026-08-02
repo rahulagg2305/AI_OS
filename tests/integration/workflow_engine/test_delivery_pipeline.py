@@ -131,6 +131,7 @@ from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepositor
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
 from ai_os_pack_software_engineering.agents.build import BuildAgentEntrypoint
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentEntrypoint
+from ai_os_pack_software_engineering.agents.git_push import GitPushAgentEntrypoint
 from ai_os_pack_software_engineering.agents.lint import LintAgentEntrypoint
 from ai_os_pack_software_engineering.agents.requirements_analyst import (
     RequirementsAnalystAgentEntrypoint,
@@ -203,7 +204,19 @@ _AGENT_IDS = {
     "lint": f"{_PACK_ID}/lint",
     "test": f"{_PACK_ID}/qa-test",
     "documentation": f"{_PACK_ID}/documentation",
+    "git-push": f"{_PACK_ID}/git-push",
 }
+
+
+def _unconfigured_git_push_agent() -> GitPushAgentEntrypoint:
+    """``se.delivery_pipeline``'s new, final step (``P03-S04-M31-T04``)
+    — every test in this file predates real git-push and is not testing
+    it; a bare, zero-arg ``GitPushAgentEntrypoint()`` (``remote_url=
+    None``) is a real, structured no-op (``pushed: false``), preserving
+    every existing assertion in this file completely unchanged. The
+    real, configured, end-to-end proof lives in
+    ``test_delivery_pipeline_git_push.py``."""
+    return GitPushAgentEntrypoint()
 
 
 def _test_agent_with_sandbox(sandbox: LocalSubprocessSandbox) -> TestAgentEntrypoint:
@@ -472,6 +485,7 @@ async def test_all_six_agent_steps_and_both_gates_genuinely_chain_through_real_p
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
             ),
+            _AGENT_IDS["git-push"]: _unconfigured_git_push_agent(),
         }
     )
 
@@ -757,6 +771,7 @@ async def test_a_gate_failure_within_the_retry_bound_eventually_succeeds(
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
             ),
+            _AGENT_IDS["git-push"]: _unconfigured_git_push_agent(),
         }
     )
 
@@ -955,6 +970,7 @@ async def test_a_non_gate_step_failure_within_the_retry_bound_eventually_succeed
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
             ),
+            _AGENT_IDS["git-push"]: _unconfigured_git_push_agent(),
         }
     )
 

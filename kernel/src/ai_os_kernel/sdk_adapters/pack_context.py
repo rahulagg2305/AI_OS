@@ -46,6 +46,7 @@ from __future__ import annotations
 from collections.abc import Collection
 
 from ai_os_kernel.capability_manager.pack_contract import PackContext
+from ai_os_kernel.git_integration.service import GitIntegrationService
 from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
 from ai_os_kernel.prompt_engine.renderer import PromptEngine
 from ai_os_kernel.sandbox.executor import SandboxExecutor
@@ -65,6 +66,7 @@ def build_pack_context(
     llm_gateway: KernelLLMGatewayProtocol | None = None,
     prompt_engine: PromptEngine | None = None,
     sandbox: SandboxExecutor | None = None,
+    git_service: GitIntegrationService | None = None,
 ) -> PackContext:
     """Build the real ``PackContext`` one entrypoint should receive,
     given *that entrypoint's own* declared ``permissions`` (see this
@@ -75,6 +77,18 @@ def build_pack_context(
     matching real Kernel object was not supplied — a caller granting a
     permission it cannot actually back is a genuine configuration error,
     not something to silently downgrade to ``None``.
+
+    ``git_service`` (``P03-S04-M31-T04``) is forwarded to
+    :class:`~ai_os_kernel.sdk_adapters.tool_invoker_adapter.
+    ToolInvokerAdapter` unchanged when ``sandbox:execute`` is granted —
+    optional, defaulting to ``None`` (no real Git tool ids reachable),
+    the identical "absent means unaffected" shape every other optional
+    capability in this codebase already establishes. Deliberately not
+    gated by its own separate permission check here: the closed
+    manifest vocabulary's ``git:write`` is a real, disclosed, deferred
+    enforcement gap (see ``git_integration.md``'s own Implementation
+    Status) — today, exactly like ``platform.sandbox.run_command``,
+    reachability is gated only by ``sandbox:execute``.
     """
     llm: KernelLLMGatewayProtocol | LLMGatewayAdapter | None = None
     prompts: PromptEngine | PromptRegistryAdapter | None = None
@@ -96,7 +110,7 @@ def build_pack_context(
                 "build_pack_context() — a granted permission this builder cannot actually "
                 "back is a configuration error, not a silent no-op"
             )
-        tools = ToolInvokerAdapter(sandbox)
+        tools = ToolInvokerAdapter(sandbox, git_service=git_service)
 
     return PackContext(
         pack_id=pack_id,

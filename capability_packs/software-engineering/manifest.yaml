@@ -79,6 +79,7 @@ dependencies:
 permissions:
   - llm:invoke
   - sandbox:execute
+  - git:write
 
 entryPoint: ai_os_pack_software_engineering.pack:SoftwareEngineeringPack
 
@@ -194,25 +195,52 @@ agents:
     requiredPrompts:
       - documentation.record_artifact@0.1.0
 
+  - id: git-push
+    name: Git Push Agent
+    version: 0.1.0
+    purpose: >-
+      Given the file Build wrote, genuinely commit and push it through
+      the real Git Integration Service, reached exclusively through
+      ToolInvoker (platform.git.commit/platform.git.push) — never a
+      direct Kernel import. Degrades to a real, structured no-op when
+      no remote_url is configured (no real, non-hardcoded default
+      exists), the identical "absent means unaffected" shape every
+      other optional Workflow Engine capability already establishes.
+      This pack's seventh agent, and the first added since the
+      Capability Pack growth gate lifted (2026-07-29) that consumes a
+      Platform Service.
+    entrypoint: ai_os_pack_software_engineering.agents.git_push:GitPushAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.git_push:GitPushAgentInput
+    outputSchema: ai_os_pack_software_engineering.agents.git_push:GitPushAgentOutput
+    # No modelAlias — this agent makes no LLM call at all, the identical
+    # shape qa-test's/lint's own entries above already establish.
+    permissions:
+      - sandbox:execute
+      - git:write
+
 workflows:
   - id: se.delivery_pipeline
     name: Software Delivery Pipeline
-    version: 1.5.0
+    version: 1.6.0
     description: >-
       Chains Requirements Analyst, Architecture, Build, Lint, QA/Test,
-      and Documentation into one real, declared workflow — each step's
-      genuine output reaches the next step's genuine input through a
-      real Context Manager resolver. A real decision step routes
-      straight to Test (skipping a wasted Lint invocation) when Build's
-      own write genuinely failed. Two real, blocking, bounded-retry
-      Quality Gates now exist: one between Build and Test (Static
-      Analysis), one between Test and Documentation (Testing).
+      Documentation, and Git Push into one real, declared workflow —
+      each step's genuine output reaches the next step's genuine input
+      through a real Context Manager resolver. A real decision step
+      routes straight to Test (skipping a wasted Lint invocation) when
+      Build's own write genuinely failed. Two real, blocking,
+      bounded-retry Quality Gates now exist: one between Build and Test
+      (Static Analysis), one between Test and Documentation (Testing).
+      Git Push, the pipeline's new final step, genuinely commits and
+      pushes through the real Git Integration Service when configured
+      with a real remote — a real, structured no-op otherwise.
     definition: workflows/delivery_pipeline.yaml
     inputsSchema: ai_os_pack_software_engineering.workflows.models:PipelineInput
     outputsSchema: ai_os_pack_software_engineering.workflows.models:PipelineOutput
     permissions:
       - llm:invoke
       - sandbox:execute
+      - git:write
     trigger: manual
 
 prompts:

@@ -122,6 +122,31 @@ contract can satisfy on its own.
   in — Documentation records the Test outcome, per its own existing
   contract; recording the Lint outcome too would be a real, separate
   scope decision, not implied by this step.
+- ``git-push`` (added 2026-08-02, ``P03-S04-M31-T04``) reads ``build``'s
+  own output, whole — the identical convention ``lint``/``test``
+  already establish. Its own contract needs only ``workingDirectory``/
+  ``filePath``, both real, already-known ``build`` fields; no transform
+  is needed (unlike ``lint``/``test``, which each derive a command field
+  ``build``'s own output has no reason to produce).
+
+**A real, final ``git-push`` agent step now exists too (added
+2026-08-02, ``P03-S04-M31-T04``) — the first real, end-to-end exercise
+of the Git Integration Service (``P03-S01-M24-T01``) and its
+ToolInvoker-reachable tools (``P03-S04-M31-T04``) through a real
+workflow.** Sits after ``documentation``, reading ``build``'s own real
+``workingDirectory``/``filePath`` (see ``_STEP_SOURCES`` above).
+``GitPushAgentEntrypoint`` is zero-arg-constructible with
+``remote_url=None`` by default, so this step is a genuine, structured
+no-op (``pushed: false``) for every current real caller — no real,
+non-hardcoded default push destination exists, so this pipeline's own
+existing, proven behavior is unchanged for the real HTTP route
+(``bootstrap.py`` does not thread a ``git_service`` into its own
+``SqlAgentRegistry`` construction — real, disclosed, deferred work) and
+every existing test that constructs this agent with no override. A
+caller that does supply a real ``remote_url`` (this pack's own new
+end-to-end proof test,
+``tests/integration/workflow_engine/test_delivery_pipeline_git_push.py``)
+gets a real commit and push, through the identical dispatch path.
 
 **Two real, blocking quality_gate steps now exist (the second added
 2026-07-30, the smallest real slices of the still-0%-built Quality Gate
@@ -247,13 +272,12 @@ _DEFINITION_PATH = (
     Path("capability_packs") / "software-engineering" / "workflows" / "delivery_pipeline.yaml"
 )
 
-# Deliberately generous, not tuned — nine real steps (six agent steps,
-# the `route-after-build` decision step added 2026-08-02, and the two
-# real quality_gate steps, `quality-gate-lint-clean` added 2026-07-30)
-# plus one final completion transition need ten `advance()` calls in
-# the happy path (or nine on the `route-after-build` "false" branch,
-# which skips `lint`/`quality-gate-lint-clean` entirely — fewer calls,
-# still well inside this bound). delivery_pipeline.yaml's own
+# Deliberately generous, not tuned — ten real steps (seven agent steps,
+# the `route-after-build` decision step, and the two real quality_gate
+# steps) plus one final completion transition need eleven `advance()`
+# calls in the happy path (or ten on the `route-after-build` "false"
+# branch, which skips `lint`/`quality-gate-lint-clean` entirely — fewer
+# calls, still well inside this bound). delivery_pipeline.yaml's own
 # `retryPolicy.maxAttempts` (2) allows exactly one bounded retry cycle
 # per step in `_STEP_RETRY_TARGETS` — both gates retry from `build`, so
 # either one's retry replays
@@ -364,6 +388,7 @@ _STEP_SOURCES: dict[str, str | list[str]] = {
     "lint": "build",
     "test": "build",
     "documentation": ["build", "test"],
+    "git-push": "build",
 }
 _FIELD_SELECTORS = {"architecture": "analysis", "build": "content"}
 

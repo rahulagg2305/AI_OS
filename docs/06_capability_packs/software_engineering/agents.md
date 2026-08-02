@@ -3,9 +3,9 @@
 **Project:** AI_OS (AI Operating System)  
 **Capability Pack:** Software Engineering  
 **Document:** Agents Catalog & Responsibilities  
-**Version:** 1.3  
+**Version:** 1.4  
 **Status:** Approved  
-**Last Updated:** 2026-07-30 (a new catalog entry, `lint` — this pack's sixth agent, and the first added since the Capability Pack growth gate lifted 2026-07-29 — added specifically to prove the Quality Gate Engine's own gate mechanism generalizes to a second gate category (Static Analysis); now chained into `se.delivery_pipeline` between Build and Test. Prior, same day: `requirements-analyst` wired into `se.delivery_pipeline` as its own first step — all 5 real agents were chained, not 4 of 5. Prior: 2026-07-28, updated the "Currently Implemented Subset" section: `requirements-analyst` is now real, 5 of 16)
+**Last Updated:** 2026-08-02 (a new catalog entry, `git-push` — this pack's seventh agent, and the first to consume a Platform Service; now chained into `se.delivery_pipeline` as its own new, final step, after Documentation. Prior, 2026-07-30: a new catalog entry, `lint` — this pack's sixth agent, and the first added since the Capability Pack growth gate lifted 2026-07-29 — added specifically to prove the Quality Gate Engine's own gate mechanism generalizes to a second gate category (Static Analysis); now chained into `se.delivery_pipeline` between Build and Test. Prior, same day: `requirements-analyst` wired into `se.delivery_pipeline` as its own first step — all 5 real agents were chained, not 4 of 5. Prior: 2026-07-28, updated the "Currently Implemented Subset" section: `requirements-analyst` is now real, 5 of 16)
 
 ---
 
@@ -78,6 +78,7 @@ Every agent shall define:
 | `software-engineering/performance` | Performance | Performance optimization |
 | `software-engineering/build` | Build | Generate and write exactly one file from a design or instruction (added 2026-07-28 — see "Currently Implemented Subset" below for why this entry exists) |
 | `software-engineering/lint` | Lint | Run a real static-analysis tool against a file Build wrote and report a real pass/fail (added 2026-07-30 — see "Currently Implemented Subset" below for why this entry exists) |
+| `software-engineering/git-push` | Git Push | Commit and push the file Build wrote through the real Git Integration Service, reached via ToolInvoker (added 2026-08-02 — see "Currently Implemented Subset" below for why this entry exists) |
 
 **Not owned by this pack.** `project-intelligence/existing-project-analyzer` (legacy system analysis) belongs to the Project Intelligence Pack. It participates in this pack's workflows via the Workflow Engine, but it is not a Software Engineering agent and has no `SE-…` identity.
 
@@ -85,13 +86,13 @@ Contract-level specifications (I/O schemas, tools, prompts, permissions, behavio
 
 ---
 
-## Currently Implemented Subset (2026-07-30)
+## Currently Implemented Subset (2026-08-02)
 
 *(This is this document's `## Implementation Status` section — kept under its established name rather than renamed, because the exact phrase "Currently Implemented Subset" is a cross-reference target from several other live documents. Formally recorded as a permitted variant in `docs/process/standing_rules.md`.)*
 
 This document describes the full, intended agent catalog for this pack's mature design. As of this date, a much smaller, real slice actually exists in `capability_packs/software-engineering/`, built under a separate product-owner reprioritization toward "the shortest real path to a working multi-agent software-engineering pipeline" (see `docs/19_roadmap/implementation_status.md`'s own header for the full framing). This section exists so a reader of this document is never misled about the gap between the two.
 
-**Real today: 6 of the 17 agents listed above** (16 original + `lint`, a new entry added 2026-07-30 for the identical reason `build` gained one).
+**Real today: 7 of the 18 agents listed above** (16 original + `lint` + `git-push`, new entries added 2026-07-30/2026-08-02 for the identical reason `build` gained one).
 
 | Agent ID (real) | Entrypoint | Notes |
 |---|---|---|
@@ -101,10 +102,11 @@ This document describes the full, intended agent catalog for this pack's mature 
 | `software-engineering/lint` | `ai_os_pack_software_engineering.agents.lint:LintAgentEntrypoint` | **New catalog entry, added 2026-07-30** — this pack's sixth agent, and the first added since the Capability Pack growth gate lifted (2026-07-29). Runs `python -m py_compile <file>` against a file Build wrote, through the sandbox, reporting a real pass/fail from the real exit code — no LLM call at all. `ruff` was tried first and genuinely works against the deterministic tier, but genuinely fails against `DockerSandbox`'s own default image (no `ruff` installed, no dependency-install step exists) — `py_compile`, a stdlib module, works identically on every real backend. Added specifically to prove the Quality Gate Engine's own gate mechanism (`gate_sources`/`success_field`/retry-target) genuinely generalizes to a second, distinct gate category (Static Analysis, not just Testing) via configuration alone — see `ai_os_kernel.workflow_engine.delivery_pipeline`'s own docstring. |
 | `software-engineering/qa-test` | `ai_os_pack_software_engineering.agents.verification:TestAgentEntrypoint` | Matches this document's own catalog exactly (renamed from an earlier, undocumented `test` id during this same reconciliation). Deliberately makes **no LLM call at all** — pass/fail comes only from a real sandboxed exit code, narrower than this catalog's own "Automated testing and validation." |
 | `software-engineering/documentation` | `ai_os_pack_software_engineering.agents.documentation:DocumentationAgentEntrypoint` | Matches this document's own catalog exactly. Records one Build+Test result as one Markdown file — narrower than this catalog's own general "Technical documentation." |
+| `software-engineering/git-push` | `ai_os_pack_software_engineering.agents.git_push:GitPushAgentEntrypoint` | **New catalog entry, added 2026-08-02 (`P03-S04-M31-T04`)** — this pack's seventh agent, and the first to consume a Platform Service (the real Git Integration Service, `P03-S01-M24-T01`) via `platform.git.commit`/`platform.git.push`. Wired as `se.delivery_pipeline`'s new, final step. Genuinely commits and pushes Build's own file when constructed with a real `remote_url`; degrades to a real, structured no-op (`pushed: false`) when not — no real, non-hardcoded default remote exists yet, so every current real caller (the live HTTP route) is genuinely unaffected. Distinct from the already-documented `release` entry (broader: versioning, changelogs, readiness — a separate, later, `P08` agent) and `devops` (broader still) — force-fitting either would misrepresent this narrower slice, the identical reasoning `build`'s own reconciliation already established. |
 
 **Not yet real: the other 11** (`technical-planner`, `frontend-developer`, `database`, `api-designer`, `devops`, `security`, `code-reviewer`, `release`, `refactoring`, `performance`, and `project-intelligence/existing-project-analyzer`). No code, manifest entry, or prompt exists for any of them in this pack today.
 
-**All five real agents are chained into one real, declared workflow**, `se.delivery_pipeline` — see `workflows.md`'s own "Currently Implemented Subset" section for why this is a distinct real workflow, not a rename of any of that document's own 7 documented ones. `requirements-analyst` was proven independently first (its own dedicated tests), the identical "prove alone first, chain later" sequencing every other agent in this pack's history has followed, then wired in as that workflow's own first step (2026-07-30) — a raw requirement now reaches Requirements Analyst first, and Architecture designs against its real, refined output.
+**All seven real agents are chained into one real, declared workflow**, `se.delivery_pipeline` — see `workflows.md`'s own "Currently Implemented Subset" section for why this is a distinct real workflow, not a rename of any of that document's own 7 documented ones. `requirements-analyst` was proven independently first (its own dedicated tests), the identical "prove alone first, chain later" sequencing every other agent in this pack's history has followed, then wired in as that workflow's own first step (2026-07-30) — a raw requirement now reaches Requirements Analyst first, and Architecture designs against its real, refined output. `git-push` (2026-08-02) is the pipeline's new, final step, after Documentation.
 
 This section should be updated (or removed, once the gap closes) every time an agent listed above genuinely gets built, per `implementation_status.md`'s own maintenance discipline.
 
@@ -250,8 +252,8 @@ This document establishes the baseline Software Engineering Capability Pack agen
 
 ## Related Documents
 
-- [`overview.md`](overview.md) · [`workflows.md`](workflows.md) — the pack overview and the one workflow (`se.delivery_pipeline`) that chains 4 of these 5 real agents
+- [`overview.md`](overview.md) · [`workflows.md`](workflows.md) — the pack overview and the one workflow (`se.delivery_pipeline`) that chains all 7 real agents
 - [`../../05_agents/agent_specifications.md`](../../05_agents/agent_specifications.md) — contract-level I/O schemas for each catalog entry
 - [`../../03_architecture/agents/agent_communication.md`](../../03_architecture/agents/agent_communication.md) · [`../../03_architecture/agents/agent_architecture.md`](../../03_architecture/agents/agent_architecture.md) — the platform rules every agent here follows
-- [`../../03_architecture/capability_framework/capability_pack_contract.md`](../../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK growth gate that froze this catalog at 5 real agents, now lifted (`platform_sdk_v1_scope.md` step 14) since this pack is fully SDK-compliant — a 6th agent may now be added subject to the standing scope-approval process
+- [`../../03_architecture/capability_framework/capability_pack_contract.md`](../../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK growth gate that froze this catalog at 5 real agents, now lifted (`platform_sdk_v1_scope.md` step 14) since this pack is fully SDK-compliant — `lint` and `git-push` are the 6th and 7th agents added since, each subject to the standing scope-approval process
 - [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status

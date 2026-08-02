@@ -78,6 +78,26 @@
 # own demo, is constructed directly in Python, for the documented
 # reason that no real pack directory existed yet to load one from —
 # see bootstrap.py's own comment. One now does.)
+#
+# A real `git-push` step (added 2026-08-02, `P03-S04-M31-T04`) is now
+# this pipeline's new, final step, after `documentation` — the first
+# real, end-to-end exercise of the Git Integration Service
+# (`P03-S01-M24-T01`) and its ToolInvoker-reachable tools
+# (`P03-S04-M31-T04`) through a real workflow, not just a direct
+# service/adapter call. Reads `build`'s own real `workingDirectory`/
+# `filePath` (delivery_pipeline.py's own `_STEP_SOURCES`) — the
+# identical field pair `lint`/`test` already consume. **Genuinely
+# no-ops (`pushed: false`) for every current real caller**: the
+# `GitPushAgentEntrypoint` this step dispatches to is
+# zero-arg-constructible with `remote_url=None` by default (no real,
+# non-hardcoded default push destination exists), so this step changes
+# nothing about the pipeline's existing, proven behavior for the real
+# HTTP route (`ai_os_kernel.bootstrap`, unchanged — no `git_service`
+# threaded into its own `SqlAgentRegistry` construction, a real,
+# disclosed, deferred piece) or any existing test that does not
+# explicitly configure one. A caller that does configure a real
+# `remote_url` (this pack's own new end-to-end proof test) gets a real
+# commit and push, through the identical Tool dispatch path.
 
 id: se.delivery_pipeline
 name: Software Delivery Pipeline
@@ -89,10 +109,12 @@ description: >-
   Gate blocks on a genuine lint failure, Test verifies it, a second
   real Quality Gate blocks on a genuine test failure (both
   bounded-retry from Build once before giving up), Documentation
-  records it — six real agent steps, one real routing decision, plus
-  two real, blocking, retried quality gates, each genuinely consuming
-  the previous step's real, persisted output.
-version: 1.5.0
+  records it, Git Push commits and pushes it through the real Git
+  Integration Service when configured — seven real agent steps, one
+  real routing decision, plus two real, blocking, retried quality
+  gates, each genuinely consuming the previous step's real, persisted
+  output.
+version: 1.6.0
 trigger: manual
 
 inputs:
@@ -122,6 +144,7 @@ agents:
   - software-engineering/lint
   - software-engineering/qa-test
   - software-engineering/documentation
+  - software-engineering/git-push
 
 qualityGates:
   - se.build_lint_clean
@@ -186,3 +209,7 @@ steps:
     promptId: documentation.record_artifact
     promptVersion: 0.1.0
     modelAlias: coding-strong
+
+  - id: git-push
+    type: agent
+    agentId: software-engineering/git-push
