@@ -218,7 +218,11 @@ def _git_push_agent_with_real_service(
         build_pack_context(
             pack_id=_PACK_ID,
             pack_version=_PACK_VERSION,
-            permissions=["sandbox:execute"],
+            # git-push's own real, declared manifest permissions
+            # (manifest.yaml) — sandbox:execute alone is no longer
+            # enough to reach a real GitIntegrationService
+            # (P03-S01-M24-T03's own real, dedicated git:write check).
+            permissions=["sandbox:execute", "git:write"],
             sandbox=sandbox,
             git_service=git_service,
         )

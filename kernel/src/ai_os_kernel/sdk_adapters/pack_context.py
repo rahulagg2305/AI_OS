@@ -56,6 +56,7 @@ from ai_os_kernel.sdk_adapters.tool_invoker_adapter import ToolInvokerAdapter
 
 _LLM_PERMISSION = "llm:invoke"
 _SANDBOX_PERMISSION = "sandbox:execute"
+_GIT_PERMISSION = "git:write"
 
 
 def build_pack_context(
@@ -80,15 +81,44 @@ def build_pack_context(
 
     ``git_service`` (``P03-S04-M31-T04``) is forwarded to
     :class:`~ai_os_kernel.sdk_adapters.tool_invoker_adapter.
-    ToolInvokerAdapter` unchanged when ``sandbox:execute`` is granted —
-    optional, defaulting to ``None`` (no real Git tool ids reachable),
-    the identical "absent means unaffected" shape every other optional
-    capability in this codebase already establishes. Deliberately not
-    gated by its own separate permission check here: the closed
-    manifest vocabulary's ``git:write`` is a real, disclosed, deferred
-    enforcement gap (see ``git_integration.md``'s own Implementation
-    Status) — today, exactly like ``platform.sandbox.run_command``,
-    reachability is gated only by ``sandbox:execute``.
+    ToolInvokerAdapter` only when the entrypoint's own declared
+    ``permissions`` include ``git:write`` **and** ``sandbox:execute``
+    (``P03-S01-M24-T03``, closing the disclosed gap the previous version
+    of this docstring named) — optional, defaulting to ``None`` (no real
+    Git tool ids reachable) otherwise, the identical "absent means
+    unaffected" shape every other optional capability in this codebase
+    already establishes. This is deliberately the *declared-permission*
+    term of ADR-0023's monotonic-narrowing chain, not the full
+    principal ∩ workflow ∩ agent ∩ tool intersection
+    (:mod:`~ai_os_kernel.security_manager.narrowing`) — the same,
+    already-disclosed partial scope :func:`~ai_os_kernel.
+    capability_manager.permission_grant.over_granted_permissions` (the
+    pack-grant term) already carries: no ``SecurityContext``/``Principal``
+    reaches this call site (:class:`~ai_os_kernel.sdk_adapters.
+    tool_invoker_adapter.ToolInvokerAdapter`'s own docstring: "v1.0.0's
+    ``ToolInvoker`` Protocol carries no trace or security context
+    parameter at all"), so the principal term cannot be computed here —
+    widening that Protocol is a distinct, later SDK step, not this one.
+
+    **Deliberately not a `ValueError` when `git:write` is declared but
+    `git_service` is absent — unlike the `llm`/`sandbox` checks above.**
+    Those two raise because a real caller declaring `llm:invoke`/
+    `sandbox:execute` always means it right now. `git:write` is
+    different: the Git Push Agent's own manifest entry declares it
+    unconditionally (a static fact about what the agent *can* do), while
+    whether a real `GitIntegrationService` backs it is an environment-
+    dependent fact (`AIOS_GIT_REMOTE_URL` — `P03-S01-M24-T02`) that is
+    legitimately absent in every environment today. Raising here would
+    make ordinary, current-day resolution of the Git Push Agent fail
+    everywhere `git_service` is not yet configured — exactly the
+    regression this permission check must not cause. `git_service=None`
+    already means "no real Git tool ids reachable," the identical safe
+    default `ToolInvokerAdapter`/`GitPushAgentEntrypoint` already handle
+    (the latter raises its own clear `GitPushInstructionError` if a
+    caller configured a real `remote_url` but the injected `ToolInvoker`
+    still exposes no Git tools — the genuine misconfiguration case is
+    still caught, just one layer up, where the caller's real intent
+    (a configured `remote_url`) is actually known).
     """
     llm: KernelLLMGatewayProtocol | LLMGatewayAdapter | None = None
     prompts: PromptEngine | PromptRegistryAdapter | None = None
@@ -110,7 +140,10 @@ def build_pack_context(
                 "build_pack_context() — a granted permission this builder cannot actually "
                 "back is a configuration error, not a silent no-op"
             )
-        tools = ToolInvokerAdapter(sandbox, git_service=git_service)
+        tools = ToolInvokerAdapter(
+            sandbox,
+            git_service=git_service if _GIT_PERMISSION in permissions else None,
+        )
 
     return PackContext(
         pack_id=pack_id,
