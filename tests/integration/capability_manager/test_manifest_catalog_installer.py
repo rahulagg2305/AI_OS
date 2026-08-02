@@ -45,6 +45,7 @@ from ai_os_kernel.persistence.engine import build_engine
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureProposalOutput
 from ai_os_pack_software_engineering.agents.build import BuildAgentOutput
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentOutput
+from ai_os_pack_software_engineering.agents.git_push import GitPushAgentOutput
 from ai_os_pack_software_engineering.agents.lint import LintAgentOutput
 from ai_os_pack_software_engineering.agents.requirements_analyst import (
     RequirementsAnalysisOutput,
@@ -71,6 +72,7 @@ _EXPECTED_PERMISSIONS = {
     "lint": ["sandbox:execute"],
     "qa-test": ["sandbox:execute"],
     "documentation": ["llm:invoke", "sandbox:execute"],
+    "git-push": ["sandbox:execute", "git:write"],
 }
 _EXPECTED_OUTPUT_MODELS: dict[str, type[BaseModel]] = {
     "requirements-analyst": RequirementsAnalysisOutput,
@@ -79,6 +81,7 @@ _EXPECTED_OUTPUT_MODELS: dict[str, type[BaseModel]] = {
     "lint": LintAgentOutput,
     "qa-test": TestAgentOutput,
     "documentation": DocumentationAgentOutput,
+    "git-push": GitPushAgentOutput,
 }
 
 
@@ -147,8 +150,8 @@ def test_registering_the_real_pack_derives_real_agent_prompt_and_tool_rows(
         finally:
             await engine.dispose()
 
-        # --- agents: real row for each of the 6 real, declared agents ---
-        assert len(agent_rows) == 6
+        # --- agents: real row for each of the 7 real, declared agents ---
+        assert len(agent_rows) == 7
         by_agent_id = {row["agent_id"]: row for row in agent_rows}
         for manifest_agent in manifest["agents"]:
             slug = manifest_agent["id"]
