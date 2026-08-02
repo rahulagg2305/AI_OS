@@ -6,11 +6,11 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-08-02 from 227 Task tickets.
+**Generated:** 2026-08-02 from 228 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 58%** (131.5 of 227 Task-equivalents complete)
+**Overall: 58%** (132.5 of 228 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -31,7 +31,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S01 Sandboxed Tool Execution | 6 | 5 | 0 | 1 | 83% |
 | P03 (C) | S02 Software Engineering Pack Agents | 8 | 6 | 0 | 2 | 75% |
 | P03 (C) | S03 Software Engineering Pack Workflows | 3 | 1 | 0 | 2 | 33% |
-| P03 (C) | S04 Pack Tools and Declared Quality Gates | 3 | 1 | 0 | 2 | 33% |
+| P03 (C) | S04 Pack Tools and Declared Quality Gates | 4 | 2 | 0 | 2 | 50% |
 | P03 (C) | S05 Security and Human Approval | 6 | 6 | 0 | 0 | 100% |
 | P03 (C) | S06 Threat Controls | 2 | 1 | 0 | 1 | 50% |
 | P04 (D) | S01 Evaluation Engine | 8 | 3 | 0 | 5 | 38% |
@@ -58,7 +58,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 46 | 42 | 91% |
 | P02 (Stage B) - Minimum Viable Kernel | 95 | 61 | 65% |
-| P03 (Stage C) - First Real Capability Pack | 28 | 20 | 71% |
+| P03 (Stage C) - First Real Capability Pack | 29 | 21 | 72% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 0 | 0% |

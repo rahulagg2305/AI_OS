@@ -1,6 +1,15 @@
 """The ``ToolInvoker`` Protocol and the ``platform.sandbox.run_command``
 tool concept (``platform_sdk.md`` §5.6).
 
+**Updated 2026-08-02 (`P03-S01-M24-T02`): three more platform-provided
+tool ids exist now** — :data:`PLATFORM_GIT_COMMIT`,
+:data:`PLATFORM_GIT_CREATE_BRANCH`, :data:`PLATFORM_GIT_PUSH` —
+following the identical "well-known platform tool id, moves its real
+parameters into ``inputs``" shape :data:`PLATFORM_SANDBOX_RUN_COMMAND`
+established below. The real Kernel-side dispatch for all four now
+lives in one adapter, :mod:`ai_os_kernel.sdk_adapters.
+tool_invoker_adapter`.
+
 **This is a from-scratch design, not a narrowing or extension** — per
 §5.6's dated *v1.0.0 Reconciliation Decision* block (recorded
 2026-07-29, ``platform_sdk_v1_scope.md`` step 2a). Nothing in the
@@ -138,6 +147,122 @@ PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR = ToolDescriptor(
 """The one real, concrete :class:`~ai_os_sdk.models.tool.ToolDescriptor`
 v1.0.0 defines. A conforming :class:`ToolInvoker` implementation's
 :func:`available_tools` is expected to include this entry."""
+
+PLATFORM_GIT_COMMIT = "platform.git.commit"
+"""A platform-provided tool wrapping the real Git Integration Service's
+``commit`` operation (``P03-S01-M24-T01``) — the same "well-known
+platform tool id, not a pack-declared one" shape
+:data:`PLATFORM_SANDBOX_RUN_COMMAND` already established, for the same
+reason: no pack declares this in its own manifest, and the real
+implementation needs Kernel-internal infrastructure (a database-backed
+audit log) no pack-facing ``PackContext`` exposes."""
+
+PLATFORM_GIT_CREATE_BRANCH = "platform.git.create_branch"
+"""Wraps the real Git Integration Service's ``create_branch``
+operation. See :data:`PLATFORM_GIT_COMMIT`'s own docstring."""
+
+PLATFORM_GIT_PUSH = "platform.git.push"
+"""Wraps the real Git Integration Service's ``push`` operation. See
+:data:`PLATFORM_GIT_COMMIT`'s own docstring.
+
+**Deliberately no credential support in this tool's own input schema
+(``P03-S01-M24-T02``'s own disclosed scope).** The real
+``GitIntegrationService.push`` accepts an optional ``secret://``
+credential reference, but resolving one requires a real
+:class:`~ai_os_kernel.security_manager.models.SecurityContext` this
+call site has none of — :class:`ToolInvoker.invoke`'s own documented
+signature carries no principal/security context at all (the identical,
+already-disclosed gap :data:`PLATFORM_PYTHON_INTERPRETER`'s own
+docstring names for trace context). Fabricating a fake
+``SecurityContext`` just to thread one through would be worse than not
+supporting it: this tool pushes only to remotes that need no
+credential (an internal/already-authenticated remote), a real,
+disclosed, deferred scope decision, not a silent omission."""
+
+_GIT_ACTOR_PROPERTIES: dict[str, Any] = {
+    "workspace": {"type": "string"},
+    "actor_id": {"type": "string"},
+    "actor_type": {"type": "string"},
+    "trace_id": {"type": ["string", "null"]},
+}
+"""The fields every real Git Integration Service operation needs for
+its own audit attribution (``git_integration.md`` §7) — factored out
+once so the three schemas below declare them identically rather than
+risking drift."""
+
+_GIT_COMMIT_INPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {**_GIT_ACTOR_PROPERTIES, "message": {"type": "string"}},
+    "required": ["workspace", "message", "actor_id", "actor_type"],
+    "additionalProperties": False,
+}
+
+_GIT_COMMIT_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"commit_sha": {"type": "string"}, "branch": {"type": "string"}},
+    "required": ["commit_sha", "branch"],
+    "additionalProperties": False,
+}
+
+PLATFORM_GIT_COMMIT_DESCRIPTOR = ToolDescriptor(
+    tool_id=PLATFORM_GIT_COMMIT,
+    trust_tier=TrustTier.TIER1_SANDBOXED,
+    input_schema=_GIT_COMMIT_INPUT_SCHEMA,
+    output_schema=_GIT_COMMIT_OUTPUT_SCHEMA,
+)
+"""``tier1_sandboxed`` because the real ``git`` subprocess this
+operation ultimately runs goes through the same
+:class:`~ai_os_kernel.sandbox.executor.SandboxExecutor`
+:data:`PLATFORM_SANDBOX_RUN_COMMAND` does — the identical execution
+boundary, not a weaker one, even though additional Kernel-side logic
+(audit, credential resolution) wraps it."""
+
+_GIT_CREATE_BRANCH_INPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {**_GIT_ACTOR_PROPERTIES, "branch_name": {"type": "string"}},
+    "required": ["workspace", "branch_name", "actor_id", "actor_type"],
+    "additionalProperties": False,
+}
+
+_GIT_CREATE_BRANCH_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"branch": {"type": "string"}, "created": {"type": "boolean"}},
+    "required": ["branch", "created"],
+    "additionalProperties": False,
+}
+
+PLATFORM_GIT_CREATE_BRANCH_DESCRIPTOR = ToolDescriptor(
+    tool_id=PLATFORM_GIT_CREATE_BRANCH,
+    trust_tier=TrustTier.TIER1_SANDBOXED,
+    input_schema=_GIT_CREATE_BRANCH_INPUT_SCHEMA,
+    output_schema=_GIT_CREATE_BRANCH_OUTPUT_SCHEMA,
+)
+
+_GIT_PUSH_INPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        **_GIT_ACTOR_PROPERTIES,
+        "branch": {"type": "string"},
+        "remote_url": {"type": "string"},
+        "remote_name": {"type": ["string", "null"]},
+    },
+    "required": ["workspace", "branch", "remote_url", "actor_id", "actor_type"],
+    "additionalProperties": False,
+}
+
+_GIT_PUSH_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"remote": {"type": "string"}, "branch": {"type": "string"}},
+    "required": ["remote", "branch"],
+    "additionalProperties": False,
+}
+
+PLATFORM_GIT_PUSH_DESCRIPTOR = ToolDescriptor(
+    tool_id=PLATFORM_GIT_PUSH,
+    trust_tier=TrustTier.TIER1_SANDBOXED,
+    input_schema=_GIT_PUSH_INPUT_SCHEMA,
+    output_schema=_GIT_PUSH_OUTPUT_SCHEMA,
+)
 
 
 @runtime_checkable

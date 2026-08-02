@@ -65,6 +65,12 @@ from ai_os_sdk.contracts.llm_gateway import LLMGateway
 from ai_os_sdk.contracts.prompt_registry import PromptRegistry
 from ai_os_sdk.contracts.tool import Tool, TrustTier
 from ai_os_sdk.contracts.tool_invoker import (
+    PLATFORM_GIT_COMMIT,
+    PLATFORM_GIT_COMMIT_DESCRIPTOR,
+    PLATFORM_GIT_CREATE_BRANCH,
+    PLATFORM_GIT_CREATE_BRANCH_DESCRIPTOR,
+    PLATFORM_GIT_PUSH,
+    PLATFORM_GIT_PUSH_DESCRIPTOR,
     PLATFORM_PYTHON_INTERPRETER,
     PLATFORM_SANDBOX_RUN_COMMAND,
     PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR,
@@ -72,6 +78,12 @@ from ai_os_sdk.contracts.tool_invoker import (
 )
 
 __all__ = [
+    "PLATFORM_GIT_COMMIT",
+    "PLATFORM_GIT_COMMIT_DESCRIPTOR",
+    "PLATFORM_GIT_CREATE_BRANCH",
+    "PLATFORM_GIT_CREATE_BRANCH_DESCRIPTOR",
+    "PLATFORM_GIT_PUSH",
+    "PLATFORM_GIT_PUSH_DESCRIPTOR",
     "PLATFORM_PYTHON_INTERPRETER",
     "PLATFORM_SANDBOX_RUN_COMMAND",
     "PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR",

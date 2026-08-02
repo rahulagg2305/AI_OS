@@ -42,7 +42,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M28 | Manifest Schema (JSON Schema) | P01 | 2 | 1 | 50% |
 | M29 | SE Pack - Agents | P03+P08 | 15 | 6 | 40% |
 | M30 | SE Pack - Workflows | P03+P08 | 5 | 1 | 20% |
-| M31 | SE Pack - Tools & Quality Gates | P03 | 3 | 1 | 33% |
+| M31 | SE Pack - Tools & Quality Gates | P03 | 4 | 2 | 50% |
 | M32 | Project Intelligence Pack | P05 | 6 | 0 | 0% |
 | M33 | Voice (Jarvis) Pack | P06 | 1 | 0 | 0% |
 | M34 | Benchmarking Pack | P04 | 4 | 0 | 0% |

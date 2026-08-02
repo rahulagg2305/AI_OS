@@ -60,6 +60,11 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from ai_os_kernel.git_integration.errors import (
+    GitOperationFailedError,
+    ProtectedBranchPushRefusedError,
+)
+from ai_os_kernel.git_integration.service import GitIntegrationService
 from ai_os_kernel.observability.trace import generate_trace_id
 from ai_os_kernel.sandbox.executor import SandboxExecutor
 from ai_os_kernel.sandbox.models import SandboxResult
@@ -73,6 +78,12 @@ from ai_os_kernel.workflow_engine.registry import ToolRegistry
 from ai_os_kernel.workflow_engine.tool import SandboxBackedTool
 from ai_os_kernel.workflow_engine.tool import TrustTier as KernelTrustTier
 from ai_os_sdk.contracts.tool_invoker import (
+    PLATFORM_GIT_COMMIT,
+    PLATFORM_GIT_COMMIT_DESCRIPTOR,
+    PLATFORM_GIT_CREATE_BRANCH,
+    PLATFORM_GIT_CREATE_BRANCH_DESCRIPTOR,
+    PLATFORM_GIT_PUSH,
+    PLATFORM_GIT_PUSH_DESCRIPTOR,
     PLATFORM_PYTHON_INTERPRETER,
     PLATFORM_SANDBOX_RUN_COMMAND,
     PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR,
@@ -80,6 +91,8 @@ from ai_os_sdk.contracts.tool_invoker import (
 from ai_os_sdk.errors import PermanentError, TransientError
 from ai_os_sdk.models.common import TraceContext
 from ai_os_sdk.models.tool import ToolDescriptor, ToolResult, ToolStatus
+
+_GIT_TOOL_IDS = frozenset({PLATFORM_GIT_COMMIT, PLATFORM_GIT_CREATE_BRANCH, PLATFORM_GIT_PUSH})
 
 
 class UnknownToolError(ValueError):
@@ -216,6 +229,15 @@ class ToolInvokerAdapter:
     ``tool_id`` other than :data:`PLATFORM_SANDBOX_RUN_COMMAND` still
     raises :class:`UnknownToolError`, byte-for-byte the prior behaviour.
 
+    **``git_service`` is optional too, the identical shape
+    (``P03-S01-M24-T02``).** With no real
+    :class:`~ai_os_kernel.git_integration.service.GitIntegrationService`
+    injected, :data:`~ai_os_sdk.contracts.tool_invoker.
+    PLATFORM_GIT_COMMIT`/:data:`PLATFORM_GIT_CREATE_BRANCH`/
+    :data:`PLATFORM_GIT_PUSH` fall through to the registry path exactly
+    like any other unresolved ``tool_id`` — this adapter never
+    fabricates Git behaviour it was not given a real service for.
+
     **Timeout precedence — a deliberate, tested decision, recorded here
     because §5.6's own decision block left it explicitly open.**
     ``invoke()``'s own ``timeout_seconds`` and
@@ -245,22 +267,42 @@ class ToolInvokerAdapter:
     not a silent no-op dressed up as enforcement.
     """
 
-    def __init__(self, sandbox: SandboxExecutor, *, registry: ToolRegistry | None = None) -> None:
+    def __init__(
+        self,
+        sandbox: SandboxExecutor,
+        *,
+        registry: ToolRegistry | None = None,
+        git_service: GitIntegrationService | None = None,
+    ) -> None:
         self._sandbox = sandbox
         self._registry = registry
+        self._git_service = git_service
 
     def available_tools(self) -> tuple[ToolDescriptor, ...]:
-        """Unchanged by this step: :class:`~ai_os_kernel.workflow_engine.
-        registry.ToolRegistry` exposes only ``resolve_tool(tool_id) ->
-        Tool`` — a single-id lookup, with no "list every currently
-        resolvable id" capability to draw from. Extending this to
-        include real, pack-declared tools needs that capability built
-        first (a real, disclosed gap, not an oversight)."""
-        return (PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR,)
+        """Unchanged by this step for the registry path:
+        :class:`~ai_os_kernel.workflow_engine.registry.ToolRegistry`
+        exposes only ``resolve_tool(tool_id) -> Tool`` — a single-id
+        lookup, with no "list every currently resolvable id" capability
+        to draw from. Extending this to include real, pack-declared
+        tools needs that capability built first (a real, disclosed gap,
+        not an oversight). The three Git tool descriptors are included
+        only when a real ``git_service`` was actually injected — an
+        honest answer, not a standing claim this adapter cannot back."""
+        descriptors: tuple[ToolDescriptor, ...] = (PLATFORM_SANDBOX_RUN_COMMAND_DESCRIPTOR,)
+        if self._git_service is not None:
+            descriptors += (
+                PLATFORM_GIT_COMMIT_DESCRIPTOR,
+                PLATFORM_GIT_CREATE_BRANCH_DESCRIPTOR,
+                PLATFORM_GIT_PUSH_DESCRIPTOR,
+            )
+        return descriptors
 
     async def invoke(
         self, tool_id: str, inputs: dict[str, Any], *, timeout_seconds: float | None = None
     ) -> ToolResult:
+        git_service = self._git_service
+        if tool_id in _GIT_TOOL_IDS and git_service is not None:
+            return await self._invoke_git_tool(tool_id, inputs, git_service)
         if tool_id != PLATFORM_SANDBOX_RUN_COMMAND:
             return await self._invoke_registered_tool(tool_id, inputs)
 
@@ -295,6 +337,99 @@ class ToolInvokerAdapter:
             stdin=stdin_str.encode() if stdin_str is not None else None,
         )
         return _sandbox_result_to_tool_result(result)
+
+    async def _invoke_git_tool(
+        self, tool_id: str, inputs: dict[str, Any], service: GitIntegrationService
+    ) -> ToolResult:
+        """Dispatches one of the three real Git tool ids to ``service``
+        (already narrowed non-``None`` by :meth:`invoke`) — the full
+        stack this Tool exists to prove: an agent's
+        ``context.tools.invoke(tool_id, ...)`` call
+        reaches this adapter, which reaches the real
+        :class:`~ai_os_kernel.git_integration.service.
+        GitIntegrationService`, which reaches the real
+        :class:`~ai_os_kernel.sandbox.executor.SandboxExecutor`, which
+        runs a real ``git`` subprocess — never a shortcut that bypasses
+        the service's own policy/audit logic.
+
+        **Resolution-time validation raises, matching the sandbox shim
+        path exactly** — malformed ``inputs`` is a call that could never
+        have been dispatched, not an execution-time failure."""
+        descriptor = {
+            PLATFORM_GIT_COMMIT: PLATFORM_GIT_COMMIT_DESCRIPTOR,
+            PLATFORM_GIT_CREATE_BRANCH: PLATFORM_GIT_CREATE_BRANCH_DESCRIPTOR,
+            PLATFORM_GIT_PUSH: PLATFORM_GIT_PUSH_DESCRIPTOR,
+        }[tool_id]
+        errors = sorted(
+            Draft202012Validator(descriptor.input_schema).iter_errors(inputs),
+            key=lambda e: list(map(str, e.path)),
+        )
+        if errors:
+            lines = [f"  - {'/'.join(map(str, e.path)) or '<root>'}: {e.message}" for e in errors]
+            raise ValueError(
+                f"inputs for tool_id {tool_id!r} do not satisfy its declared input_schema:\n"
+                + "\n".join(lines)
+            )
+
+        started = time.monotonic()
+        try:
+            if tool_id == PLATFORM_GIT_COMMIT:
+                commit_result = await service.commit(
+                    workspace=Path(inputs["workspace"]),
+                    message=inputs["message"],
+                    actor_id=inputs["actor_id"],
+                    actor_type=inputs["actor_type"],
+                    trace_id=inputs.get("trace_id"),
+                )
+                outputs: dict[str, Any] = {
+                    "commit_sha": commit_result.commit_sha,
+                    "branch": commit_result.branch,
+                }
+            elif tool_id == PLATFORM_GIT_CREATE_BRANCH:
+                branch_result = await service.create_branch(
+                    workspace=Path(inputs["workspace"]),
+                    branch_name=inputs["branch_name"],
+                    actor_id=inputs["actor_id"],
+                    actor_type=inputs["actor_type"],
+                    trace_id=inputs.get("trace_id"),
+                )
+                outputs = {"branch": branch_result.branch, "created": branch_result.created}
+            else:
+                push_kwargs: dict[str, Any] = {
+                    "workspace": Path(inputs["workspace"]),
+                    "branch": inputs["branch"],
+                    "remote_url": inputs["remote_url"],
+                    "actor_id": inputs["actor_id"],
+                    "actor_type": inputs["actor_type"],
+                    "trace_id": inputs.get("trace_id"),
+                }
+                remote_name = inputs.get("remote_name")
+                if remote_name is not None:
+                    push_kwargs["remote_name"] = remote_name
+                push_result = await service.push(**push_kwargs)
+                outputs = {"remote": push_result.remote, "branch": push_result.branch}
+        except ProtectedBranchPushRefusedError as exc:
+            return _failure_tool_result(
+                PermanentError("git.protected_branch_refused", str(exc)),
+                duration_ms=round((time.monotonic() - started) * 1000),
+            )
+        except GitOperationFailedError as exc:
+            return _failure_tool_result(
+                PermanentError("git.operation_failed", str(exc)),
+                duration_ms=round((time.monotonic() - started) * 1000),
+            )
+
+        return ToolResult(
+            status=ToolStatus.SUCCESS,
+            outputs=outputs,
+            error=None,
+            exit_code=None,
+            stdout="",
+            stderr="",
+            timed_out=False,
+            truncated=False,
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
 
     async def _invoke_registered_tool(self, tool_id: str, inputs: dict[str, Any]) -> ToolResult:
         """Resolves ``tool_id`` through the real, injected
