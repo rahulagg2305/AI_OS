@@ -80,7 +80,7 @@ from tests.integration._postgres_fixture import postgres_container
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 SCHEMA_PATH = "platform_sdk/schemas/manifest.schema.json"
-_SIGNING_KEY = "approvals-route-test-signing-key-at-least-32-bytes"
+_SIGNING_KEY = "approvals-route-test-signing-key-at-least-32-bytes"  # gitleaks:allow
 _PACK_ID = "software-engineering"
 _PACK_VERSION = "0.1.0"
 _APPROVE_GIT_PUSH_STEP_ID = "approve-git-push"
