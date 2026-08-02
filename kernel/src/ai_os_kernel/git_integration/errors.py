@@ -27,3 +27,14 @@ class ProtectedBranchPushRefusedError(GitIntegrationError):
     pass with a different role; it is a structural refusal that does
     not depend on who is asking.
     """
+
+
+class GitIntegrationConfigError(GitIntegrationError):
+    """``AIOS_GIT_REMOTE_URL`` is set but the rest of :class:`~ai_os_kernel.
+    git_integration.settings.GitIntegrationSettings` cannot back a real
+    :class:`~ai_os_kernel.git_integration.service.GitIntegrationService`
+    — a missing author identity, or a missing/empty
+    ``protected_branches``. Raised clearly at startup rather than
+    silently defaulting ``protected_branches`` to an empty set (a real,
+    disclosed audit finding: an empty protected-branch set is not a
+    safe production default — R-001)."""

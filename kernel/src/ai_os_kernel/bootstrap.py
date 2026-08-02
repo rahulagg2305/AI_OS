@@ -359,6 +359,7 @@ from ai_os_kernel.capability_manager.repository import (
 from ai_os_kernel.configuration_manager import BootstrapEnv, ConfigurationManager, PlatformConfig
 from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextManager
 from ai_os_kernel.context_manager.resolvers import WorkflowStateResolver
+from ai_os_kernel.git_integration.default_service import build_git_integration_service_from_env
 from ai_os_kernel.health import ComponentStatus, GracefulShutdownCoordinator, HealthService
 from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
     PROVIDER_NAME,
@@ -396,6 +397,7 @@ from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_ro
 from ai_os_kernel.routes.health import router as health_router
 from ai_os_kernel.routes.packs import router as packs_router
 from ai_os_kernel.routes.workflows import router as workflows_router
+from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 from ai_os_kernel.security_manager.token_verifier import (
     JWTBearerTokenVerifier,
@@ -985,6 +987,22 @@ async def _build_se_delivery_pipeline_registry(engine: AsyncEngine) -> AgentRegi
     Takes the already-built ``engine`` rather than constructing its
     own, the same one-engine-per-process reasoning every other
     engine-dependent composition in this file already follows.
+
+    **``git_service`` (P03-S01-M24-T02) is built from real ``AIOS_GIT_*``
+    env vars, unguarded** — unlike ``llm_gateway`` above, a *partially*
+    configured ``AIOS_GIT_REMOTE_URL`` (missing author identity or
+    protected branches) is a genuine operator misconfiguration, not an
+    ordinary "no credential in this environment yet" state, so it fails
+    startup loudly (:class:`~ai_os_kernel.git_integration.errors.
+    GitIntegrationConfigError`) rather than degrading silently — the
+    identical "fail clearly at startup rather than silently proceeding"
+    principle :class:`~ai_os_kernel.persistence.settings.DatabaseSettings`
+    already establishes for a required-when-present value.
+    :func:`~ai_os_kernel.git_integration.default_service.
+    build_git_integration_service_from_env` itself returns ``None`` — the
+    safe, existing no-op every current caller already relies on — when
+    ``AIOS_GIT_REMOTE_URL`` is absent entirely, so a Kernel with no Git
+    configuration at all still starts exactly as before this step.
     """
     llm_gateway: LLMGateway | None = None
     try:
@@ -1012,7 +1030,18 @@ async def _build_se_delivery_pipeline_registry(engine: AsyncEngine) -> AgentRegi
             "kernel.bootstrap.se_delivery_pipeline_llm_gateway_unavailable", error=str(exc)
         )
 
-    return SqlAgentRegistry(engine, llm_gateway=llm_gateway, prompt_engine=SqlPromptCatalog(engine))
+    sandbox = build_default_sandbox_executor()
+    git_service = build_git_integration_service_from_env(
+        sandbox=sandbox, audit_log=SqlAuditLogWriter(engine)
+    )
+
+    return SqlAgentRegistry(
+        engine,
+        llm_gateway=llm_gateway,
+        prompt_engine=SqlPromptCatalog(engine),
+        sandbox=sandbox,
+        git_service=git_service,
+    )
 
 
 async def _build_token_verifier() -> JWTBearerTokenVerifier | None:

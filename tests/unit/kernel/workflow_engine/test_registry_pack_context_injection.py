@@ -44,6 +44,7 @@ class TestBindPackContextIfReceiver:
             llm_gateway=None,
             prompt_engine=None,
             sandbox=None,
+            git_service=None,
         )
 
         assert not hasattr(agent, "bound_context")
@@ -62,6 +63,7 @@ class TestBindPackContextIfReceiver:
             llm_gateway=None,
             prompt_engine=None,
             sandbox=sandbox,
+            git_service=None,
         )
 
         assert receiver.bound_context is not None
@@ -85,6 +87,7 @@ class TestBindPackContextIfReceiver:
             llm_gateway=None,
             prompt_engine=None,
             sandbox=LocalSubprocessSandbox(),
+            git_service=None,
         )
 
         assert receiver.bound_context is not None
@@ -104,6 +107,7 @@ class TestBindPackContextIfReceiver:
                 llm_gateway=None,
                 prompt_engine=None,
                 sandbox=None,
+                git_service=None,
             )
         # A structural, permanent cause — never retriable (the
         # retriable-split step, 2026-07-31): this registry's own
@@ -127,5 +131,6 @@ class TestBindPackContextIfReceiver:
                 llm_gateway=None,
                 prompt_engine=None,
                 sandbox=None,
+                git_service=None,
             )
         assert exc_info.value.retriable is False

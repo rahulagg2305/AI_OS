@@ -116,6 +116,7 @@ from typing import Any, Protocol
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_os_kernel.git_integration.service import GitIntegrationService
 from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
 from ai_os_kernel.persistence.catalog_schema import agents as agents_table
 from ai_os_kernel.persistence.catalog_schema import packs as packs_table
@@ -216,6 +217,7 @@ def _bind_pack_context_if_receiver(
     llm_gateway: KernelLLMGatewayProtocol | None,
     prompt_engine: PromptEngine | None,
     sandbox: SandboxExecutor | None,
+    git_service: GitIntegrationService | None,
 ) -> None:
     """Shared by :class:`SqlAgentRegistry`/:class:`SqlToolRegistry`: if
     ``loaded`` implements
@@ -263,6 +265,7 @@ def _bind_pack_context_if_receiver(
             llm_gateway=llm_gateway,
             prompt_engine=prompt_engine,
             sandbox=sandbox,
+            git_service=git_service,
         )
     except ValueError as exc:
         # A structural, permanent cause (retriable=False, the default)
@@ -345,6 +348,7 @@ class SqlAgentRegistry:
         llm_gateway: KernelLLMGatewayProtocol | None = None,
         prompt_engine: PromptEngine | None = None,
         sandbox: SandboxExecutor | None = None,
+        git_service: GitIntegrationService | None = None,
     ) -> None:
         self._engine = engine
         self._loader = loader or EntrypointLoader()
@@ -359,6 +363,18 @@ class SqlAgentRegistry:
         self._llm_gateway = llm_gateway
         self._prompt_engine = prompt_engine
         self._sandbox = sandbox or build_default_sandbox_executor()
+        # Unlike llm_gateway/prompt_engine/sandbox, git_service has no
+        # real-default builder called here — building one needs a real
+        # AuditLogWriter (a database engine), which this constructor
+        # already has, but also an env-sourced config decision
+        # (ai_os_kernel.git_integration.default_service.
+        # build_git_integration_service_from_env) that belongs at the
+        # composition root (bootstrap.py), not silently re-decided here
+        # on every registry construction (including every test's own).
+        # Left None — the existing, safe "no real git tool backing"
+        # default every current caller already relies on — until a real
+        # caller supplies one.
+        self._git_service = git_service
 
     async def resolve_agent(self, agent_id: str) -> Agent:
         try:
@@ -435,6 +451,7 @@ class SqlAgentRegistry:
             llm_gateway=self._llm_gateway,
             prompt_engine=self._prompt_engine,
             sandbox=self._sandbox,
+            git_service=self._git_service,
         )
 
         return loaded
@@ -545,6 +562,11 @@ class SqlToolRegistry:
             llm_gateway=self._llm_gateway,
             prompt_engine=self._prompt_engine,
             sandbox=self._sandbox,
+            # No real Git-writing Tool exists yet (git_integration.md's
+            # own "no Tool wrapper yet" disclosed scope) — SqlToolRegistry
+            # has no git_service of its own to thread through, unlike
+            # SqlAgentRegistry.
+            git_service=None,
         )
 
         return loaded

@@ -95,6 +95,27 @@ P07-S01-M40-T01/Kubernetes-Helm) genuinely wires a real, non-empty
 `push_policy` — an empty `protected_branches` set (this step's own
 proof test) is deliberately not a safe production default.
 
+**Update 2026-08-02, same day (`P03-S01-M24-T02`): production
+reachability is no longer narrow by omission — `bootstrap.py`'s real
+`SqlAgentRegistry` composition now *is* threaded a real `git_service`,
+built from `AIOS_GIT_*` env vars
+(`ai_os_kernel.git_integration.default_service.
+build_git_integration_service_from_env`). This closes the previous
+update's own named gap, and does so while genuinely enforcing the
+"non-empty `push_policy`" requirement that update itself stated: the
+builder raises `GitIntegrationConfigError` — refusing to start the
+composition at all — if `AIOS_GIT_REMOTE_URL` is configured but
+`AIOS_GIT_PROTECTED_BRANCHES` is missing or resolves to zero real
+branch names, rather than silently defaulting to an empty set. In every
+environment today `AIOS_GIT_REMOTE_URL` remains unset, so the live HTTP
+route still resolves to the existing, safe no-op — this closes *how*
+reachability would be granted, not that it now is. **The rule stays
+open and permanent**: this is still only the "no `push --force`/direct
+push to protected branches" structural half; the moment a real
+deployment sets `AIOS_GIT_REMOTE_URL` for a genuine push destination, a
+real `human_approval` step in whatever workflow drives that push is
+still the operator's own responsibility to wire, exactly as before.
+
 ### R-002 — Docker exception-catching inconsistency *(closed)*
 
 `_postgres_fixture.py` caught only `docker.errors.DockerException`, while

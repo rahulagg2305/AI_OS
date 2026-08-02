@@ -24,20 +24,28 @@ agent preserves the existing, proven ``se.delivery_pipeline`` behaviour
 unchanged for every current real caller.** ``remote_url`` is this
 agent's own constructor parameter (zero-arg-constructible like every
 other entrypoint in this pack — ``EntrypointLoader`` always calls
-``cls()`` with no arguments in production), with no real, non-hardcoded
-default value to fall back to (a repository's real push destination
-cannot be guessed) — so its only real default is "not configured,"
-exactly the same "absent means unaffected" shape ``quality_gate``/
-``decision``/``parallel``/``sub_workflow``/``human_approval`` step
-types already established at the Workflow Engine level, applied here at
-the agent level instead. A caller that wants this agent to genuinely
-push constructs it with a real ``remote_url`` and binds a
+``cls()`` with no arguments in production). When not given explicitly,
+it reads ``AIOS_GIT_REMOTE_URL`` directly via ``os.environ`` as its bare
+default — the identical "one env var, read once at construction, absent
+means the existing safe default" shape
+``ai_os_kernel.sandbox.default_executor.build_default_sandbox_executor``
+already establishes for the same "zero-arg constructed, needs a real
+deployment value" problem. Read via plain ``os.environ``, never a
+``from ai_os_kernel...`` import: this pack has zero forbidden-import
+violations today (``pack_contract_suite`` check 7's own "zero
+violations, zero waiver file" state), and a Kernel-internal Settings
+import here would reintroduce exactly the direct-Kernel-import coupling
+that migration removed. A caller that wants this agent to genuinely
+push either passes a real ``remote_url`` explicitly or sets
+``AIOS_GIT_REMOTE_URL`` in its environment, and binds a
 :class:`~ai_os_kernel.git_integration.service.GitIntegrationService`
 -backed ``PackContext`` — exactly what this pack's own end-to-end test
-does; production wiring (a real Configuration-Manager-sourced remote
-URL/push policy/author identity) is real, disclosed, deferred work — no
-such config source exists yet (see ``git_integration.md``'s own
-Implementation Status).
+does. Production wiring of the ``PackContext`` side
+(``bootstrap.py`` constructing a real ``GitIntegrationService`` from
+``ai_os_kernel.git_integration.default_service.
+build_git_integration_service_from_env`` and threading it through
+``SqlAgentRegistry``) is this same step's own real, non-deferred work —
+see ``git_integration.md``'s own Implementation Status.
 
 **Also checks ``context.tools.available_tools()`` before attempting
 either tool call** — an SDK-Protocol-documented, side-effect-free fact
@@ -64,6 +72,7 @@ call, never independently re-derived or assumed.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -73,6 +82,7 @@ from ai_os_sdk.models import ToolStatus
 
 _ACTOR_ID = "se.delivery_pipeline"
 _ACTOR_TYPE = "workflow"
+_REMOTE_URL_ENV_VAR = "AIOS_GIT_REMOTE_URL"
 
 _OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -173,7 +183,9 @@ class GitPushAgentEntrypoint:
     output_schema: dict[str, Any] = _OUTPUT_SCHEMA
 
     def __init__(self, *, remote_url: str | None = None) -> None:
-        self._remote_url = remote_url
+        self._remote_url = (
+            remote_url if remote_url is not None else os.environ.get(_REMOTE_URL_ENV_VAR)
+        )
         self._context: Any | None = None
 
     def bind_pack_context(self, context: Any) -> None:
