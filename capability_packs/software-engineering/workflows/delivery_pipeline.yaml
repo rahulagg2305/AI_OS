@@ -55,6 +55,22 @@
 # (bounded attempts + bounded duration, per error_handling_retry.md §4)
 # before the first gate read it at runtime.
 #
+# A real `decision` step (added 2026-08-02, `P02-S01-M05-T15`) now
+# routes around `lint`/`quality-gate-lint-clean` entirely when `build`'s
+# own real `written` field is `false` — the write genuinely failed
+# (nonzero exit or timeout, ai_os_pack_software_engineering.agents.build's
+# own docstring), so there is nothing real for Lint to check; routing
+# straight to `test` instead skips a real, wasted Lint invocation (and
+# its own gate/retry-triggering) rather than blindly linting a file that
+# was never written. `test` still runs either way — genuinely failing
+# fast against the missing file, caught by the existing, unchanged
+# `quality-gate-tests-pass` halt/retry, so `documentation`'s own
+# `["build", "test"]` source requirement (delivery_pipeline.py's own
+# `_STEP_SOURCES`) is always satisfied by the time `documentation` could
+# ever be reached. See that module's own docstring for the full
+# reasoning and why this was chosen over the pipeline's other three
+# idle-capability candidates.
+#
 # Loaded by the already-real, already-existing, previously-unused
 # ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader — the
 # first real consumer of that loader in this codebase (every prior
@@ -68,13 +84,15 @@ name: Software Delivery Pipeline
 description: >-
   Requirements Analyst refines the raw ask, Architecture proposes a
   design against that refined analysis, Build implements it, a real
-  Quality Gate blocks on a genuine lint failure, Test verifies it, a
-  second real Quality Gate blocks on a genuine test failure (both
+  decision step routes straight to Test (skipping a wasted Lint
+  invocation) when Build's own write genuinely failed, a real Quality
+  Gate blocks on a genuine lint failure, Test verifies it, a second
+  real Quality Gate blocks on a genuine test failure (both
   bounded-retry from Build once before giving up), Documentation
-  records it — six real agent steps plus two real, blocking, retried
-  quality gates, each genuinely consuming the previous step's real,
-  persisted output.
-version: 1.4.0
+  records it — six real agent steps, one real routing decision, plus
+  two real, blocking, retried quality gates, each genuinely consuming
+  the previous step's real, persisted output.
+version: 1.5.0
 trigger: manual
 
 inputs:
@@ -137,6 +155,16 @@ steps:
     promptId: build.write_file
     promptVersion: 0.1.0
     modelAlias: coding-strong
+
+  - id: route-after-build
+    type: decision
+    condition:
+      sourceStepId: build
+      field: written
+      equals: true
+    branches:
+      "true": lint
+      "false": test
 
   - id: lint
     type: agent

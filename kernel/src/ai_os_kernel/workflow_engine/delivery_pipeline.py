@@ -167,6 +167,36 @@ Python: "there is no real pack directory for such a file to live in
 yet." One now does — :class:`WorkflowDefinitionLoader` is the real,
 existing mechanism for loading it, not a second, parallel way to build
 a definition.
+
+**A real ``decision`` step now exists too (added 2026-08-02,
+`P02-S01-M05-T15`) — the last of the four ``P02-S01-M05-T09``–``T12``
+"proven, unused" capabilities to reach a real, running pipeline.**
+``route-after-build`` (between ``build`` and ``lint``) reads ``build``'s
+own real ``written`` field
+(:mod:`ai_os_pack_software_engineering.agents.build`'s own
+``result.exit_code == 0 and not result.timed_out``) and routes to
+``lint`` when ``true`` (the existing, unchanged path) or straight to
+``test`` when ``false``. Chosen over `parallel` (running `lint`/`test`
+concurrently would have required each branch's own output to be
+independently persisted and re-plumbed through `_GATE_SOURCES`/
+`_STEP_SOURCES` — real, existing, already-proven behaviour this step
+declines to disturb, per its own zero-regression constraint) and over
+`sub_workflow` (nothing in this pipeline invokes another whole
+`WorkflowDefinition`). A genuinely failed write means there is nothing
+real for Lint to check — routing around it skips one real, wasted agent
+invocation (and its own gate/retry-triggering) rather than blindly
+linting a file that was never written. `test` still runs on *either*
+branch — it fails fast and clean against the missing file when
+`written` was `false`, caught by the existing, unchanged
+``quality-gate-tests-pass`` halt/retry — so `documentation`'s own
+``["build", "test"]`` requirement in ``_STEP_SOURCES`` is always
+satisfied by the time `documentation` could ever be reached; nothing
+about `documentation`'s own contract changed. ``DecisionStepExecutor``
+needs no pipeline-specific configuration beyond being supplied here
+(unlike ``_GATE_SOURCES``/``_STEP_RETRY_TARGETS``): its own condition
+and both branch targets are declared entirely in
+``delivery_pipeline.yaml`` itself, per the Decision Step Contract
+(``workflow_architecture.md``).
 """
 
 from __future__ import annotations
@@ -200,6 +230,7 @@ from ai_os_kernel.workflow_engine.repository import (
 from ai_os_kernel.workflow_engine.service import WorkflowInstanceService
 from ai_os_kernel.workflow_engine.step_executor import (
     AgentStepExecutor,
+    DecisionStepExecutor,
     DispatchingStepExecutor,
     NoOpStepExecutor,
     ToolStepExecutor,
@@ -216,10 +247,13 @@ _DEFINITION_PATH = (
     Path("capability_packs") / "software-engineering" / "workflows" / "delivery_pipeline.yaml"
 )
 
-# Deliberately generous, not tuned — eight real steps (six agent steps
-# plus the two real quality_gate steps, `quality-gate-lint-clean` added
-# 2026-07-30) plus one final completion transition need nine
-# `advance()` calls in the happy path. delivery_pipeline.yaml's own
+# Deliberately generous, not tuned — nine real steps (six agent steps,
+# the `route-after-build` decision step added 2026-08-02, and the two
+# real quality_gate steps, `quality-gate-lint-clean` added 2026-07-30)
+# plus one final completion transition need ten `advance()` calls in
+# the happy path (or nine on the `route-after-build` "false" branch,
+# which skips `lint`/`quality-gate-lint-clean` entirely — fewer calls,
+# still well inside this bound). delivery_pipeline.yaml's own
 # `retryPolicy.maxAttempts` (2) allows exactly one bounded retry cycle
 # per step in `_STEP_RETRY_TARGETS` — both gates retry from `build`, so
 # either one's retry replays
@@ -443,6 +477,7 @@ def build_pipeline_trigger(
             tool_executor=ToolStepExecutor(InMemoryToolRegistry({})),
             default_executor=NoOpStepExecutor(),
             quality_gate_executor=QualityGateStepExecutor(repository, gate_sources=_GATE_SOURCES),
+            decision_executor=DecisionStepExecutor(repository),
         ),
         definition_catalog=SqlWorkflowDefinitionCatalog(engine),
         gate_result_recorder=SqlGateResultRecorder(engine),

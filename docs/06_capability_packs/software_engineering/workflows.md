@@ -4,7 +4,7 @@
 **Document:** Software Engineering Pack – Workflows
 **Version:** 1.2
 **Status:** Approved
-**Last Updated:** 2026-07-30 (`se.delivery_pipeline` gained Requirements Analyst as its own first step — the graph is now 5 real agent steps, not 4; the raw `requirement` input now reaches Requirements Analyst first, not Architecture directly. Prior: 2026-07-28, added a "Currently Implemented Subset" section documenting the real `se.delivery_pipeline` workflow, and a row for it in §12's own permissions table)
+**Last Updated:** 2026-08-02 (`se.delivery_pipeline` gained a real `route-after-build` decision step, `P02-S01-M05-T15` — corrected the "no decisions" claim in the Currently Implemented Subset section below; the section's own graph diagram remains a known-stale pre-Lint/pre-gate snapshot, disclosed rather than silently left wrong. Prior: 2026-07-30, `se.delivery_pipeline` gained Requirements Analyst as its own first step — the graph is now 5 real agent steps, not 4; the raw `requirement` input now reaches Requirements Analyst first, not Architecture directly. Prior: 2026-07-28, added a "Currently Implemented Subset" section documenting the real `se.delivery_pipeline` workflow, and a row for it in §12's own permissions table)
 
 ---
 
@@ -54,7 +54,7 @@ Step type vocabulary: `agent`, `tool`, `decision`, `parallel`, `foreach`, `sub_w
 
 **Inputs:** `requirement` (string, the raw ask). **Outputs:** `documentationPath` (string).
 
-**Graph (genuinely simpler than any of §§3–9 — no tools, no decisions, no loops, no quality gates, no human approval points):**
+**Graph — this section's own diagram below is a known-stale snapshot from before Lint, both Quality Gates, and the routing decision step existed; `capability_packs/software-engineering/workflows/delivery_pipeline.yaml` and `ai_os_kernel.workflow_engine.delivery_pipeline`'s own module docstring are the real, current, authoritative shape (nine declared steps: six agents, one `decision`, two `quality_gate`). Reconciling this diagram in full is a real, separate documentation-reconciliation task, not part of the step that added the decision step.** As of 2026-08-02, `se.delivery_pipeline` **does** include a real `decision` step (`route-after-build`, between `build` and `lint`) — the claim below that it has "no decisions" and none of `se.implement_task`'s step types is no longer accurate for `decision` specifically (still accurate for `tool`/`parallel`/`foreach`/`sub_workflow`/`human_approval`, none of which this pipeline declares).
 
 ```text
 1  agent   software-engineering/requirements-analyst → a refined requirements analysis (free text)
@@ -66,7 +66,7 @@ Step type vocabulary: `agent`, `tool`, `decision`, `parallel`, `foreach`, `sub_w
 
 **How this differs from `se.implement_task` (§4), checked directly, not assumed:**
 - `se.implement_task` is a **sub-workflow**, invoked via `foreach` from a larger workflow (`se.product_creation`/`se.feature_addition`), with `task`/`architecture_ref`/`workspace_id` as inputs — it has no `architecture` or `documentation` step of its own, and is never meant to run standalone.
-- `se.implement_task`'s own graph includes `fs.apply_patch`/`test.run` tool steps, two `decision` steps forming iteration loops (`max_iterations: 3`), a `code-reviewer` agent step, and a blocking `quality_gate` — none of which `se.delivery_pipeline` has.
+- `se.implement_task`'s own graph includes `fs.apply_patch`/`test.run` tool steps, two `decision` steps forming iteration loops (`max_iterations: 3`), a `code-reviewer` agent step, and a blocking `quality_gate` — `se.delivery_pipeline` now has its own, differently-purposed real `decision` step too (routing, not an iteration loop), but still no `tool` steps, `foreach`, or `code-reviewer`.
 - `se.delivery_pipeline` includes its own `architecture` and `documentation` steps, which `se.implement_task` deliberately does not (those belong to the *outer* workflow in the full design).
 
 Both are real, intentional, differently-shaped things — `se.delivery_pipeline` is not a smaller or renamed `se.implement_task`; it is the reprioritization's own minimal, standalone, end-to-end proof, and the closest real analogue in this document's own §§3–9 is actually a drastically reduced `se.product_creation` (§3's own "Stage C Scope," §13, already names a similar reduced slice — steps 1, 3, 7, 8, 9 — but using `backend-developer`/`code-reviewer` in place of this pipeline's own `build`/`qa-test`/`documentation`).

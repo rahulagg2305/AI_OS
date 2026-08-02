@@ -197,12 +197,14 @@ agents:
 workflows:
   - id: se.delivery_pipeline
     name: Software Delivery Pipeline
-    version: 1.4.0
+    version: 1.5.0
     description: >-
       Chains Requirements Analyst, Architecture, Build, Lint, QA/Test,
       and Documentation into one real, declared workflow — each step's
       genuine output reaches the next step's genuine input through a
-      real Context Manager resolver. Two real, blocking, bounded-retry
+      real Context Manager resolver. A real decision step routes
+      straight to Test (skipping a wasted Lint invocation) when Build's
+      own write genuinely failed. Two real, blocking, bounded-retry
       Quality Gates now exist: one between Build and Test (Static
       Analysis), one between Test and Documentation (Testing).
     definition: workflows/delivery_pipeline.yaml
