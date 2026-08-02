@@ -113,6 +113,9 @@ class _FakeApprovalRepository:
     async def get_by_step(self, *, workflow_id: str, step_id: str) -> Approval | None:
         return self._existing
 
+    async def get_by_id(self, *, approval_id: str) -> Approval | None:
+        return self._existing
+
     async def create_pending(
         self, *, workflow_id: str, step_id: str, point: HumanApprovalPoint
     ) -> Approval:

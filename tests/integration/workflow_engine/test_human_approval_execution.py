@@ -14,8 +14,12 @@ R-001's own permanent hard rule (`risk_register.md`) — the pending
 approval and the paused instance are still exactly as they were, real
 wall-clock time later, with no decision recorded; that an anonymous
 (blank `principal_id`) or a double decision attempt is refused, never
-silently accepted; and that a real `rejected` decision genuinely halts
-the pipeline before any step after it ever runs.
+silently accepted; that a real `rejected` decision genuinely halts the
+pipeline before any step after it ever runs; and (`P03-S05-M14-T06`)
+that :class:`~ai_os_kernel.workflow_engine.human_approval.ApprovalService`
+enforces ADR-0023's real, class-scoped `approver:<approval_class>` RBAC
+against a real Postgres row — an authorized principal decides, an
+unauthorized one is refused and the row stays genuinely `pending`.
 """
 
 import asyncio
@@ -33,10 +37,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.persistence.schema import approvals
+from ai_os_kernel.security_manager.errors import ApprovalNotAuthorizedError
+from ai_os_kernel.security_manager.models import Principal, PrincipalType
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner, WorkflowRunOutcome
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.errors import ApprovalNotPendingError
 from ai_os_kernel.workflow_engine.human_approval import (
+    ApprovalService,
     HumanApprovalStepExecutor,
     SqlApprovalRepository,
 )
@@ -411,6 +418,90 @@ def test_a_rejected_decision_genuinely_halts_the_pipeline(database_url: str) -> 
             steps = await repository.list_steps(workflow_id)
             step_names = {s.step_name for s in steps}
             assert "finish" not in step_names  # the pipeline never reached the next step
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_rbac_authorized_role_decides_and_unauthorized_role_is_refused_and_stays_pending(
+    database_url: str,
+) -> None:
+    """(`P03-S05-M14-T06`) Real, Postgres-backed proof of ADR-0023's
+    class-scoped `approver` grant, enforced by
+    :class:`~ai_os_kernel.workflow_engine.human_approval.ApprovalService`
+    in front of the real repository — never the repository's own
+    `decide()` directly, the identical "authorization sits in front of
+    persistence" shape every other real authorization check in this
+    codebase (`require_permission`, narrowing) already uses."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            definition = _definition()
+            workflow_id = await _create_running_instance(engine, definition)
+            advance_runner, approval_repository, _ = _make_composition(engine)
+
+            await advance_runner.run_to_completion(
+                workflow_id=workflow_id,
+                definition=definition,
+                worker_id="worker-1",
+                lease_duration_seconds=60,
+                max_iterations=10,
+            )
+            approval = await approval_repository.get_by_step(
+                workflow_id=workflow_id, step_id=_STEP_ID
+            )
+            assert approval is not None
+
+            service = ApprovalService(approval_repository)
+
+            # Wrong class entirely — refused before any real write
+            # against the real database; the row stays exactly pending.
+            wrong_class = Principal(
+                principal_id="user-1",
+                principal_type=PrincipalType.USER,
+                roles=frozenset({"approver:some-other-class"}),
+            )
+            with pytest.raises(ApprovalNotAuthorizedError):
+                await service.decide(
+                    approval_id=approval.approval_id,
+                    principal=wrong_class,
+                    decision="approved",
+                    comment=None,
+                )
+            assert await _approval_status(engine, workflow_id) == "pending"
+
+            # No roles at all — refused too.
+            no_roles = Principal(
+                principal_id="user-2", principal_type=PrincipalType.USER, roles=frozenset()
+            )
+            with pytest.raises(ApprovalNotAuthorizedError):
+                await service.decide(
+                    approval_id=approval.approval_id,
+                    principal=no_roles,
+                    decision="approved",
+                    comment=None,
+                )
+            assert await _approval_status(engine, workflow_id) == "pending"
+
+            # The real, class-scoped approver ADR-0023 documents
+            # (`approver:<approval_class>`) genuinely, successfully
+            # decides, and the real database reflects it.
+            authorized = Principal(
+                principal_id="user-99",
+                principal_type=PrincipalType.USER,
+                roles=frozenset({f"approver:{_STEP_ID}"}),
+            )
+            decided = await service.decide(
+                approval_id=approval.approval_id,
+                principal=authorized,
+                decision="approved",
+                comment="Looks good to ship.",
+            )
+            assert decided.status == "approved"
+            assert decided.decided_by == "user-99"
+            assert await _approval_status(engine, workflow_id) == "approved"
         finally:
             await engine.dispose()
 

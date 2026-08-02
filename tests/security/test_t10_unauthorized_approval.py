@@ -3,10 +3,9 @@
 defenses: "§9 approval classes, attributable decisions, timeout never
 approves").
 
-**Real, positive control now exists for two of the three defenses named
-above — updated 2026-08-02, `P03-S05-M14-T04`/`T05`, closing the
-disclosed tripwire this file used to be.** Before this step, no real
-code anywhere handled a `human_approval` step at all
+**Real, positive control now exists for all three defenses named
+above.** Before `P03-S05-M14-T04`/`T05` (2026-08-02), no real code
+anywhere handled a `human_approval` step at all
 (:class:`~ai_os_kernel.workflow_engine.step_executor.
 DispatchingStepExecutor` had no branch for it) and
 :class:`~ai_os_kernel.workflow_engine.models.HumanApprovalPoint` had no
@@ -14,25 +13,32 @@ field to attribute a decision to anyone — these tests used to assert
 exactly that real absence, so that the day someone added real
 approval-decision handling, at least one test would force a conscious
 update (this one) rather than the gap silently persisting unnoticed.
-
-**Still a real, disclosed, partial defense — not the full §9 picture.**
-``decide()`` requires a real, non-empty, attributable ``principal_id``
+`decide()` requires a real, non-empty, attributable `principal_id`
 (never anonymous) and a real timeout never implies approval (nothing
-anywhere converts an elapsed ``expires_at`` into an implicit decision —
+anywhere converts an elapsed `expires_at` into an implicit decision —
 see the real, Postgres-backed proof in
-``tests/integration/workflow_engine/test_human_approval_execution.py``).
-**"Approval classes are granted separately" (§9's own RBAC
-requirement — an operator who may approve a release does not thereby
-approve architecture) is genuinely not built yet** — `decide()` accepts
-any real, non-empty `principal_id`, with no permission check against
-`security_manager`'s own `approver` role (`permissions.py`'s own
-docstring: no permission grant modelled for it yet). This was a
-deliberate, disclosed, product-owner-approved scope decision (build the
-Workflow-Engine-level pause/resume + attributable-decision mechanism
-first, defer HTTP/RBAC wiring — the identical precedent every other
-step type this session already established), not an oversight — see
-`human_approval.py`'s own module docstring for the full reasoning and
-the options considered.
+`tests/integration/workflow_engine/test_human_approval_execution.py`).
+
+**"Approval classes are granted separately" is now real too
+(`P03-S05-M14-T06`, 2026-08-02).**
+:class:`~ai_os_kernel.workflow_engine.human_approval.ApprovalService`
+sits in front of the repository's own `decide()` and enforces
+ADR-0023's own documented per-class `approver` grant —
+`approver:<approval_class>` or `admin` — via
+:func:`~ai_os_kernel.security_manager.approval_authorization.
+is_authorized_to_decide_approval`, refusing an unauthorized attempt
+*before* any write, real proof below. This was a deliberate, disclosed,
+product-owner-approved sequencing (build the Workflow-Engine-level
+pause/resume + attributable-decision mechanism first, close RBAC as its
+own, immediately-following step before any deploy-capability work
+opens), not an oversight — see `human_approval.py`'s own module
+docstring for the full reasoning and the options considered at each
+step.
+
+**Still real, disclosed, deferred scope**: no HTTP route/Bearer-token
+wiring for this call site (service-layer `ApprovalService.decide()`
+only), and no role *administration* — who may grant/revoke
+`approver:<class>` itself is `admin`-only per ADR-0023 and unbuilt.
 """
 
 from __future__ import annotations
@@ -43,8 +49,14 @@ from typing import Any
 
 import pytest
 
+from ai_os_kernel.security_manager.errors import ApprovalNotAuthorizedError
+from ai_os_kernel.security_manager.models import Principal, PrincipalType
 from ai_os_kernel.workflow_engine.errors import HumanApprovalPendingError
-from ai_os_kernel.workflow_engine.human_approval import Approval, HumanApprovalStepExecutor
+from ai_os_kernel.workflow_engine.human_approval import (
+    Approval,
+    ApprovalService,
+    HumanApprovalStepExecutor,
+)
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance, WorkflowInstanceStatus
 from ai_os_kernel.workflow_engine.models import (
     HumanApprovalPoint,
@@ -156,11 +168,14 @@ class _FakeApprovalRepository:
     decision arrives), fake persistence — no Postgres required to prove
     this control genuinely blocks."""
 
-    def __init__(self) -> None:
+    def __init__(self, existing: Approval | None = None) -> None:
         self.create_calls = 0
-        self._approval: Approval | None = None
+        self._approval = existing
 
     async def get_by_step(self, *, workflow_id: str, step_id: str) -> Approval | None:
+        return self._approval
+
+    async def get_by_id(self, *, approval_id: str) -> Approval | None:
         return self._approval
 
     async def create_pending(
@@ -186,8 +201,51 @@ class _FakeApprovalRepository:
         )
         return self._approval
 
-    async def decide(self, **kwargs: Any) -> Approval:
+    async def decide(
+        self,
+        *,
+        approval_id: str,
+        principal_id: str,
+        decision: str,
+        comment: str | None,
+    ) -> Approval:
+        assert self._approval is not None and self._approval.approval_id == approval_id
+        self._approval = self._approval.model_copy(
+            update={
+                "status": decision,
+                "decided_by": principal_id,
+                "decision_comment": comment,
+                "decided_at": datetime.now(UTC),
+            }
+        )
+        return self._approval
+
+
+class _RefuseIfDecided:
+    """Stands in for :class:`~ai_os_kernel.workflow_engine.human_approval.
+    ApprovalRepository` in the unauthorized-attempt test — its own
+    :meth:`decide` fails loudly if ever reached, proving
+    :class:`~ai_os_kernel.workflow_engine.human_approval.ApprovalService`
+    refuses *before* any write is attempted, not merely that a write
+    happens to be rejected downstream."""
+
+    def __init__(self, approval: Approval) -> None:
+        self._approval = approval
+
+    async def get_by_id(self, *, approval_id: str) -> Approval | None:
+        return self._approval
+
+    async def get_by_step(self, *, workflow_id: str, step_id: str) -> Approval | None:
+        return self._approval
+
+    async def create_pending(self, **kwargs: Any) -> Approval:
         raise NotImplementedError("not exercised by this test")
+
+    async def decide(self, **kwargs: Any) -> Approval:
+        raise AssertionError(
+            "ApprovalService must refuse an unauthorized decision before ever "
+            "calling the repository's own decide()"
+        )
 
 
 class _FakeInstanceRepository:
@@ -237,3 +295,129 @@ async def test_a_real_human_approval_step_genuinely_blocks_when_configured() -> 
     # Exactly one real pending row was ever created — the second and
     # third attempts found it still pending, not duplicated.
     assert approval_repository.create_calls == 1
+
+
+def _pending_approval(*, approval_class: str = _STEP_ID) -> Approval:
+    now = datetime.now(UTC)
+    return Approval(
+        approval_id="appr_fake",
+        workflow_id="wf_fake",
+        step_id=_STEP_ID,
+        approval_class=approval_class,
+        title="Approve Deployment",
+        description="Approve the production deployment.",
+        context_digest="deadbeef",
+        options=["approve", "reject"],
+        status="pending",
+        decided_by=None,
+        decision_comment=None,
+        requested_at=now,
+        expires_at=None,
+        decided_at=None,
+    )
+
+
+async def test_an_authorized_class_scoped_approver_can_decide() -> None:
+    """The real, positive RBAC proof: a principal holding the exact
+    class-scoped role ADR-0023 documents (`approver:<approval_class>`)
+    genuinely, successfully decides — through
+    :class:`~ai_os_kernel.workflow_engine.human_approval.ApprovalService`,
+    not by calling the repository directly."""
+    approval = _pending_approval(approval_class="approve-deployment")
+    repository = _FakeApprovalRepository(existing=approval)
+    service = ApprovalService(repository)
+    principal = Principal(
+        principal_id="user-99",
+        principal_type=PrincipalType.USER,
+        roles=frozenset({"approver:approve-deployment"}),
+    )
+
+    decided = await service.decide(
+        approval_id=approval.approval_id,
+        principal=principal,
+        decision="approved",
+        comment="Looks good to ship.",
+    )
+
+    assert decided.status == "approved"
+    assert decided.decided_by == "user-99"
+
+
+async def test_an_admin_can_decide_any_approval_class() -> None:
+    """`admin` shortcuts every class-scoped check (ADR-0023: "All,
+    including security policy, role assignment, and secret
+    management")."""
+    approval = _pending_approval(approval_class="approve-architecture")
+    repository = _FakeApprovalRepository(existing=approval)
+    service = ApprovalService(repository)
+    principal = Principal(
+        principal_id="root-99", principal_type=PrincipalType.USER, roles=frozenset({"admin"})
+    )
+
+    decided = await service.decide(
+        approval_id=approval.approval_id,
+        principal=principal,
+        decision="approved",
+        comment=None,
+    )
+
+    assert decided.status == "approved"
+
+
+async def test_an_unauthorized_principal_is_refused_and_the_approval_stays_pending() -> None:
+    """The real, negative RBAC proof: a principal holding an unrelated
+    (or no) `approver:<class>` role is refused — and, critically, the
+    approval is never touched. `_RefuseIfDecided`'s own `decide()`
+    raises `AssertionError` if ever reached, so this test proves the
+    refusal happens *before* any write is attempted, not that a write
+    merely rolls back."""
+    approval = _pending_approval(approval_class="approve-deployment")
+    repository = _RefuseIfDecided(approval)
+    service = ApprovalService(repository)
+
+    # Wrong class entirely — authority to approve architecture is not
+    # authority to approve a deployment (ADR-0023's own example).
+    wrong_class_principal = Principal(
+        principal_id="user-1",
+        principal_type=PrincipalType.USER,
+        roles=frozenset({"approver:approve-architecture"}),
+    )
+    with pytest.raises(ApprovalNotAuthorizedError):
+        await service.decide(
+            approval_id=approval.approval_id,
+            principal=wrong_class_principal,
+            decision="approved",
+            comment=None,
+        )
+
+    # No role at all.
+    no_role_principal = Principal(
+        principal_id="user-2", principal_type=PrincipalType.USER, roles=frozenset()
+    )
+    with pytest.raises(ApprovalNotAuthorizedError):
+        await service.decide(
+            approval_id=approval.approval_id,
+            principal=no_role_principal,
+            decision="approved",
+            comment=None,
+        )
+
+    # A bare, unscoped "approver" role — ADR-0023's own examples are
+    # all class-scoped; an unscoped grant is not a documented fallback.
+    bare_approver_principal = Principal(
+        principal_id="user-3", principal_type=PrincipalType.USER, roles=frozenset({"approver"})
+    )
+    with pytest.raises(ApprovalNotAuthorizedError):
+        await service.decide(
+            approval_id=approval.approval_id,
+            principal=bare_approver_principal,
+            decision="approved",
+            comment=None,
+        )
+
+    # The approval itself is still, genuinely, exactly as it started —
+    # not silently resolved by any of the three refused attempts above.
+    still_pending = await repository.get_by_id(approval_id=approval.approval_id)
+    assert still_pending is not None
+    assert still_pending.status == "pending"
+    assert still_pending.decided_by is None

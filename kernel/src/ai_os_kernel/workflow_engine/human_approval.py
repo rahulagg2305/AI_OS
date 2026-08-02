@@ -54,20 +54,40 @@ terminate," compensation not built).
 **Scoped deliberately smaller than the full framework document
 (product-owner decision — see the design options presented and
 `decide()`'s own docstring).** No HTTP route, no Bearer-token
-authentication, no RBAC permission check (`security_manager`'s own
-``approver`` role has no permission grant modelled yet, per
-``permissions.py``'s own docstring) — a real, tested, callable
-``decide()`` method is this step's whole scope, matching the identical
-"build the Workflow-Engine-level mechanism first, defer HTTP/production
-wiring" precedent every other step type this session already
-established (``P02-S01-M05-T09`` through ``T15``); the dashboard/API
-surface (``P06-S03-M39-T02``) is real, separate, later work. Only
-``approved``/``rejected`` decisions are accepted — ``changes_requested``
-(no "loop back to an earlier step" target is specified anywhere in the
-Contract) and automatic ``timed_out``/``cancelled`` transitions (no
-reaper/escalation-policy job exists, mirroring how
-``WorkflowLeaseReaper`` needed its own, later, dedicated step) are
-real, valid, disclosed, deferred scope — not silently dropped.
+authentication for *this* call site — a real, tested, callable
+:class:`ApprovalService` is this step's whole scope, matching the
+identical "build the Workflow-Engine-level mechanism first, defer
+HTTP/production wiring" precedent every other step type this session
+already established (``P02-S01-M05-T09`` through ``T15``); the
+dashboard/API surface (``P06-S03-M39-T02``) is real, separate, later
+work. Only ``approved``/``rejected`` decisions are accepted —
+``changes_requested`` (no "loop back to an earlier step" target is
+specified anywhere in the Contract) and automatic
+``timed_out``/``cancelled`` transitions (no reaper/escalation-policy job
+exists, mirroring how ``WorkflowLeaseReaper`` needed its own, later,
+dedicated step) are real, valid, disclosed, deferred scope — not
+silently dropped.
+
+**RBAC is real too (``P03-S05-M14-T06``): :class:`ApprovalService`
+enforces ADR-0023's own documented per-class ``approver`` grant before
+any decision is recorded.** ``decide()`` at the repository level still
+only proves *attribution* (a real, non-empty ``principal_id``); a real
+*authorization* check now sits in front of it —
+:func:`~ai_os_kernel.security_manager.approval_authorization.
+is_authorized_to_decide_approval` requires the ``admin`` role or the
+exact class-scoped role ``approver:<approval_class>`` (ADR-0023's own
+example: ``approver:release`` distinct from ``approver:architecture``)
+— reusing :class:`~ai_os_kernel.security_manager.models.Principal`
+unchanged, not a parallel permission mechanism; see that module's own
+docstring for why a standalone function, not a
+:mod:`~ai_os_kernel.security_manager.permissions` addition. An
+unauthorized attempt is refused *before* any write — the approval stays
+genuinely, verifiably ``pending``, not rolled back. Still real,
+disclosed, deferred scope: no HTTP route/Bearer-token wiring for this
+call site (unchanged from the paragraph above), and no role
+*administration* (who may grant/revoke `approver:<class>` itself is
+out of scope — ADR-0023's own role assignment is `admin`-only and
+unbuilt).
 
 **``approval_class`` (data_model.md §4.5's own column, with no defined
 source anywhere in the Human Approval Point Contract, §4).** Reuses the
@@ -92,7 +112,11 @@ import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_os_kernel.observability import get_logger
 from ai_os_kernel.persistence.schema import approvals, workflow_events, workflow_instances
+from ai_os_kernel.security_manager.approval_authorization import is_authorized_to_decide_approval
+from ai_os_kernel.security_manager.errors import ApprovalNotAuthorizedError
+from ai_os_kernel.security_manager.models import Principal
 from ai_os_kernel.workflow_engine.definition_catalog import WorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.errors import (
     ApprovalNotPendingError,
@@ -107,6 +131,8 @@ from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 
 _STATE_TRANSITIONED_EVENT_TYPE = "state.transitioned"
 _STATE_TRANSITIONED_SCHEMA_VERSION = 1
+
+logger = get_logger("ai_os_kernel.security_manager")
 
 Decision = Literal["approved", "rejected"]
 
@@ -150,6 +176,8 @@ class ApprovalRepository(Protocol):
 
     async def get_by_step(self, *, workflow_id: str, step_id: str) -> Approval | None: ...
 
+    async def get_by_id(self, *, approval_id: str) -> Approval | None: ...
+
     async def create_pending(
         self, *, workflow_id: str, step_id: str, point: HumanApprovalPoint
     ) -> Approval: ...
@@ -184,6 +212,19 @@ class SqlApprovalRepository:
                 sa.select(approvals).where(
                     approvals.c.workflow_id == workflow_id, approvals.c.step_id == step_id
                 )
+            )
+            row = result.mappings().one_or_none()
+        return Approval.model_validate(dict(row)) if row is not None else None
+
+    async def get_by_id(self, *, approval_id: str) -> Approval | None:
+        """A plain, unguarded read — see :meth:`get_by_step`'s own
+        reasoning. Used by :class:`ApprovalService` to resolve an
+        approval's own ``approval_class`` *before* deciding, so an
+        unauthorized attempt can be refused without ever reaching
+        :meth:`decide`'s guarded ``UPDATE``."""
+        async with self._engine.connect() as connection:
+            result = await connection.execute(
+                sa.select(approvals).where(approvals.c.approval_id == approval_id)
             )
             row = result.mappings().one_or_none()
         return Approval.model_validate(dict(row)) if row is not None else None
@@ -316,6 +357,70 @@ class SqlApprovalRepository:
             ) from exc
 
         return Approval.model_validate(dict(approval_row))
+
+
+class ApprovalService:
+    """The real authorization boundary in front of
+    :meth:`ApprovalRepository.decide` — ``decide()`` itself only proves
+    *attribution* (a real, non-blank ``principal_id``); this is where
+    *authorization* is enforced (human_approval_points.md §7: "Security
+    Manager ensures only authorized humans can approve"), reusing
+    :class:`~ai_os_kernel.security_manager.models.Principal` and
+    :func:`~ai_os_kernel.security_manager.approval_authorization.
+    is_authorized_to_decide_approval` unchanged rather than inventing a
+    parallel permission mechanism — see that module's own docstring for
+    why this is a standalone check, not a
+    :mod:`~ai_os_kernel.security_manager.permissions` addition.
+
+    Deliberately not folded into :class:`SqlApprovalRepository` itself:
+    that class is a pure persistence seam (its own docstring), and
+    keeping the authorization gate here lets it be exercised, and
+    proven refusing, without a real database (see
+    ``tests/security/test_t10_unauthorized_approval.py``).
+    """
+
+    def __init__(self, approval_repository: ApprovalRepository) -> None:
+        self._approval_repository = approval_repository
+
+    async def decide(
+        self,
+        *,
+        approval_id: str,
+        principal: Principal,
+        decision: Decision,
+        comment: str | None,
+    ) -> Approval:
+        approval = await self._approval_repository.get_by_id(approval_id=approval_id)
+        if approval is None:
+            raise ApprovalNotPendingError(f"approval '{approval_id}' does not exist")
+        if not is_authorized_to_decide_approval(principal, approval.approval_class):
+            logger.warning(
+                "security_manager.authorization_denied",
+                principal_id=principal.principal_id,
+                approval_id=approval_id,
+                approval_class=approval.approval_class,
+                required="admin or approver:" + approval.approval_class,
+            )
+            raise ApprovalNotAuthorizedError(
+                f"principal '{principal.principal_id}' (roles: "
+                f"{sorted(principal.roles)}) is not authorized to decide approval "
+                f"'{approval_id}' (class '{approval.approval_class}') — requires the "
+                f"'admin' role or 'approver:{approval.approval_class}'"
+            )
+        decided = await self._approval_repository.decide(
+            approval_id=approval_id,
+            principal_id=principal.principal_id,
+            decision=decision,
+            comment=comment,
+        )
+        logger.info(
+            "security_manager.approval_decided",
+            principal_id=principal.principal_id,
+            approval_id=approval_id,
+            approval_class=approval.approval_class,
+            decision=decision,
+        )
+        return decided
 
 
 class HumanApprovalStepExecutor:

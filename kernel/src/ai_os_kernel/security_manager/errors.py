@@ -15,3 +15,16 @@ class InvalidTokenError(SecurityError):
     mirroring :class:`~ai_os_kernel.secrets_manager.errors.SecretResolutionError`'s
     own "name the reference, never the value" discipline.
     """
+
+
+class ApprovalNotAuthorizedError(SecurityError):
+    """A principal attempted to decide a Human Approval Point it is not
+    authorized for — holds neither the ``admin`` role nor the
+    approval's own class-scoped ``approver:<approval_class>`` role
+    (ADR-0023's Roles table: "Approval classes are grantable separately
+    — for example ``approver:release`` distinct from
+    ``approver:architecture``"). Raised **before** any write is
+    attempted (:mod:`ai_os_kernel.security_manager.approval_authorization`'s
+    own check runs first) — the approval itself is left completely
+    untouched, not a rolled-back one.
+    """

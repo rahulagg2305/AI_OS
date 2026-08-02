@@ -24,9 +24,11 @@ This document is subordinate to:
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-08-02, `P03-S05-M14-T06`)
 
 **The identity and role layer is real; the permission-narrowing chain it composes into is not — yet, and the gap is disclosed by the implementing module's own docstring, not glossed over.** Verified against `kernel/src/ai_os_kernel/security_manager/models.py`: `Principal` (id, type, roles) and `SecurityContext` (principal + computed `permissions: frozenset[str]`) both exist and are used at the API boundary — §4.2's roles and §3.2's "Security Context" are real.
+
+**§4.2's per-class `approver` grant — "`approver:release` distinct from `approver:architecture`" — is now real too, the first genuinely class-scoped role check in this codebase.** `security_manager.approval_authorization.is_authorized_to_decide_approval` reads `Principal.roles` directly (not `permissions_for_roles()`, whose fixed 5-role dict cannot express a role *family* parameterized by an arbitrary class) and requires `admin` or the exact `approver:<approval_class>` string. Its one real caller, `workflow_engine.human_approval.ApprovalService`, gates Human Approval Point decisions, proven refusing before any write against both fakes and a real Postgres row. Real, disclosed gap: no role *administration* — nothing grants or revokes an `approver:<class>` role for a real principal yet.
 
 **§4.4's "Monotonic Narrowing — the core rule" is partially implemented: the computation is real, and one real slice of it now runs against real data.** `ai_os_kernel.security_manager.narrowing.narrow_permissions`/`is_permitted` (`P03-S05-M14-T03`) compute ADR-0023's exact intersection (principal ∩ workflow ∩ agent ∩ tool). `P02-S05-M13-T08` gave the agent/tool terms a real data source: `catalog.agents.required_permissions`/`catalog.tools.required_permissions` are manifest-sourced values, now checked against their own pack's manifest-declared `permissions` at resolution (`SqlAgentRegistry`/`SqlToolRegistry`), reusing the narrowing primitive rather than a bespoke check — an over-granted agent/tool is refused before its entrypoint ever loads. Still missing: `SecurityContext` (the principal term) is never threaded into resolution at all, and no code parses a *workflow's* declared `permissions` out of a manifest — so the full four-way chain still never runs; only the pack ⊇ agent/tool slice does. §4.4's "There is no runtime elevation path" is true for that slice; the fuller per-invocation narrowing the full intersection implies still does not run.
 
