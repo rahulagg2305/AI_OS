@@ -17,7 +17,7 @@ Practical consequence: if you are working in a fresh clone and a document refere
 | Folder | Real content? | What's actually there |
 |---|---|---|
 | `docs/` | **Yes** | ~150 files — architecture, 25 ADRs, requirements, the roadmap/history, `process/` (this file's own home) |
-| `kernel/` | **Yes** | The real `ai-os-kernel` package: Workflow Engine, LLM Gateway (+2 adapters), Prompt Engine, Context Manager, Capability Manager, Security Manager (minimal slice), Secrets Manager (`env` only), Sandbox (`LocalSubprocessSandbox` + `DockerSandbox`), persistence (all schemas), Observability, Manifest Loader, Configuration Manager, HTTP routes, 29 Alembic migrations |
+| `kernel/` | **Yes** | The real `ai-os-kernel` package: Workflow Engine, LLM Gateway (+2 adapters), Prompt Engine, Context Manager, Capability Manager, Security Manager (minimal slice), Secrets Manager (`env` only), Sandbox (`LocalSubprocessSandbox` + `DockerSandbox`), Git Integration Service (`git_integration/` — commit/branch/push, `P03-S01-M24-T01`; not a separate `platform_services/` package, see below), persistence (all schemas), Observability, Manifest Loader, Configuration Manager, HTTP routes, 29 Alembic migrations |
 | `capability_packs/` | **Yes** | `software-engineering/` — the real, reprioritized pack: **5 agents** (`requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`), 1 workflow (`se.delivery_pipeline`, chaining 4 of them), 4 prompts. Plus `_template/` (a documented scaffold: manifest + README + CHANGELOG, no code). |
 | `tests/` | **Yes** | `unit/` and `integration/` — real Postgres/Docker-backed tests (see `coding_standards.md` on the one recorded mock exception). 849 passing, 11 skipped. |
 | `config/` | Minimal | `llm.yaml`, `platform.yaml` — real, small, checked-in configuration |
@@ -31,7 +31,7 @@ Practical consequence: if you are working in a fresh clone and a document refere
 
 | Folder | Corresponding specification | Why it's empty |
 |---|---|---|
-| `platform_services/` | `../03_architecture/services/` (7 documents) | Storage, Notification, Caching, Git Integration, Document Processing, Speech Gateway — **all 0% built**. Redis is provisioned in Compose but **no Kernel code uses it**. |
+| `platform_services/` | `../03_architecture/services/` (7 documents) | Storage, Notification, Caching, Document Processing, Speech Gateway — still 0% built. **Git Integration is real (`P03-S01-M24-T01`) but deliberately lives at `kernel/src/ai_os_kernel/git_integration/`, not here** — a disclosed packaging decision (module_path stays a board label; whether Platform Services become a genuinely separate uv workspace tier is real, deferred, later architecture work), so this directory itself is still absent from a fresh clone. Redis is provisioned in Compose but **no Kernel code uses it**. |
 | `dashboard/` | `../13_dashboard/` (3 documents) | No frontend project scaffolded at all |
 | `tools/` | `../07_api/cli_design.md` | No `aios` CLI package, no entry-point script declared |
 | `ai_context/` | `../ai_context/context_pack_structure.md` | Structure fully specified; zero packs written |

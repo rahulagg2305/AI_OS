@@ -66,6 +66,20 @@ service-layer-only scope (no HTTP route, no RBAC against `approver`) is
 a disclosed, product-owner-approved gap — not itself a violation of this
 rule, since no deploy capability exists yet to expose it.
 
+**Update 2026-08-02: P03-S01-M24-T01 (Git integration) is now done, and
+it genuinely honors this rule — the first of the two named blocking
+Tasks to actually land.** The real Git Integration Service
+(`kernel/src/ai_os_kernel/git_integration/`) makes a direct push to a
+protected branch structurally impossible (absent from its own tool
+surface, `git_integration.md` §5.1) rather than merely gating it behind
+a permission — every real integration path onto a protected branch
+still requires a pull request with human approval, a mechanism this
+Task deliberately does not build. **The rule stays open and permanent**:
+no `git.*` Tool exists yet in the Software Engineering pack, so no real
+workflow can reach this service — the deploy-capability exposure this
+rule guards against remains latent, not active, until a Tool wraps it
+and P07-S01-M40-T01 (Kubernetes/Helm) also lands.
+
 ### R-002 — Docker exception-catching inconsistency *(closed)*
 
 `_postgres_fixture.py` caught only `docker.errors.DockerException`, while
