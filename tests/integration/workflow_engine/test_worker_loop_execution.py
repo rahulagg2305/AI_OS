@@ -1,16 +1,21 @@
 """Real, genuine multi-instance concurrent advancement against a real
 Postgres container (ADR-0015 — no mocking the database). Proves
-``WorkflowWorkerLoop`` (``P02-S01-M05-T12``) discovers several real,
+``WorkflowWorkerLoop`` (``P02-S01-M05-T12``, updated ``P02-S01-M05-T14``
+for real catalog-backed definition resolution) discovers several real,
 running instances and advances every one of them within a single
 tick, genuinely concurrently — real wall-clock timing, not sequential
 execution disguised as concurrent, the identical proof technique
 ``tests/unit/kernel/workflow_engine/test_parallel_step_executor.py``
 already established for concurrent *branches*, applied here across
 concurrent *instances* instead; that an instance already leased by
-another worker is a genuine skip, not a tick failure; and that
+another worker is a genuine skip, not a tick failure; that
 ``run_worker_loop`` genuinely drives a real instance to completion
 across real, separate wall-clock ticks with no manual ``tick_once()``
-call anywhere in the test, then stops cleanly on cancellation.
+call anywhere in the test, then stops cleanly on cancellation; and that
+definition resolution genuinely round-trips through
+``SqlWorkflowDefinitionCatalog`` — a real ``register()`` write, read
+back by the worker loop's own real ``get()`` call, never a
+composition-injected mapping.
 """
 
 import asyncio
@@ -40,8 +45,16 @@ from tests.integration._postgres_fixture import postgres_container
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 
-_DEFINITION_ID = "se.product_creation"
+# Deliberately its own id, distinct from `se.product_creation` — this
+# package's own `conftest.py` autouse fixture already registers that
+# id/version pair with an *empty* placeholder graph (just enough to
+# satisfy the FK, never meant to be read back). These tests, unlike
+# every other test in this package, genuinely read the catalog row
+# back through `WorkflowWorkerLoop`'s own real `get()` call, so they
+# need their own, real, fully-populated registration instead.
+_DEFINITION_ID = "se.worker_loop_catalog_test"
 _DEFINITION_VERSION = "1.0.0"
+_PACK_ID = "se.software_engineering"
 _AGENT_ID = "se.software_engineering/analyst"
 
 
@@ -93,7 +106,16 @@ def _one_step_definition() -> WorkflowDefinition:
     )
 
 
-async def _create_running_instance(repository: SqlWorkflowInstanceRepository) -> str:
+async def _create_running_instance(engine: AsyncEngine) -> str:
+    """Registers the real definition (idempotent — `ON CONFLICT DO
+    NOTHING`, and this file's own content for `(definition_id,
+    version)` never varies) before creating and starting the instance
+    that references it, the identical ordering
+    `WorkflowInstanceService.create_instance` already establishes."""
+    await SqlWorkflowDefinitionCatalog(engine).register(
+        definition=_one_step_definition(), pack_id=_PACK_ID
+    )
+    repository = SqlWorkflowInstanceRepository(engine)
     created = await repository.create(
         definition_id=_DEFINITION_ID,
         definition_version=_DEFINITION_VERSION,
@@ -115,15 +137,14 @@ def _make_worker(
         default_executor=NoOpStepExecutor(),
     )
     repository = SqlWorkflowInstanceRepository(engine)
-    instance_service = WorkflowInstanceService(
-        repository, step_executor, SqlWorkflowDefinitionCatalog(engine)
-    )
+    definition_catalog = SqlWorkflowDefinitionCatalog(engine)
+    instance_service = WorkflowInstanceService(repository, step_executor, definition_catalog)
     lease_service = WorkflowLeaseService(SqlWorkflowLeaseRepository(engine))
     advance_runner = WorkflowAdvanceRunner(instance_service, lease_service)
     return WorkflowWorkerLoop(
         repository=repository,
         advance_runner=advance_runner,
-        definitions={(_DEFINITION_ID, _DEFINITION_VERSION): _one_step_definition()},
+        definition_catalog=definition_catalog,
         worker_id=worker_id,
     )
 
@@ -135,7 +156,7 @@ def test_a_single_tick_genuinely_advances_multiple_real_instances_concurrently(
         engine = build_engine(database_url)
         try:
             repository = SqlWorkflowInstanceRepository(engine)
-            workflow_ids = [await _create_running_instance(repository) for _ in range(3)]
+            workflow_ids = [await _create_running_instance(engine) for _ in range(3)]
             worker = _make_worker(engine, step_duration=0.2)
 
             started = time.monotonic()
@@ -169,8 +190,8 @@ def test_an_instance_already_leased_by_another_worker_is_not_even_discovered(
         engine = build_engine(database_url)
         try:
             repository = SqlWorkflowInstanceRepository(engine)
-            held_workflow_id = await _create_running_instance(repository)
-            free_workflow_id = await _create_running_instance(repository)
+            held_workflow_id = await _create_running_instance(engine)
+            free_workflow_id = await _create_running_instance(engine)
 
             lease_repository = SqlWorkflowLeaseRepository(engine)
             await lease_repository.acquire(
@@ -212,7 +233,7 @@ def test_two_workers_racing_for_the_same_freshly_runnable_instance_have_exactly_
         engine = build_engine(database_url)
         try:
             repository = SqlWorkflowInstanceRepository(engine)
-            workflow_id = await _create_running_instance(repository)
+            workflow_id = await _create_running_instance(engine)
 
             worker_a = _make_worker(engine, step_duration=0.05, worker_id="worker-a")
             worker_b = _make_worker(engine, step_duration=0.05, worker_id="worker-b")
@@ -255,7 +276,7 @@ def test_run_worker_loop_genuinely_drives_a_real_instance_to_completion_on_its_o
         engine = build_engine(database_url)
         try:
             repository = SqlWorkflowInstanceRepository(engine)
-            workflow_id = await _create_running_instance(repository)
+            workflow_id = await _create_running_instance(engine)
             worker = _make_worker(engine, step_duration=0.01)
 
             task = asyncio.create_task(
@@ -275,6 +296,44 @@ def test_run_worker_loop_genuinely_drives_a_real_instance_to_completion_on_its_o
                 task.cancel()
                 with pytest.raises(asyncio.CancelledError):
                     await task
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_definition_resolution_genuinely_round_trips_through_the_real_catalog(
+    database_url: str,
+) -> None:
+    """The core proof of the new discovery mechanism: nothing here
+    injects a `{(id, version): WorkflowDefinition}` mapping — the
+    worker loop's own `_advance_one` calls the real
+    `SqlWorkflowDefinitionCatalog.get()`, which reconstructs the
+    definition from exactly the columns a real, prior `register()` call
+    wrote. If that round-trip lost or corrupted anything, the step
+    would fail to resolve `agentId` correctly and the instance would
+    never reach `do_work`."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            repository = SqlWorkflowInstanceRepository(engine)
+            definition_catalog = SqlWorkflowDefinitionCatalog(engine)
+            workflow_id = await _create_running_instance(engine)
+
+            resolved = await definition_catalog.get(
+                definition_id=_DEFINITION_ID, version=_DEFINITION_VERSION
+            )
+            assert resolved is not None
+            assert resolved == _one_step_definition()
+
+            worker = _make_worker(engine, step_duration=0.01)
+            result = await worker.tick_once(limit=100, lease_duration_seconds=60)
+
+            assert workflow_id in result.advanced
+            instance = await repository.get_instance(workflow_id)
+            assert instance is not None
+            assert instance.current_step_id == "do_work"
         finally:
             await engine.dispose()
 

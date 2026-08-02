@@ -427,6 +427,11 @@ from ai_os_kernel.workflow_engine.step_executor import (
     NoOpStepExecutor,
     ToolStepExecutor,
 )
+from ai_os_kernel.workflow_engine.worker_loop import (
+    WORKER_POLL_INTERVAL_SECONDS,
+    WorkflowWorkerLoop,
+    run_worker_loop,
+)
 
 logger = get_logger("ai_os_kernel.bootstrap")
 
@@ -542,6 +547,14 @@ _DEMO_WORKFLOW_MODEL_ALIAS = "fast-cheap"
 _DEMO_WORKFLOW_MAX_ITERATIONS = 5
 _DEMO_WORKFLOW_LEASE_DURATION_SECONDS = 30
 _DEMO_WORKFLOW_WORKER_ID = "bootstrap-trigger"
+
+# The real, continuously-running multi-instance worker loop's own
+# identity (P02-S01-M05-T14) — distinct from _DEMO_WORKFLOW_WORKER_ID
+# above, which only ever drives the one demo instance a single
+# `trigger()` call creates; this id shows up in `workflow_leases.worker_id`
+# for whichever *arbitrary* runnable instance this background loop
+# picks up.
+_WORKFLOW_WORKER_ID = "kernel-worker-loop"
 
 # The audit trail actor/reason for every register()/activate() call this
 # file makes on a discovered pack's behalf — a real Kernel process, not
@@ -1166,30 +1179,36 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     A missing/misconfigured database degrades to an empty
     ``AgentRegistry`` and **no** ``database_engine``,
     ``trigger_prompted_agent_workflow``, ``workflow_instance_repository``,
-    ``context_manager``, ``pack_lifecycle_repository``, or
-    ``pack_health_polling_task``, or ``lease_reap_task`` at all — there
-    is nothing real for any of them to run against without one, unlike
-    a missing LLM secret alone (handled inside
-    ``_build_prompted_agent_registry``), which still leaves a real
-    database for the Workflow Engine components to use. The token
-    verifier degrades independently of all seven, since authentication
-    needs neither a database nor an LLM secret.
+    ``context_manager``, ``pack_lifecycle_repository``,
+    ``pack_health_polling_task``, ``lease_reap_task``, or
+    ``workflow_worker_task`` at all — there is nothing real for any of
+    them to run against without one, unlike a missing LLM secret alone
+    (handled inside ``_build_prompted_agent_registry``), which still
+    leaves a real database for the Workflow Engine components to use.
+    The token verifier degrades independently of all seven, since
+    authentication needs neither a database nor an LLM secret.
 
-    **Three real, continuously-running background tasks are started
+    **Four real, continuously-running background tasks are started
     here and drained through a single
     :class:`~ai_os_kernel.health.shutdown.GracefulShutdownCoordinator`
     (``P01-S04-M03-T06``) in this function's own ``finally`` block** —
     the Pack Health Collector's own polling loop
     (``ai_os_kernel.capability_manager.health_poller.run_health_polling_loop``),
     the Lease Reaper's own reap loop
-    (``ai_os_kernel.workflow_engine.lease_reaper.run_reap_loop``), and,
-    as of this step, the audit-chain verification job
+    (``ai_os_kernel.workflow_engine.lease_reaper.run_reap_loop``), the
+    audit-chain verification job
     (``ai_os_kernel.observability.audit_verification_job.run_periodic_audit_chain_verification``,
     built and unit-tested in ``P01-S05-M04-T06`` but never started
-    anywhere until now). All three are genuinely stopped — cancelled or
-    signalled to stop, then awaited — before ``engine.dispose()`` runs,
-    so no query any of them makes can ever race a closed connection
-    pool.
+    anywhere until it was), and, as of this step
+    (``P02-S01-M05-T14``), the multi-instance worker loop
+    (``ai_os_kernel.workflow_engine.worker_loop.run_worker_loop``,
+    built and unit/integration-tested in ``P02-S01-M05-T12`` but
+    deliberately left unstarted until a real, system-wide definition
+    discovery mechanism existed for it to use — see
+    ``definition_catalog.py``'s own docstring). All four are genuinely
+    stopped — cancelled or signalled to stop, then awaited — before
+    ``engine.dispose()`` runs, so no query any of them makes can ever
+    race a closed connection pool.
     """
     app.state.token_verifier = await _build_token_verifier()
     shutdown_coordinator = GracefulShutdownCoordinator()
@@ -1252,6 +1271,50 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         app.state.lease_reap_task = lease_reap_task
         shutdown_coordinator.register_task("lease_reap", lease_reap_task)
+        # The multi-instance worker loop's own real background loop
+        # (P02-S01-M05-T14) — the first of the four P02-S01-M05-T09
+        # through T12 "proven, unused" capabilities to move to "proven,
+        # running." Definition resolution now goes through the real
+        # SqlWorkflowDefinitionCatalog.get() this step added, not a
+        # composition-injected mapping — genuine, system-wide
+        # discovery of whichever definition an arbitrary, already-
+        # running instance happens to belong to. The step executor
+        # reuses the identical agent_registry/context_manager
+        # _build_workflow_trigger's own demo path already built above
+        # (real or credential-degraded, this loop does not care which
+        # — an AgentNotRegisteredError for one discovered instance is
+        # just that instance's own "failed" outcome, not a loop
+        # failure), the same "cheap to construct a second one" reuse
+        # lease_reap_task above already establishes for its own
+        # WorkflowLeaseService.
+        worker_loop_definition_catalog = SqlWorkflowDefinitionCatalog(engine)
+        worker_loop = WorkflowWorkerLoop(
+            repository=SqlWorkflowInstanceRepository(engine),
+            advance_runner=WorkflowAdvanceRunner(
+                instance_service=WorkflowInstanceService(
+                    repository=SqlWorkflowInstanceRepository(engine),
+                    step_executor=DispatchingStepExecutor(
+                        agent_executor=AgentStepExecutor(
+                            app.state.agent_registry, context_manager=app.state.context_manager
+                        ),
+                        tool_executor=ToolStepExecutor(InMemoryToolRegistry({})),
+                        default_executor=NoOpStepExecutor(),
+                    ),
+                    definition_catalog=worker_loop_definition_catalog,
+                ),
+                lease_service=WorkflowLeaseService(SqlWorkflowLeaseRepository(engine)),
+            ),
+            definition_catalog=worker_loop_definition_catalog,
+            worker_id=_WORKFLOW_WORKER_ID,
+        )
+        worker_poll_interval = app.state.config.worker_poll_interval_seconds
+        if worker_poll_interval is None:
+            worker_poll_interval = WORKER_POLL_INTERVAL_SECONDS
+        workflow_worker_task = asyncio.create_task(
+            run_worker_loop(worker=worker_loop, interval_seconds=worker_poll_interval)
+        )
+        app.state.workflow_worker_task = workflow_worker_task
+        shutdown_coordinator.register_task("workflow_worker_loop", workflow_worker_task)
         # The same read accessors GET /workflows/{id}(/steps|/events)
         # use (ai_os_kernel.routes.workflows) — a plain, stateless
         # wrapper over the engine, safe to construct separately from the

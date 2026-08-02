@@ -57,14 +57,38 @@ covered by the primary key):
   occurred_at``, ``evaluation.metrics.recorded_at``,
   ``catalog.pack_state_transitions.occurred_at``).
 
-No reader, no update, no delete — registration is the only operation
-this step approves.
+**A real reader now exists (2026-08-02, `P02-S01-M05-T14`) — closing
+the "no reader" gap this module's own docstring stated above.**
+Investigation (this same step) found the write-only catalog is a
+genuine blocker for exactly two of the four capabilities the product
+owner asked to unblock — `sub_workflow` (needs to resolve an
+*arbitrary* referenced definition by id) and the multi-instance worker
+loop (needs to resolve *whichever* definition a discovered, already-
+running instance happens to belong to, unknown in advance) — both of
+which previously had no real option but a composition-level,
+caller-supplied mapping (`P02-S01-M05-T11`/`T12`). `decision`/
+`parallel` are a genuinely different, smaller gap: they need no
+cross-definition lookup at all (both operate entirely within one
+definition's own declared steps) — they stay unwired because no real
+running pipeline has yet declared one, not because of this module.
+`get` is a lossless round-trip of exactly what `register` already writes —
+`graph` already contains every field of the original, validated
+definition except `id`/`version`/`inputs`/`outputs` (each already its
+own column), so reconstructing `WorkflowDefinition.model_validate(...)`
+from the four columns together recovers the identical object, nothing
+approximated or re-derived. This is deliberately **not** a general
+catalog/versioning system: no listing, no update, no delete, no
+"latest version" resolution — a single, exact-key lookup, the smallest
+real thing that turns "write-only" into "genuinely readable by the
+callers that already need it." See
+:class:`~ai_os_kernel.workflow_engine.worker_loop.WorkflowWorkerLoop`
+for the first real consumer.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -78,12 +102,15 @@ _GRAPH_EXCLUDED_FIELDS = {"id", "version", "inputs", "outputs"}
 
 
 class WorkflowDefinitionCatalog(Protocol):
-    """Persistence boundary for registering a validated
-    :class:`WorkflowDefinition` into ``catalog.workflow_definitions`` —
-    the seam a fake implementation substitutes in unit tests (ADR-0004:
-    interface-driven, configuration over code)."""
+    """Persistence boundary for registering, and now reading back, a
+    validated :class:`WorkflowDefinition` in
+    ``catalog.workflow_definitions`` — the seam a fake implementation
+    substitutes in unit tests (ADR-0004: interface-driven, configuration
+    over code)."""
 
     async def register(self, *, definition: WorkflowDefinition, pack_id: str) -> None: ...
+
+    async def get(self, *, definition_id: str, version: str) -> WorkflowDefinition | None: ...
 
 
 class SqlWorkflowDefinitionCatalog:
@@ -117,3 +144,30 @@ class SqlWorkflowDefinitionCatalog:
                 f"failed to register workflow definition "
                 f"'{definition.id}@{definition.version}': {exc}"
             ) from exc
+
+    async def get(self, *, definition_id: str, version: str) -> WorkflowDefinition | None:
+        """A plain, unguarded read — the identical "no leasing/locking
+        here" shape :meth:`~ai_os_kernel.workflow_engine.repository.
+        SqlWorkflowInstanceRepository.get_instance` already establishes
+        for a read that exists to be acted on, not raced over. Rebuilds
+        the original, validated definition from exactly the four
+        columns `register` wrote it from — see this module's own
+        docstring for why that round-trip is lossless."""
+        async with self._engine.connect() as connection:
+            result = await connection.execute(
+                sa.select(workflow_definitions).where(
+                    workflow_definitions.c.definition_id == definition_id,
+                    workflow_definitions.c.version == version,
+                )
+            )
+            row = result.mappings().one_or_none()
+        if row is None:
+            return None
+        payload: dict[str, Any] = {
+            **row["graph"],
+            "id": row["definition_id"],
+            "version": row["version"],
+            "inputs": row["inputs_schema"],
+            "outputs": row["outputs_schema"],
+        }
+        return WorkflowDefinition.model_validate(payload)

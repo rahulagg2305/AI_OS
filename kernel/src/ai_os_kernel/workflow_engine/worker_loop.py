@@ -20,24 +20,22 @@ purpose-built query: `status = 'running'` and no unexpired
 `workflow_leases` row, oldest-runnable-first (fairness, unlike the
 listing endpoint's newest-first).
 
-**Definition resolution reuses the exact `P02-S01-M05-T11` precedent,
-for the identical reason.** A discovered instance only stores
-`(definition_id, definition_version)` — `WorkflowDefinitionCatalog` is
-write-only (see `definition_catalog.py`'s own docstring), so there is
-still no real path to look up the full `WorkflowDefinition` object a
-call to `advance()` requires. `WorkflowWorkerLoop` is constructed with
-a plain, composition-level `{(definition_id, definition_version):
-WorkflowDefinition}` mapping — the same `gate_sources`/
-`step_retry_targets`/`SubWorkflowStepExecutor.definitions` shape this
-codebase already established for "a cross-cutting reference belongs in
-the composition layer." Keyed by the *pair*, not `definition_id` alone
-(unlike `SubWorkflowStepExecutor`'s own single-version-in-scope
-mapping): a worker loop's whole point is to discover *arbitrary*
-already-running instances, which may span more than one still-running
-version of the same `definition_id` — collapsing the key to `id` alone
-would silently resolve some instances against the wrong version's
-graph, a real correctness bug the narrower T11 case did not have to
-consider.
+**Definition resolution now reads the real catalog (updated
+2026-08-02, `P02-S01-M05-T14`) — no longer a composition-level
+mapping.** `WorkflowDefinitionCatalog` used to be write-only (see
+`definition_catalog.py`'s own docstring for the full history); this
+step gave it a real `get(definition_id, version)` reader, reconstructed
+losslessly from exactly what `register` already writes. Every
+discovered instance's `(definition_id, definition_version)` is now
+resolved by calling that reader directly — genuine, system-wide
+discovery, not a dict a composition root has to hand-maintain in
+advance. (The prior, T12-era design injected a plain
+`{(definition_id, definition_version): WorkflowDefinition}` mapping,
+the same `gate_sources`/`step_retry_targets` shape this codebase
+established elsewhere; that shape remains correct for
+`SubWorkflowStepExecutor`'s narrower, single-reference case, but could
+never answer "any arbitrary already-running instance," which is this
+module's whole point.)
 
 **One step per instance per tick, not `run_to_completion` per
 instance.** The whole point of "concurrently, not one per call" is
@@ -59,13 +57,17 @@ as a skip, never a tick failure. Any other exception for one instance
 is logged and skipped too — the identical per-item resilience
 `run_health_polling_loop`/`run_reap_loop` already established, so one
 instance's genuine failure never stops the rest of the batch or the
-loop itself.
+loop itself. A resolved-to-`None` definition (a real row genuinely
+absent from the catalog) is the identical kind of per-instance skip.
 
 **`run_worker_loop` is the scheduler**, the identical
 sleep-then-act-until-cancelled shape
 :func:`~ai_os_kernel.workflow_engine.lease_reaper.run_reap_loop` (which
 itself names :func:`~ai_os_kernel.capability_manager.health_poller.
-run_health_polling_loop` as its own precedent) already proved twice.
+run_health_polling_loop` as its own precedent) already proved twice —
+and, as of this step, genuinely started in `_lifespan` alongside them
+(`bootstrap.py`), the first of the four `P02-S01-M05-T09`–`T12`
+capabilities to move from "proven, unused" to "proven, running."
 
 **The interval/batch-size/lease-duration values, decided here.**
 Neither `workflow_engine.md` nor any other document names a worker
@@ -85,16 +87,15 @@ with an empty-result query every event-loop tick.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
 from ai_os_kernel.observability.logging import get_logger
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner
+from ai_os_kernel.workflow_engine.definition_catalog import WorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.errors import WorkflowLeaseUnavailableError
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance
-from ai_os_kernel.workflow_engine.models import WorkflowDefinition
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 
 _logger = get_logger(__name__)
@@ -132,19 +133,22 @@ class WorkflowWorkerLoop:
     step, concurrently, via the injected
     :class:`~ai_os_kernel.workflow_engine.advance_runner.WorkflowAdvanceRunner`
     — the same class a single-instance caller already uses, not a
-    second execution mechanism."""
+    second execution mechanism. Resolves each instance's definition via
+    the injected :class:`~ai_os_kernel.workflow_engine.
+    definition_catalog.WorkflowDefinitionCatalog`'s own real `get` —
+    genuine, system-wide discovery, not a caller-maintained mapping."""
 
     def __init__(
         self,
         *,
         repository: WorkflowInstanceRepository,
         advance_runner: WorkflowAdvanceRunner,
-        definitions: Mapping[tuple[str, str], WorkflowDefinition],
+        definition_catalog: WorkflowDefinitionCatalog,
         worker_id: str,
     ) -> None:
         self._repository = repository
         self._advance_runner = advance_runner
-        self._definitions = definitions
+        self._definition_catalog = definition_catalog
         self._worker_id = worker_id
 
     async def tick_once(self, *, limit: int, lease_duration_seconds: int) -> WorkerTickResult:
@@ -191,7 +195,9 @@ class WorkflowWorkerLoop:
     async def _advance_one(
         self, instance: WorkflowInstance, *, lease_duration_seconds: int
     ) -> _Outcome:
-        definition = self._definitions.get((instance.definition_id, instance.definition_version))
+        definition = await self._definition_catalog.get(
+            definition_id=instance.definition_id, version=instance.definition_version
+        )
         if definition is None:
             _logger.warning(
                 "workflow_worker_loop.no_definition",

@@ -1,11 +1,12 @@
 """Unit tests for ``WorkflowWorkerLoop``'s own logic — fake
-``repository``/``advance_runner`` throughout, isolating discovery,
-per-instance dispatch, and outcome bucketing from what a real
-``WorkflowInstanceRepository``/``WorkflowAdvanceRunner`` do internally,
-which is already proven, real, end to end, against a real Postgres
-container by
+``repository``/``advance_runner``/``definition_catalog`` throughout,
+isolating discovery, per-instance dispatch, and outcome bucketing from
+what a real ``WorkflowInstanceRepository``/``WorkflowAdvanceRunner``/
+``WorkflowDefinitionCatalog`` do internally, which is already proven,
+real, end to end, against a real Postgres container by
 ``tests/integration/workflow_engine/test_worker_loop_execution.py``
-(``P02-S01-M05-T12``)."""
+(``P02-S01-M05-T12``, updated ``P02-S01-M05-T14`` for the real catalog
+reader)."""
 
 from __future__ import annotations
 
@@ -76,6 +77,24 @@ class _FakeRepository:
         return self._instances[:limit]
 
 
+class _FakeDefinitionCatalog:
+    """Records every lookup; returns whichever definition the test
+    registered under the exact `(definition_id, version)` key, or
+    `None` — the identical "resolved or genuinely absent" contract the
+    real `SqlWorkflowDefinitionCatalog.get` has."""
+
+    def __init__(self, definitions: dict[tuple[str, str], WorkflowDefinition]) -> None:
+        self._definitions = definitions
+        self.get_calls: list[tuple[str, str]] = []
+
+    async def register(self, *, definition: WorkflowDefinition, pack_id: str) -> None:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def get(self, *, definition_id: str, version: str) -> WorkflowDefinition | None:
+        self.get_calls.append((definition_id, version))
+        return self._definitions.get((definition_id, version))
+
+
 class _FakeAdvanceRunner:
     """Records every call; either succeeds, raises
     ``WorkflowLeaseUnavailableError`` for a configured set of workflow
@@ -124,9 +143,11 @@ def _worker(
     return WorkflowWorkerLoop(
         repository=_FakeRepository(instances),  # type: ignore[arg-type]
         advance_runner=advance_runner,  # type: ignore[arg-type]
-        definitions=definitions
-        if definitions is not None
-        else {(_DEFINITION_ID, _DEFINITION_VERSION): _definition()},
+        definition_catalog=_FakeDefinitionCatalog(
+            definitions
+            if definitions is not None
+            else {(_DEFINITION_ID, _DEFINITION_VERSION): _definition()}
+        ),
         worker_id="worker-1",
     )
 
@@ -171,7 +192,7 @@ async def test_a_genuine_per_instance_failure_is_isolated_from_the_rest_of_the_b
     assert result.advanced == ("wf_b",)
 
 
-async def test_an_instance_whose_definition_is_not_configured_is_skipped_not_advanced() -> None:
+async def test_an_instance_whose_definition_is_not_registered_is_skipped_not_advanced() -> None:
     instances = [_instance(workflow_id="wf_a", definition_version="9.9.9")]
     advance_runner = _FakeAdvanceRunner()
     worker = _worker(instances=instances, advance_runner=advance_runner)
@@ -187,7 +208,7 @@ async def test_definitions_are_resolved_by_the_exact_id_and_version_pair() -> No
     """Two concurrently-running instances of the *same* `definition_id`
     but different `definition_version` must each resolve to their own,
     correct definition object — never collapsed to one just because the
-    id matches, the real correctness bug a plain-id-keyed mapping would
+    id matches, the real correctness bug a plain-id-keyed lookup would
     risk once more than one version of a definition is running at
     once."""
     v1 = _definition()

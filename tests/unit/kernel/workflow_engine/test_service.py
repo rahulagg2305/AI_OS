@@ -360,6 +360,9 @@ class _FakeDefinitionCatalog:
         if self._error is not None:
             raise self._error
 
+    async def get(self, *, definition_id: str, version: str) -> WorkflowDefinition | None:
+        raise NotImplementedError("not exercised by these tests")
+
 
 class _FakeGateResultRecorder:
     """Records every call made to it; never touches a database."""

@@ -441,6 +441,9 @@ class _FakeDefinitionCatalog:
     async def register(self, *, definition: WorkflowDefinition, pack_id: str) -> None:
         raise NotImplementedError("not exercised by these tests")
 
+    async def get(self, *, definition_id: str, version: str) -> WorkflowDefinition | None:
+        raise NotImplementedError("not exercised by these tests")
+
 
 def _runner(
     instance_repository: _FakeInstanceRepository | _StatefulInstanceRepository,
