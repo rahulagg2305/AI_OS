@@ -56,6 +56,16 @@ _DEFINITION_VERSION = "1.0.0"
 _PACK_ID = "se.software_engineering"
 _STEP_ID = "approve-deployment"
 
+# `register()` is an upsert keyed on `(definition_id, version)` with
+# `ON CONFLICT DO NOTHING` (data_model.md §5: versions are immutable —
+# a change creates a new version row, definition_catalog.py's own
+# docstring). Every test in this module shares `database_url` (module
+# scope, one real container), so a definition with different content —
+# here, a declared `timeout` — MUST use its own version; reusing
+# `_DEFINITION_VERSION` would silently resolve to whichever test
+# registered that version first, not the content this test declared.
+_TIMEOUT_DEFINITION_VERSION = "1.0.0-timeout"
+
 
 @pytest.fixture(scope="module")
 def database_url() -> Generator[str, None, None]:
@@ -83,12 +93,13 @@ def _definition(*, timeout: float | None = None) -> WorkflowDefinition:
     }
     if timeout is not None:
         point["timeout"] = timeout
+    version = _TIMEOUT_DEFINITION_VERSION if timeout is not None else _DEFINITION_VERSION
     return WorkflowDefinition.model_validate(
         {
             "id": _DEFINITION_ID,
             "name": "Human Approval Test",
             "description": "test fixture",
-            "version": _DEFINITION_VERSION,
+            "version": version,
             "inputs": {"type": "object"},
             "outputs": {"type": "object"},
             "steps": [
