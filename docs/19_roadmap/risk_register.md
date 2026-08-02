@@ -52,6 +52,20 @@ The moment either P07-S01-M40-T01 (Kubernetes/Helm) or P03-S01-M24-T01
 from satisfied to violated silently. **Blocking dependency:** those two
 Tasks each declare the approval Tasks as `depends_on`.
 
+**Update 2026-08-02: the blocking dependency itself is now satisfied.**
+P03-S05-M14-T04/T05 are done — a real Human Approval Manager exists,
+genuinely pauses a workflow at a `human_approval` step, and resumes only
+on a real, attributable decision; a timeout never implies approval
+(proven via real Postgres tests, `feature_inventory.md` module 5's own
+row). **The rule itself stays open and permanent** (it is a standing
+constraint, not a one-time gap to close): it still requires that *when*
+P07-S01-M40-T01 or P03-S01-M24-T01 is eventually built, it actually
+wires a real `human_approval` step into its own deploy pipeline, not
+merely that the guardrail exists somewhere unused. The Manager's own
+service-layer-only scope (no HTTP route, no RBAC against `approver`) is
+a disclosed, product-owner-approved gap — not itself a violation of this
+rule, since no deploy capability exists yet to expose it.
+
 ### R-002 — Docker exception-catching inconsistency *(closed)*
 
 `_postgres_fixture.py` caught only `docker.errors.DockerException`, while

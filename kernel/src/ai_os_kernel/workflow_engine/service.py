@@ -15,7 +15,10 @@ from __future__ import annotations
 from typing import Any
 
 from ai_os_kernel.workflow_engine.definition_catalog import WorkflowDefinitionCatalog
-from ai_os_kernel.workflow_engine.errors import WorkflowInvalidTransitionError
+from ai_os_kernel.workflow_engine.errors import (
+    HumanApprovalPendingError,
+    WorkflowInvalidTransitionError,
+)
 from ai_os_kernel.workflow_engine.gate_result_recorder import GateResultRecorder
 from ai_os_kernel.workflow_engine.input_validation import (
     validate_inputs,
@@ -113,6 +116,23 @@ class WorkflowInstanceService:
             triggering_event_id=triggering_event_id,
         )
 
+    async def get_instance(self, workflow_id: str) -> WorkflowInstance | None:
+        """A plain, unguarded read passthrough to the injected
+        repository (added 2026-08-02, ``P03-S05-M14-T04``) — needed by
+        :meth:`~ai_os_kernel.workflow_engine.advance_runner.
+        WorkflowAdvanceRunner.run_to_completion` to distinguish a
+        genuine lease-acquire rejection (real contention, or a
+        genuinely absent/wrong instance — still ``FAILED``) from a
+        real, honest pause (the instance is already
+        ``waiting_for_human`` — see that method's own docstring for the
+        full reasoning). This service stays "deliberately thin" per its
+        own module docstring: no new logic here, just the identical
+        read :class:`WorkflowInstanceRepository.get_instance` already
+        provides, exposed at this layer since ``WorkflowAdvanceRunner``
+        has no direct repository access of its own.
+        """
+        return await self._repository.get_instance(workflow_id)
+
     async def advance(
         self,
         *,
@@ -182,6 +202,19 @@ class WorkflowInstanceService:
         per-exception-type special-casing; only whether the exception
         also declares itself ``retriable`` (see that module's own
         docstring for the category split) gates the decision.
+
+        **A ``human_approval`` step genuinely pausing is a third, real
+        outcome here — neither success nor failure (added 2026-08-02,
+        ``P03-S05-M14-T04``).** :class:`~ai_os_kernel.workflow_engine.
+        errors.HumanApprovalPendingError` is caught *before* the
+        generic handler above: no failed-attempt row, no re-raise, just
+        a genuine transition to ``waiting_for_human`` via
+        :meth:`~ai_os_kernel.workflow_engine.repository.
+        WorkflowInstanceRepository.mark_waiting_for_human`, returned
+        exactly like any other successful ``advance()`` result. See
+        :mod:`ai_os_kernel.workflow_engine.human_approval`'s own module
+        docstring for the full pause/resume design and why a timeout
+        can never imply approval.
         """
         instance = await self._repository.get_instance(workflow_id)
         if instance is None:
@@ -197,6 +230,24 @@ class WorkflowInstanceService:
         if next_step is not None:
             try:
                 outputs = await self._step_executor.execute(next_step, workflow_id=workflow_id)
+            except HumanApprovalPendingError:
+                # A human_approval step genuinely still awaiting a real
+                # decision is not a failure — no `record_failed_attempt`
+                # row, no re-raise. The caller (`WorkflowAdvanceRunner.
+                # run_once`, and therefore the worker loop and
+                # `run_to_completion`) sees an ordinary, successful
+                # return, exactly like any other `advance()` call — one
+                # whose resulting status just happens to be
+                # `waiting_for_human` instead of `running`. See
+                # `human_approval.py`'s own module docstring for the
+                # full pause/resume design.
+                return await self._repository.mark_waiting_for_human(
+                    workflow_id=workflow_id,
+                    definition_id=definition.id,
+                    definition_version=definition.version,
+                    expected_current_step_id=instance.current_step_id,
+                    reason=f"human_approval step '{next_step.id}' awaiting a real decision",
+                )
             except Exception as exc:
                 # setattr (not `exc.step_id = ...`, which mypy --strict
                 # correctly rejects — `exc`'s *static* type is the bare

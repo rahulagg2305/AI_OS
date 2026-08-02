@@ -2,8 +2,8 @@
 work (Agent, Tool, Decision, Parallel, Sub-workflow, Quality Gate, Human
 Approval — workflow_architecture.md "Supported Step Types").
 
-``NoOpStepExecutor`` always succeeds and does nothing — still the only
-implementation for Human-Approval steps at this stage.
+``NoOpStepExecutor`` always succeeds and does nothing — the only
+implementation for every step type nothing else is configured for.
 ``AgentStepExecutor`` resolves a step's declared ``agentId`` through an
 injected
 :class:`~ai_os_kernel.workflow_engine.registry.AgentRegistry` and
@@ -28,8 +28,13 @@ and joining per ``joinPolicy`` — see its own docstring.
 implementation for a Sub-workflow step, genuinely creating, starting,
 and running a real child :class:`~ai_os_kernel.workflow_engine.
 instance.WorkflowInstance` to completion and joining on its real,
-persisted output — see its own docstring. A caller that does not
-supply one still routes ``decision``/``parallel``/``sub_workflow``
+persisted output — see its own docstring.
+:class:`~ai_os_kernel.workflow_engine.human_approval.
+HumanApprovalStepExecutor` (``P03-S05-M14-T04``) is the real
+implementation for a Human-Approval step — the last of the seven step
+types to genuinely execute — see that module's own docstring for the
+full pause/resume design. A caller that does not supply one still
+routes ``decision``/``parallel``/``sub_workflow``/``human_approval``
 steps to ``NoOpStepExecutor``, unchanged. ``DispatchingStepExecutor``
 routes between all seven by ``step.type`` — the composition root wires
 each individually (ADR-0004: interface-driven; ADR-0010: no DI
@@ -656,23 +661,26 @@ class DispatchingStepExecutor:
     to ``tool_executor``, a Quality-Gate-type step to
     ``quality_gate_executor`` (when supplied), a Decision-type step to
     ``decision_executor`` (when supplied), a Parallel-type step to
-    ``parallel_executor`` (when supplied), and every other step type to
-    ``default_executor``.
+    ``parallel_executor`` (when supplied), a Human-Approval-type step to
+    ``human_approval_executor`` (when supplied), and every other step
+    type to ``default_executor``.
 
     The only place that knows all seven executors exist; none of them
     needs to know about the others or about step types it does not
     handle. ``quality_gate_executor``/``decision_executor``/
-    ``parallel_executor``/``sub_workflow_executor`` all default to
-    ``None`` — every existing caller that does not supply one keeps
-    routing that step type to ``default_executor`` exactly as before
-    (:class:`NoOpStepExecutor`, unchanged); only a caller that
-    genuinely wants real, blocking gate evaluation
-    (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`), real
-    decision-step branching, real concurrent parallel execution, or
-    real child-workflow invocation supplies
-    :class:`~ai_os_kernel.workflow_engine.quality_gate.
+    ``parallel_executor``/``sub_workflow_executor``/
+    ``human_approval_executor`` all default to ``None`` — every existing
+    caller that does not supply one keeps routing that step type to
+    ``default_executor`` exactly as before (:class:`NoOpStepExecutor`,
+    unchanged); only a caller that genuinely wants real, blocking gate
+    evaluation (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`),
+    real decision-step branching, real concurrent parallel execution,
+    real child-workflow invocation, or a real, durable human-approval
+    pause supplies :class:`~ai_os_kernel.workflow_engine.quality_gate.
     QualityGateStepExecutor`/:class:`DecisionStepExecutor`/
-    :class:`ParallelStepExecutor`/:class:`SubWorkflowStepExecutor` here.
+    :class:`ParallelStepExecutor`/:class:`SubWorkflowStepExecutor`/
+    :class:`~ai_os_kernel.workflow_engine.human_approval.
+    HumanApprovalStepExecutor` here.
     """
 
     def __init__(
@@ -684,6 +692,7 @@ class DispatchingStepExecutor:
         decision_executor: StepExecutor | None = None,
         parallel_executor: StepExecutor | None = None,
         sub_workflow_executor: StepExecutor | None = None,
+        human_approval_executor: StepExecutor | None = None,
     ) -> None:
         self._agent_executor = agent_executor
         self._tool_executor = tool_executor
@@ -692,6 +701,7 @@ class DispatchingStepExecutor:
         self._decision_executor = decision_executor
         self._parallel_executor = parallel_executor
         self._sub_workflow_executor = sub_workflow_executor
+        self._human_approval_executor = human_approval_executor
 
     async def execute(
         self, step: WorkflowStep, *, workflow_id: str | None = None
@@ -708,4 +718,6 @@ class DispatchingStepExecutor:
             return await self._parallel_executor.execute(step, workflow_id=workflow_id)
         if step.type is StepType.SUB_WORKFLOW and self._sub_workflow_executor is not None:
             return await self._sub_workflow_executor.execute(step, workflow_id=workflow_id)
+        if step.type is StepType.HUMAN_APPROVAL and self._human_approval_executor is not None:
+            return await self._human_approval_executor.execute(step, workflow_id=workflow_id)
         return await self._default_executor.execute(step, workflow_id=workflow_id)

@@ -453,3 +453,35 @@ class WorkflowDefinition(_CamelModel):
         if not value:
             raise ValueError("failureHandling must not be empty")
         return value
+
+    @model_validator(mode="after")
+    def _human_approval_steps_reference_a_real_point(self) -> WorkflowDefinition:
+        """A ``human_approval``-typed step's own ``id`` **is** the
+        corresponding ``humanApprovalPoints`` entry's own ``id`` — the
+        identical, already-established convention every other id-based
+        cross-reference in this codebase already uses (``sourceStepId``
+        naming a step, ``branches`` naming steps, ``subWorkflowId``
+        naming a definition): one shared id namespace, not a new field.
+        This is confirmed, not invented — a pre-existing test
+        (``test_human_approval_step_with_agent_id_fails_clearly``)
+        already paired a `human_approval` step's own id with a matching
+        `humanApprovalPoints` entry of the identical id, before any
+        code enforced it.
+
+        Deliberately **one-directional**: only every declared
+        `human_approval` *step* must resolve to a real point. The
+        reverse is not required — a `humanApprovalPoints` entry with no
+        matching step is merely unused, declared data (an existing,
+        real test, ``test_loads_a_definition_with_a_full_human_approval_point``,
+        already exercises exactly this shape) — not an error, the same
+        "an unresolvable source contributing nothing is not a failure"
+        reasoning already established for context resolvers.
+        """
+        point_ids = {point.id for point in self.human_approval_points}
+        for step in self.steps:
+            if step.type is StepType.HUMAN_APPROVAL and step.id not in point_ids:
+                raise ValueError(
+                    f"step '{step.id}': a human_approval step's id must match a "
+                    "humanApprovalPoints entry of the same id — none declared"
+                )
+        return self

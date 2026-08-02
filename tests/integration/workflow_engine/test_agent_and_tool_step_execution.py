@@ -77,6 +77,15 @@ def _definition_with_an_agent_step_a_tool_step_and_a_human_approval_step() -> Wo
                 {"id": "run_build", "type": "tool", "toolId": _TOOL_ID},
                 {"id": "release_approval", "type": "human_approval"},
             ],
+            "humanApprovalPoints": [
+                {
+                    "id": "release_approval",
+                    "name": "Release Approval",
+                    "description": "Approve the release before it ships.",
+                    "context": {},
+                    "options": ["approve", "reject"],
+                }
+            ],
             "failureHandling": {"onError": "escalate"},
         }
     )

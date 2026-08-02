@@ -95,6 +95,15 @@ def _one_step_definition() -> WorkflowDefinition:
             "inputs": {"type": "object"},
             "outputs": {"type": "object"},
             "steps": [{"id": "approve", "type": "human_approval"}],
+            "humanApprovalPoints": [
+                {
+                    "id": "approve",
+                    "name": "Approve",
+                    "description": "Approve something.",
+                    "context": {},
+                    "options": ["approve", "reject"],
+                }
+            ],
             "failureHandling": {"onError": "escalate"},
         }
     )

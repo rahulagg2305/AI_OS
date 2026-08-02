@@ -73,6 +73,9 @@ class _FakeRepository:
     async def reset_current_step(self, **kwargs: Any) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
+    async def mark_waiting_for_human(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
     async def record_failed_attempt(self, **kwargs: Any) -> None:
         raise NotImplementedError("not exercised by these tests")
 

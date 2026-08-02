@@ -25,3 +25,7 @@ def new_step_id() -> str:
 
 def new_gate_result_id() -> str:
     return f"gr_{ULID()}"
+
+
+def new_approval_id() -> str:
+    return f"appr_{ULID()}"

@@ -114,6 +114,44 @@ class SubWorkflowFailedError(Exception):
     distinct real causes, one class, a clear message per site."""
 
 
+class HumanApprovalPendingError(Exception):
+    """A ``human_approval`` step
+    (:class:`~ai_os_kernel.workflow_engine.human_approval.
+    HumanApprovalStepExecutor`) has a real, persisted ``approvals`` row
+    that is still ``pending`` — genuinely not yet decided, not a
+    failure. Caught specially by
+    :meth:`~ai_os_kernel.workflow_engine.service.WorkflowInstanceService.advance`
+    (before its own generic exception handler) to transition the
+    instance to ``waiting_for_human`` instead of recording a failed
+    attempt — see that method's own docstring addendum. **Never raised
+    on a timeout**: nothing in this codebase ever converts an elapsed
+    ``timeout``/``expires_at`` into an implicit approval — R-001
+    (`risk_register.md`) is a permanent, non-negotiable rule, not a
+    default this exception's own absence of a case for it left open by
+    oversight."""
+
+
+class HumanApprovalRejectedError(Exception):
+    """A ``human_approval`` step's real, persisted decision was
+    ``rejected`` — a genuine step failure (human_approval_points.md
+    §5: "Reject → Workflow follows the rejection path (may terminate
+    or compensate)"; compensation is not built, so this halts the
+    pipeline through the same, existing failure boundary
+    :class:`AgentOutputValidationError` already uses — "terminate," not
+    a new mechanism)."""
+
+
+class ApprovalNotPendingError(Exception):
+    """A real decision was attempted against an ``approvals`` row that
+    is not (or no longer) ``pending`` — already decided, or genuinely
+    absent. Guards :meth:`~ai_os_kernel.workflow_engine.human_approval.
+    SqlApprovalRepository.decide` against a double decision (two real,
+    concurrent decide attempts) the identical way every other guarded
+    ``UPDATE ... WHERE`` in this codebase already guards against a
+    stale caller — never a silent overwrite of an already-recorded,
+    attributable decision."""
+
+
 class ToolSandboxRequiredError(Exception):
     """A tool declares ``trust_tier = tier1_sandboxed`` but is not
     genuinely backed by a real :class:`~ai_os_kernel.sandbox.executor.

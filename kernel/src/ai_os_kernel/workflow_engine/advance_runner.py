@@ -113,6 +113,15 @@ class WorkflowRunOutcome(StrEnum):
     COMPLETED = "completed"
     MAX_ITERATIONS_REACHED = "max_iterations_reached"
     FAILED = "failed"
+    WAITING_FOR_HUMAN = "waiting_for_human"
+    """A real, honest outcome (added 2026-08-02, ``P03-S05-M14-T04``) —
+    the instance genuinely reached a ``human_approval`` step and is
+    now durably paused, not failed. Without this, `run_to_completion`'s
+    own loop would attempt a *second* `run_once` on an instance that
+    is no longer `running`, hit `WorkflowLeaseService.acquire`'s
+    existing "must be running" guard, and misreport a genuine pause as
+    `FAILED` — see this class's own docstring below for exactly where
+    the loop now returns early instead."""
 
 
 class WorkflowRunResult(BaseModel):
@@ -246,6 +255,31 @@ class WorkflowAdvanceRunner:
                     step_retry_deadlines=step_retry_deadlines,
                 )
                 if retried_instance is None:
+                    # Before reporting a real failure, check whether
+                    # `run_once` never even reached `advance()` — its
+                    # own `WorkflowLeaseService.acquire` call rejected a
+                    # genuinely already-`waiting_for_human` instance
+                    # (this call's *own* prior iteration paused it, or
+                    # a separate, later `run_to_completion` call is
+                    # simply checking in on it again — see
+                    # `WorkflowRunOutcome.WAITING_FOR_HUMAN`'s own
+                    # docstring for why the `COMPLETED`-style early
+                    # return below cannot catch this on its own: this
+                    # rejection happens *before* `run_once` ever
+                    # returns an instance to inspect). A real lease
+                    # rejection from genuine contention, or any other
+                    # cause, still falls through to `FAILED` unchanged.
+                    current = await self._instance_service.get_instance(workflow_id)
+                    if (
+                        current is not None
+                        and current.status is WorkflowInstanceStatus.WAITING_FOR_HUMAN
+                    ):
+                        return WorkflowRunResult(
+                            workflow_id=workflow_id,
+                            outcome=WorkflowRunOutcome.WAITING_FOR_HUMAN,
+                            iterations=iteration,
+                            last_instance=current,
+                        )
                     return WorkflowRunResult(
                         workflow_id=workflow_id,
                         outcome=WorkflowRunOutcome.FAILED,
@@ -260,6 +294,20 @@ class WorkflowAdvanceRunner:
                 return WorkflowRunResult(
                     workflow_id=workflow_id,
                     outcome=WorkflowRunOutcome.COMPLETED,
+                    iterations=iteration,
+                    last_instance=instance,
+                )
+
+            if instance.status is WorkflowInstanceStatus.WAITING_FOR_HUMAN:
+                # Return immediately, the identical "an honest terminal
+                # outcome for this call" reasoning the COMPLETED branch
+                # above already applies — trying again would only hit
+                # WorkflowLeaseService.acquire's own "must be running"
+                # guard and misreport a genuine pause as FAILED (see
+                # WorkflowRunOutcome.WAITING_FOR_HUMAN's own docstring).
+                return WorkflowRunResult(
+                    workflow_id=workflow_id,
+                    outcome=WorkflowRunOutcome.WAITING_FOR_HUMAN,
                     iterations=iteration,
                     last_instance=instance,
                 )

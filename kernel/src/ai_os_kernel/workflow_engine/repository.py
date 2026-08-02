@@ -130,6 +130,16 @@ class WorkflowInstanceRepository(Protocol):
         reason: str,
     ) -> WorkflowInstance: ...
 
+    async def mark_waiting_for_human(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        reason: str,
+    ) -> WorkflowInstance: ...
+
     async def record_failed_attempt(
         self,
         *,
@@ -673,6 +683,94 @@ class SqlWorkflowInstanceRepository:
         except sa.exc.SQLAlchemyError as exc:
             raise WorkflowInstanceCreationError(
                 f"failed to reset workflow instance '{workflow_id}' for retry: {exc}"
+            ) from exc
+
+        return WorkflowInstance.model_validate(dict(instance_row))
+
+    async def mark_waiting_for_human(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        reason: str,
+    ) -> WorkflowInstance:
+        """Moves a `running` instance to `waiting_for_human` —
+        `current_step_id` deliberately **unchanged** (the identical
+        "no `workflow_steps` row, current_step_id untouched" shape
+        :meth:`reset_current_step` already established for its own
+        mid-flight, not-yet-completed transition): the human_approval
+        step has not genuinely completed, so there is nothing to
+        advance past yet. The *next* real `advance()` call resolves the
+        identical human_approval step again — genuinely re-invoking
+        :class:`~ai_os_kernel.workflow_engine.human_approval.
+        HumanApprovalStepExecutor`, which this time either finds the
+        approval still pending (calls back here, a real no-op re-write
+        to the same state) or finds a real, recorded decision and
+        resolves normally.
+
+        Guarded by the identical CAS pattern
+        :meth:`advance_workflow`/:meth:`reset_current_step` already use
+        (status must be ``running``, definition must match,
+        ``current_step_id`` must equal ``expected_current_step_id``).
+        """
+        occurred_at = datetime.now(UTC)
+        current_step_clause = (
+            workflow_instances.c.current_step_id.is_(None)
+            if expected_current_step_id is None
+            else workflow_instances.c.current_step_id == expected_current_step_id
+        )
+
+        try:
+            async with self._engine.begin() as connection:
+                result = await connection.execute(
+                    sa.update(workflow_instances)
+                    .where(
+                        workflow_instances.c.workflow_id == workflow_id,
+                        workflow_instances.c.status == WorkflowInstanceStatus.RUNNING.value,
+                        workflow_instances.c.definition_id == definition_id,
+                        workflow_instances.c.definition_version == definition_version,
+                        current_step_clause,
+                    )
+                    .values(
+                        status=WorkflowInstanceStatus.WAITING_FOR_HUMAN.value,
+                        last_event_seq=workflow_instances.c.last_event_seq + 1,
+                        updated_at=sa.func.now(),
+                    )
+                    .returning(*workflow_instances.columns)
+                )
+                instance_row = result.mappings().one_or_none()
+
+                if instance_row is None:
+                    raise WorkflowInvalidTransitionError(
+                        await self._describe_rejected_advance(
+                            connection,
+                            workflow_id,
+                            definition_id,
+                            definition_version,
+                            expected_current_step_id,
+                        )
+                    )
+
+                await connection.execute(
+                    sa.insert(workflow_events).values(
+                        event_id=new_event_id(),
+                        workflow_id=workflow_id,
+                        seq=instance_row["last_event_seq"],
+                        event_type=_STATE_TRANSITIONED_EVENT_TYPE,
+                        schema_version=_STATE_TRANSITIONED_SCHEMA_VERSION,
+                        payload={
+                            "previousStatus": WorkflowInstanceStatus.RUNNING.value,
+                            "newStatus": WorkflowInstanceStatus.WAITING_FOR_HUMAN.value,
+                            "reason": reason,
+                        },
+                        occurred_at=occurred_at,
+                    )
+                )
+        except sa.exc.SQLAlchemyError as exc:
+            raise WorkflowInstanceCreationError(
+                f"failed to mark workflow instance '{workflow_id}' waiting for human: {exc}"
             ) from exc
 
         return WorkflowInstance.model_validate(dict(instance_row))

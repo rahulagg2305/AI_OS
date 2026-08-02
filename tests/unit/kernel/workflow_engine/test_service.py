@@ -12,6 +12,7 @@ import pytest
 from ai_os_kernel.workflow_engine import WorkflowInputValidationError
 from ai_os_kernel.workflow_engine.errors import (
     DecisionConditionError,
+    HumanApprovalPendingError,
     QualityGateFailedError,
     WorkflowInvalidTransitionError,
 )
@@ -173,6 +174,7 @@ class _FakeRepository:
         self.transition_calls: list[dict[str, Any]] = []
         self.advance_calls: list[dict[str, Any]] = []
         self.reset_calls: list[dict[str, Any]] = []
+        self.mark_waiting_for_human_calls: list[dict[str, Any]] = []
         self.record_failed_attempt_calls: list[dict[str, Any]] = []
         self._instance = instance
         self._steps = steps or []
@@ -286,6 +288,32 @@ class _FakeRepository:
             inputs={},
             last_event_seq=99,
             current_step_id=retry_to_step_id,
+        )
+
+    async def mark_waiting_for_human(
+        self,
+        *,
+        workflow_id: str,
+        definition_id: str,
+        definition_version: str,
+        expected_current_step_id: str | None,
+        reason: str,
+    ) -> WorkflowInstance:
+        self.mark_waiting_for_human_calls.append(
+            {
+                "workflow_id": workflow_id,
+                "definition_id": definition_id,
+                "definition_version": definition_version,
+                "expected_current_step_id": expected_current_step_id,
+                "reason": reason,
+            }
+        )
+        return _instance(
+            workflow_id=workflow_id,
+            status=WorkflowInstanceStatus.WAITING_FOR_HUMAN,
+            inputs={},
+            last_event_seq=99,
+            current_step_id=expected_current_step_id,
         )
 
     async def record_failed_attempt(
@@ -633,6 +661,37 @@ async def test_advance_records_no_failed_attempt_when_the_executor_succeeds() ->
     await service.advance(workflow_id="wf_fake", definition=_DEFINITION)
 
     assert repository.record_failed_attempt_calls == []
+
+
+@pytest.mark.asyncio
+async def test_advance_marks_waiting_for_human_without_recording_a_failed_attempt() -> None:
+    """The real proof this step exists for: a `HumanApprovalPendingError`
+    is genuinely not a failure — `advance()` calls
+    `mark_waiting_for_human`, never `record_failed_attempt`, and returns
+    the resulting instance normally (no re-raise), exactly like any
+    other successful `advance()` call."""
+    current = _instance(
+        workflow_id="wf_fake", status=WorkflowInstanceStatus.RUNNING, inputs={}, last_event_seq=2
+    )
+    pending = HumanApprovalPendingError("still awaiting a real decision")
+    service, repository, _, _ = _service(
+        instance=current, step_executor=_FakeStepExecutor(error=pending)
+    )
+
+    result = await service.advance(workflow_id="wf_fake", definition=_DEFINITION)
+
+    assert result.status == WorkflowInstanceStatus.WAITING_FOR_HUMAN
+    assert repository.record_failed_attempt_calls == []
+    assert repository.advance_calls == []
+    assert repository.mark_waiting_for_human_calls == [
+        {
+            "workflow_id": "wf_fake",
+            "definition_id": "se.product_creation",
+            "definition_version": "1.0.0",
+            "expected_current_step_id": None,
+            "reason": "human_approval step 'analyze_requirements' awaiting a real decision",
+        }
+    ]
 
 
 @pytest.mark.asyncio
