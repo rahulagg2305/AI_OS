@@ -64,7 +64,8 @@ _STEP_ID = "approve-deployment"
 # here, a declared `timeout` — MUST use its own version; reusing
 # `_DEFINITION_VERSION` would silently resolve to whichever test
 # registered that version first, not the content this test declared.
-_TIMEOUT_DEFINITION_VERSION = "1.0.0-timeout"
+# Must be strict semver (`WorkflowDefinition.version`'s own pattern).
+_TIMEOUT_DEFINITION_VERSION = "1.0.1"
 
 
 @pytest.fixture(scope="module")
