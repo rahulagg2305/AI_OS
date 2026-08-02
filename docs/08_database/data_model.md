@@ -54,6 +54,7 @@ Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `
 | `knowledge` | Documents, chunks, embeddings, memory items |
 | `trace` | Traceability artifacts and links |
 | `governance` | Audit log, configuration change history |
+| `security` | Role grants (`P03-S05-M14-T07`) |
 | `platform` | Outbox, idempotency keys, schema metadata |
 
 ---
@@ -220,6 +221,27 @@ Indexes: GIN on `chunks.content_tsv`; HNSW on `embeddings.embedding` (cosine).
 ### 9.2 `governance.config_changes`
 
 `change_id` PK, `config_key`, `old_value_digest`, `new_value_digest`, `changed_by`, `reason`, `changed_at`. Digests rather than values, so a secret reference change never leaks a value.
+
+---
+
+## 9a. Security (`P03-S05-M14-T07`)
+
+Its own bounded context, distinct from `governance` — a real, previously-undocumented gap: role *administration* (granting/revoking a role for a principal) had no schema at all before this table, since every role before it came solely from a bearer token's own `roles` claim (`security_manager.token_verifier`), never from persisted state. Inserted here (not renumbering `10. Platform` onward) to avoid invalidating every existing cross-reference to a numbered section below it.
+
+### 9a.1 `security.role_grants`
+
+| Column | Type | Notes |
+|---|---|---|
+| `grant_id` | text PK | |
+| `principal_id` | text NOT NULL | The principal the role is granted to — a bearer token's own `sub` claim |
+| `role` | text NOT NULL | The exact role string, e.g. `approver:approve-git-push` — the same closed-vocabulary-family ADR-0023 §4.2 documents, not validated against a fixed list here (the `approver:<class>` family is open-ended by class name, matching `approval_class`'s own unconstrained shape in `workflow.approvals`) |
+| `status` | text NOT NULL | `active` / `revoked` |
+| `granted_by`, `granted_reason`, `granted_at` | text, text, timestamptz NOT NULL | Attributable, per this table's own "every grant/revoke is audited" requirement — mirrored again in `governance.audit_log` (`security.role_granted`/`security.role_revoked`), never only here |
+| `revoked_by`, `revoked_reason`, `revoked_at` | text, text, timestamptz NULL | `NULL` until revoked; a row is never deleted, only transitioned |
+
+A partial unique index (`principal_id`, `role`) `WHERE status = 'active'` prevents two simultaneously-active grants of the identical role to the identical principal — a real, enforced invariant, not merely a convention. `UPDATE` is real and expected here (unlike `governance.audit_log`'s own append-only rule) — a grant transitions `active` -> `revoked` in place, its own real audit trail living in `governance.audit_log`, not in row history.
+
+Real, disclosed, narrower-than-full-RBAC scope: only the `admin`-gated grant/revoke this ticket's own Input/Output asks for is built — no self-service request flow, no expiring grants, no bulk operations.
 
 ---
 

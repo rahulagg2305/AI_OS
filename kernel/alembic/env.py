@@ -24,6 +24,7 @@ from ai_os_kernel.persistence.platform_schema import metadata as platform_metada
 from ai_os_kernel.persistence.schema import metadata as workflow_metadata
 from ai_os_kernel.persistence.settings import DatabaseSettings
 from ai_os_kernel.persistence.trace_schema import metadata as trace_metadata
+from ai_os_kernel.security_manager.schema import metadata as security_metadata
 
 config = context.config
 
@@ -37,8 +38,8 @@ if config.config_file_name is not None:
 register_workflow_run_manifest_foreign_key()
 
 # One target_metadata per bounded context/schema (workflow, governance,
-# platform, trace, catalog, evaluation, knowledge, ...), each still a
-# single MetaData; Alembic accepts a sequence of them here for
+# platform, trace, catalog, evaluation, knowledge, security, ...), each
+# still a single MetaData; Alembic accepts a sequence of them here for
 # autogenerate diffing across all of them at once.
 target_metadata = [
     workflow_metadata,
@@ -48,6 +49,7 @@ target_metadata = [
     catalog_metadata,
     evaluation_metadata,
     knowledge_metadata,
+    security_metadata,
 ]
 
 

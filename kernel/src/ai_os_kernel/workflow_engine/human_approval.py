@@ -117,6 +117,7 @@ from ai_os_kernel.persistence.schema import approvals, workflow_events, workflow
 from ai_os_kernel.security_manager.approval_authorization import is_authorized_to_decide_approval
 from ai_os_kernel.security_manager.errors import ApprovalNotAuthorizedError
 from ai_os_kernel.security_manager.models import Principal
+from ai_os_kernel.security_manager.role_administration import RoleGrantRepository
 from ai_os_kernel.workflow_engine.definition_catalog import WorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.errors import (
     ApprovalNotPendingError,
@@ -377,10 +378,29 @@ class ApprovalService:
     keeping the authorization gate here lets it be exercised, and
     proven refusing, without a real database (see
     ``tests/security/test_t10_unauthorized_approval.py``).
+
+    **``role_grant_repository`` (``P03-S05-M14-T07``) is optional,
+    defaulting to ``None`` — unchanged behaviour for every existing
+    caller.** When supplied, real, persisted grants
+    (:mod:`~ai_os_kernel.security_manager.role_administration`) are
+    unioned with whatever ``principal.roles`` already claims (a
+    bearer token's own ``roles`` claim, never replaced, only
+    augmented) before the unchanged
+    :func:`~ai_os_kernel.security_manager.approval_authorization.
+    is_authorized_to_decide_approval` check runs — the same "a caller
+    without the real backing object gets the identical, existing
+    behaviour" shape :func:`~ai_os_kernel.sdk_adapters.pack_context.
+    build_pack_context`'s own optional capabilities already establish.
     """
 
-    def __init__(self, approval_repository: ApprovalRepository) -> None:
+    def __init__(
+        self,
+        approval_repository: ApprovalRepository,
+        *,
+        role_grant_repository: RoleGrantRepository | None = None,
+    ) -> None:
         self._approval_repository = approval_repository
+        self._role_grant_repository = role_grant_repository
 
     async def decide(
         self,
@@ -393,6 +413,12 @@ class ApprovalService:
         approval = await self._approval_repository.get_by_id(approval_id=approval_id)
         if approval is None:
             raise ApprovalNotPendingError(f"approval '{approval_id}' does not exist")
+        if self._role_grant_repository is not None:
+            granted_roles = await self._role_grant_repository.active_roles_for(
+                principal.principal_id
+            )
+            if granted_roles - principal.roles:
+                principal = principal.model_copy(update={"roles": principal.roles | granted_roles})
         if not is_authorized_to_decide_approval(principal, approval.approval_class):
             logger.warning(
                 "security_manager.authorization_denied",

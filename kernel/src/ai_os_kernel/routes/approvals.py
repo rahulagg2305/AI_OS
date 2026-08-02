@@ -55,9 +55,11 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.security_manager import SecurityContext, authenticate
 from ai_os_kernel.security_manager.errors import ApprovalNotAuthorizedError
+from ai_os_kernel.security_manager.role_administration import SqlRoleGrantRepository
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
 from ai_os_kernel.workflow_engine.delivery_pipeline import (
     DEFINITION_ID as SE_DELIVERY_PIPELINE_DEFINITION_ID,
@@ -97,11 +99,11 @@ class DecideApprovalResponse(BaseModel):
     resumed_error: str | None
 
 
-def _get_approval_repository(request: Request) -> SqlApprovalRepository:
-    engine = getattr(request.app.state, "database_engine", None)
+def _get_engine(request: Request) -> AsyncEngine:
+    engine: AsyncEngine | None = getattr(request.app.state, "database_engine", None)
     if engine is None:
         raise HTTPException(status_code=503, detail="workflow engine is not available")
-    return SqlApprovalRepository(engine)
+    return engine
 
 
 def _get_instance_repository(request: Request) -> WorkflowInstanceRepository:
@@ -127,7 +129,8 @@ async def decide_approval(
     # ai_os_kernel.routes.workflows's identical pattern.
     security_context: SecurityContext = Depends(authenticate),  # noqa: B008
 ) -> DecideApprovalResponse:
-    approval_repository = _get_approval_repository(request)
+    engine = _get_engine(request)
+    approval_repository = SqlApprovalRepository(engine)
     instance_repository = _get_instance_repository(request)
 
     approval = await approval_repository.get_by_id(approval_id=approval_id)
@@ -137,7 +140,12 @@ async def decide_approval(
             detail=f"no approval '{approval_id}' for workflow '{workflow_id}'",
         )
 
-    approval_service = ApprovalService(approval_repository)
+    # A real, persisted grant (P03-S05-M14-T07) is consulted here too —
+    # not only the bearer token's own roles claim — via
+    # ApprovalService's own optional role_grant_repository.
+    approval_service = ApprovalService(
+        approval_repository, role_grant_repository=SqlRoleGrantRepository(engine)
+    )
     try:
         decided = await approval_service.decide(
             approval_id=approval_id,
@@ -158,8 +166,7 @@ async def decide_approval(
         agent_registry: AgentRegistry | None = getattr(
             request.app.state, "se_delivery_pipeline_agent_registry", None
         )
-        engine = getattr(request.app.state, "database_engine", None)
-        if agent_registry is not None and engine is not None:
+        if agent_registry is not None:
             result = await resume_pipeline_after_approval(engine, agent_registry, workflow_id)
             resumed = True
             resumed_outcome = result.outcome

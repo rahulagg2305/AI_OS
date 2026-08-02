@@ -28,3 +28,30 @@ class ApprovalNotAuthorizedError(SecurityError):
     own check runs first) — the approval itself is left completely
     untouched, not a rolled-back one.
     """
+
+
+class RoleAdministrationNotAuthorizedError(SecurityError):
+    """A principal attempted to grant or revoke a role without holding
+    ``admin`` — the same "administered by ``admin`` only" reading
+    authentication_authorization.md §4.2's role table already gives
+    role/secret administration (`RoleAdministrationService`'s own
+    module docstring has the full reasoning). Raised, and audited as a
+    real ``DENIED`` event, **before** any write is attempted."""
+
+
+class RoleGrantNotActiveError(SecurityError):
+    """A revoke was attempted against a role that is not (or no longer)
+    an active grant for that principal — already revoked, or genuinely
+    never granted. Mirrors :class:`~ai_os_kernel.workflow_engine.errors.
+    ApprovalNotPendingError`'s own "guards a state-transition write
+    against acting twice" shape."""
+
+
+class RoleGrantAlreadyActiveError(SecurityError):
+    """A grant was attempted for a (principal, role) pair that already
+    has a real, active grant — refused rather than silently accepted as
+    a no-op, the identical "a second write against already-settled
+    state is a clear error, not silently swallowed" discipline
+    :class:`RoleGrantNotActiveError` applies in the opposite direction.
+    Enforced by ``security.role_grants``'s own real, atomic partial
+    unique index — never a separate, race-prone pre-check read."""
