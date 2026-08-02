@@ -136,7 +136,19 @@ class WorkflowWorkerLoop:
     second execution mechanism. Resolves each instance's definition via
     the injected :class:`~ai_os_kernel.workflow_engine.
     definition_catalog.WorkflowDefinitionCatalog`'s own real `get` —
-    genuine, system-wide discovery, not a caller-maintained mapping."""
+    genuine, system-wide discovery, not a caller-maintained mapping.
+
+    **One fixed step-executor composition for every instance it
+    discovers.** ``advance_runner`` is built once, at construction, from
+    one ``DispatchingStepExecutor`` — there is no per-definition
+    composition routing. ``exclude_definition_ids`` (``P03-S03-M30-T06``)
+    is the real, small escape hatch this implies: a definition whose own
+    declared step types (a ``human_approval`` point, a pack-specific
+    credential-gated ``agent`` registry) this loop's fixed composition
+    cannot correctly execute must opt out of discovery entirely, rather
+    than being silently mis-advanced. Empty by default — unchanged
+    behaviour for every existing caller.
+    """
 
     def __init__(
         self,
@@ -145,16 +157,20 @@ class WorkflowWorkerLoop:
         advance_runner: WorkflowAdvanceRunner,
         definition_catalog: WorkflowDefinitionCatalog,
         worker_id: str,
+        exclude_definition_ids: frozenset[str] = frozenset(),
     ) -> None:
         self._repository = repository
         self._advance_runner = advance_runner
         self._definition_catalog = definition_catalog
         self._worker_id = worker_id
+        self._exclude_definition_ids = exclude_definition_ids
 
     async def tick_once(self, *, limit: int, lease_duration_seconds: int) -> WorkerTickResult:
         """Discover up to ``limit`` runnable instances and attempt to
         advance each by one step, concurrently."""
-        instances = await self._repository.list_runnable_instances(limit=limit)
+        instances = await self._repository.list_runnable_instances(
+            limit=limit, exclude_definition_ids=self._exclude_definition_ids
+        )
         outcomes = await asyncio.gather(
             *(
                 self._advance_one(instance, lease_duration_seconds=lease_duration_seconds)

@@ -14,6 +14,24 @@ role grants the docs give for them; a later step adds more permissions
 and role grants as more routes are built, without changing this
 module's shape.
 
+**No ``approval:decide`` flat permission (considered and rejected,
+``P03-S03-M30-T06``).** A route needing "may this principal decide
+*some* approval" cannot be expressed correctly here: this module's own
+flat, exact-string role lookup has no way to recognize a class-scoped
+role like ``approver:release`` as also implying the bare ``approver``
+grant — a principal legitimately holding *only*
+``approver:approve-git-push`` (the realistic, minimal grant ADR-0023's
+own role table describes — "Approval classes are grantable separately")
+would be refused by a flat gate before ever reaching the real,
+correctly class-scoped check. :mod:`ai_os_kernel.routes.approvals`
+authenticates only (real Bearer/JWT verification, unchanged) and defers
+the entire authorization decision to
+:class:`~ai_os_kernel.workflow_engine.human_approval.ApprovalService`,
+which already does this correctly via
+:func:`~ai_os_kernel.security_manager.approval_authorization.
+is_authorized_to_decide_approval` — see that module's own docstring for
+why it is a standalone function precisely because of this gap.
+
 **Why only ``maintainer``/``admin`` get ``pack:read``/``pack:manage``.**
 authentication_authorization.md §4.2's role table gives `viewer`
 ("Read workflows, experiments, gate results, health"), `operator`

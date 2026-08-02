@@ -393,6 +393,7 @@ from ai_os_kernel.persistence.settings import DatabaseSettings
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import build_anthropic_prompted_completion_service
+from ai_os_kernel.routes.approvals import router as approvals_router
 from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
 from ai_os_kernel.routes.health import router as health_router
 from ai_os_kernel.routes.packs import router as packs_router
@@ -405,7 +406,7 @@ from ai_os_kernel.security_manager.token_verifier import (
 )
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner, WorkflowRunResult
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
-from ai_os_kernel.workflow_engine.delivery_pipeline import build_pipeline_trigger
+from ai_os_kernel.workflow_engine.delivery_pipeline import DEFINITION_ID, build_pipeline_trigger
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
 from ai_os_kernel.workflow_engine.lease_reaper import (
     LEASE_REAP_INTERVAL_SECONDS,
@@ -1335,6 +1336,26 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             ),
             definition_catalog=worker_loop_definition_catalog,
             worker_id=_WORKFLOW_WORKER_ID,
+            # This loop's own fixed composition just above (the
+            # platform demo's agent_registry/context_manager, no
+            # quality_gate/decision/human_approval executor at all)
+            # cannot correctly advance a real se.delivery_pipeline
+            # instance — genuinely investigated, not assumed
+            # (P03-S03-M30-T06): that pipeline's own real composition
+            # needs the credential/git_service-threaded
+            # se_delivery_pipeline_registry built below, plus real
+            # quality_gate/decision/human_approval executors this loop
+            # was never given. Excluding it here is what makes the new
+            # approvals route's own synchronous
+            # resume_pipeline_after_approval() call the sole, safe
+            # resumption path — without this, the instant a paused
+            # instance's approval is decided, this already-running
+            # background loop could independently rediscover it and
+            # mis-advance it in a race (silently no-opping the
+            # human_approval step, then failing git-push against the
+            # wrong registry) before the route's own correct resume
+            # ever runs.
+            exclude_definition_ids=frozenset({DEFINITION_ID}),
         )
         worker_poll_interval = app.state.config.worker_poll_interval_seconds
         if worker_poll_interval is None:
@@ -1481,6 +1502,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.trigger_se_delivery_pipeline = build_pipeline_trigger(
             engine, se_delivery_pipeline_registry
         )
+        # Exposed so ai_os_kernel.routes.approvals can genuinely resume
+        # a paused se.delivery_pipeline instance after a real decision
+        # (resume_pipeline_after_approval, P03-S03-M30-T06) with the
+        # identical real, credential/git_service-threaded registry
+        # trigger_se_delivery_pipeline itself already uses — never the
+        # platform demo's own app.state.agent_registry, which does not
+        # know this pack's agents at all.
+        app.state.se_delivery_pipeline_agent_registry = se_delivery_pipeline_registry
 
     try:
         yield
@@ -1538,6 +1567,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(workflows_router)
     app.include_router(delivery_pipeline_router)
+    app.include_router(approvals_router)
     app.include_router(packs_router)
 
     logger.info("kernel.bootstrap.complete")

@@ -3,11 +3,22 @@ composed here, not scattered across route modules, mirroring
 :mod:`ai_os_kernel.routes.health` reading services off ``request.app.state``
 rather than each route reconstructing them.
 
-Two-stage dependency chain: :func:`_authenticate` verifies the bearer
+Two-stage dependency chain: :func:`authenticate` verifies the bearer
 token and computes a :class:`~ai_os_kernel.security_manager.models.SecurityContext`;
-:func:`require_permission` wraps it with one permission check. Both
+:func:`require_permission` wraps it with one flat permission check. Both
 fail closed (401/403/503) rather than default-allow, per
 authentication_authorization.md §3.3/§4.3.
+
+**``authenticate`` is exported directly (``P03-S03-M30-T06``), for a
+route that needs real Bearer/JWT authentication but no *flat*
+permission check — full authorization deferred entirely to a
+resource-specific check of its own.** :mod:`ai_os_kernel.routes.approvals`
+is the first such caller: whether a principal may decide *some*
+approval genuinely cannot be expressed as one of this module's own
+flat, exact-string role grants (a class-scoped role like
+``approver:release`` does not imply the unscoped ``approver``) — see
+:mod:`ai_os_kernel.security_manager.permissions`'s own docstring for
+the real, concrete case this was found against.
 """
 
 from __future__ import annotations
@@ -28,7 +39,7 @@ logger = get_logger("ai_os_kernel.security_manager")
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def _authenticate(
+async def authenticate(
     request: Request,
     # FastAPI's own documented Depends(...) idiom, not the
     # mutable-default-argument bug B008 otherwise correctly flags:
@@ -63,7 +74,7 @@ def require_permission(permission: str) -> Callable[..., Awaitable[SecurityConte
     computed :class:`SecurityContext`."""
 
     async def _check(
-        security_context: SecurityContext = Depends(_authenticate),  # noqa: B008
+        security_context: SecurityContext = Depends(authenticate),  # noqa: B008
     ) -> SecurityContext:
         if not security_context.has_permission(permission):
             logger.warning(

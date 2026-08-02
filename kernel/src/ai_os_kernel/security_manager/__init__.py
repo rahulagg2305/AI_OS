@@ -4,8 +4,9 @@ See docs/03_architecture/kernel/security_manager.md,
 docs/09_security/authentication_authorization.md, ADR-0023.
 
 Implemented so far — exactly enough to safely front the Workflow Engine
-routes (:mod:`ai_os_kernel.routes.workflows`) and the Capability
-Manager's pack lifecycle routes (:mod:`ai_os_kernel.routes.packs`):
+routes (:mod:`ai_os_kernel.routes.workflows`), the Capability
+Manager's pack lifecycle routes (:mod:`ai_os_kernel.routes.packs`), and
+the Human Approval decide route (:mod:`ai_os_kernel.routes.approvals`):
 
 - :class:`Principal`/:class:`PrincipalType`/:class:`SecurityContext` —
   identity and computed-permissions shapes, reduced from ADR-0023's
@@ -21,6 +22,13 @@ Manager's pack lifecycle routes (:mod:`ai_os_kernel.routes.packs`):
 - :func:`require_permission` — the FastAPI dependency chain routes use
   to authenticate and authorize in one call (see
   :mod:`ai_os_kernel.security_manager.dependencies`).
+- :func:`authenticate` (``P03-S03-M30-T06``) — the bare, real
+  Bearer/JWT authentication half of that same chain, exported directly
+  for a route that needs no *flat* permission check because a
+  resource-specific check already exists elsewhere (see
+  :mod:`ai_os_kernel.security_manager.dependencies`'s own docstring for
+  the real, concrete case — class-scoped ``approver:<class>`` roles —
+  that makes this necessary, not merely convenient).
 - :func:`narrow_permissions`/:func:`is_permitted` — ADR-0023's monotonic
   narrowing intersection (principal ∩ workflow ∩ agent ∩ tool), real and
   tested (``P03-S05-M14-T03``; see
@@ -39,7 +47,7 @@ authentication/authorization events (logged via structlog only, for
 now).
 """
 
-from ai_os_kernel.security_manager.dependencies import require_permission
+from ai_os_kernel.security_manager.dependencies import authenticate, require_permission
 from ai_os_kernel.security_manager.errors import InvalidTokenError, SecurityError
 from ai_os_kernel.security_manager.models import Principal, PrincipalType, SecurityContext
 from ai_os_kernel.security_manager.narrowing import is_permitted, narrow_permissions
@@ -70,6 +78,7 @@ __all__ = [
     "SecurityContext",
     "SecurityError",
     "TokenVerifier",
+    "authenticate",
     "build_jwt_bearer_token_verifier",
     "is_permitted",
     "narrow_permissions",

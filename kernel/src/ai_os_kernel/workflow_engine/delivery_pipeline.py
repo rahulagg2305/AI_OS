@@ -266,6 +266,13 @@ from ai_os_kernel.workflow_engine.step_executor import (
 )
 
 PACK_ID = "software-engineering"
+DEFINITION_ID = "se.delivery_pipeline"
+"""The real, declared ``id`` of this pipeline's own ``WorkflowDefinition``
+(``delivery_pipeline.yaml``) — named here once so callers that need to
+recognize *this specific* definition (``bootstrap.py``'s own worker-loop
+exclusion, ``routes/approvals.py``'s own resume dispatch,
+``P03-S03-M30-T06``) compare against one real, shared constant, never a
+duplicated string literal."""
 
 # Paths are resolved relative to the current working directory, matching
 # every other path bootstrap.py resolves (see its own module docstring:

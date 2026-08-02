@@ -8,15 +8,17 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-08-03, `P03-S03-M30-T06`)
 
-**Partially built — roughly 9 of the ~45 endpoints documented below exist.** Read this section before assuming an endpoint is callable.
+**Partially built — roughly 10 of the ~45 endpoints documented below exist.** Read this section before assuming an endpoint is callable.
 
 **Built** (`kernel/src/ai_os_kernel/routes/`, all bearer-token authenticated): `POST /api/v1/workflows`, `GET /api/v1/workflows`, `GET /api/v1/workflows/{id}`, `GET /api/v1/workflows/{id}/steps`, `GET /api/v1/workflows/{id}/events`, `POST /api/v1/packs`, `POST /api/v1/packs/{id}/activate`, `POST /api/v1/packs/{id}/deactivate`, `GET /api/v1/packs/{id}`, plus the health endpoints.
 
+**§6.2 Approvals — one real endpoint now exists, at a genuinely different shape than documented below (`P03-S03-M30-T06`), not a silent reconciliation.** `POST /api/v1/workflows/{workflow_id}/approvals/{approval_id}/decisions` (`ai_os_kernel.routes.approvals`) — nested under its own workflow, plural `decisions`, versus this section's own designed `POST /api/v1/approvals/{id}/decision`. Two real, disclosed deviations from the design below: (1) authorization is the real, shipped `approver:<approval_class>` **role** (ADR-0023, `security_manager.approval_authorization`), not the `approval:decide:<class>` **permission** §6.1's table below documents — `permissions.py`'s own real, deliberately-reduced flat permission model cannot express a permission family parameterized by an arbitrary class any more than it can a role family (see that module's own docstring, and `security_manager.md`'s Implementation Status for the concrete request that proved this); (2) idempotency ("a second identical decision returns the original result") is not real — a second `decide()` against an already-decided approval returns `409` unconditionally (`ApprovalNotPendingError`), regardless of whether the payload matches. `GET /approvals`, `GET /approvals/{id}`, `GET /approvals/history` remain genuinely not built.
+
 **Not built:**
 - **The entire WebSocket stream** (`/api/v1/stream`) — no route, no topics, no event envelope. Every real-time feature specified here and in `../13_dashboard/` has no transport.
-- All Approvals, Experiments, Gates, Usage, Agents, Config, Traceability, and Logs/Traces endpoint groups — each blocked on a subsystem that is itself 0% built (Human Approval Manager, Evaluation Engine, Quality Gate Engine, Traceability Engine).
+- All Experiments, Gates, Usage, Agents, Config, Traceability, and Logs/Traces endpoint groups, and the remaining 3 of 4 Approvals endpoints above — each blocked on a subsystem that is itself 0% built (Evaluation Engine, Quality Gate Engine, Traceability Engine) or simply not yet built (Approvals listing/history).
 - **RFC 9457 `application/problem+json` error bodies** — responses currently use FastAPI's default `{"detail": ...}` shape. The documented `error_code` catalogue does not exist.
 - **`Idempotency-Key` handling** — the `platform.idempotency_keys` table exists as schema only, with no reader or writer.
 - **Per-principal rate limiting** — requires Redis, which no Kernel code uses.

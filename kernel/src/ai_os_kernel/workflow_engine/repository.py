@@ -159,7 +159,9 @@ class WorkflowInstanceRepository(Protocol):
         self, *, limit: int, before: WorkflowListCursor | None = None
     ) -> list[WorkflowInstance]: ...
 
-    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]: ...
+    async def list_runnable_instances(
+        self, *, limit: int, exclude_definition_ids: frozenset[str] = frozenset()
+    ) -> list[WorkflowInstance]: ...
 
 
 class SqlWorkflowInstanceRepository:
@@ -364,7 +366,9 @@ class SqlWorkflowInstanceRepository:
             rows = result.mappings().all()
         return [WorkflowInstance.model_validate(dict(row)) for row in rows]
 
-    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]:
+    async def list_runnable_instances(
+        self, *, limit: int, exclude_definition_ids: frozenset[str] = frozenset()
+    ) -> list[WorkflowInstance]:
         """A plain, unguarded read — mirrors :meth:`get_instance`; a
         worker loop's own subsequent :meth:`WorkflowLeaseService.acquire`
         call is the real exclusivity guard, exactly the same
@@ -384,7 +388,31 @@ class SqlWorkflowInstanceRepository:
         activity up top; a scheduler wants fairness — the
         longest-waiting runnable instance should not starve behind a
         stream of newly-created ones.
+
+        **``exclude_definition_ids`` (``P03-S03-M30-T06``): a real,
+        caller-supplied opt-out, not a generic filter.** A system-wide
+        worker loop with one fixed executor composition (see
+        :class:`~ai_os_kernel.workflow_engine.worker_loop.WorkflowWorkerLoop`'s
+        own docstring) cannot correctly advance an instance whose
+        definition declares step types that composition has no executor
+        for — discovering one anyway would silently mis-advance it (a
+        `human_approval` step falling through to a no-op default
+        executor, an `agent` step failing to resolve against the wrong
+        registry). Empty by default — the identical "absent means
+        unaffected" shape every optional capability in this codebase
+        already establishes; a caller with a single, fixed composition
+        that genuinely handles every step type any definition might
+        declare has no reason to exclude anything.
         """
+        conditions = [
+            workflow_instances.c.status == WorkflowInstanceStatus.RUNNING.value,
+            sa.or_(
+                workflow_leases.c.lease_id.is_(None),
+                workflow_leases.c.expires_at < sa.func.now(),
+            ),
+        ]
+        if exclude_definition_ids:
+            conditions.append(workflow_instances.c.definition_id.notin_(exclude_definition_ids))
         query = (
             sa.select(workflow_instances)
             .select_from(
@@ -393,13 +421,7 @@ class SqlWorkflowInstanceRepository:
                     workflow_leases.c.workflow_id == workflow_instances.c.workflow_id,
                 )
             )
-            .where(
-                workflow_instances.c.status == WorkflowInstanceStatus.RUNNING.value,
-                sa.or_(
-                    workflow_leases.c.lease_id.is_(None),
-                    workflow_leases.c.expires_at < sa.func.now(),
-                ),
-            )
+            .where(*conditions)
             .order_by(workflow_instances.c.created_at)
             .limit(limit)
         )

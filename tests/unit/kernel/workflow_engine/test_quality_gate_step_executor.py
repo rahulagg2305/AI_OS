@@ -87,7 +87,9 @@ class _FakeRepository:
     ) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
-    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]:
+    async def list_runnable_instances(
+        self, *, limit: int, exclude_definition_ids: frozenset[str] = frozenset()
+    ) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
 

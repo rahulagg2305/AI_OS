@@ -45,12 +45,15 @@ def _definition() -> WorkflowDefinition:
 
 
 def _instance(
-    *, workflow_id: str, definition_version: str = _DEFINITION_VERSION
+    *,
+    workflow_id: str,
+    definition_version: str = _DEFINITION_VERSION,
+    definition_id: str = _DEFINITION_ID,
 ) -> WorkflowInstance:
     now = datetime.now(UTC)
     return WorkflowInstance(
         workflow_id=workflow_id,
-        definition_id=_DEFINITION_ID,
+        definition_id=definition_id,
         definition_version=definition_version,
         status=WorkflowInstanceStatus.RUNNING,
         current_step_id=None,
@@ -72,9 +75,14 @@ def _instance(
 class _FakeRepository:
     def __init__(self, instances: list[WorkflowInstance]) -> None:
         self._instances = instances
+        self.exclude_definition_ids_calls: list[frozenset[str]] = []
 
-    async def list_runnable_instances(self, *, limit: int) -> list[WorkflowInstance]:
-        return self._instances[:limit]
+    async def list_runnable_instances(
+        self, *, limit: int, exclude_definition_ids: frozenset[str] = frozenset()
+    ) -> list[WorkflowInstance]:
+        self.exclude_definition_ids_calls.append(exclude_definition_ids)
+        instances = [i for i in self._instances if i.definition_id not in exclude_definition_ids]
+        return instances[:limit]
 
 
 class _FakeDefinitionCatalog:
@@ -250,3 +258,35 @@ async def test_the_discovery_limit_is_forwarded_to_the_repository() -> None:
     result = await worker.tick_once(limit=1, lease_duration_seconds=30)
 
     assert result.discovered == 1
+
+
+async def test_exclude_definition_ids_is_forwarded_to_the_repository_and_genuinely_excludes() -> (
+    None
+):
+    """``P03-S03-M30-T06``: a real proof that ``WorkflowWorkerLoop``'s
+    own constructor-time ``exclude_definition_ids`` genuinely reaches
+    ``list_runnable_instances`` — not merely accepted and dropped — and
+    that an instance whose own ``definition_id`` is excluded is never
+    discovered, never advanced, at all. The real SQL-level exclusion
+    (not merely this fake's own in-memory filter) is proven directly
+    against a real Postgres instance in
+    ``test_worker_loop_execution.py``."""
+    excluded_instance = _instance(workflow_id="wf_excluded", definition_id="se.delivery_pipeline")
+    included_instance = _instance(workflow_id="wf_included")
+    repository = _FakeRepository([excluded_instance, included_instance])
+    advance_runner = _FakeAdvanceRunner()
+    worker = WorkflowWorkerLoop(
+        repository=repository,  # type: ignore[arg-type]
+        advance_runner=advance_runner,  # type: ignore[arg-type]
+        definition_catalog=_FakeDefinitionCatalog(
+            {(_DEFINITION_ID, _DEFINITION_VERSION): _definition()}
+        ),
+        worker_id="worker-1",
+        exclude_definition_ids=frozenset({"se.delivery_pipeline"}),
+    )
+
+    result = await worker.tick_once(limit=100, lease_duration_seconds=30)
+
+    assert repository.exclude_definition_ids_calls == [frozenset({"se.delivery_pipeline"})]
+    assert set(result.advanced) == {"wf_included"}
+    assert "wf_excluded" not in result.advanced
