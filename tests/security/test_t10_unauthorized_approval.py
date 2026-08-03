@@ -138,7 +138,11 @@ def _instance() -> WorkflowInstance:
 
 class _FailIfCalled:
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         raise AssertionError("no executor should specifically handle a human_approval step today")
 

@@ -143,6 +143,7 @@ class _FakeInstanceRepository:
         definition_version: str,
         inputs: dict[str, Any],
         principal_id: str,
+        principal_permissions: frozenset[str] | None = None,
     ) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
@@ -261,6 +262,7 @@ class _StatefulInstanceRepository:
         definition_version: str,
         inputs: dict[str, Any],
         principal_id: str,
+        principal_permissions: frozenset[str] | None = None,
     ) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
