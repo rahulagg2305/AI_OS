@@ -766,6 +766,111 @@ def test_resolve_agent_is_refused_when_principal_permissions_are_narrower_than_t
     asyncio.run(_run())
 
 
+def test_resolve_agent_succeeds_when_workflow_permissions_cover_its_required_permissions(
+    database_url: str,
+) -> None:
+    """The workflow term (``P03-S05-M14-T10``), the success half: a
+    workflow whose own declared permission ceiling covers what the agent
+    declares resolves exactly as before this step."""
+
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.workflow_scoped_pack",
+            state="activated",
+            manifest={"permissions": ["llm:invoke", "sandbox:execute"]},
+        )
+        await _seed_agent(
+            database_url,
+            agent_id="se.workflow_scoped_pack/legit-agent",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            pack_id="se.workflow_scoped_pack",
+            required_permissions=["llm:invoke"],
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            resolved = await registry.resolve_agent(
+                "se.workflow_scoped_pack/legit-agent",
+                workflow_permissions=frozenset({"llm:invoke", "workflow:start"}),
+            )
+
+            assert isinstance(resolved, EchoAgent)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_is_refused_when_workflow_permissions_are_narrower_than_the_packs_grant(
+    database_url: str,
+) -> None:
+    """The central proof this step exists for: the pack's own manifest
+    grants **both** ``llm:invoke`` and ``sandbox:execute`` — broad
+    enough that the existing pack-grant term alone would happily resolve
+    this agent, and no principal term is supplied at all here (isolating
+    this proof to the workflow term specifically, not a coincidental
+    refusal from the principal check) — but the *workflow's* own real,
+    catalog-sourced declared permission ceiling holds only
+    ``sandbox:execute``. A workflow broadly declared at the pack level is
+    still correctly narrowed for *this* resolution to exactly what that
+    one workflow's own manifest ceiling covers, never silently
+    inheriting the pack's own wider grant — ADR-0023's "no hop can ever
+    grant a permission the principal lacks," now also enforced for the
+    workflow term specifically."""
+
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.workflow_narrow_pack",
+            state="activated",
+            manifest={"permissions": ["llm:invoke", "sandbox:execute"]},
+        )
+        await _seed_agent(
+            database_url,
+            agent_id="se.workflow_narrow_pack/broad-agent",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            pack_id="se.workflow_narrow_pack",
+            required_permissions=["llm:invoke", "sandbox:execute"],
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            # Proof, part 1: with no workflow term supplied at all
+            # (unenforced, the default — mirrors an empty catalog result
+            # too, see get_declared_permissions's own docstring), the
+            # identical resolution genuinely succeeds — confirming the
+            # refusal below comes from the new workflow check, not some
+            # other difference between the two calls.
+            resolved_unenforced = await registry.resolve_agent(
+                "se.workflow_narrow_pack/broad-agent"
+            )
+            assert isinstance(resolved_unenforced, EchoAgent)
+
+            # Proof, part 2: the identical agent, the identical
+            # sufficient pack grant — refused once a real, more
+            # restrictive workflow permission ceiling is supplied.
+            with pytest.raises(
+                AgentRegistryError,
+                match="own workflow's declared permission ceiling does not include",
+            ) as exc_info:
+                await registry.resolve_agent(
+                    "se.workflow_narrow_pack/broad-agent",
+                    workflow_permissions=frozenset({"sandbox:execute"}),
+                )
+
+            assert "llm:invoke" in str(exc_info.value)
+            # A structural, permanent cause: retrying with the identical
+            # workflow permission ceiling reconstructs the identical refusal.
+            assert exc_info.value.retriable is False
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
 def test_resolve_tool_succeeds_when_its_permissions_are_within_its_packs_grant(
     database_url: str,
 ) -> None:

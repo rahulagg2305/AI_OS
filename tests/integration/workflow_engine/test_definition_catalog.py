@@ -202,3 +202,104 @@ def test_register_treats_two_versions_of_the_same_definition_as_distinct_rows(
             await engine.dispose()
 
     asyncio.run(_run())
+
+
+def test_get_declared_permissions_returns_empty_for_an_unregistered_key(database_url: str) -> None:
+    """The workflow term (``P03-S05-M14-T10``): a key nothing has ever
+    registered returns an empty ``frozenset`` — the same "unenforced"
+    default :meth:`~ai_os_kernel.workflow_engine.registry.
+    SqlAgentRegistry.resolve_agent`'s own caller relies on, never a
+    ``KeyError``/``None``."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            catalog = SqlWorkflowDefinitionCatalog(engine)
+            result = await catalog.get_declared_permissions(
+                definition_id="se.never_registered", version="1.0.0"
+            )
+            assert result == frozenset()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_get_declared_permissions_returns_empty_when_register_wrote_the_empty_default(
+    database_url: str,
+) -> None:
+    """:meth:`SqlWorkflowDefinitionCatalog.register` itself always writes
+    an empty ``declared_permissions`` (no manifest in scope at that call
+    site — see this module's own docstring) — confirms the read half
+    faithfully returns that real, empty value, not a KeyError, for a row
+    that genuinely exists but was never given real permissions."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            catalog = SqlWorkflowDefinitionCatalog(engine)
+            definition = _definition(
+                definition_id="se.definition_catalog_empty_permissions", version="1.0.0"
+            )
+            await catalog.register(definition=definition, pack_id="se.software_engineering")
+
+            result = await catalog.get_declared_permissions(
+                definition_id="se.definition_catalog_empty_permissions", version="1.0.0"
+            )
+            assert result == frozenset()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_get_declared_permissions_returns_a_real_non_empty_value_once_one_is_written(
+    database_url: str,
+) -> None:
+    """The real, positive proof: once a row genuinely carries a
+    non-empty ``declared_permissions`` (exactly what
+    :func:`~ai_os_kernel.capability_manager.manifest_catalog_installer.
+    derive_workflow_definition_rows` writes from a real manifest, proven
+    separately in ``tests/integration/capability_manager/
+    test_manifest_catalog_installer.py``), the read half returns it as a
+    real, non-empty ``frozenset`` — the value
+    :mod:`ai_os_kernel.workflow_engine.registry`'s own workflow-term
+    check needs to genuinely narrow resolution."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            catalog = SqlWorkflowDefinitionCatalog(engine)
+            await catalog.register(
+                definition=_definition(
+                    definition_id="se.definition_catalog_non_empty_permissions", version="1.0.0"
+                ),
+                pack_id="se.software_engineering",
+            )
+            # A direct write, standing in for what a manifest-driven
+            # installer (derive_workflow_definition_rows) would have
+            # written for real in a real pack-registration path — this
+            # module's own writer (register, above) never has a manifest
+            # in scope to source a real value from, see this module's own
+            # docstring.
+            async with engine.begin() as connection:
+                await connection.execute(
+                    sa.text(
+                        "UPDATE catalog.workflow_definitions SET declared_permissions = "
+                        '\'["llm:invoke", "sandbox:execute", "git:write"]\'::jsonb '
+                        "WHERE definition_id = :definition_id AND version = :version"
+                    ),
+                    {
+                        "definition_id": "se.definition_catalog_non_empty_permissions",
+                        "version": "1.0.0",
+                    },
+                )
+
+            result = await catalog.get_declared_permissions(
+                definition_id="se.definition_catalog_non_empty_permissions", version="1.0.0"
+            )
+            assert result == frozenset({"llm:invoke", "sandbox:execute", "git:write"})
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())

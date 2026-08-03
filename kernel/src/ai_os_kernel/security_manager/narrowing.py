@@ -23,10 +23,21 @@ see :mod:`ai_os_kernel.workflow_engine.registry`'s own docstring for how
 a triggering principal's real, persisted permission set (captured once
 at workflow-trigger time, since resolution can happen much later — a
 worker-loop tick has no live bearer token to re-derive it from) reaches
-that check. The workflow term is still not sourced from anywhere — no
-code parses a *workflow's* declared ``permissions`` out of a manifest —
-so :func:`narrow_permissions`'s full four-way call still has no real
-data for that one argument.
+that check. **Updated (``P03-S05-M14-T10``): the workflow term is now
+real too**, reusing the identical :func:`over_permitted_permissions`
+primitive rather than a third, parallel subset check —
+``catalog.workflow_definitions.declared_permissions`` is now real,
+manifest-sourced data (:func:`~ai_os_kernel.capability_manager.
+manifest_catalog_installer.derive_workflow_definition_rows`), read at
+resolution time via :meth:`~ai_os_kernel.workflow_engine.
+definition_catalog.WorkflowDefinitionCatalog.get_declared_permissions`
+(no snapshot needed — unlike the principal term, a workflow's declared
+permissions are pinned to an immutable ``(definition_id, version)`` a
+``WorkflowInstance`` already stores, not an ephemeral bearer token). The
+agent/tool term of the four-way chain (``narrow_permissions``'s own
+remaining two arguments) is still bound to the pack-grant/principal/
+workflow terms checked at *resolution*, not (yet) to a genuine
+per-invocation call of ``narrow_permissions`` itself.
 
 Authority only ever shrinks: a set intersection can never contain a
 permission absent from any one of its operands, so a workflow, agent, or
@@ -102,15 +113,21 @@ def is_permitted(
 
 
 def over_permitted_permissions(
-    *, entrypoint_permissions: frozenset[str], principal_permissions: frozenset[str]
+    *, entrypoint_permissions: frozenset[str], bounding_permissions: frozenset[str]
 ) -> frozenset[str]:
-    """Which of ``entrypoint_permissions`` exceed what ``principal_permissions``
+    """Which of ``entrypoint_permissions`` exceed what ``bounding_permissions``
     actually holds — empty when an entrypoint's own declared permissions
-    are entirely within reach of the triggering principal's own real
-    permission set (``P03-S05-M14-T09``, closing this module's own
-    long-disclosed gap: "``SecurityContext`` is never threaded into
-    resolution at all"). This is the principal term of ADR-0023's
-    monotonic-narrowing chain, applied at agent/tool *resolution*
+    are entirely within reach of ``bounding_permissions``. Originally
+    built (``P03-S05-M14-T09``) for the principal term of ADR-0023's
+    monotonic-narrowing chain, closing this module's own long-disclosed
+    gap: "``SecurityContext`` is never threaded into resolution at all".
+    **Generalized (``P03-S05-M14-T10``) to also serve the workflow
+    term** — ``bounding_permissions`` is deliberately not named
+    ``principal_permissions`` any more, since :mod:`ai_os_kernel.
+    workflow_engine.registry`'s ``_refuse_if_over_granted`` now calls
+    this same function once per single-set bounding term (principal,
+    then workflow), rather than growing a second, parallel subset check
+    for the new term. Applied at agent/tool *resolution*
     (:mod:`ai_os_kernel.workflow_engine.registry`) rather than only at
     :func:`narrow_permissions`'s own per-invocation call — the identical
     "refuse before loading, not a confusing failure the first time
@@ -121,5 +138,5 @@ def over_permitted_permissions(
     primitive rather than a second, parallel subset check. Never raises;
     the caller (a registry resolving a real row) decides what
     "over-permitted" means for its own error type."""
-    within_reach = intersect_declared_permissions(entrypoint_permissions, principal_permissions)
+    within_reach = intersect_declared_permissions(entrypoint_permissions, bounding_permissions)
     return entrypoint_permissions - within_reach

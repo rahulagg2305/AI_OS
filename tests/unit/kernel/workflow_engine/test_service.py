@@ -375,6 +375,7 @@ class _FakeStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         self.executed_steps.append(step)
         self.received_workflow_ids.append(workflow_id)
@@ -399,6 +400,9 @@ class _FakeDefinitionCatalog:
 
     async def get(self, *, definition_id: str, version: str) -> WorkflowDefinition | None:
         raise NotImplementedError("not exercised by these tests")
+
+    async def get_declared_permissions(self, *, definition_id: str, version: str) -> frozenset[str]:
+        return frozenset()
 
 
 class _FakeGateResultRecorder:

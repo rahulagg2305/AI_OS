@@ -5,9 +5,10 @@ path ... enough to make activation real, not seed-only" this step
 approves.
 
 **``register()`` now also derives and writes real ``catalog.agents``/
-``catalog.prompts``/``catalog.tools`` rows from the pack's own manifest
-— closing the "no automated manifest -> catalog installer exists yet"
-gap several integration tests' own docstrings named explicitly.** See
+``catalog.prompts``/``catalog.tools``/``catalog.workflow_definitions``
+rows from the pack's own manifest — closing the "no automated manifest
+-> catalog installer exists yet" gap several integration tests' own
+docstrings named explicitly.** See
 :mod:`~ai_os_kernel.capability_manager.manifest_catalog_installer` for
 the real derivation logic (pure functions, no database access); this
 module's own job is only to run that derivation *before* opening the
@@ -111,6 +112,7 @@ from ai_os_kernel.capability_manager.manifest_catalog_installer import (
     derive_agent_rows,
     derive_prompt_rows,
     derive_tool_rows,
+    derive_workflow_definition_rows,
 )
 from ai_os_kernel.capability_manager.models import PackRecord
 from ai_os_kernel.persistence.catalog_schema import (
@@ -119,6 +121,7 @@ from ai_os_kernel.persistence.catalog_schema import (
     packs,
     prompts,
     tools,
+    workflow_definitions,
 )
 from ai_os_kernel.workflow_engine.pack_state import PackState
 
@@ -223,10 +226,14 @@ class SqlPackLifecycleRepository:
         agent_rows: list[dict[str, Any]] = []
         prompt_rows: list[dict[str, Any]] = []
         tool_rows: list[dict[str, Any]] = []
+        workflow_definition_rows: list[dict[str, Any]] = []
         if pack_root is not None:
             agent_rows = derive_agent_rows(manifest, pack_id=pack_id)
             prompt_rows = derive_prompt_rows(manifest, pack_id=pack_id, pack_root=pack_root)
             tool_rows = derive_tool_rows(manifest, pack_id=pack_id)
+            workflow_definition_rows = derive_workflow_definition_rows(
+                manifest, pack_id=pack_id, pack_root=pack_root
+            )
 
         occurred_at = datetime.now(UTC)
         try:
@@ -262,6 +269,12 @@ class SqlPackLifecycleRepository:
                     await connection.execute(sa.insert(prompts), prompt_rows)
                 if tool_rows:
                     await connection.execute(sa.insert(tools), tool_rows)
+                if workflow_definition_rows:
+                    await connection.execute(
+                        pg_insert(workflow_definitions)
+                        .values(workflow_definition_rows)
+                        .on_conflict_do_nothing(index_elements=["definition_id", "version"])
+                    )
         except sa.exc.IntegrityError as exc:
             raise PackAlreadyRegisteredError(
                 f"pack '{pack_id}' is already registered in catalog.packs"
@@ -376,9 +389,10 @@ class SqlPackLifecycleRepository:
         an id present in the new manifest is upserted (its row's content
         may have genuinely changed between versions); an id no longer
         declared is deleted outright, not left orphaned pointing at a
-        pack that no longer claims it. ``catalog.prompts`` is
-        append-only instead, matching its own "versions are immutable"
-        rule (data_model.md §5) — a prompt version already on disk is
+        pack that no longer claims it. ``catalog.prompts`` and
+        ``catalog.workflow_definitions`` are append-only instead,
+        matching their own "versions are immutable" rule (data_model.md
+        §5) — a prompt or workflow-definition version already on disk is
         inserted idempotently (``ON CONFLICT DO NOTHING`` on its real
         composite key), never overwritten.
         """
@@ -395,6 +409,9 @@ class SqlPackLifecycleRepository:
         agent_rows = derive_agent_rows(manifest, pack_id=pack_id)
         prompt_rows = derive_prompt_rows(manifest, pack_id=pack_id, pack_root=pack_root)
         tool_rows = derive_tool_rows(manifest, pack_id=pack_id)
+        workflow_definition_rows = derive_workflow_definition_rows(
+            manifest, pack_id=pack_id, pack_root=pack_root
+        )
         new_agent_ids = {row["agent_id"] for row in agent_rows}
         new_tool_ids = {row["tool_id"] for row in tool_rows}
 
@@ -489,6 +506,12 @@ class SqlPackLifecycleRepository:
                         pg_insert(prompts)
                         .values(prompt_rows)
                         .on_conflict_do_nothing(index_elements=["prompt_id", "version"])
+                    )
+                if workflow_definition_rows:
+                    await connection.execute(
+                        pg_insert(workflow_definitions)
+                        .values(workflow_definition_rows)
+                        .on_conflict_do_nothing(index_elements=["definition_id", "version"])
                     )
         except (InvalidPackTransitionError, InvalidPackUpgradeError):
             raise

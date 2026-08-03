@@ -51,6 +51,7 @@ class _SleepingStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         self.executed_step_ids.append(step.id)
         try:
@@ -213,6 +214,7 @@ async def test_a_tool_branch_dispatches_to_the_tool_executor_not_the_agent_one()
             *,
             workflow_id: str | None = None,
             principal_permissions: frozenset[str] | None = None,
+            workflow_permissions: frozenset[str] | None = None,
         ) -> dict[str, Any]:
             self._calls.append(step.id)
             return {"ranAs": step.type.value}

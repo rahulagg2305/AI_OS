@@ -90,6 +90,7 @@ class _SleepingStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         await asyncio.sleep(self._duration)
         return {"status": "ok"}

@@ -146,6 +146,9 @@ class _FakeDefinitionCatalog:
     async def get(self, *, definition_id: str, version: str) -> WorkflowDefinition | None:
         return self._definition
 
+    async def get_declared_permissions(self, *, definition_id: str, version: str) -> frozenset[str]:
+        return frozenset()
+
 
 _UNSET = object()
 

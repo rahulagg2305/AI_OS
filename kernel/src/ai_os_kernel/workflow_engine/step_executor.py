@@ -134,6 +134,7 @@ class StepExecutor(Protocol):
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -147,6 +148,7 @@ class NoOpStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         return {}
 
@@ -200,6 +202,7 @@ class AgentStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.AGENT:
             raise ValueError(
@@ -212,7 +215,9 @@ class AgentStepExecutor:
                 "should already have required one for an agent step"
             )
         agent = await self._registry.resolve_agent(
-            step.agent_id, principal_permissions=principal_permissions
+            step.agent_id,
+            principal_permissions=principal_permissions,
+            workflow_permissions=workflow_permissions,
         )
         inputs = await self._invocation_inputs(step, workflow_id)
         outputs = await agent.execute(inputs)
@@ -279,6 +284,7 @@ class ToolStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.TOOL:
             raise ValueError(
@@ -291,7 +297,9 @@ class ToolStepExecutor:
                 "should already have required one for a tool step"
             )
         tool = await self._registry.resolve_tool(
-            step.tool_id, principal_permissions=principal_permissions
+            step.tool_id,
+            principal_permissions=principal_permissions,
+            workflow_permissions=workflow_permissions,
         )
         if tool.trust_tier is TrustTier.TIER1_SANDBOXED:
             is_sandbox_backed = isinstance(tool, SandboxBackedTool) and tool.sandbox is not None
@@ -353,6 +361,7 @@ class DecisionStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.DECISION:
             raise ValueError(
@@ -442,6 +451,7 @@ class ParallelStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.PARALLEL:
             raise ValueError(
@@ -458,13 +468,19 @@ class ParallelStepExecutor:
 
         if join_policy is JoinPolicy.ANY:
             results = await self._run_racing_for_first_success(
-                branches, workflow_id=workflow_id, principal_permissions=principal_permissions
+                branches,
+                workflow_id=workflow_id,
+                principal_permissions=principal_permissions,
+                workflow_permissions=workflow_permissions,
             )
         else:
             results = await asyncio.gather(
                 *(
                     self._run_branch(
-                        branch, workflow_id=workflow_id, principal_permissions=principal_permissions
+                        branch,
+                        workflow_id=workflow_id,
+                        principal_permissions=principal_permissions,
+                        workflow_permissions=workflow_permissions,
                     )
                     for branch in branches
                 )
@@ -495,11 +511,15 @@ class ParallelStepExecutor:
         *,
         workflow_id: str | None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         executor = self._agent_executor if branch.type is StepType.AGENT else self._tool_executor
         try:
             outputs = await executor.execute(
-                branch, workflow_id=workflow_id, principal_permissions=principal_permissions
+                branch,
+                workflow_id=workflow_id,
+                principal_permissions=principal_permissions,
+                workflow_permissions=workflow_permissions,
             )
             return {"branchId": branch.id, "status": "completed", "outputs": outputs, "error": None}
         except asyncio.CancelledError:
@@ -518,6 +538,7 @@ class ParallelStepExecutor:
         *,
         workflow_id: str | None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> list[dict[str, Any]]:
         """``joinPolicy: any`` — the first genuine success wins; every
         branch still in flight at that moment is really cancelled, not
@@ -528,7 +549,10 @@ class ParallelStepExecutor:
         tasks = {
             asyncio.ensure_future(
                 self._run_branch(
-                    branch, workflow_id=workflow_id, principal_permissions=principal_permissions
+                    branch,
+                    workflow_id=workflow_id,
+                    principal_permissions=principal_permissions,
+                    workflow_permissions=workflow_permissions,
                 )
             ): branch
             for branch in branches
@@ -651,6 +675,7 @@ class SubWorkflowStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.SUB_WORKFLOW:
             raise ValueError(
@@ -780,10 +805,12 @@ class DispatchingStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "workflow_id": workflow_id,
             "principal_permissions": principal_permissions,
+            "workflow_permissions": workflow_permissions,
         }
         if step.type is StepType.AGENT:
             return await self._agent_executor.execute(step, **kwargs)

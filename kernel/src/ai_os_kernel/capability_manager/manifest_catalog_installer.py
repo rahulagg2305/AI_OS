@@ -62,6 +62,29 @@ left unbuilt, for the same reason
 consistency) already builds real tool-trust-tier validation logic ahead
 of any manifest actually declaring one — recorded here explicitly so
 this gap is never mistaken for an oversight.
+
+**``derive_workflow_definition_rows`` (``P03-S05-M14-T10``) closes the
+workflow term of ADR-0023's monotonic-narrowing chain's own data-source
+gap** — the identical "no code anywhere parses a workflow's own
+declared ``permissions`` out of a manifest" gap this module's own
+opening paragraph names for agents/tools, now closed for workflows too.
+**Not pure derivation only**, unlike every function above: a workflow
+manifest entry's own ``definition`` field is a *path* to a separate
+workflow-definition YAML file (``platform_sdk/schemas/manifest.schema.json``:
+"Path to the workflow definition file, relative to the pack root"), not
+inline content the manifest itself carries — the identical reason
+:func:`derive_prompt_rows` above already needs ``pack_root`` to read a
+prompt's own on-disk content. :class:`~ai_os_kernel.workflow_engine.
+loader.WorkflowDefinitionLoader` (already real, already used by every
+other pack-workflow caller) does that read-and-validate; this function
+adds only the one manifest-level fact that loader has no way to know —
+the workflow's own declared permission ceiling — via
+:func:`~ai_os_kernel.workflow_engine.definition_catalog.
+build_workflow_definition_row`, the identical row-shape helper
+:meth:`~ai_os_kernel.workflow_engine.definition_catalog.
+SqlWorkflowDefinitionCatalog.register` itself now uses, so the two
+writers of ``catalog.workflow_definitions`` can never silently disagree
+about what its other five columns mean.
 """
 
 from __future__ import annotations
@@ -75,6 +98,9 @@ from typing import Any
 from pydantic import BaseModel
 
 from ai_os_kernel.capability_manager.errors import PackRegistrationError
+from ai_os_kernel.workflow_engine.definition_catalog import build_workflow_definition_row
+from ai_os_kernel.workflow_engine.errors import WorkflowDefinitionError
+from ai_os_kernel.workflow_engine.loader import WorkflowDefinitionLoader
 
 
 def _resolve_dotted_path(dotted: str) -> Any:
@@ -180,3 +206,39 @@ def derive_tool_rows(manifest: dict[str, Any], *, pack_id: str) -> list[dict[str
         }
         for tool in manifest.get("tools", [])
     ]
+
+
+def derive_workflow_definition_rows(
+    manifest: dict[str, Any], *, pack_id: str, pack_root: Path
+) -> list[dict[str, Any]]:
+    """One row per ``manifest["workflows"]`` entry, matching
+    ``catalog.workflow_definitions``'s own real columns
+    (:data:`~ai_os_kernel.persistence.catalog_schema.workflow_definitions`)
+    exactly — see this module's own docstring for why this one function
+    is not pure derivation alone (it also loads and validates each
+    workflow's own on-disk definition file, via the already-real
+    :class:`~ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader`).
+    ``declared_permissions`` is each workflow's own manifest-level
+    ``permissions`` — its permission ceiling (ADR-0023) — never assumed
+    equal to any agent's or tool's own declared set, the identical
+    "each component's own real, exact declaration" discipline
+    :func:`derive_agent_rows`'s own docstring already establishes."""
+    loader = WorkflowDefinitionLoader()
+    rows: list[dict[str, Any]] = []
+    for workflow in manifest.get("workflows", []):
+        definition_path = pack_root / workflow["definition"]
+        try:
+            definition = loader.load(definition_path)
+        except WorkflowDefinitionError as exc:
+            raise PackRegistrationError(
+                f"workflow {workflow['id']!r}: cannot load declared definition "
+                f"{workflow['definition']!r}: {exc}"
+            ) from exc
+        rows.append(
+            build_workflow_definition_row(
+                definition,
+                pack_id=pack_id,
+                declared_permissions=workflow.get("permissions", []),
+            )
+        )
+    return rows

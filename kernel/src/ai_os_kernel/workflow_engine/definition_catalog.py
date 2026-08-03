@@ -46,16 +46,51 @@ covered by the primary key):
   dropped, which matters for the reproducibility this table exists for
   (ADR-0022).
 - ``declared_permissions`` — ``WorkflowDefinition`` has no permissions
-  field of its own today (only ``agents``/``requiredTools`` component
-  *references*, not a permissions list); stored as an empty JSONB array
-  until a documented field for it exists, not silently guessed from the
-  component references.
+  field of its own (only ``agents``/``requiredTools`` component
+  *references*, not a permissions list) — the real, documented source
+  is the *manifest's* own ``workflows[].permissions``, which this class
+  has no access to at this call site (only a bare ``pack_id`` string,
+  never the manifest itself). :meth:`register` therefore still writes
+  an empty JSONB array here, exactly as before — genuinely correct only
+  when nothing has registered this ``(definition_id, version)`` for
+  real yet; see this module's own docstring for why that is safe (the
+  manifest-driven writer runs first, in every real pack-installation
+  path, and this upsert's own ``ON CONFLICT DO NOTHING`` never
+  overwrites a row already carrying the real value).
 - ``validated_at`` — the moment this writer runs, application-supplied
   (no server default), the same reasoning already applied to every
   other "when did this actually happen" column in this persistence
   layer (``workflow_events.occurred_at``, ``governance.audit_log.
   occurred_at``, ``evaluation.metrics.recorded_at``,
   ``catalog.pack_state_transitions.occurred_at``).
+
+**``declared_permissions`` is now genuinely populated by a second writer
+(2026-08-03, `P03-S05-M14-T10`) — closing the gap this module's own
+column mapping used to disclose ("`WorkflowDefinition` has no
+permissions field of its own today ... stored as an empty JSONB array
+until a documented field for it exists").** That documented field now
+exists, one level up: the *manifest's* own ``workflows[].permissions``
+(the "permission ceiling for every agent and tool in this workflow",
+``platform_sdk/schemas/manifest.schema.json``) — never a field added to
+``WorkflowDefinition`` itself, which stays what it always was, the
+definition *file's* own validated contract, with no notion of which
+pack or manifest it belongs to.
+:func:`~ai_os_kernel.capability_manager.manifest_catalog_installer.
+derive_workflow_definition_rows` derives real rows straight from that
+manifest field at pack-registration time, using
+:func:`build_workflow_definition_row` below (the same row-shape logic
+:meth:`SqlWorkflowDefinitionCatalog.register` itself now uses, extracted
+so neither writer duplicates the other's column mapping) — writing a
+real, non-empty ``declared_permissions`` *before* any instance is ever
+created from that workflow, so this class's own ``register`` (called
+later, at instance-creation time, with no manifest in scope to source a
+permission ceiling from — see :meth:`register`'s own docstring) upserts
+against an ``ON CONFLICT DO NOTHING`` that is already correct, real
+data, not the placeholder empty list it would write on its own.
+:meth:`get_declared_permissions` is the new read half, the seam
+:mod:`ai_os_kernel.workflow_engine.service` calls once per real
+``advance()`` — see :mod:`ai_os_kernel.workflow_engine.registry`'s own
+docstring for how that reaches the resolution check itself.
 
 **A real reader now exists (2026-08-02, `P02-S01-M05-T14`) — closing
 the "no reader" gap this module's own docstring stated above.**
@@ -87,6 +122,7 @@ for the first real consumer.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -101,6 +137,33 @@ from ai_os_kernel.workflow_engine.models import WorkflowDefinition
 _GRAPH_EXCLUDED_FIELDS = {"id", "version", "inputs", "outputs"}
 
 
+def build_workflow_definition_row(
+    definition: WorkflowDefinition,
+    *,
+    pack_id: str,
+    declared_permissions: Collection[str],
+) -> dict[str, Any]:
+    """The one real column mapping from a validated :class:`WorkflowDefinition`
+    to a ``catalog.workflow_definitions`` row — shared by
+    :meth:`SqlWorkflowDefinitionCatalog.register` (``declared_permissions``
+    always ``[]``, no manifest in scope) and
+    :func:`~ai_os_kernel.capability_manager.manifest_catalog_installer.
+    derive_workflow_definition_rows` (the real, manifest-sourced value),
+    so the two writers can never silently drift on what the other five
+    columns mean. See this module's own docstring for the full column
+    mapping rationale."""
+    return {
+        "definition_id": definition.id,
+        "version": definition.version,
+        "pack_id": pack_id,
+        "graph": definition.model_dump(mode="json", by_alias=True, exclude=_GRAPH_EXCLUDED_FIELDS),
+        "inputs_schema": definition.inputs,
+        "outputs_schema": definition.outputs,
+        "declared_permissions": list(declared_permissions),
+        "validated_at": datetime.now(UTC),
+    }
+
+
 class WorkflowDefinitionCatalog(Protocol):
     """Persistence boundary for registering, and now reading back, a
     validated :class:`WorkflowDefinition` in
@@ -112,6 +175,10 @@ class WorkflowDefinitionCatalog(Protocol):
 
     async def get(self, *, definition_id: str, version: str) -> WorkflowDefinition | None: ...
 
+    async def get_declared_permissions(
+        self, *, definition_id: str, version: str
+    ) -> frozenset[str]: ...
+
 
 class SqlWorkflowDefinitionCatalog:
     """The only implementation of :class:`WorkflowDefinitionCatalog` at
@@ -121,22 +188,13 @@ class SqlWorkflowDefinitionCatalog:
         self._engine = engine
 
     async def register(self, *, definition: WorkflowDefinition, pack_id: str) -> None:
-        graph = definition.model_dump(mode="json", by_alias=True, exclude=_GRAPH_EXCLUDED_FIELDS)
+        row = build_workflow_definition_row(definition, pack_id=pack_id, declared_permissions=[])
 
         try:
             async with self._engine.begin() as connection:
                 await connection.execute(
                     pg_insert(workflow_definitions)
-                    .values(
-                        definition_id=definition.id,
-                        version=definition.version,
-                        pack_id=pack_id,
-                        graph=graph,
-                        inputs_schema=definition.inputs,
-                        outputs_schema=definition.outputs,
-                        declared_permissions=[],
-                        validated_at=datetime.now(UTC),
-                    )
+                    .values(**row)
                     .on_conflict_do_nothing(index_elements=["definition_id", "version"])
                 )
         except sa.exc.SQLAlchemyError as exc:
@@ -171,3 +229,40 @@ class SqlWorkflowDefinitionCatalog:
             "outputs": row["outputs_schema"],
         }
         return WorkflowDefinition.model_validate(payload)
+
+    async def get_declared_permissions(self, *, definition_id: str, version: str) -> frozenset[str]:
+        """The workflow term of ADR-0023's monotonic-narrowing chain
+        (``P03-S05-M14-T10``): ``catalog.workflow_definitions.
+        declared_permissions`` for one real, pinned
+        ``(definition_id, version)`` — the same composite key a
+        ``WorkflowInstance`` already stores (``instance.definition_id``/
+        ``instance.definition_version``), needing no snapshot of its own
+        (unlike the principal term) since that pin, unlike a bearer
+        token, is never ephemeral: the row it points at is immutable by
+        version (this module's own docstring), so a fresh read always
+        returns the identical answer a snapshot would have.
+
+        Returns an empty ``frozenset`` both when no row exists for this
+        key and when a real row exists but its own ``declared_permissions``
+        is ``[]`` — the two are indistinguishable at the storage layer
+        today (the column has no separate "not yet derived" marker), and
+        this module's own writers only ever populate a real, non-empty
+        list when a manifest actually declared one
+        (:func:`~ai_os_kernel.capability_manager.
+        manifest_catalog_installer.derive_workflow_definition_rows`).
+        :mod:`~ai_os_kernel.workflow_engine.registry`'s own caller treats
+        an empty result as "unenforced," the identical safe default
+        ``principal_permissions=None`` already establishes — never as
+        "this workflow may exercise zero permissions," which would
+        incorrectly refuse every resolution under a workflow that simply
+        predates real derivation (the demo workflow, today).
+        """
+        async with self._engine.connect() as connection:
+            result = await connection.execute(
+                sa.select(workflow_definitions.c.declared_permissions).where(
+                    workflow_definitions.c.definition_id == definition_id,
+                    workflow_definitions.c.version == version,
+                )
+            )
+            declared_permissions = result.scalar_one_or_none()
+        return frozenset(declared_permissions or [])

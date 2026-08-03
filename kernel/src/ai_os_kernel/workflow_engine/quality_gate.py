@@ -123,6 +123,7 @@ class QualityGateStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.QUALITY_GATE:
             raise ValueError(

@@ -40,7 +40,7 @@ from ai_os_kernel.capability_manager.manifest_catalog_installer import (
     derive_tool_rows,
 )
 from ai_os_kernel.capability_manager.repository import SqlPackLifecycleRepository
-from ai_os_kernel.persistence.catalog_schema import agents, prompts, tools
+from ai_os_kernel.persistence.catalog_schema import agents, prompts, tools, workflow_definitions
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureProposalOutput
 from ai_os_pack_software_engineering.agents.build import BuildAgentOutput
@@ -147,6 +147,17 @@ def test_registering_the_real_pack_derives_real_agent_prompt_and_tool_rows(
                     .mappings()
                     .all()
                 )
+                workflow_definition_rows = (
+                    (
+                        await connection.execute(
+                            sa.select(workflow_definitions).where(
+                                workflow_definitions.c.pack_id == PACK_ID
+                            )
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
         finally:
             await engine.dispose()
 
@@ -187,6 +198,31 @@ def test_registering_the_real_pack_derives_real_agent_prompt_and_tool_rows(
         # --- tools: the real pack declares none — genuinely zero rows,
         # not silently skipped ---
         assert tool_rows == []
+
+        # --- workflow_definitions (P03-S05-M14-T10): the real pack
+        # declares one, se.delivery_pipeline, with a real, non-empty
+        # permission ceiling — the workflow term of ADR-0023's
+        # monotonic-narrowing chain, genuinely sourced from this same
+        # manifest, not left at register()'s own [] default. ---
+        assert len(workflow_definition_rows) == 1
+        by_definition_id = {
+            (row["definition_id"], row["version"]): row for row in workflow_definition_rows
+        }
+        for manifest_workflow in manifest["workflows"]:
+            row = by_definition_id[(manifest_workflow["id"], manifest_workflow["version"])]
+            assert row["pack_id"] == PACK_ID
+            assert set(row["declared_permissions"]) == set(manifest_workflow["permissions"])
+            # inputs_schema/outputs_schema come from the workflow
+            # *definition file*'s own inline inputs/outputs (loaded via
+            # WorkflowDefinitionLoader) — a different source from the
+            # manifest's own inputsSchema/outputsSchema (a Pydantic
+            # import path, resolved only by derive_agent_rows-style
+            # installers); declared_permissions above is the one field
+            # this row genuinely takes from the manifest.
+            definition_path = PACK_ROOT / manifest_workflow["definition"]
+            real_definition = yaml.safe_load(definition_path.read_text(encoding="utf-8"))
+            assert row["inputs_schema"] == real_definition["inputs"]
+            assert row["outputs_schema"] == real_definition["outputs"]
 
     asyncio.run(_run())
 

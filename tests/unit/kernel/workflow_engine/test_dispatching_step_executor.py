@@ -29,6 +29,7 @@ class _FakeStepExecutor:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         self.executed_steps.append(step)
         self.received_workflow_ids.append(workflow_id)

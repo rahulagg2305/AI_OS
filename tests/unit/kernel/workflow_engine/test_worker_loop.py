@@ -103,6 +103,9 @@ class _FakeDefinitionCatalog:
         self.get_calls.append((definition_id, version))
         return self._definitions.get((definition_id, version))
 
+    async def get_declared_permissions(self, *, definition_id: str, version: str) -> frozenset[str]:
+        return frozenset()
+
 
 class _FakeAdvanceRunner:
     """Records every call; either succeeds, raises

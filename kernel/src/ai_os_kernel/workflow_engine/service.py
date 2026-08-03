@@ -251,10 +251,14 @@ class WorkflowInstanceService:
         outputs: dict[str, Any] = {}
         if next_step is not None:
             try:
+                workflow_permissions = await self._definition_catalog.get_declared_permissions(
+                    definition_id=instance.definition_id, version=instance.definition_version
+                )
                 outputs = await self._step_executor.execute(
                     next_step,
                     workflow_id=workflow_id,
                     principal_permissions=instance.principal_permissions,
+                    workflow_permissions=workflow_permissions,
                 )
             except HumanApprovalPendingError:
                 # A human_approval step genuinely still awaiting a real

@@ -143,6 +143,7 @@ class _FailIfCalled:
         *,
         workflow_id: str | None = None,
         principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         raise AssertionError("no executor should specifically handle a human_approval step today")
 
@@ -264,6 +265,9 @@ class _FakeDefinitionCatalog:
 
     async def get(self, *, definition_id: str, version: str) -> WorkflowDefinition | None:
         return _definition()
+
+    async def get_declared_permissions(self, *, definition_id: str, version: str) -> frozenset[str]:
+        return frozenset()
 
 
 async def test_a_real_human_approval_step_genuinely_blocks_when_configured() -> None:
