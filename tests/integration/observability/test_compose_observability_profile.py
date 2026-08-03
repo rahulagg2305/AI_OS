@@ -113,8 +113,19 @@ def test_the_collector_genuinely_receives_and_forwards_real_telemetry(
 
     # Real proof #1: the Collector's own debug exporter logged what it
     # received — genuinely processed, not merely accepted over HTTP.
-    collector_stdout, collector_stderr = observability_stack.get_logs("otel-collector")
-    assert "compose-profile-span" in collector_stdout + collector_stderr
+    # Polled, not a one-shot read: `force_flush` only guarantees the SDK
+    # sent the data over the wire, not that the Collector has received,
+    # processed, and written its own debug-exporter line to stdout by
+    # the time this runs — a real, discovered race (this exact one-shot
+    # check flaked twice on a loaded CI runner; the identical data path
+    # 2 lines below already polls for exactly this reason).
+    def _span_was_logged() -> bool:
+        collector_stdout, collector_stderr = observability_stack.get_logs("otel-collector")
+        return "compose-profile-span" in collector_stdout + collector_stderr
+
+    assert _wait_until(
+        _span_was_logged, timeout=_STARTUP_TIMEOUT_SECONDS, interval=_POLL_INTERVAL_SECONDS
+    ), "The Collector never logged the real span it received"
 
     # Real proof #2: Prometheus genuinely scraped the Collector's own
     # /metrics endpoint and the real metric is queryable — the full,
