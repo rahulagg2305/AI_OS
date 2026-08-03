@@ -1,0 +1,31 @@
+name: Performance
+
+# P01-S06-M42-T05. nfr.md §13: "tests/performance/ load suite in CI
+# nightly" -- deliberately never on every push/PR like ci.yml. Several
+# tests in this suite use real, production interval/duration constants
+# (never a test-shortened override), so they are genuinely slow and
+# would make the fast per-push gate noisier and slower for no benefit.
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC daily
+  workflow_dispatch:
+
+env:
+  UV_VERSION: "0.5.11"
+  PYTHON_VERSION: "3.12"
+  AIOS_ENV: ci
+
+jobs:
+  performance:
+    name: Performance tests (nfr.md §3-5)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen --all-packages
+      - name: pytest tests/performance
+        run: uv run pytest tests/performance -v -s
