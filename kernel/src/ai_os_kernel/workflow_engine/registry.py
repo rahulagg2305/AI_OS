@@ -124,6 +124,7 @@ from ai_os_kernel.persistence.catalog_schema import tools as tools_table
 from ai_os_kernel.prompt_engine.renderer import PromptEngine
 from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
 from ai_os_kernel.sandbox.executor import SandboxExecutor
+from ai_os_kernel.security_manager.narrowing import over_permitted_permissions
 from ai_os_kernel.workflow_engine.agent import Agent
 from ai_os_kernel.workflow_engine.entrypoint_loader import EntrypointLoader
 from ai_os_kernel.workflow_engine.errors import (
@@ -173,6 +174,7 @@ def _refuse_if_over_granted(
     pack_id: str,
     required_permissions: Collection[str],
     pack_manifest: Mapping[str, Any],
+    principal_permissions: frozenset[str] | None = None,
 ) -> None:
     """Shared by :class:`SqlAgentRegistry`/:class:`SqlToolRegistry`
     (``P02-S05-M13-T08``): raise :class:`AgentRegistryError`/
@@ -183,27 +185,64 @@ def _refuse_if_over_granted(
     "refuse before importing pack code" discipline
     :func:`_require_activated_pack` already establishes.
 
-    **Deferred import, not a style choice** — importing
-    :mod:`ai_os_kernel.capability_manager.permission_grant` triggers
-    ``ai_os_kernel.capability_manager``'s own package init, which
-    re-enters this still-mid-import package; see
+    **Updated (``P03-S05-M14-T09``): also refuses on the principal term,
+    when supplied.** ``principal_permissions`` is the resolving
+    instance's own captured
+    :attr:`~ai_os_kernel.workflow_engine.instance.WorkflowInstance.
+    principal_permissions` — ``None`` (no real ``SecurityContext``
+    reached this instance's own trigger call) leaves this check
+    unenforced, the identical "absent means unaffected" precedent every
+    other optional capability in this codebase already establishes. When
+    it *is* supplied, an entrypoint whose own declared permissions
+    include anything the triggering principal itself does not hold is
+    refused the identical way — the effective permission set achievable
+    by that principal for that entrypoint can only ever narrow, never
+    silently degrade a constructed ``PackContext`` into a confusing
+    ``.execute()``-time failure instead. Reuses
+    :func:`~ai_os_kernel.security_manager.narrowing.
+    over_permitted_permissions` — the principal-term counterpart of
+    :func:`~ai_os_kernel.capability_manager.permission_grant.
+    over_granted_permissions` below, not a second, bespoke subset check.
+
+    **Deferred import (the pack-grant check only), not a style choice**
+    — importing :mod:`ai_os_kernel.capability_manager.permission_grant`
+    triggers ``ai_os_kernel.capability_manager``'s own package init,
+    which re-enters this still-mid-import package; see
     :func:`_bind_pack_context_if_receiver`'s own docstring for the
     identical, already-diagnosed cycle and why deferring to call time is
-    genuinely safe here too.
+    genuinely safe here too. :mod:`ai_os_kernel.security_manager` carries
+    no such cycle (nothing in it imports
+    :mod:`ai_os_kernel.workflow_engine`), so
+    :func:`over_permitted_permissions` is imported normally, at module
+    level, alongside this module's other real imports.
     """
     from ai_os_kernel.capability_manager.permission_grant import over_granted_permissions
 
+    entrypoint_permissions = frozenset(required_permissions)
+    error_type = AgentRegistryError if kind == "agent" else ToolRegistryError
+
     pack_permissions = frozenset(pack_manifest.get("permissions", []))
     over_granted = over_granted_permissions(
-        entrypoint_permissions=frozenset(required_permissions), pack_permissions=pack_permissions
+        entrypoint_permissions=entrypoint_permissions, pack_permissions=pack_permissions
     )
     if over_granted:
-        error_type = AgentRegistryError if kind == "agent" else ToolRegistryError
         raise error_type(
             f"{kind} '{declared_id}' declares permissions {sorted(over_granted)} that pack "
             f"{pack_id!r}'s own manifest never grants (declares only "
             f"{sorted(pack_permissions)!r})"
         )
+
+    if principal_permissions is not None:
+        over_permitted = over_permitted_permissions(
+            entrypoint_permissions=entrypoint_permissions,
+            principal_permissions=principal_permissions,
+        )
+        if over_permitted:
+            raise error_type(
+                f"{kind} '{declared_id}' declares permissions {sorted(over_permitted)} that "
+                f"the triggering principal's own SecurityContext does not hold (holds only "
+                f"{sorted(principal_permissions)!r})"
+            )
 
 
 def _bind_pack_context_if_receiver(
@@ -285,17 +324,27 @@ def _bind_pack_context_if_receiver(
 class AgentRegistry(Protocol):
     """Resolves a declared ``agentId`` to a real :class:`Agent` instance
     — the seam a Capability-Manager-backed registry substitutes once one
-    exists (ADR-0004: interface-driven, configuration over code)."""
+    exists (ADR-0004: interface-driven, configuration over code).
 
-    async def resolve_agent(self, agent_id: str) -> Agent: ...
+    ``principal_permissions`` (``P03-S05-M14-T09``, defaulted ``None``)
+    is the resolving instance's own captured principal term — see
+    :func:`_refuse_if_over_granted`'s own docstring for exactly what
+    supplying it changes."""
+
+    async def resolve_agent(
+        self, agent_id: str, *, principal_permissions: frozenset[str] | None = None
+    ) -> Agent: ...
 
 
 class ToolRegistry(Protocol):
     """Resolves a declared ``toolId`` to a real :class:`Tool` instance —
     the seam a Capability-Manager-backed registry substitutes once one
-    exists (ADR-0004: interface-driven, configuration over code)."""
+    exists (ADR-0004: interface-driven, configuration over code). See
+    :class:`AgentRegistry`'s own docstring for ``principal_permissions``."""
 
-    async def resolve_tool(self, tool_id: str) -> Tool: ...
+    async def resolve_tool(
+        self, tool_id: str, *, principal_permissions: frozenset[str] | None = None
+    ) -> Tool: ...
 
 
 class InMemoryAgentRegistry:
@@ -303,12 +352,18 @@ class InMemoryAgentRegistry:
     construction by the composition root — no pack discovery, no
     activation state, no permissions. A registered agent may itself be
     an :class:`~ai_os_kernel.workflow_engine.agent.EchoAgent`; this
-    registry does not care what an ``Agent`` actually does."""
+    registry does not care what an ``Agent`` actually does.
+    ``principal_permissions`` is accepted for ``Protocol`` uniformity
+    only and never checked — there is no pack/manifest data here for it
+    to narrow against, the identical "no permissions here" scope this
+    class's own docstring already states."""
 
     def __init__(self, agents: Mapping[str, Agent]) -> None:
         self._agents = dict(agents)
 
-    async def resolve_agent(self, agent_id: str) -> Agent:
+    async def resolve_agent(
+        self, agent_id: str, *, principal_permissions: frozenset[str] | None = None
+    ) -> Agent:
         try:
             return self._agents[agent_id]
         except KeyError:
@@ -322,7 +377,9 @@ class InMemoryToolRegistry:
     def __init__(self, tools: Mapping[str, Tool]) -> None:
         self._tools = dict(tools)
 
-    async def resolve_tool(self, tool_id: str) -> Tool:
+    async def resolve_tool(
+        self, tool_id: str, *, principal_permissions: frozenset[str] | None = None
+    ) -> Tool:
         try:
             return self._tools[tool_id]
         except KeyError:
@@ -376,7 +433,9 @@ class SqlAgentRegistry:
         # caller supplies one.
         self._git_service = git_service
 
-    async def resolve_agent(self, agent_id: str) -> Agent:
+    async def resolve_agent(
+        self, agent_id: str, *, principal_permissions: frozenset[str] | None = None
+    ) -> Agent:
         try:
             async with self._engine.connect() as connection:
                 result = await connection.execute(
@@ -427,6 +486,7 @@ class SqlAgentRegistry:
             pack_id=row.pack_id,
             required_permissions=row.required_permissions,
             pack_manifest=row.manifest,
+            principal_permissions=principal_permissions,
         )
 
         loaded = await asyncio.to_thread(self._loader.load, row.entrypoint)
@@ -486,7 +546,9 @@ class SqlToolRegistry:
         self._prompt_engine = prompt_engine
         self._sandbox = sandbox or build_default_sandbox_executor()
 
-    async def resolve_tool(self, tool_id: str) -> Tool:
+    async def resolve_tool(
+        self, tool_id: str, *, principal_permissions: frozenset[str] | None = None
+    ) -> Tool:
         try:
             async with self._engine.connect() as connection:
                 result = await connection.execute(
@@ -527,6 +589,7 @@ class SqlToolRegistry:
             pack_id=row.pack_id,
             required_permissions=row.required_permissions,
             pack_manifest=row.manifest,
+            principal_permissions=principal_permissions,
         )
 
         loaded = await asyncio.to_thread(self._loader.load, row.entrypoint)

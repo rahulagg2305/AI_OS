@@ -24,7 +24,11 @@ class _FakeStepExecutor:
         self.received_workflow_ids: list[str | None] = []
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         self.executed_steps.append(step)
         self.received_workflow_ids.append(workflow_id)

@@ -16,10 +16,17 @@ half of that data-source gap — ``catalog.agents.required_permissions``/
 the Capability Manager now checks at resolution time (see
 :mod:`ai_os_kernel.capability_manager.permission_grant`, which reuses
 :func:`intersect_declared_permissions` below rather than a bespoke
-subset check). The workflow term is still not sourced from anywhere —
-no code parses a *workflow's* declared ``permissions`` out of a
-manifest — so :func:`narrow_permissions`'s full four-way call still has
-no real data for that one argument.
+subset check). **Updated (``P03-S05-M14-T09``): the principal term is
+now real too, applied at that identical resolution point** —
+:func:`over_permitted_permissions` (below) is the reusable primitive;
+see :mod:`ai_os_kernel.workflow_engine.registry`'s own docstring for how
+a triggering principal's real, persisted permission set (captured once
+at workflow-trigger time, since resolution can happen much later — a
+worker-loop tick has no live bearer token to re-derive it from) reaches
+that check. The workflow term is still not sourced from anywhere — no
+code parses a *workflow's* declared ``permissions`` out of a manifest —
+so :func:`narrow_permissions`'s full four-way call still has no real
+data for that one argument.
 
 Authority only ever shrinks: a set intersection can never contain a
 permission absent from any one of its operands, so a workflow, agent, or
@@ -92,3 +99,27 @@ def is_permitted(
         agent_permissions=agent_permissions,
         tool_permissions=tool_permissions,
     )
+
+
+def over_permitted_permissions(
+    *, entrypoint_permissions: frozenset[str], principal_permissions: frozenset[str]
+) -> frozenset[str]:
+    """Which of ``entrypoint_permissions`` exceed what ``principal_permissions``
+    actually holds — empty when an entrypoint's own declared permissions
+    are entirely within reach of the triggering principal's own real
+    permission set (``P03-S05-M14-T09``, closing this module's own
+    long-disclosed gap: "``SecurityContext`` is never threaded into
+    resolution at all"). This is the principal term of ADR-0023's
+    monotonic-narrowing chain, applied at agent/tool *resolution*
+    (:mod:`ai_os_kernel.workflow_engine.registry`) rather than only at
+    :func:`narrow_permissions`'s own per-invocation call — the identical
+    "refuse before loading, not a confusing failure the first time
+    something calls ``.execute()``" shape
+    :func:`~ai_os_kernel.capability_manager.permission_grant.
+    over_granted_permissions` already establishes for the pack-grant
+    term, reusing the exact same :func:`intersect_declared_permissions`
+    primitive rather than a second, parallel subset check. Never raises;
+    the caller (a registry resolving a real row) decides what
+    "over-permitted" means for its own error type."""
+    within_reach = intersect_declared_permissions(entrypoint_permissions, principal_permissions)
+    return entrypoint_permissions - within_reach

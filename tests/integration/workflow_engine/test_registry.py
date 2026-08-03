@@ -665,6 +665,107 @@ def test_resolve_agent_over_grant_refusal_happens_before_the_entrypoint_is_ever_
     asyncio.run(_run())
 
 
+def test_resolve_agent_succeeds_when_principal_permissions_cover_its_required_permissions(
+    database_url: str,
+) -> None:
+    """The principal term (``P03-S05-M14-T09``), the success half: a
+    principal whose own ``SecurityContext.permissions`` covers what the
+    agent declares resolves exactly as before this step."""
+
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.principal_scoped_pack",
+            state="activated",
+            manifest={"permissions": ["llm:invoke", "sandbox:execute"]},
+        )
+        await _seed_agent(
+            database_url,
+            agent_id="se.principal_scoped_pack/legit-agent",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            pack_id="se.principal_scoped_pack",
+            required_permissions=["llm:invoke"],
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            resolved = await registry.resolve_agent(
+                "se.principal_scoped_pack/legit-agent",
+                principal_permissions=frozenset({"llm:invoke", "workflow:start"}),
+            )
+
+            assert isinstance(resolved, EchoAgent)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_resolve_agent_is_refused_when_principal_permissions_are_narrower_than_the_packs_grant(
+    database_url: str,
+) -> None:
+    """The central proof this step exists for: the pack's own manifest
+    grants **both** ``llm:invoke`` and ``sandbox:execute`` — broad
+    enough that the existing pack-grant term (``P02-S05-M13-T08``) alone
+    would happily resolve this agent — but the triggering principal's
+    own, real ``SecurityContext.permissions`` holds only
+    ``sandbox:execute``. A principal generally holding several
+    permissions (broad in role terms) is still correctly narrowed for
+    *this* resolution to exactly what its own SecurityContext covers,
+    never silently inheriting the pack's own wider grant — ADR-0023's
+    "no hop can ever grant a permission the principal lacks," now
+    genuinely enforced at resolution, not merely computed."""
+
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.principal_narrow_pack",
+            state="activated",
+            manifest={"permissions": ["llm:invoke", "sandbox:execute"]},
+        )
+        await _seed_agent(
+            database_url,
+            agent_id="se.principal_narrow_pack/broad-agent",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            pack_id="se.principal_narrow_pack",
+            required_permissions=["llm:invoke", "sandbox:execute"],
+        )
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(engine)
+
+            # Proof, part 1: with no principal term supplied at all
+            # (unenforced, the pre-existing default), the identical
+            # resolution genuinely succeeds — confirming the refusal
+            # below comes from the new principal check, not some other
+            # difference between the two calls.
+            resolved_unenforced = await registry.resolve_agent(
+                "se.principal_narrow_pack/broad-agent"
+            )
+            assert isinstance(resolved_unenforced, EchoAgent)
+
+            # Proof, part 2: the identical agent, the identical
+            # sufficient pack grant — refused once a real, more
+            # restrictive principal permission set is supplied.
+            with pytest.raises(
+                AgentRegistryError, match="triggering principal's own SecurityContext does not hold"
+            ) as exc_info:
+                await registry.resolve_agent(
+                    "se.principal_narrow_pack/broad-agent",
+                    principal_permissions=frozenset({"sandbox:execute"}),
+                )
+
+            assert "llm:invoke" in str(exc_info.value)
+            # A structural, permanent cause: retrying with the identical
+            # principal permission set reconstructs the identical refusal.
+            assert exc_info.value.retriable is False
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
 def test_resolve_tool_succeeds_when_its_permissions_are_within_its_packs_grant(
     database_url: str,
 ) -> None:

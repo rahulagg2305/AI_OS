@@ -96,6 +96,7 @@ class WorkflowInstanceRepository(Protocol):
         definition_version: str,
         inputs: dict[str, Any],
         principal_id: str,
+        principal_permissions: frozenset[str] | None = None,
     ) -> WorkflowInstance: ...
 
     async def transition_to_running(
@@ -178,6 +179,7 @@ class SqlWorkflowInstanceRepository:
         definition_version: str,
         inputs: dict[str, Any],
         principal_id: str,
+        principal_permissions: frozenset[str] | None = None,
     ) -> WorkflowInstance:
         workflow_id = new_workflow_id()
         event_id = new_event_id()
@@ -204,6 +206,11 @@ class SqlWorkflowInstanceRepository:
                         status=WorkflowInstanceStatus.CREATED.value,
                         inputs=inputs,
                         principal_id=principal_id,
+                        principal_permissions=(
+                            sorted(principal_permissions)
+                            if principal_permissions is not None
+                            else None
+                        ),
                         last_event_seq=1,
                     )
                     .returning(*workflow_instances.columns)

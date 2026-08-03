@@ -60,6 +60,21 @@ filters — §5's explicit filter examples — and no free-form query DSL:
 the approved framing for this step is a *correct list endpoint*, not
 search; a filtered list is a distinct, later step layered on the same
 cursor mechanism.
+
+**Updated (``P03-S05-M14-T09``): ``start_workflow`` now forwards
+``security_context.permissions`` into ``trigger()``, not only
+``.principal.principal_id``.** Previously this real, computed
+``SecurityContext`` was built and then discarded past the
+``require_permission`` gate — the exact gap
+:mod:`ai_os_kernel.security_manager.narrowing`'s own docstring long
+disclosed ("``SecurityContext`` is never threaded into resolution").
+This one call site now captures it once, at trigger time, into the new
+``workflow_instances.principal_permissions`` column; every later
+``AgentStepExecutor``/``ToolStepExecutor`` resolution for this instance
+narrows against it — see :mod:`ai_os_kernel.workflow_engine.registry`'s
+own docstring for the resolution-time enforcement and
+:mod:`ai_os_kernel.workflow_engine.service`'s ``create_instance`` for
+why a snapshot, not a live object, is what travels past this request.
 """
 
 from __future__ import annotations
@@ -127,7 +142,11 @@ async def start_workflow(
     if trigger is None:
         raise HTTPException(status_code=503, detail="workflow engine is not available")
 
-    result = await trigger(body.inputs, security_context.principal.principal_id)
+    result = await trigger(
+        body.inputs,
+        security_context.principal.principal_id,
+        principal_permissions=security_context.permissions,
+    )
     return StartWorkflowResponse(
         workflow_id=result.workflow_id,
         outcome=result.outcome,

@@ -2,9 +2,11 @@
 ``workflow.workflow_instances`` (data_model.md §4.1).
 
 This is a read model returned after a write, not a new architectural
-concept: every field here already exists as a column created by the
-Stage B persistence-foundation migration
-(``kernel/alembic/versions/0001_workflow_state_baseline.py``).
+concept: every field here already exists as a column, most created by
+the Stage B persistence-foundation migration
+(``kernel/alembic/versions/0001_workflow_state_baseline.py``);
+``principal_permissions`` is the one later addition
+(``0031_workflow_instances_principal_permissions``, ``P03-S05-M14-T09``).
 """
 
 from __future__ import annotations
@@ -47,6 +49,11 @@ class WorkflowInstance(BaseModel):
     experiment_id: str | None
     run_manifest_id: str | None
     principal_id: str
+    # The principal term of ADR-0023's monotonic-narrowing chain,
+    # captured once at trigger time — None when no real SecurityContext
+    # reached the trigger call (see ai_os_kernel.persistence.schema's
+    # own column comment for why this is never an empty frozenset).
+    principal_permissions: frozenset[str] | None
     last_event_seq: int
     error: dict[str, Any] | None
     total_cost_usd: Decimal

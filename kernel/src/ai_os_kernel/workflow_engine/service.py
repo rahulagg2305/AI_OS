@@ -60,6 +60,7 @@ class WorkflowInstanceService:
         inputs: dict[str, Any],
         principal_id: str,
         pack_id: str,
+        principal_permissions: frozenset[str] | None = None,
     ) -> WorkflowInstance:
         """Register ``definition`` into the catalog, then create the
         instance that references it.
@@ -84,6 +85,17 @@ class WorkflowInstanceService:
         two tables the way it does for ``workflow_instances``/
         ``workflow_events`` (data_model.md §4: "written in one
         transaction so they can never disagree").
+
+        ``principal_permissions`` (``P03-S05-M14-T09``, defaulted
+        ``None``) is the triggering principal's real, computed
+        ``SecurityContext.permissions`` — the one real caller that has
+        one synchronously (``routes/workflows.py``'s ``start_workflow``)
+        supplies it; every other caller omits it, leaving this
+        instance's own principal term unenforced, exactly as before this
+        step. Captured once, here, and read back by :meth:`advance` at
+        every later step — see :mod:`ai_os_kernel.workflow_engine.
+        registry`'s own docstring for why a snapshot, not a live
+        ``SecurityContext``, is what resolution needs.
         """
         validate_principal(principal_id)
         validate_pack_id(pack_id)
@@ -94,6 +106,7 @@ class WorkflowInstanceService:
             definition_version=definition.version,
             inputs=inputs,
             principal_id=principal_id,
+            principal_permissions=principal_permissions,
         )
 
     async def start(
@@ -164,6 +177,15 @@ class WorkflowInstanceService:
         logic — see :mod:`ai_os_kernel.workflow_engine.step_executor`'s
         own module docstring.
 
+        **``instance.principal_permissions`` is now passed the identical
+        way (``P03-S05-M14-T09``)** — read back from the already-fetched
+        ``instance`` above (no extra query), so the same, real, captured
+        SecurityContext this instance was triggered with reaches
+        ``AgentStepExecutor``/``ToolStepExecutor``'s own registry
+        resolution at every step, not only the first. ``None`` (no real
+        SecurityContext at trigger time) means unenforced, exactly as
+        before this step.
+
         **A genuinely failed attempt is now genuinely recorded (added
         2026-07-30) — closing quality_gate_engine.md §9's own "every
         gate execution must record ... error details" requirement,
@@ -229,7 +251,11 @@ class WorkflowInstanceService:
         outputs: dict[str, Any] = {}
         if next_step is not None:
             try:
-                outputs = await self._step_executor.execute(next_step, workflow_id=workflow_id)
+                outputs = await self._step_executor.execute(
+                    next_step,
+                    workflow_id=workflow_id,
+                    principal_permissions=instance.principal_permissions,
+                )
             except HumanApprovalPendingError:
                 # A human_approval step genuinely still awaiting a real
                 # decision is not a failure — no `record_failed_attempt`

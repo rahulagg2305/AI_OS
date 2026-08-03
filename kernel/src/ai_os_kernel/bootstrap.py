@@ -331,7 +331,7 @@ Docker image, Kubernetes) starts the process from the repository root.
 """
 
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from pathlib import Path
@@ -405,7 +405,11 @@ from ai_os_kernel.security_manager.token_verifier import (
     JWTBearerTokenVerifier,
     build_jwt_bearer_token_verifier,
 )
-from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner, WorkflowRunResult
+from ai_os_kernel.workflow_engine.advance_runner import (
+    WorkflowAdvanceRunner,
+    WorkflowRunResult,
+    WorkflowTrigger,
+)
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.delivery_pipeline import DEFINITION_ID, build_pipeline_trigger
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
@@ -873,7 +877,7 @@ async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
 
 def _build_workflow_trigger(
     engine: AsyncEngine, agent_registry: AgentRegistry, context_manager: ContextManager
-) -> Callable[[dict[str, Any], str], Awaitable[WorkflowRunResult]]:
+) -> WorkflowTrigger:
     """The minimum real Workflow Engine execution path this step
     approves: real, ``engine``-backed persistence
     (:class:`SqlWorkflowInstanceRepository`, :class:`SqlWorkflowDefinitionCatalog`,
@@ -927,12 +931,18 @@ def _build_workflow_trigger(
     )
     definition = _build_demo_workflow_definition()
 
-    async def trigger(inputs: dict[str, Any], principal_id: str) -> WorkflowRunResult:
+    async def trigger(
+        inputs: dict[str, Any],
+        principal_id: str,
+        *,
+        principal_permissions: frozenset[str] | None = None,
+    ) -> WorkflowRunResult:
         instance = await instance_service.create_instance(
             definition=definition,
             inputs=inputs,
             principal_id=principal_id,
             pack_id=_DEMO_WORKFLOW_PACK_ID,
+            principal_permissions=principal_permissions,
         )
         await instance_service.start(
             workflow_id=instance.workflow_id,

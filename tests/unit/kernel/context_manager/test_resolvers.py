@@ -36,6 +36,7 @@ def _instance(inputs: dict[str, Any]) -> WorkflowInstance:
         experiment_id=None,
         run_manifest_id=None,
         principal_id="user-42",
+        principal_permissions=None,
         last_event_seq=1,
         error=None,
         total_cost_usd=Decimal("0"),

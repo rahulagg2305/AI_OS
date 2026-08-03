@@ -226,7 +226,7 @@ and both branch targets are declared entirely in
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -240,7 +240,11 @@ from ai_os_kernel.context_manager.resolvers import (
     WorkflowStepOutputResolver,
 )
 from ai_os_kernel.sandbox.default_executor import default_python_command
-from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner, WorkflowRunResult
+from ai_os_kernel.workflow_engine.advance_runner import (
+    WorkflowAdvanceRunner,
+    WorkflowRunResult,
+    WorkflowTrigger,
+)
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.gate_result_recorder import SqlGateResultRecorder
 from ai_os_kernel.workflow_engine.human_approval import (
@@ -531,7 +535,7 @@ def build_pipeline_trigger(
     agent_registry: AgentRegistry,
     *,
     python_command: tuple[str, ...] | None = None,
-) -> Callable[[dict[str, Any], str], Awaitable[WorkflowRunResult]]:
+) -> WorkflowTrigger:
     """Mirrors ``kernel/bootstrap.py``'s own ``_build_workflow_trigger``
     shape exactly — real, ``engine``-backed persistence driving one
     ``WorkflowDefinition`` through create -> start -> run-to-completion.
@@ -557,12 +561,18 @@ def build_pipeline_trigger(
     )
     definition = load_pipeline_definition()
 
-    async def trigger(inputs: dict[str, Any], principal_id: str) -> WorkflowRunResult:
+    async def trigger(
+        inputs: dict[str, Any],
+        principal_id: str,
+        *,
+        principal_permissions: frozenset[str] | None = None,
+    ) -> WorkflowRunResult:
         instance = await instance_service.create_instance(
             definition=definition,
             inputs=inputs,
             principal_id=principal_id,
             pack_id=PACK_ID,
+            principal_permissions=principal_permissions,
         )
         await instance_service.start(
             workflow_id=instance.workflow_id,

@@ -126,7 +126,11 @@ class _EchoStepExecutor:
     step, not a real tool/agent invocation."""
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         return {"status": "ok"}
 

@@ -476,7 +476,11 @@ class HumanApprovalStepExecutor:
         self._definition_catalog = definition_catalog
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.HUMAN_APPROVAL:
             raise ValueError(

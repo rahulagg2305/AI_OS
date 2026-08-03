@@ -85,7 +85,11 @@ class _SleepingStepExecutor:
         self._duration = duration
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         await asyncio.sleep(self._duration)
         return {"status": "ok"}

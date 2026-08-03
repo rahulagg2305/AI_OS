@@ -65,6 +65,7 @@ def _instance(
         experiment_id=None,
         run_manifest_id=None,
         principal_id=_PRINCIPAL_ID,
+        principal_permissions=None,
         last_event_seq=1,
         error=None,
         total_cost_usd=Decimal("0"),
@@ -114,6 +115,7 @@ class _FakeInstanceService:
         inputs: dict[str, Any],
         principal_id: str,
         pack_id: str,
+        principal_permissions: frozenset[str] | None = None,
     ) -> WorkflowInstance:
         self.create_calls.append(
             {
@@ -121,6 +123,7 @@ class _FakeInstanceService:
                 "inputs": inputs,
                 "principal_id": principal_id,
                 "pack_id": pack_id,
+                "principal_permissions": principal_permissions,
             }
         )
         return _instance(
@@ -245,6 +248,7 @@ async def test_it_creates_starts_and_runs_a_real_child_and_joins_its_output() ->
             "inputs": {},
             "principal_id": _PRINCIPAL_ID,
             "pack_id": _PACK_ID,
+            "principal_permissions": None,
         }
     ]
     assert instance_service.start_calls[0]["workflow_id"] == "wf_child"

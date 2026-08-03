@@ -95,8 +95,9 @@ mechanism has had from the start.
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping
+from collections.abc import Awaitable, Mapping
 from enum import StrEnum
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
@@ -136,6 +137,28 @@ class WorkflowRunResult(BaseModel):
     iterations: int
     last_instance: WorkflowInstance | None
     error: BaseException | None = None
+
+
+class WorkflowTrigger(Protocol):
+    """The callable shape ``_build_workflow_trigger``/
+    ``build_pipeline_trigger`` return — a real ``Protocol``, not a bare
+    ``Callable[...]`` alias, because ``typing.Callable`` cannot express
+    an optional keyword-only parameter. ``principal_permissions``
+    (``P03-S05-M14-T09``, defaulted ``None``) is the triggering
+    principal's real, computed ``SecurityContext.permissions``; the one
+    real caller that has one synchronously
+    (``routes/workflows.py``'s ``start_workflow``) supplies it, every
+    other caller omits it — an additive, backward-compatible parameter,
+    the identical shape ``StepExecutor.execute``'s own
+    ``principal_permissions`` already establishes."""
+
+    def __call__(
+        self,
+        inputs: dict[str, Any],
+        principal_id: str,
+        *,
+        principal_permissions: frozenset[str] | None = None,
+    ) -> Awaitable[WorkflowRunResult]: ...
 
 
 class WorkflowAdvanceRunner:

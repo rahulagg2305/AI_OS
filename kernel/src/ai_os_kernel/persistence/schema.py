@@ -161,6 +161,15 @@ workflow_instances = sa.Table(
     # avoidance, explained in this module's own docstring above).
     sa.Column("run_manifest_id", sa.Text, nullable=True),
     sa.Column("principal_id", sa.Text, nullable=False),
+    # The triggering principal's real, computed SecurityContext.permissions
+    # (security_manager.narrowing's principal term), captured once at
+    # trigger time — nullable, NULL meaning "not enforced" (a caller
+    # with no live SecurityContext, e.g. every real caller before
+    # P03-S05-M14-T09), never an empty set, which would incorrectly
+    # mean "this principal holds no permissions at all." See
+    # ai_os_kernel.workflow_engine.registry's own docstring for why a
+    # snapshot, not a live object, is what resolution reads back.
+    sa.Column("principal_permissions", JSONB, nullable=True),
     sa.Column("last_event_seq", sa.BigInteger, nullable=False),
     sa.Column("error", JSONB, nullable=True),
     sa.Column("total_cost_usd", sa.Numeric(14, 6), nullable=False, server_default="0"),

@@ -118,7 +118,11 @@ class QualityGateStepExecutor:
         self._success_field = success_field
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.QUALITY_GATE:
             raise ValueError(

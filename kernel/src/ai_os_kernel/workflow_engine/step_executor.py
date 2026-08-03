@@ -116,10 +116,24 @@ class StepExecutor(Protocol):
     """Executes one step and returns its outputs. A real implementation
     raises on failure; this stage only has a stub that always
     succeeds, plus one real (trivial) agent path and one real (trivial)
-    tool path."""
+    tool path.
+
+    ``principal_permissions`` (``P03-S05-M14-T09``, defaulted ``None``,
+    mirroring ``workflow_id``'s own precedent exactly) is the triggering
+    instance's own captured principal term
+    (:attr:`~ai_os_kernel.workflow_engine.instance.WorkflowInstance.
+    principal_permissions`) — only :class:`AgentStepExecutor`/
+    :class:`ToolStepExecutor` (via their registries) and
+    :class:`SubWorkflowStepExecutor` (propagating it to a child instance)
+    read it; every other implementation ignores it, so this is a pure,
+    additive wiring change for them, not new orchestration logic."""
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]: ...
 
 
@@ -128,7 +142,11 @@ class NoOpStepExecutor:
     real executor until every step type has one (Stage C)."""
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         return {}
 
@@ -177,7 +195,11 @@ class AgentStepExecutor:
         self._context_manager = context_manager
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.AGENT:
             raise ValueError(
@@ -189,7 +211,9 @@ class AgentStepExecutor:
                 f"step '{step.id}' declares no agentId — WorkflowStep validation "
                 "should already have required one for an agent step"
             )
-        agent = await self._registry.resolve_agent(step.agent_id)
+        agent = await self._registry.resolve_agent(
+            step.agent_id, principal_permissions=principal_permissions
+        )
         inputs = await self._invocation_inputs(step, workflow_id)
         outputs = await agent.execute(inputs)
         self._validate_output(agent, outputs)
@@ -250,7 +274,11 @@ class ToolStepExecutor:
         self._registry = registry
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.TOOL:
             raise ValueError(
@@ -262,7 +290,9 @@ class ToolStepExecutor:
                 f"step '{step.id}' declares no toolId — WorkflowStep validation "
                 "should already have required one for a tool step"
             )
-        tool = await self._registry.resolve_tool(step.tool_id)
+        tool = await self._registry.resolve_tool(
+            step.tool_id, principal_permissions=principal_permissions
+        )
         if tool.trust_tier is TrustTier.TIER1_SANDBOXED:
             is_sandbox_backed = isinstance(tool, SandboxBackedTool) and tool.sandbox is not None
             if not is_sandbox_backed:
@@ -318,7 +348,11 @@ class DecisionStepExecutor:
         self._repository = repository
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.DECISION:
             raise ValueError(
@@ -403,7 +437,11 @@ class ParallelStepExecutor:
         self._tool_executor = tool_executor
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.PARALLEL:
             raise ValueError(
@@ -419,10 +457,17 @@ class ParallelStepExecutor:
             )
 
         if join_policy is JoinPolicy.ANY:
-            results = await self._run_racing_for_first_success(branches, workflow_id=workflow_id)
+            results = await self._run_racing_for_first_success(
+                branches, workflow_id=workflow_id, principal_permissions=principal_permissions
+            )
         else:
             results = await asyncio.gather(
-                *(self._run_branch(branch, workflow_id=workflow_id) for branch in branches)
+                *(
+                    self._run_branch(
+                        branch, workflow_id=workflow_id, principal_permissions=principal_permissions
+                    )
+                    for branch in branches
+                )
             )
 
         if join_policy is JoinPolicy.COLLECT:
@@ -444,10 +489,18 @@ class ParallelStepExecutor:
             )
         return {"joinPolicy": join_policy.value, "results": results}
 
-    async def _run_branch(self, branch: WorkflowStep, *, workflow_id: str | None) -> dict[str, Any]:
+    async def _run_branch(
+        self,
+        branch: WorkflowStep,
+        *,
+        workflow_id: str | None,
+        principal_permissions: frozenset[str] | None = None,
+    ) -> dict[str, Any]:
         executor = self._agent_executor if branch.type is StepType.AGENT else self._tool_executor
         try:
-            outputs = await executor.execute(branch, workflow_id=workflow_id)
+            outputs = await executor.execute(
+                branch, workflow_id=workflow_id, principal_permissions=principal_permissions
+            )
             return {"branchId": branch.id, "status": "completed", "outputs": outputs, "error": None}
         except asyncio.CancelledError:
             raise
@@ -460,7 +513,11 @@ class ParallelStepExecutor:
             }
 
     async def _run_racing_for_first_success(
-        self, branches: list[WorkflowStep], *, workflow_id: str | None
+        self,
+        branches: list[WorkflowStep],
+        *,
+        workflow_id: str | None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> list[dict[str, Any]]:
         """``joinPolicy: any`` — the first genuine success wins; every
         branch still in flight at that moment is really cancelled, not
@@ -469,7 +526,11 @@ class ParallelStepExecutor:
         gets cancelled is reported as ``"cancelled"``, an honest third
         outcome distinct from ``"completed"``/``"failed"``."""
         tasks = {
-            asyncio.ensure_future(self._run_branch(branch, workflow_id=workflow_id)): branch
+            asyncio.ensure_future(
+                self._run_branch(
+                    branch, workflow_id=workflow_id, principal_permissions=principal_permissions
+                )
+            ): branch
             for branch in branches
         }
         results: dict[str, dict[str, Any]] = {}
@@ -585,7 +646,11 @@ class SubWorkflowStepExecutor:
         self._max_iterations = max_iterations
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.type is not StepType.SUB_WORKFLOW:
             raise ValueError(
@@ -616,6 +681,12 @@ class SubWorkflowStepExecutor:
             inputs={},
             principal_id=self._principal_id,
             pack_id=self._pack_id,
+            # Inherits the parent instance's own real, captured
+            # permission term (P03-S05-M14-T09) — never a separately
+            # configured value, so a child workflow can never end up
+            # broader than what triggered its own parent (monotonic
+            # narrowing, ADR-0023).
+            principal_permissions=principal_permissions,
         )
         await self._instance_service.start(
             workflow_id=child_instance.workflow_id,
@@ -704,20 +775,28 @@ class DispatchingStepExecutor:
         self._human_approval_executor = human_approval_executor
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "workflow_id": workflow_id,
+            "principal_permissions": principal_permissions,
+        }
         if step.type is StepType.AGENT:
-            return await self._agent_executor.execute(step, workflow_id=workflow_id)
+            return await self._agent_executor.execute(step, **kwargs)
         if step.type is StepType.TOOL:
-            return await self._tool_executor.execute(step, workflow_id=workflow_id)
+            return await self._tool_executor.execute(step, **kwargs)
         if step.type is StepType.QUALITY_GATE and self._quality_gate_executor is not None:
-            return await self._quality_gate_executor.execute(step, workflow_id=workflow_id)
+            return await self._quality_gate_executor.execute(step, **kwargs)
         if step.type is StepType.DECISION and self._decision_executor is not None:
-            return await self._decision_executor.execute(step, workflow_id=workflow_id)
+            return await self._decision_executor.execute(step, **kwargs)
         if step.type is StepType.PARALLEL and self._parallel_executor is not None:
-            return await self._parallel_executor.execute(step, workflow_id=workflow_id)
+            return await self._parallel_executor.execute(step, **kwargs)
         if step.type is StepType.SUB_WORKFLOW and self._sub_workflow_executor is not None:
-            return await self._sub_workflow_executor.execute(step, workflow_id=workflow_id)
+            return await self._sub_workflow_executor.execute(step, **kwargs)
         if step.type is StepType.HUMAN_APPROVAL and self._human_approval_executor is not None:
-            return await self._human_approval_executor.execute(step, workflow_id=workflow_id)
-        return await self._default_executor.execute(step, workflow_id=workflow_id)
+            return await self._human_approval_executor.execute(step, **kwargs)
+        return await self._default_executor.execute(step, **kwargs)

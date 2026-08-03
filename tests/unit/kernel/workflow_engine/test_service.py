@@ -150,6 +150,7 @@ def _instance(
         experiment_id=None,
         run_manifest_id=None,
         principal_id="user-42",
+        principal_permissions=None,
         last_event_seq=last_event_seq,
         error=None,
         total_cost_usd=Decimal("0"),
@@ -186,6 +187,7 @@ class _FakeRepository:
         definition_version: str,
         inputs: dict[str, Any],
         principal_id: str,
+        principal_permissions: frozenset[str] | None = None,
     ) -> WorkflowInstance:
         self.create_calls.append(
             {
@@ -193,6 +195,7 @@ class _FakeRepository:
                 "definition_version": definition_version,
                 "inputs": inputs,
                 "principal_id": principal_id,
+                "principal_permissions": principal_permissions,
             }
         )
         return _instance(
@@ -367,7 +370,11 @@ class _FakeStepExecutor:
         self._error = error
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         self.executed_steps.append(step)
         self.received_workflow_ids.append(workflow_id)

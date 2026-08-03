@@ -103,6 +103,7 @@ def _instance(
         experiment_id=None,
         run_manifest_id=None,
         principal_id="user-42",
+        principal_permissions=None,
         last_event_seq=2,
         error=None,
         total_cost_usd=Decimal("0"),
@@ -345,7 +346,11 @@ class _FailingStepExecutor:
         self.attempts = 0
 
     async def execute(
-        self, step: WorkflowStep, *, workflow_id: str | None = None
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         if step.id == self._failing_step_id:
             self.attempts += 1

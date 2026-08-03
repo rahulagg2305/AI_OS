@@ -220,6 +220,7 @@ def test_workflow_instances_matches_the_documented_columns(
         "experiment_id",
         "run_manifest_id",
         "principal_id",
+        "principal_permissions",
         "last_event_seq",
         "error",
         "total_cost_usd",
