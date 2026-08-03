@@ -242,6 +242,13 @@ jobs:
           context: .
           push: false
           tags: ai-os:${{ github.sha }}
+          # Real, dynamic value (the commit actually being built) —
+          # never hardcoded. Deployment_architecture.md §3: "Image is
+          # labelled with the Git SHA". No VERSION build-arg here: the
+          # Dockerfile's own default is honest about what CI has not
+          # been given a real semantic-version source for yet.
+          build-args: |
+            GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

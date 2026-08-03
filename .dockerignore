@@ -1,0 +1,25 @@
+# Reduces the build context to what the image build actually needs.
+# See Dockerfile / docs/11_deployment/deployment_architecture.md §3.
+
+.git
+.github
+docs
+dashboard
+scripts
+tests
+**/tests
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+.mypy_cache
+**/.mypy_cache
+.pytest_cache
+**/.pytest_cache
+.ruff_cache
+htmlcov
+.coverage
+*.egg-info
+.claude
+.env
+.env.*
