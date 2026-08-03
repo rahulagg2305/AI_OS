@@ -397,6 +397,7 @@ from ai_os_kernel.routes.approvals import router as approvals_router
 from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
 from ai_os_kernel.routes.health import router as health_router
 from ai_os_kernel.routes.packs import router as packs_router
+from ai_os_kernel.routes.role_administration import router as role_administration_router
 from ai_os_kernel.routes.workflows import router as workflows_router
 from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
@@ -1569,6 +1570,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.include_router(delivery_pipeline_router)
     app.include_router(approvals_router)
     app.include_router(packs_router)
+    app.include_router(role_administration_router)
 
     logger.info("kernel.bootstrap.complete")
     return app

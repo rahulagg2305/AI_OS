@@ -51,11 +51,15 @@ already establishes, mirrored here almost exactly: an unauthorized
 attempt is audited as ``DENIED`` *before* being refused; a real
 grant/revoke is audited as ``SUCCESS`` after the real write commits.
 
-**Service-layer only, no HTTP route — the identical "Workflow-Engine-
-level mechanism first, HTTP wiring is separate, later work" precedent
-``P03-S05-M14-T04``/``T05`` already established for Human Approval
-itself** (``P03-S03-M30-T06`` added that HTTP route as its own, later
-step). Real, tested, callable — not wired to any transport yet.
+**Updated (``P03-S05-M14-T08``): a real HTTP route now exists too** —
+``POST``/``DELETE /api/v1/security/role-grants``
+(:mod:`ai_os_kernel.routes.role_administration`), the identical
+"Workflow-Engine-level mechanism first, HTTP wiring is separate, later
+work" precedent ``P03-S03-M30-T06`` already established for Human
+Approval's own ``decide()`` — authenticated via
+:func:`~ai_os_kernel.security_manager.authenticate` directly, the
+entire ``admin``-only authorization decision deferred to this module's
+own :class:`RoleAdministrationService`, no parallel check.
 """
 
 from __future__ import annotations

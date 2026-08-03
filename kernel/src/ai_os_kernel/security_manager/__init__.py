@@ -40,11 +40,14 @@ the Human Approval decide route (:mod:`ai_os_kernel.routes.approvals`):
 
 Not yet implemented: full OIDC (JWKS, issuer/audience validation),
 service-account API keys as a distinct mechanism, the full ADR-0023
-permission vocabulary, manifest-sourced workflow/agent/tool declared
-permissions (see :func:`narrow_permissions`'s own docstring), role
-assignment/administration, and a ``governance.audit_log`` writer for
-authentication/authorization events (logged via structlog only, for
-now).
+permission vocabulary, and manifest-sourced workflow/agent/tool
+declared permissions (see :func:`narrow_permissions`'s own docstring).
+Role administration (grant/revoke ``approver:<class>``,
+``P03-S05-M14-T07``/``T08``, HTTP-reachable) and its own audit trail
+now exist too — see :mod:`ai_os_kernel.security_manager.
+role_administration`; the rest of this module's authentication/
+authorization events (plain bearer-token success/failure,
+``require_permission()`` denials) remain structlog-only.
 """
 
 from ai_os_kernel.security_manager.dependencies import authenticate, require_permission
