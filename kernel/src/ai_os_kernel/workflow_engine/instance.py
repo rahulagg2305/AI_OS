@@ -5,8 +5,9 @@ This is a read model returned after a write, not a new architectural
 concept: every field here already exists as a column, most created by
 the Stage B persistence-foundation migration
 (``kernel/alembic/versions/0001_workflow_state_baseline.py``);
-``principal_permissions`` is the one later addition
-(``0031_workflow_instances_principal_permissions``, ``P03-S05-M14-T09``).
+``principal_permissions`` (``0031_principal_permissions``,
+``P03-S05-M14-T09``) and ``scheduled_at`` (``0032_scheduled_at``,
+``P02-S01-M05-T13``) are later additions.
 """
 
 from __future__ import annotations
@@ -54,6 +55,10 @@ class WorkflowInstance(BaseModel):
     # reached the trigger call (see ai_os_kernel.persistence.schema's
     # own column comment for why this is never an empty frozenset).
     principal_permissions: frozenset[str] | None
+    # The Scheduler's own data (workflow_engine.md §5.13) — None means
+    # no scheduled start was requested; a real timestamp means "start
+    # no earlier than this" (P02-S01-M05-T13).
+    scheduled_at: datetime | None
     last_event_seq: int
     error: dict[str, Any] | None
     total_cost_usd: Decimal

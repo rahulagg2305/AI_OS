@@ -72,6 +72,14 @@ class PlatformConfig(BaseModel):
     ``None`` (every real deployment) means "use the real, decided
     5-second policy constant"."""
 
+    scheduler_interval_seconds: float | None = None
+    """Overrides :data:`ai_os_kernel.workflow_engine.scheduler.SCHEDULER_INTERVAL_SECONDS`
+    for the real background Scheduler loop (`ai_os_kernel.bootstrap._lifespan`,
+    `P02-S01-M05-T13`). The identical "test-only override, never a
+    second policy decision" shape ``lease_reap_interval_seconds``
+    already establishes — ``None`` (every real deployment) means "use
+    the real, decided 5-second policy constant"."""
+
     # No `otlp_endpoint` field here: `OTEL_EXPORTER_OTLP_ENDPOINT` is one
     # of §3.3's named "bootstrap minimum" environment variables, read
     # directly (`ai_os_kernel.observability.settings.ObservabilitySettings`),

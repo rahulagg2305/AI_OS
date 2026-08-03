@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 60%** (143.5 of 238 Task-equivalents complete)
+**Overall: 61%** (144.5 of 238 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -20,7 +20,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S04 Health and Lifecycle | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S05 Observability and Audit | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S06 CI and Test Infrastructure | 10 | 9 | 0 | 1 | 90% |
-| P02 (B) | S01 Workflow Execution Core | 15 | 14 | 0 | 1 | 93% |
+| P02 (B) | S01 Workflow Execution Core | 15 | 15 | 0 | 0 | 100% |
 | P02 (B) | S02 LLM Gateway | 12 | 6 | 1 | 5 | 54% |
 | P02 (B) | S03 Prompt and Context Assembly | 16 | 8 | 0 | 8 | 50% |
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 4 | 0 | 10 | 29% |
@@ -57,7 +57,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 44 | 94% |
-| P02 (Stage B) - Minimum Viable Kernel | 95 | 61 | 65% |
+| P02 (Stage B) - Minimum Viable Kernel | 95 | 62 | 66% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 30 | 79% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
@@ -68,10 +68,9 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-45 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+44 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P01-S06-M42-T05` tests/performance against NFR targets
-- `P02-S01-M05-T13` Scheduler for delayed workflow starts
 - `P02-S02-M06-T08` Streaming completions
 - `P02-S02-M06-T09` Embeddings
 - `P02-S02-M06-T10` Provider token counting
@@ -95,7 +94,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P03-S03-M30-T02` Structured Markdown specification input
 - `P03-S04-M31-T02` Manifest-declared file and build tools
 - `P03-S06-M41-T02` Remaining T2-T12 controls
-- ... and 20 more
+- `P04-S01-M12-T04` Metrics collector
+- ... and 19 more
 
 ## Dependency review signal
 

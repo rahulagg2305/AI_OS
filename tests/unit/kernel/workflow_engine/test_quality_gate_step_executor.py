@@ -61,6 +61,9 @@ class _FakeRepository:
     async def create(self, **kwargs: Any) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
+    async def list_startable_instances(self, *, limit: int) -> list[WorkflowInstance]:
+        raise NotImplementedError("not exercised by these tests")
+
     async def transition_to_running(self, **kwargs: Any) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 

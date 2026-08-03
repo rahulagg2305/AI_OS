@@ -104,6 +104,7 @@ def _instance(
         run_manifest_id=None,
         principal_id="user-42",
         principal_permissions=None,
+        scheduled_at=None,
         last_event_seq=2,
         error=None,
         total_cost_usd=Decimal("0"),
@@ -144,6 +145,7 @@ class _FakeInstanceRepository:
         inputs: dict[str, Any],
         principal_id: str,
         principal_permissions: frozenset[str] | None = None,
+        scheduled_at: datetime | None = None,
     ) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
@@ -207,6 +209,9 @@ class _FakeInstanceRepository:
     ) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
+    async def list_startable_instances(self, *, limit: int) -> list[WorkflowInstance]:
+        raise NotImplementedError("not exercised by these tests")
+
 
 class _FakeLeaseRepository:
     """Only `acquire`/`release` are exercised; `renew` is implemented
@@ -263,6 +268,7 @@ class _StatefulInstanceRepository:
         inputs: dict[str, Any],
         principal_id: str,
         principal_permissions: frozenset[str] | None = None,
+        scheduled_at: datetime | None = None,
     ) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
@@ -322,6 +328,9 @@ class _StatefulInstanceRepository:
     async def list_runnable_instances(
         self, *, limit: int, exclude_definition_ids: frozenset[str] = frozenset()
     ) -> list[WorkflowInstance]:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def list_startable_instances(self, *, limit: int) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
 
@@ -454,6 +463,9 @@ class _GateRetryInstanceRepository:
     async def list_runnable_instances(
         self, *, limit: int, exclude_definition_ids: frozenset[str] = frozenset()
     ) -> list[WorkflowInstance]:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def list_startable_instances(self, *, limit: int) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
 

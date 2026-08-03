@@ -430,6 +430,11 @@ from ai_os_kernel.workflow_engine.registry import (
     SqlAgentRegistry,
 )
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
+from ai_os_kernel.workflow_engine.scheduler import (
+    SCHEDULER_INTERVAL_SECONDS,
+    WorkflowScheduler,
+    run_scheduler_loop,
+)
 from ai_os_kernel.workflow_engine.service import WorkflowInstanceService
 from ai_os_kernel.workflow_engine.step_executor import (
     AgentStepExecutor,
@@ -1306,7 +1311,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     The token verifier degrades independently of all seven, since
     authentication needs neither a database nor an LLM secret.
 
-    **Four real, continuously-running background tasks are started
+    **Five real, continuously-running background tasks are started
     here and drained through a single
     :class:`~ai_os_kernel.health.shutdown.GracefulShutdownCoordinator`
     (``P01-S04-M03-T06``) in this function's own ``finally`` block** —
@@ -1317,16 +1322,20 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     audit-chain verification job
     (``ai_os_kernel.observability.audit_verification_job.run_periodic_audit_chain_verification``,
     built and unit-tested in ``P01-S05-M04-T06`` but never started
-    anywhere until it was), and, as of this step
-    (``P02-S01-M05-T14``), the multi-instance worker loop
+    anywhere until it was), the multi-instance worker loop
     (``ai_os_kernel.workflow_engine.worker_loop.run_worker_loop``,
     built and unit/integration-tested in ``P02-S01-M05-T12`` but
     deliberately left unstarted until a real, system-wide definition
     discovery mechanism existed for it to use — see
-    ``definition_catalog.py``'s own docstring). All four are genuinely
-    stopped — cancelled or signalled to stop, then awaited — before
-    ``engine.dispose()`` runs, so no query any of them makes can ever
-    race a closed connection pool.
+    ``definition_catalog.py``'s own docstring), and, as of this step
+    (``P02-S01-M05-T13``), the Scheduler's own loop
+    (``ai_os_kernel.workflow_engine.scheduler.run_scheduler_loop``,
+    starting a `created` instance once its own real, persisted
+    `scheduled_at` is due — workflow_engine.md §5.13's own
+    previously-"not built at all" Scheduler component). All five are
+    genuinely stopped — cancelled or signalled to stop, then awaited —
+    before ``engine.dispose()`` runs, so no query any of them makes can
+    ever race a closed connection pool.
     """
     app.state.token_verifier = await _build_token_verifier()
     shutdown_coordinator = GracefulShutdownCoordinator()
@@ -1389,6 +1398,23 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         app.state.lease_reap_task = lease_reap_task
         shutdown_coordinator.register_task("lease_reap", lease_reap_task)
+        # The Scheduler's own real background loop (workflow_engine.md
+        # §5.13, `P02-S01-M05-T13`) — starts a `created` instance once
+        # its own real, persisted `scheduled_at` is due. A dedicated,
+        # plain, stateless `WorkflowScheduler` over the same shared
+        # engine — the identical "cheap to construct a second one"
+        # reasoning `lease_reap_task` above already establishes.
+        scheduler_interval = app.state.config.scheduler_interval_seconds
+        if scheduler_interval is None:
+            scheduler_interval = SCHEDULER_INTERVAL_SECONDS
+        scheduler_task = asyncio.create_task(
+            run_scheduler_loop(
+                scheduler=WorkflowScheduler(SqlWorkflowInstanceRepository(engine)),
+                interval_seconds=scheduler_interval,
+            )
+        )
+        app.state.scheduler_task = scheduler_task
+        shutdown_coordinator.register_task("scheduler", scheduler_task)
         # The multi-instance worker loop's own real background loop
         # (P02-S01-M05-T14) — the first of the four P02-S01-M05-T09
         # through T12 "proven, unused" capabilities to move to "proven,

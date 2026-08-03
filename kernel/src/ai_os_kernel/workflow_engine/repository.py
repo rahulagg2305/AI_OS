@@ -97,6 +97,7 @@ class WorkflowInstanceRepository(Protocol):
         inputs: dict[str, Any],
         principal_id: str,
         principal_permissions: frozenset[str] | None = None,
+        scheduled_at: datetime | None = None,
     ) -> WorkflowInstance: ...
 
     async def transition_to_running(
@@ -164,6 +165,8 @@ class WorkflowInstanceRepository(Protocol):
         self, *, limit: int, exclude_definition_ids: frozenset[str] = frozenset()
     ) -> list[WorkflowInstance]: ...
 
+    async def list_startable_instances(self, *, limit: int) -> list[WorkflowInstance]: ...
+
 
 class SqlWorkflowInstanceRepository:
     """The only implementation of :class:`WorkflowInstanceRepository` at
@@ -180,6 +183,7 @@ class SqlWorkflowInstanceRepository:
         inputs: dict[str, Any],
         principal_id: str,
         principal_permissions: frozenset[str] | None = None,
+        scheduled_at: datetime | None = None,
     ) -> WorkflowInstance:
         workflow_id = new_workflow_id()
         event_id = new_event_id()
@@ -211,6 +215,7 @@ class SqlWorkflowInstanceRepository:
                             if principal_permissions is not None
                             else None
                         ),
+                        scheduled_at=scheduled_at,
                         last_event_seq=1,
                     )
                     .returning(*workflow_instances.columns)
@@ -430,6 +435,40 @@ class SqlWorkflowInstanceRepository:
             )
             .where(*conditions)
             .order_by(workflow_instances.c.created_at)
+            .limit(limit)
+        )
+        async with self._engine.connect() as connection:
+            result = await connection.execute(query)
+            rows = result.mappings().all()
+        return [WorkflowInstance.model_validate(dict(row)) for row in rows]
+
+    async def list_startable_instances(self, *, limit: int) -> list[WorkflowInstance]:
+        """A plain, unguarded read — mirrors :meth:`list_runnable_instances`;
+        :class:`~ai_os_kernel.workflow_engine.scheduler.WorkflowScheduler`'s
+        own subsequent :meth:`transition_to_running` call is the real
+        exclusivity guard (its ``WHERE status = 'created'`` clause is
+        one atomic check-and-transition, so two concurrent scheduler
+        ticks racing the same instance can never both start it).
+
+        The Scheduler's own question (workflow_engine.md §5.13): which
+        ``created`` instances have a real, now-due ``scheduled_at`` —
+        genuinely different from :meth:`list_runnable_instances`
+        (``status = 'running'``, no active lease), since deciding
+        *when* a not-yet-started instance should begin is a distinct
+        question from discovering already-running work to advance.
+        Ordered ``scheduled_at`` ASC (earliest-due-first, the identical
+        fairness reasoning ``list_runnable_instances`` already
+        establishes for ``created_at``) — a schedule due five minutes
+        ago should not wait behind one due five seconds ago.
+        """
+        query = (
+            sa.select(workflow_instances)
+            .where(
+                workflow_instances.c.status == WorkflowInstanceStatus.CREATED.value,
+                workflow_instances.c.scheduled_at.is_not(None),
+                workflow_instances.c.scheduled_at <= sa.func.now(),
+            )
+            .order_by(workflow_instances.c.scheduled_at)
             .limit(limit)
         )
         async with self._engine.connect() as connection:

@@ -78,6 +78,7 @@ The core of the design: an append-only event log plus a materialised snapshot, w
 | `run_manifest_id` | text NULL | FK → `evaluation.run_manifests` |
 | `principal_id` | text NOT NULL | Who started it |
 | `principal_permissions` | jsonb NULL | The triggering principal's real, computed `SecurityContext.permissions`, captured once at trigger time (`P03-S05-M14-T09`, migration `0031`) — `NULL` means no real `SecurityContext` reached the trigger call, so the principal term of ADR-0023's monotonic-narrowing chain is unenforced for this instance, never an empty-array "holds nothing" claim. Read back at every later agent/tool resolution (`ai_os_kernel.workflow_engine.registry`) |
+| `scheduled_at` | timestamptz NULL | The Scheduler's own data (`P02-S01-M05-T13`, migration `0032`) — `NULL` means no scheduled start was requested (must be started by an explicit `start()` call); a real timestamp means "start no earlier than this," read by `ai_os_kernel.workflow_engine.scheduler.WorkflowScheduler` |
 | `last_event_seq` | bigint NOT NULL | Sequence of the last applied event |
 | `error` | jsonb NULL | `StructuredError` |
 | `total_cost_usd` | numeric(14,6) NOT NULL DEFAULT 0 | |

@@ -170,6 +170,13 @@ workflow_instances = sa.Table(
     # ai_os_kernel.workflow_engine.registry's own docstring for why a
     # snapshot, not a live object, is what resolution reads back.
     sa.Column("principal_permissions", JSONB, nullable=True),
+    # The Scheduler's own data (workflow_engine.md §5.13, "Scheduler ...
+    # delayed/scheduled workflow starts") — NULL means "no scheduled
+    # start requested" (every real caller before P02-S01-M05-T13, and
+    # every create() call that still omits the new keyword), never "due
+    # immediately," which would be indistinguishable from a genuine,
+    # very-soon-due schedule. WorkflowScheduler is the one real reader.
+    sa.Column("scheduled_at", sa.TIMESTAMP(timezone=True), nullable=True),
     sa.Column("last_event_seq", sa.BigInteger, nullable=False),
     sa.Column("error", JSONB, nullable=True),
     sa.Column("total_cost_usd", sa.Numeric(14, 6), nullable=False, server_default="0"),

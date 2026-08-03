@@ -12,6 +12,7 @@ by whatever wires this service up).
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from ai_os_kernel.workflow_engine.definition_catalog import WorkflowDefinitionCatalog
@@ -61,9 +62,20 @@ class WorkflowInstanceService:
         principal_id: str,
         pack_id: str,
         principal_permissions: frozenset[str] | None = None,
+        scheduled_at: datetime | None = None,
     ) -> WorkflowInstance:
         """Register ``definition`` into the catalog, then create the
         instance that references it.
+
+        ``scheduled_at`` (``P02-S01-M05-T13``, defaulted ``None``) is
+        the Scheduler's own data (workflow_engine.md §5.13) — when
+        supplied, the created instance stays ``created`` (this method
+        never calls :meth:`start` itself) until
+        :class:`~ai_os_kernel.workflow_engine.scheduler.WorkflowScheduler`
+        genuinely starts it once that real timestamp is due. ``None``
+        (every caller today) is unaffected: some other, explicit
+        :meth:`start` call is still required, exactly as before this
+        parameter existed.
 
         Registration happens first, and always — not conditionally on
         whether it looks already-registered — because
@@ -107,6 +119,7 @@ class WorkflowInstanceService:
             inputs=inputs,
             principal_id=principal_id,
             principal_permissions=principal_permissions,
+            scheduled_at=scheduled_at,
         )
 
     async def start(

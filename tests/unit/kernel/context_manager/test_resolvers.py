@@ -37,6 +37,7 @@ def _instance(inputs: dict[str, Any]) -> WorkflowInstance:
         run_manifest_id=None,
         principal_id="user-42",
         principal_permissions=None,
+        scheduled_at=None,
         last_event_seq=1,
         error=None,
         total_cost_usd=Decimal("0"),
@@ -97,7 +98,11 @@ class _FakeRepository:
         inputs: dict[str, Any],
         principal_id: str,
         principal_permissions: frozenset[str] | None = None,
+        scheduled_at: datetime | None = None,
     ) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def list_startable_instances(self, *, limit: int) -> list[WorkflowInstance]:
         raise NotImplementedError("not exercised by these tests")
 
     async def transition_to_running(

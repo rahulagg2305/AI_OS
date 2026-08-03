@@ -239,6 +239,7 @@ from ai_os_kernel.workflow_engine.repository import (
     WorkflowInstanceRepository,
     WorkflowListCursor,
 )
+from ai_os_kernel.workflow_engine.scheduler import WorkflowScheduler, WorkflowSchedulerResult
 from ai_os_kernel.workflow_engine.service import WorkflowInstanceService
 from ai_os_kernel.workflow_engine.step_executor import (
     AgentStepExecutor,
@@ -312,6 +313,8 @@ __all__ = [
     "WorkflowListCursor",
     "WorkflowRunOutcome",
     "WorkflowRunResult",
+    "WorkflowScheduler",
+    "WorkflowSchedulerResult",
     "WorkflowStep",
     "WorkflowStepRecord",
 ]
