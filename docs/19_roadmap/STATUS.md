@@ -6,15 +6,15 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-08-03 from 237 Task tickets.
+**Generated:** 2026-08-03 from 238 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 60%** (142.5 of 237 Task-equivalents complete)
+**Overall: 60%** (143.5 of 238 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
-| P01 (A) | S01 Process, Packaging and Persistence Baseline | 4 | 4 | 0 | 0 | 100% |
+| P01 (A) | S01 Process, Packaging and Persistence Baseline | 5 | 5 | 0 | 0 | 100% |
 | P01 (A) | S02 Configuration and Secrets | 14 | 13 | 0 | 1 | 93% |
 | P01 (A) | S03 Manifest Discovery and Schema | 6 | 5 | 0 | 1 | 83% |
 | P01 (A) | S04 Health and Lifecycle | 6 | 6 | 0 | 0 | 100% |
@@ -56,7 +56,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
-| P01 (Stage A) - Platform Skeleton | 46 | 43 | 93% |
+| P01 (Stage A) - Platform Skeleton | 47 | 44 | 94% |
 | P02 (Stage B) - Minimum Viable Kernel | 95 | 61 | 65% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 30 | 79% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |

@@ -331,6 +331,8 @@ Docker image, Kubernetes) starts the process from the repository root.
 """
 
 import asyncio
+import os
+import socket
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -556,14 +558,6 @@ _DEMO_WORKFLOW_MAX_ITERATIONS = 5
 _DEMO_WORKFLOW_LEASE_DURATION_SECONDS = 30
 _DEMO_WORKFLOW_WORKER_ID = "bootstrap-trigger"
 
-# The real, continuously-running multi-instance worker loop's own
-# identity (P02-S01-M05-T14) — distinct from _DEMO_WORKFLOW_WORKER_ID
-# above, which only ever drives the one demo instance a single
-# `trigger()` call creates; this id shows up in `workflow_leases.worker_id`
-# for whichever *arbitrary* runnable instance this background loop
-# picks up.
-_WORKFLOW_WORKER_ID = "kernel-worker-loop"
-
 # The audit trail actor/reason for every register()/activate() call this
 # file makes on a discovered pack's behalf — a real Kernel process, not
 # a human/test/route caller, so it gets its own identity rather than
@@ -599,7 +593,15 @@ def _build_demo_workflow_definition() -> WorkflowDefinition:
     )
 
 
-def _load_configuration() -> PlatformConfig:
+def load_configuration() -> PlatformConfig:
+    """Loads real, ``AIOS_``-env-driven configuration — the identical
+    construction :func:`build_app` (the ``api`` role) already used
+    privately, now also the ``worker`` role's own entrypoint
+    (:mod:`ai_os_kernel.entrypoints.worker`) calls directly, since that
+    role has no ``app``/``app.state`` of its own to read configuration
+    from (``P01-S01-M40-T05``). Public for exactly that reason — every
+    other ``_build_*`` helper in this module stays private, since only
+    this module's own functions call them."""
     repo_root = Path.cwd()
     bootstrap_env = BootstrapEnv()
     manager = ConfigurationManager(
@@ -792,9 +794,10 @@ async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
     Engine agent steps can resolve it without test-only setup"
     deliverable of an earlier step.
 
-    Takes an already-built ``engine`` (see ``_lifespan``, the only
-    caller) rather than building its own, so the same connection pool
-    backs both this and the Workflow Engine components this step adds —
+    Takes an already-built ``engine`` (``_lifespan`` for the ``api``
+    role, :func:`build_workflow_worker_loop` for the ``worker`` role)
+    rather than building its own, so the same connection pool backs
+    both this and the Workflow Engine components built alongside it —
     one engine per process, the established pattern.
 
     A missing/misconfigured ``config/llm.yaml`` or Anthropic secret
@@ -873,6 +876,80 @@ async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
     agent = PromptedAgent(service=service, max_output_tokens=_PROMPTED_AGENT_MAX_OUTPUT_TOKENS)
     logger.info("kernel.bootstrap.prompted_agent_registered", agent_id=_PROMPTED_AGENT_ID)
     return InMemoryAgentRegistry({_PROMPTED_AGENT_ID: agent})
+
+
+def _generate_worker_id(prefix: str) -> str:
+    """A real, distinct identity per process — hostname + PID, never a
+    shared literal (``P01-S01-M40-T05``). Before this step, exactly one
+    process (the ``api`` role's own background loop, inside
+    ``_lifespan``) ever ran a :class:`~ai_os_kernel.workflow_engine.
+    worker_loop.WorkflowWorkerLoop`, so a fixed ``worker_id`` was
+    harmless. Now that :func:`build_workflow_worker_loop` also backs a
+    genuinely separate, real ``worker``-role process — and ADR-0020's
+    own documented target is *N* such replicas — reusing one literal
+    across all of them would make ``workflow_leases.worker_id`` unable
+    to tell any of them apart. Hostname + PID is real, always available
+    with no new configuration surface, and reads clearly in that
+    column; a container's own hostname is normally its pod/container
+    id, which is exactly the identity an operator already looks up."""
+    return f"{prefix}-{socket.gethostname()}-{os.getpid()}"
+
+
+async def build_workflow_worker_loop(engine: AsyncEngine) -> WorkflowWorkerLoop:
+    """Builds the real, continuously-running multi-instance worker loop
+    (``P02-S01-M05-T14``) — the one real construction shared by the
+    ``api`` role's own background task (``_lifespan``) and the
+    ``worker`` role's own standalone process
+    (:mod:`ai_os_kernel.entrypoints.worker`, ``P01-S01-M40-T05``), so
+    neither ever duplicates it.
+
+    **Builds its own ``AgentRegistry``/``ContextManager``, rather than
+    reusing ``app.state``'s.** Before this step, ``_lifespan`` passed
+    its own already-built ``app.state.agent_registry``/
+    ``app.state.context_manager`` (built for the demo trigger path) to
+    this construction — reachable only because both lived in the same
+    process. The ``worker`` role has no ``app``/``app.state`` at all, so
+    this function builds its own pair from ``engine`` directly, the
+    identical "cheap to construct a second one" reasoning this module
+    already applies to ``WorkflowLeaseService`` (see ``lease_reap_task``
+    in ``_lifespan``) — both are stateless wrappers over the same
+    engine, so a second instance is behaviourally identical to reusing
+    the first, not a second, divergent copy.
+
+    Excludes ``se.delivery_pipeline`` (:data:`DEFINITION_ID`) from
+    whatever this loop picks up — see the caller-side comment this
+    function's own extraction preserved verbatim for the full reasoning
+    (that pipeline's own real composition needs credential/git_service
+    threading and real quality_gate/decision/human_approval executors
+    this loop was never given; the approvals route's own synchronous
+    resume is the sole safe resumption path for it).
+    """
+    agent_registry = await _build_prompted_agent_registry(engine)
+    context_manager = DefaultContextManager(
+        resolvers=[WorkflowStateResolver(SqlWorkflowInstanceRepository(engine))],
+        default_token_budget=_CONTEXT_TOKEN_BUDGET,
+    )
+    worker_loop_definition_catalog = SqlWorkflowDefinitionCatalog(engine)
+    return WorkflowWorkerLoop(
+        repository=SqlWorkflowInstanceRepository(engine),
+        advance_runner=WorkflowAdvanceRunner(
+            instance_service=WorkflowInstanceService(
+                repository=SqlWorkflowInstanceRepository(engine),
+                step_executor=DispatchingStepExecutor(
+                    agent_executor=AgentStepExecutor(
+                        agent_registry, context_manager=context_manager
+                    ),
+                    tool_executor=ToolStepExecutor(InMemoryToolRegistry({})),
+                    default_executor=NoOpStepExecutor(),
+                ),
+                definition_catalog=worker_loop_definition_catalog,
+            ),
+            lease_service=WorkflowLeaseService(SqlWorkflowLeaseRepository(engine)),
+        ),
+        definition_catalog=worker_loop_definition_catalog,
+        worker_id=_generate_worker_id("kernel-worker"),
+        exclude_definition_ids=frozenset({DEFINITION_ID}),
+    )
 
 
 def _build_workflow_trigger(
@@ -1315,59 +1392,17 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # The multi-instance worker loop's own real background loop
         # (P02-S01-M05-T14) — the first of the four P02-S01-M05-T09
         # through T12 "proven, unused" capabilities to move to "proven,
-        # running." Definition resolution now goes through the real
-        # SqlWorkflowDefinitionCatalog.get() this step added, not a
+        # running." Definition resolution goes through the real
+        # SqlWorkflowDefinitionCatalog.get() that step added, not a
         # composition-injected mapping — genuine, system-wide
         # discovery of whichever definition an arbitrary, already-
-        # running instance happens to belong to. The step executor
-        # reuses the identical agent_registry/context_manager
-        # _build_workflow_trigger's own demo path already built above
-        # (real or credential-degraded, this loop does not care which
-        # — an AgentNotRegisteredError for one discovered instance is
-        # just that instance's own "failed" outcome, not a loop
-        # failure), the same "cheap to construct a second one" reuse
-        # lease_reap_task above already establishes for its own
-        # WorkflowLeaseService.
-        worker_loop_definition_catalog = SqlWorkflowDefinitionCatalog(engine)
-        worker_loop = WorkflowWorkerLoop(
-            repository=SqlWorkflowInstanceRepository(engine),
-            advance_runner=WorkflowAdvanceRunner(
-                instance_service=WorkflowInstanceService(
-                    repository=SqlWorkflowInstanceRepository(engine),
-                    step_executor=DispatchingStepExecutor(
-                        agent_executor=AgentStepExecutor(
-                            app.state.agent_registry, context_manager=app.state.context_manager
-                        ),
-                        tool_executor=ToolStepExecutor(InMemoryToolRegistry({})),
-                        default_executor=NoOpStepExecutor(),
-                    ),
-                    definition_catalog=worker_loop_definition_catalog,
-                ),
-                lease_service=WorkflowLeaseService(SqlWorkflowLeaseRepository(engine)),
-            ),
-            definition_catalog=worker_loop_definition_catalog,
-            worker_id=_WORKFLOW_WORKER_ID,
-            # This loop's own fixed composition just above (the
-            # platform demo's agent_registry/context_manager, no
-            # quality_gate/decision/human_approval executor at all)
-            # cannot correctly advance a real se.delivery_pipeline
-            # instance — genuinely investigated, not assumed
-            # (P03-S03-M30-T06): that pipeline's own real composition
-            # needs the credential/git_service-threaded
-            # se_delivery_pipeline_registry built below, plus real
-            # quality_gate/decision/human_approval executors this loop
-            # was never given. Excluding it here is what makes the new
-            # approvals route's own synchronous
-            # resume_pipeline_after_approval() call the sole, safe
-            # resumption path — without this, the instant a paused
-            # instance's approval is decided, this already-running
-            # background loop could independently rediscover it and
-            # mis-advance it in a race (silently no-opping the
-            # human_approval step, then failing git-push against the
-            # wrong registry) before the route's own correct resume
-            # ever runs.
-            exclude_definition_ids=frozenset({DEFINITION_ID}),
-        )
+        # running instance happens to belong to. Construction itself is
+        # shared with the ``worker`` role's own standalone process
+        # (``P01-S01-M40-T05``) — see build_workflow_worker_loop's own
+        # docstring for the full reasoning, including why it builds its
+        # own agent_registry/context_manager rather than reusing
+        # app.state's.
+        worker_loop = await build_workflow_worker_loop(engine)
         worker_poll_interval = app.state.config.worker_poll_interval_seconds
         if worker_poll_interval is None:
             worker_poll_interval = WORKER_POLL_INTERVAL_SECONDS
@@ -1543,7 +1578,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     This is what the ``api`` process role starts from
     (see :mod:`ai_os_kernel.entrypoints.api`).
     """
-    config = config or _load_configuration()
+    config = config or load_configuration()
     configure_logging(config.log_level)
     # OTEL_EXPORTER_OTLP_ENDPOINT is a bootstrap-minimum env var
     # (configuration_management.md §3.3), read directly here — the
