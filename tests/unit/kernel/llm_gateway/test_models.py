@@ -5,6 +5,8 @@ import pytest
 from pydantic import ValidationError
 
 from ai_os_kernel.llm_gateway.models import (
+    EmbeddingRequest,
+    EmbeddingResponse,
     LLMRequest,
     LLMResponse,
     Message,
@@ -144,3 +146,51 @@ def test_llm_response_served_from_cache_defaults_to_false() -> None:
 
 def test_llm_response_served_from_cache_can_be_set_true() -> None:
     assert _response(served_from_cache=True).served_from_cache is True
+
+
+def test_embedding_request_accepts_a_batch_of_inputs() -> None:
+    request = EmbeddingRequest(model_alias="embedding-fast", inputs=["a", "b"])
+
+    assert request.inputs == ["a", "b"]
+    assert request.metadata is None
+
+
+def test_embedding_request_rejects_a_blank_model_alias() -> None:
+    with pytest.raises(ValidationError, match="model_alias must not be blank"):
+        EmbeddingRequest(model_alias="   ", inputs=["a"])
+
+
+def test_embedding_request_rejects_empty_inputs() -> None:
+    with pytest.raises(ValidationError, match="at least one text"):
+        EmbeddingRequest(model_alias="embedding-fast", inputs=[])
+
+
+def test_embedding_request_is_frozen() -> None:
+    request = EmbeddingRequest(model_alias="embedding-fast", inputs=["a"])
+
+    with pytest.raises(ValidationError):
+        request.inputs = ["b"]  # type: ignore[misc]
+
+
+def test_embedding_response_carries_real_vectors_and_dimensions() -> None:
+    response = EmbeddingResponse(
+        vectors=[[0.1, 0.2, 0.3]],
+        model_id="nomic-embed-text",
+        model_version="nomic-embed-text",
+        dimensions=3,
+        usage=UsageRecord(
+            input_tokens=5,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            cost_usd=0,
+            latency_ms=1,
+            provider="local",
+            model_id="nomic-embed-text",
+            retries=0,
+            fallback_used=False,
+        ),
+    )
+
+    assert response.vectors == [[0.1, 0.2, 0.3]]
+    assert response.dimensions == 3

@@ -235,3 +235,49 @@ class LLMResponse(BaseModel):
     other caller's response is a genuine model output. ADR-0025 §3:
     the Evaluation Engine excludes ``served_from_cache=true`` runs from
     comparison results."""
+
+
+class EmbeddingRequest(BaseModel):
+    """A request for real embedding vectors (§11), added at
+    ``P02-S02-M06-T09``. Field-for-field §11's own documented shape
+    (``model_alias; inputs: str[]; metadata: TraceContext``) — ``inputs``
+    is a real batch, not one text at a time, matching every real
+    embeddings endpoint's own batch-native wire shape."""
+
+    model_config = ConfigDict(frozen=True)
+
+    model_alias: str
+    inputs: list[str]
+    metadata: TraceContext | None = None
+
+    @field_validator("model_alias")
+    @classmethod
+    def _model_alias_is_not_blank(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("model_alias must not be blank — never a literal model id (ADR-0002)")
+        return value
+
+    @field_validator("inputs")
+    @classmethod
+    def _at_least_one_input(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("inputs must contain at least one text")
+        return value
+
+
+class EmbeddingResponse(BaseModel):
+    """§11's own documented response shape (``vectors: float[][];
+    model_id; model_version; dimensions; usage: UsageRecord``) —
+    ``usage`` is the same shape :class:`LLMResponse` already uses
+    (``retries``/``fallback_used`` are honestly ``0``/``False``: real
+    embedding calls never retry or fall back — see
+    :meth:`~ai_os_kernel.llm_gateway.gateway.DispatchingLLMGateway.embed`'s
+    own docstring for why)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    vectors: list[list[float]]
+    model_id: str
+    model_version: str
+    dimensions: int
+    usage: UsageRecord

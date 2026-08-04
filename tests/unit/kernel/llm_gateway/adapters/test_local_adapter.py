@@ -30,7 +30,7 @@ from ai_os_kernel.llm_gateway.adapters.local_adapter import (
 from ai_os_kernel.llm_gateway.adapters.model_config import ModelPricing
 from ai_os_kernel.llm_gateway.error_taxonomy import ErrorCategory
 from ai_os_kernel.llm_gateway.errors import LLMProviderError
-from ai_os_kernel.llm_gateway.models import LLMRequest, MessageRole
+from ai_os_kernel.llm_gateway.models import EmbeddingRequest, LLMRequest, MessageRole
 from ai_os_kernel.llm_gateway.models import Message as PlatformMessage
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 
@@ -408,6 +408,167 @@ async def test_complete_honours_a_real_retry_after_header() -> None:
             await adapter.complete(_request())
 
     assert exc_info.value.retry_after_seconds == 3.0
+
+
+# --- LocalAdapter.embed(): real provider endpoint (§11) -------------------
+
+
+def _embedding_request(*, inputs: list[str] | None = None) -> EmbeddingRequest:
+    return EmbeddingRequest(model_alias="embedding-fast", inputs=inputs or ["hello", "world"])
+
+
+class _SuccessfulEmbeddingsHandler(http.server.BaseHTTPRequestHandler):
+    """Serves a real, well-formed OpenAI-compatible ``/v1/embeddings``
+    JSON body — deliberately out of index order, to prove
+    ``_map_embedding_response`` sorts by each entry's own ``index``
+    rather than trusting array order."""
+
+    _body = (
+        b'{"object":"list","model":"nomic-embed-text",'
+        b'"data":['
+        b'{"object":"embedding","index":1,"embedding":[0.4,0.5,0.6]},'
+        b'{"object":"embedding","index":0,"embedding":[0.1,0.2,0.3]}'
+        b'],"usage":{"prompt_tokens":7,"total_tokens":7}}'
+    )
+
+    def do_POST(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(self._body)))
+        self.end_headers()
+        self.wfile.write(self._body)
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        pass
+
+
+@pytest.fixture
+def successful_embeddings_server() -> Generator[str, None, None]:
+    server = http.server.HTTPServer(("127.0.0.1", 0), _SuccessfulEmbeddingsHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+def _embedding_adapter_against(base_url: str) -> LocalAdapter:
+    return LocalAdapter(
+        client=httpx.AsyncClient(base_url=base_url, timeout=2.0),
+        router=_router({"embedding-fast": "nomic-embed-text"}),
+        pricing={"nomic-embed-text": _PRICING},
+    )
+
+
+@pytest.mark.asyncio
+async def test_embed_returns_real_vectors_in_the_real_requested_order(
+    successful_embeddings_server: str,
+) -> None:
+    adapter = _embedding_adapter_against(successful_embeddings_server)
+
+    response = await adapter.embed(_embedding_request(inputs=["hello", "world"]))
+
+    # The server (deliberately) returned index 1 before index 0 — a
+    # genuine sort-by-index bug here would silently swap these.
+    assert response.vectors == [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+    assert response.model_id == "nomic-embed-text"
+    assert response.dimensions == 3
+    assert response.usage.input_tokens == 7
+    assert response.usage.output_tokens == 0
+    assert response.usage.provider == "local"
+
+
+@pytest.mark.asyncio
+async def test_embed_refuses_a_routing_decision_for_a_different_provider() -> None:
+    adapter = LocalAdapter(
+        client=httpx.AsyncClient(),
+        router=_router({"embedding-fast": "nomic-embed-text"}, provider="anthropic"),
+        pricing={"nomic-embed-text": _PRICING},
+    )
+
+    with pytest.raises(LLMProviderError, match="does not serve") as exc_info:
+        await adapter.embed(_embedding_request())
+
+    assert exc_info.value.error_code == "llm.misrouted"
+
+
+@pytest.mark.asyncio
+async def test_embed_wraps_a_real_connection_failure() -> None:
+    closed_port = _unused_local_port()
+    adapter = LocalAdapter(
+        client=httpx.AsyncClient(base_url=f"http://127.0.0.1:{closed_port}", timeout=2.0),
+        router=_router({"embedding-fast": "nomic-embed-text"}),
+        pricing={"nomic-embed-text": _PRICING},
+    )
+
+    with pytest.raises(LLMProviderError, match="could not reach local model server") as exc_info:
+        await adapter.embed(_embedding_request())
+
+    assert exc_info.value.category == ErrorCategory.TRANSIENT
+    assert exc_info.value.error_code == "llm.network"
+
+
+@pytest.mark.asyncio
+async def test_embed_classifies_a_real_http_error_response() -> None:
+    with _status_server(500) as base_url:
+        adapter = LocalAdapter(
+            client=httpx.AsyncClient(base_url=base_url, timeout=2.0),
+            router=_router({"embedding-fast": "nomic-embed-text"}),
+            pricing={"nomic-embed-text": _PRICING},
+        )
+
+        with pytest.raises(LLMProviderError) as exc_info:
+            await adapter.embed(_embedding_request())
+
+    assert exc_info.value.category == ErrorCategory.TRANSIENT
+    assert exc_info.value.error_code == "llm.provider_error"
+
+
+class _MismatchedCountEmbeddingsHandler(http.server.BaseHTTPRequestHandler):
+    """A real, well-formed response that is nonetheless a real provider
+    bug: two inputs requested, one vector returned."""
+
+    _body = (
+        b'{"object":"list","model":"nomic-embed-text",'
+        b'"data":[{"object":"embedding","index":0,"embedding":[0.1,0.2]}],'
+        b'"usage":{"prompt_tokens":7,"total_tokens":7}}'
+    )
+
+    def do_POST(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(self._body)))
+        self.end_headers()
+        self.wfile.write(self._body)
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        pass
+
+
+@pytest.fixture
+def mismatched_count_embeddings_server() -> Generator[str, None, None]:
+    server = http.server.HTTPServer(("127.0.0.1", 0), _MismatchedCountEmbeddingsHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+@pytest.mark.asyncio
+async def test_embed_refuses_a_real_vector_count_mismatch(
+    mismatched_count_embeddings_server: str,
+) -> None:
+    adapter = _embedding_adapter_against(mismatched_count_embeddings_server)
+
+    with pytest.raises(LLMProviderError, match="returned 1 embedding") as exc_info:
+        await adapter.embed(_embedding_request(inputs=["hello", "world"]))
+
+    assert exc_info.value.error_code == "llm.provider_error"
 
 
 # --- build_local_adapter -----------------------------------------------

@@ -79,7 +79,14 @@ from ai_os_kernel.llm_gateway.error_taxonomy import (
     ErrorCategory,
 )
 from ai_os_kernel.llm_gateway.errors import LLMProviderError
-from ai_os_kernel.llm_gateway.models import LLMRequest, LLMResponse, StopReason, UsageRecord
+from ai_os_kernel.llm_gateway.models import (
+    EmbeddingRequest,
+    EmbeddingResponse,
+    LLMRequest,
+    LLMResponse,
+    StopReason,
+    UsageRecord,
+)
 from ai_os_kernel.llm_gateway.rate_limiter import RateLimiter
 from ai_os_kernel.llm_gateway.router import Router, RoutingDecision
 
@@ -114,6 +121,21 @@ class TokenCounter(Protocol):
     check."""
 
     async def count_tokens(self, request: LLMRequest) -> int: ...
+
+
+@runtime_checkable
+class Embedder(Protocol):
+    """A real ``LLMGateway`` implementation that can also answer a
+    genuine provider-endpoint embedding call (llm_gateway.md §11,
+    ``P02-S02-M06-T09``) — kept off :class:`LLMGateway` itself, the
+    identical reasoning :class:`TokenCounter` already applies:
+    Anthropic's own real API has no embeddings endpoint at all, so
+    forcing every :class:`LLMGateway` to declare ``embed()`` would ship
+    a method the primary registered adapter must always raise from.
+    ``@runtime_checkable`` for the identical reason :class:`TokenCounter`
+    already is."""
+
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse: ...
 
 
 class EchoLLMGateway:
@@ -434,6 +456,42 @@ class DispatchingLLMGateway:
                 retriable=CAPABILITY_UNSUPPORTED.retriable,
             )
         return await gateway.count_tokens(request)
+
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
+        """A real, provider-endpoint embedding call (llm_gateway.md
+        §11, ``P02-S02-M06-T09``) — never a fabricated or hashed
+        stand-in vector.
+
+        Resolves ``request.model_alias`` exactly once, the identical
+        shape :meth:`count_tokens` already establishes, then asks
+        *only* that one resolved candidate's registered
+        :class:`LLMGateway` — never its ``fallback``. §11: "queries
+        only compare vectors from the same model and version" — a
+        fallback provider's embedding model lives in a genuinely
+        different vector space, so silently substituting one would be
+        a real, wrong answer, not a valid alternative the way a
+        fallback chat completion is.
+
+        Raises :class:`LLMProviderError`
+        (:data:`~ai_os_kernel.llm_gateway.error_taxonomy.CAPABILITY_UNSUPPORTED`)
+        when the resolved provider has no registered gateway at all, or
+        when its registered gateway does not implement
+        :class:`Embedder` — every existing provider today except
+        ``local`` (Anthropic's own real API has no embeddings endpoint
+        to call).
+        """
+        decision = self._router.resolve(request.model_alias)
+        gateway = self._gateways.get(decision.provider)
+        if gateway is None or not isinstance(gateway, Embedder):
+            raise LLMProviderError(
+                f"model_alias {request.model_alias!r} routes to provider "
+                f"{decision.provider!r}, which does not support real "
+                "provider-endpoint embeddings",
+                category=CAPABILITY_UNSUPPORTED.category,
+                error_code=CAPABILITY_UNSUPPORTED.error_code,
+                retriable=CAPABILITY_UNSUPPORTED.retriable,
+            )
+        return await gateway.embed(request)
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
         decision = self._router.resolve(request.model_alias)

@@ -25,11 +25,14 @@ from ai_os_kernel.llm_gateway.error_taxonomy import ErrorCategory
 from ai_os_kernel.llm_gateway.errors import LLMProviderError, LLMRefusalError
 from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway
 from ai_os_kernel.llm_gateway.models import (
+    EmbeddingRequest,
+    EmbeddingResponse,
     LLMRequest,
     LLMResponse,
     Message,
     MessageRole,
     TraceContext,
+    UsageRecord,
 )
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter, build_routing_chain
 
@@ -1151,5 +1154,121 @@ async def test_count_tokens_never_falls_back_to_a_different_provider() -> None:
 
     with pytest.raises(LLMProviderError) as exc_info:
         await dispatcher.count_tokens(_request("fast-cheap"))
+
+    assert exc_info.value.error_code == "llm.capability_unsupported"
+
+
+# --- DispatchingLLMGateway.embed() (P02-S02-M06-T09) ----------------------
+
+
+def _embedding_request(model_alias: str = "embedding-fast") -> EmbeddingRequest:
+    return EmbeddingRequest(model_alias=model_alias, inputs=["hello"])
+
+
+def _embedding_response(vector: list[float]) -> EmbeddingResponse:
+    return EmbeddingResponse(
+        vectors=[vector],
+        model_id="model-a",
+        model_version="model-a",
+        dimensions=len(vector),
+        usage=UsageRecord(
+            input_tokens=1,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            cost_usd=Decimal("0"),
+            latency_ms=1,
+            provider="provider-a",
+            model_id="model-a",
+            retries=0,
+            fallback_used=False,
+        ),
+    )
+
+
+class _FakeEmbeddingGateway:
+    """A real, deterministic fake implementing both ``LLMGateway`` and
+    ``Embedder`` — used only to prove genuine resolution/dispatch
+    wiring at this class's own level. The real provider-endpoint call
+    itself is proven against a real local HTTP server in
+    tests/unit/kernel/llm_gateway/adapters/test_local_adapter.py."""
+
+    def __init__(self, vector: list[float]) -> None:
+        self._vector = vector
+
+    async def complete(self, request: LLMRequest) -> LLMResponse:
+        return await EchoLLMGateway().complete(request)
+
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
+        return _embedding_response(self._vector)
+
+
+@pytest.mark.asyncio
+async def test_embed_resolves_the_alias_and_delegates_to_the_registered_gateway() -> None:
+    router = StaticRouter(
+        routes={"embedding-fast": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    dispatcher = DispatchingLLMGateway(
+        router=router, gateways={"provider-a": _FakeEmbeddingGateway([0.1, 0.2])}
+    )
+
+    response = await dispatcher.embed(_embedding_request())
+
+    assert response.vectors == [[0.1, 0.2]]
+
+
+@pytest.mark.asyncio
+async def test_embed_raises_clearly_when_the_resolved_gateway_cannot_embed() -> None:
+    router = StaticRouter(
+        routes={"embedding-fast": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    dispatcher = DispatchingLLMGateway(router=router, gateways={"provider-a": EchoLLMGateway()})
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        await dispatcher.embed(_embedding_request())
+
+    assert exc_info.value.error_code == "llm.capability_unsupported"
+    assert exc_info.value.retriable is False
+
+
+@pytest.mark.asyncio
+async def test_embed_raises_clearly_for_an_unregistered_provider() -> None:
+    router = StaticRouter(
+        routes={"embedding-fast": RoutingDecision(provider="unregistered-provider", model_id="x")}
+    )
+    dispatcher = DispatchingLLMGateway(
+        router=router, gateways={"provider-a": _FakeEmbeddingGateway([0.1])}
+    )
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        await dispatcher.embed(_embedding_request())
+
+    assert exc_info.value.error_code == "llm.capability_unsupported"
+
+
+@pytest.mark.asyncio
+async def test_embed_never_falls_back_to_a_different_provider() -> None:
+    # An embedding is specific to the primary resolved model's own
+    # vector space -- a fallback candidate that *can* embed must never
+    # be silently substituted for a primary that cannot.
+    router = StaticRouter(
+        routes={
+            "embedding-fast": RoutingDecision(
+                provider="provider-a",
+                model_id="model-a",
+                fallback=RoutingDecision(provider="provider-b", model_id="model-b"),
+            )
+        }
+    )
+    dispatcher = DispatchingLLMGateway(
+        router=router,
+        gateways={
+            "provider-a": EchoLLMGateway(),
+            "provider-b": _FakeEmbeddingGateway([0.1]),
+        },
+    )
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        await dispatcher.embed(_embedding_request())
 
     assert exc_info.value.error_code == "llm.capability_unsupported"

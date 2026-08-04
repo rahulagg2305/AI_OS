@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 64%** (152.5 of 238 Task-equivalents complete)
+**Overall: 64%** (153.5 of 238 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -21,7 +21,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S05 Observability and Audit | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S06 CI and Test Infrastructure | 10 | 10 | 0 | 0 | 100% |
 | P02 (B) | S01 Workflow Execution Core | 15 | 15 | 0 | 0 | 100% |
-| P02 (B) | S02 LLM Gateway | 12 | 8 | 1 | 3 | 71% |
+| P02 (B) | S02 LLM Gateway | 12 | 9 | 1 | 2 | 79% |
 | P02 (B) | S03 Prompt and Context Assembly | 16 | 8 | 0 | 8 | 50% |
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 4 | 0 | 10 | 29% |
 | P02 (B) | S05 Capability Manager and Platform SDK | 19 | 19 | 0 | 0 | 100% |
@@ -57,7 +57,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
-| P02 (Stage B) - Minimum Viable Kernel | 95 | 69 | 73% |
+| P02 (Stage B) - Minimum Viable Kernel | 95 | 70 | 74% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 30 | 79% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
@@ -71,7 +71,6 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 41 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P02-S02-M06-T08` Streaming completions
-- `P02-S02-M06-T09` Embeddings
 - `P02-S03-M07-T05` Composition and inheritance
 - `P02-S03-M07-T06` Cache boundary index
 - `P02-S03-M08-T07` AI-context-pack resolver
@@ -81,6 +80,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S04-M09-T03` Indexing component
 - `P02-S04-M09-T05` Provenance and versioning
 - `P02-S04-M10-T01` Memory store
+- `P02-S04-M11-T03` Embedding writer
 - `P02-S06-M15-T05` Gate Registry
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P03-S02-M29-T07` code-reviewer agent

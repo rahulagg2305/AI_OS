@@ -32,6 +32,14 @@ DispatchingLLMGateway`) is a second, provider-agnostic layer on top,
 driven by classifying every failure this adapter raises via
 :mod:`~ai_os_kernel.llm_gateway.error_taxonomy` exactly as
 ``anthropic_adapter`` does.
+
+**Real embeddings (§11, ``P02-S02-M06-T09``) live here, not in
+``anthropic_adapter``.** Anthropic's own real public API has no
+embeddings endpoint at all — the OpenAI-compatible protocol family
+this module already speaks for chat completions genuinely does define
+one (``POST /v1/embeddings``), so :meth:`LocalAdapter.embed` extends
+the identical, already-real wire protocol rather than fabricating a
+capability Anthropic's own service does not offer.
 """
 
 from __future__ import annotations
@@ -54,7 +62,14 @@ from ai_os_kernel.llm_gateway.error_taxonomy import (
     parse_retry_after_seconds,
 )
 from ai_os_kernel.llm_gateway.errors import LLMProviderError
-from ai_os_kernel.llm_gateway.models import LLMRequest, LLMResponse, StopReason, UsageRecord
+from ai_os_kernel.llm_gateway.models import (
+    EmbeddingRequest,
+    EmbeddingResponse,
+    LLMRequest,
+    LLMResponse,
+    StopReason,
+    UsageRecord,
+)
 from ai_os_kernel.llm_gateway.router import Router
 
 # Public for the identical reason anthropic_adapter.PROVIDER_NAME is:
@@ -161,6 +176,73 @@ class LocalAdapter:
 
         return _map_response(http_response.json(), latency_ms=latency_ms, pricing=pricing)
 
+    async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
+        """llm_gateway.md §11: real embedding vectors, never a
+        fabricated or hashed stand-in. Calls the real, standard
+        ``POST /v1/embeddings`` endpoint the OpenAI-compatible protocol
+        family this adapter already speaks for chat completions
+        defines (``AnthropicAdapter`` has no equivalent: Anthropic's own
+        real API has no embeddings endpoint at all, which is why this
+        capability lives only here — see
+        :class:`~ai_os_kernel.llm_gateway.gateway.Embedder`'s own
+        docstring).
+        """
+        decision = self._router.resolve(request.model_alias)
+        if decision.provider != PROVIDER_NAME:
+            raise LLMProviderError(
+                f"model_alias {request.model_alias!r} routes to provider "
+                f"{decision.provider!r}, which this adapter does not serve "
+                f"(it only calls {PROVIDER_NAME!r})",
+                category=MISROUTED.category,
+                error_code=MISROUTED.error_code,
+                retriable=MISROUTED.retriable,
+            )
+        model_id = decision.model_id
+
+        pricing = self._pricing.get(model_id)
+        if pricing is None:
+            raise LLMProviderError(
+                f"model id {model_id!r} (alias {request.model_alias!r}) has no configured "
+                "pricing — cost_usd cannot be honestly computed for a real call",
+                category=NO_PRICING.category,
+                error_code=NO_PRICING.error_code,
+                retriable=NO_PRICING.retriable,
+            )
+
+        payload = {"model": model_id, "input": request.inputs}
+
+        started = time.monotonic()
+        try:
+            http_response = await self._client.post("/embeddings", json=payload)
+            http_response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            classification = classify_http_status(exc.response.status_code)
+            retry_after_seconds = parse_retry_after_seconds(exc.response.headers.get("retry-after"))
+            raise LLMProviderError(
+                f"local model server returned HTTP {exc.response.status_code} embedding for "
+                f"model_alias {request.model_alias!r}: {exc.response.text}",
+                category=classification.category,
+                error_code=classification.error_code,
+                retriable=classification.retriable,
+                retry_after_seconds=retry_after_seconds,
+            ) from exc
+        except httpx.TransportError as exc:
+            raise LLMProviderError(
+                f"could not reach local model server to embed for model_alias "
+                f"{request.model_alias!r}: {exc}",
+                category=NETWORK_FAILURE.category,
+                error_code=NETWORK_FAILURE.error_code,
+                retriable=NETWORK_FAILURE.retriable,
+            ) from exc
+        latency_ms = int((time.monotonic() - started) * 1000)
+
+        return _map_embedding_response(
+            http_response.json(),
+            input_count=len(request.inputs),
+            latency_ms=latency_ms,
+            pricing=pricing,
+        )
+
 
 def _map_response(payload: Any, *, latency_ms: int, pricing: ModelPricing) -> LLMResponse:
     """Pure, synchronous mapping from a real OpenAI-compatible chat
@@ -231,6 +313,71 @@ def _map_response(payload: Any, *, latency_ms: int, pricing: ModelPricing) -> LL
         # the identical situation anthropic_adapter._map_response's own
         # model_version comment already describes for Anthropic's ids.
         model_version=model_id,
+    )
+
+
+def _map_embedding_response(
+    payload: Any, *, input_count: int, latency_ms: int, pricing: ModelPricing
+) -> EmbeddingResponse:
+    """Pure, synchronous mapping from a real OpenAI-compatible
+    ``/v1/embeddings`` JSON body to §11's documented
+    :class:`~ai_os_kernel.llm_gateway.models.EmbeddingResponse` — the
+    identical "map the real wire shape, no I/O" role
+    :func:`_map_response` already plays for chat completions.
+
+    Sorts by each real entry's own ``index`` rather than trusting
+    array order — the documented OpenAI-compatible contract does not
+    guarantee ``data`` is returned in request order, and a silently
+    mis-ordered vector would be a real correctness bug (a later caller
+    zipping ``vectors`` back against its own input list must get the
+    right vector for the right text).
+    """
+
+    try:
+        entries = sorted(payload["data"], key=lambda entry: entry["index"])
+        vectors = [[float(value) for value in entry["embedding"]] for entry in entries]
+        model_id = payload["model"]
+        usage = payload.get("usage") or {}
+        input_tokens = int(usage.get("prompt_tokens", 0))
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise LLMProviderError(
+            f"local model server returned an embeddings response this adapter could not "
+            f"parse: {exc}",
+            category=UNPARSEABLE_RESPONSE.category,
+            error_code=UNPARSEABLE_RESPONSE.error_code,
+            retriable=UNPARSEABLE_RESPONSE.retriable,
+        ) from exc
+
+    if len(vectors) != input_count:
+        raise LLMProviderError(
+            f"local model server returned {len(vectors)} embedding(s) for {input_count} "
+            "input(s) — a real provider bug, not something this adapter can honestly paper "
+            "over",
+            category=UNPARSEABLE_RESPONSE.category,
+            error_code=UNPARSEABLE_RESPONSE.error_code,
+            retriable=UNPARSEABLE_RESPONSE.retriable,
+        )
+
+    dimensions = len(vectors[0]) if vectors else 0
+    cost_usd = (Decimal(input_tokens) * pricing.input_per_million_usd) / Decimal(1_000_000)
+
+    return EmbeddingResponse(
+        vectors=vectors,
+        model_id=model_id,
+        model_version=model_id,
+        dimensions=dimensions,
+        usage=UsageRecord(
+            input_tokens=input_tokens,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            cost_usd=cost_usd,
+            latency_ms=latency_ms,
+            provider=PROVIDER_NAME,
+            model_id=model_id,
+            retries=0,
+            fallback_used=False,
+        ),
     )
 
 

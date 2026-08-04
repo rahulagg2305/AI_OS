@@ -29,6 +29,14 @@ aliases:
   # Unlike the aliases above, an alias's provider is only ever
   # Anthropic by default (kernel/bootstrap.py) unless named here.
   local-fast: llama3.1:8b
+  # Real embeddings (llm_gateway.md §11, P02-S02-M06-T09): Anthropic's
+  # own API has no embeddings endpoint at all, so this alias only ever
+  # routes to `local` (see `providers:` below) — never a default. A
+  # real, widely-used self-hosted embedding model id (Ollama/vLLM/etc.
+  # all serve this exact name); like `llama3.1:8b` above, an operator
+  # should confirm the model actually running behind `local_provider`
+  # is this one, or update this id to match.
+  embedding-fast: nomic-embed-text
 
 # Optional: alias -> provider name, for any alias above that does not
 # route to the default provider (Anthropic). An alias absent here is
@@ -36,6 +44,7 @@ aliases:
 # applies.
 providers:
   local-fast: local
+  embedding-fast: local
 
 # Optional: the local, OpenAI-compatible chat-completions server's root
 # URL (ai_os_kernel.llm_gateway.adapters.local_adapter.build_local_adapter).
@@ -83,6 +92,15 @@ pricing:
   # has no optional/default variant, matching this file's own existing
   # "no field is silently defaulted" pattern for every model above).
   llama3.1:8b:
+    input_per_million_usd: "0.00"
+    output_per_million_usd: "0.00"
+  # Same "self-hosted, no metered cost" reasoning as llama3.1:8b above.
+  # output_per_million_usd is real too, not a placeholder: an
+  # embedding call never produces output tokens (EmbeddingResponse's
+  # own usage.output_tokens is always 0), so this is never charged
+  # regardless of its value — kept at the identical "$0" honest
+  # default rather than an unused field.
+  nomic-embed-text:
     input_per_million_usd: "0.00"
     output_per_million_usd: "0.00"
 
