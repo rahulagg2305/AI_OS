@@ -29,6 +29,7 @@ import contextlib
 import http.server
 import socket
 import threading
+import time
 from collections.abc import Generator
 from decimal import Decimal
 
@@ -543,6 +544,205 @@ async def test_count_tokens_classifies_real_http_error_responses(
     assert exc_info.value.category == expected_category
     assert exc_info.value.error_code == expected_error_code
     assert exc_info.value.retriable is expected_retriable
+
+
+# --- AnthropicAdapter.stream(): real, incremental delivery (§4.3) ---------
+
+
+_STREAM_INTER_EVENT_DELAY_SECONDS = 0.05
+
+_STREAM_EVENTS: list[bytes] = [
+    b'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1",'
+    b'"type":"message","role":"assistant","model":"claude-sonnet-5","content":[],'
+    b'"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":0}}}\n\n',
+    b'event: content_block_start\ndata: {"type":"content_block_start","index":0,'
+    b'"content_block":{"type":"text","text":""}}\n\n',
+    b'event: ping\ndata: {"type":"ping"}\n\n',
+    b'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,'
+    b'"delta":{"type":"text_delta","text":"Hello"}}\n\n',
+    b'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,'
+    b'"delta":{"type":"text_delta","text":" world"}}\n\n',
+    b'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+    b'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn",'
+    b'"stop_sequence":null},"usage":{"input_tokens":10,"output_tokens":5}}\n\n',
+    b'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+]
+
+
+class _StreamingHandler(http.server.BaseHTTPRequestHandler):
+    """Serves a real, well-formed Anthropic SSE stream — one real
+    ``wfile.write()`` + ``flush()`` + real sleep per event, so the
+    events genuinely arrive over real wall-clock time rather than as
+    one buffered response an eager client could read all at once."""
+
+    def do_POST(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        for raw_event in _STREAM_EVENTS:
+            self.wfile.write(raw_event)
+            self.wfile.flush()
+            time.sleep(_STREAM_INTER_EVENT_DELAY_SECONDS)
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        pass
+
+
+@pytest.fixture
+def streaming_server() -> Generator[str, None, None]:
+    server = http.server.HTTPServer(("127.0.0.1", 0), _StreamingHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+@pytest.mark.asyncio
+async def test_stream_delivers_real_events_incrementally_over_real_time(
+    streaming_server: str,
+) -> None:
+    adapter = _adapter_against(streaming_server)
+
+    arrival_times: list[float] = []
+    events = []
+    started = time.monotonic()
+    async for event in adapter.stream(_request()):
+        arrival_times.append(time.monotonic() - started)
+        events.append(event)
+
+    # Genuine incremental delivery: the last real event arrived
+    # meaningfully later than the first — a single blocking response
+    # dressed up as a stream would deliver everything at ~time 0.
+    assert arrival_times[-1] - arrival_times[0] >= _STREAM_INTER_EVENT_DELAY_SECONDS * 3
+
+    types = [event.type.value for event in events]
+    assert types == [
+        "message_start",
+        "content_start",
+        "content_delta",
+        "content_delta",
+        "content_stop",
+        "message_delta",
+        "message_stop",
+    ]
+
+    # The real "ping" keep-alive between content_start and the first
+    # content_delta was genuinely skipped, not reported as a fabricated
+    # event of some other type.
+    assert len(events) == len(_STREAM_EVENTS) - 1
+
+    deltas = [
+        event.delta for event in events if event.type.value == "content_delta" and event.delta
+    ]
+    assert "".join(deltas) == "Hello world"
+
+    message_delta = next(event for event in events if event.type.value == "message_delta")
+    assert message_delta.usage is not None
+    assert message_delta.usage.input_tokens == 10
+    assert message_delta.usage.output_tokens == 5
+    assert message_delta.usage.cost_usd > 0
+
+    message_start = events[0]
+    assert message_start.usage is None
+    message_stop = events[-1]
+    assert message_stop.usage is None
+
+
+@pytest.mark.asyncio
+async def test_stream_refuses_a_routing_decision_for_a_different_provider() -> None:
+    adapter = AnthropicAdapter(
+        client=anthropic.AsyncAnthropic(api_key="unused"),
+        router=_router({"coding-balanced": "claude-sonnet-5"}, provider="openai"),
+        pricing={"claude-sonnet-5": _PRICING},
+    )
+
+    with pytest.raises(LLMProviderError, match="does not serve") as exc_info:
+        async for _ in adapter.stream(_request()):
+            pass
+
+    assert exc_info.value.error_code == "llm.misrouted"
+
+
+@pytest.mark.asyncio
+async def test_stream_wraps_a_real_connection_failure() -> None:
+    closed_port = _unused_local_port()
+    adapter = AnthropicAdapter(
+        client=anthropic.AsyncAnthropic(
+            api_key="unused",
+            base_url=f"http://127.0.0.1:{closed_port}",
+            timeout=2.0,
+            max_retries=0,
+        ),
+        router=_router({"coding-balanced": "claude-sonnet-5"}),
+        pricing={"claude-sonnet-5": _PRICING},
+    )
+
+    with pytest.raises(LLMProviderError, match="could not reach Anthropic") as exc_info:
+        async for _ in adapter.stream(_request()):
+            pass
+
+    assert exc_info.value.category == ErrorCategory.TRANSIENT
+    assert exc_info.value.error_code == "llm.network"
+
+
+@pytest.mark.asyncio
+async def test_stream_classifies_a_real_http_error_response() -> None:
+    with _status_server(500) as base_url:
+        adapter = _adapter_against(base_url)
+
+        with pytest.raises(LLMProviderError) as exc_info:
+            async for _ in adapter.stream(_request()):
+                pass
+
+    assert exc_info.value.category == ErrorCategory.TRANSIENT
+    assert exc_info.value.error_code == "llm.provider_error"
+
+
+class _UnsupportedContentBlockHandler(http.server.BaseHTTPRequestHandler):
+    """A real content_block_start naming a block type this reduced
+    contract does not represent (no tools are declared)."""
+
+    _body = (
+        b'event: content_block_start\ndata: {"type":"content_block_start","index":0,'
+        b'"content_block":{"type":"tool_use","id":"toolu_1","name":"x","input":{}}}\n\n'
+    )
+
+    def do_POST(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        self.wfile.write(self._body)
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        pass
+
+
+@pytest.fixture
+def unsupported_content_block_server() -> Generator[str, None, None]:
+    server = http.server.HTTPServer(("127.0.0.1", 0), _UnsupportedContentBlockHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+@pytest.mark.asyncio
+async def test_stream_refuses_a_real_unsupported_content_block_type(
+    unsupported_content_block_server: str,
+) -> None:
+    adapter = _adapter_against(unsupported_content_block_server)
+
+    with pytest.raises(LLMProviderError, match="does not represent") as exc_info:
+        async for _ in adapter.stream(_request()):
+            pass
+
+    assert exc_info.value.error_code == "llm.capability_unsupported"
 
 
 # --- build_anthropic_adapter: resolves the key via SecretProvider ---------

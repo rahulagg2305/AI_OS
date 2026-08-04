@@ -281,3 +281,48 @@ class EmbeddingResponse(BaseModel):
     model_version: str
     dimensions: int
     usage: UsageRecord
+
+
+class StreamEventType(StrEnum):
+    """§4.3's own documented six-value event set, minus ``error`` —
+    added at ``P02-S02-M06-T08``. A real provider streaming failure
+    surfaces as :class:`~ai_os_kernel.llm_gateway.errors.LLMProviderError`
+    raised out of the generator, the identical channel every other
+    real failure in this Gateway already uses, rather than a second,
+    parallel in-band error-delivery event type."""
+
+    MESSAGE_START = "message_start"
+    CONTENT_START = "content_start"
+    CONTENT_DELTA = "content_delta"
+    CONTENT_STOP = "content_stop"
+    MESSAGE_DELTA = "message_delta"
+    MESSAGE_STOP = "message_stop"
+
+
+class LLMStreamEvent(BaseModel):
+    """§4.3's own documented shape (``type; index; delta; content_block?;
+    usage?``), reduced the identical way :class:`LLMResponse.content`
+    already is: ``content_block`` is dropped entirely rather than kept
+    as an always-``None`` field, since this reduced contract never
+    declares tools/thinking and therefore only ever emits real ``text``
+    content blocks — a caller already knows the one real shape a
+    content block can have without this field naming it. ``delta`` is
+    reduced from a typed delta object to the real, incremental text
+    string itself, the identical "only the ``text`` variant has
+    meaning without tool-calling or thinking" reasoning
+    :class:`LLMResponse.content` already documents.
+
+    ``usage`` is genuinely ``None`` except on ``message_delta`` — §4.3
+    says "usage totals arrive on ``message_delta``/``message_stop``",
+    and that is honestly what happens for the one real provider this
+    reduced contract streams from: Anthropic's own real
+    ``message_stop`` event carries no usage field of its own at all: a
+    real absence, not a value this adapter withholds.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    type: StreamEventType
+    index: int | None = None
+    delta: str | None = None
+    usage: UsageRecord | None = None

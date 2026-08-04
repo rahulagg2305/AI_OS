@@ -9,9 +9,11 @@ from ai_os_kernel.llm_gateway.models import (
     EmbeddingResponse,
     LLMRequest,
     LLMResponse,
+    LLMStreamEvent,
     Message,
     MessageRole,
     StopReason,
+    StreamEventType,
     TraceContext,
     UsageRecord,
 )
@@ -194,3 +196,26 @@ def test_embedding_response_carries_real_vectors_and_dimensions() -> None:
 
     assert response.vectors == [[0.1, 0.2, 0.3]]
     assert response.dimensions == 3
+
+
+def test_llm_stream_event_defaults_index_delta_and_usage_to_none() -> None:
+    event = LLMStreamEvent(type=StreamEventType.MESSAGE_START)
+
+    assert event.index is None
+    assert event.delta is None
+    assert event.usage is None
+
+
+def test_llm_stream_event_carries_a_real_text_delta() -> None:
+    event = LLMStreamEvent(type=StreamEventType.CONTENT_DELTA, index=0, delta="hi")
+
+    assert event.type == StreamEventType.CONTENT_DELTA
+    assert event.index == 0
+    assert event.delta == "hi"
+
+
+def test_llm_stream_event_is_frozen() -> None:
+    event = LLMStreamEvent(type=StreamEventType.MESSAGE_START)
+
+    with pytest.raises(ValidationError):
+        event.delta = "x"  # type: ignore[misc]

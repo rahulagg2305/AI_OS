@@ -31,12 +31,17 @@ to translate them from. In particular, no ``thinking`` parameter is set:
 enabling it by default would be inventing request behaviour the
 documented, already-reduced ``LLMRequest`` contract gives no caller any
 way to control.
+
+**Real streaming (§4.3, ``P02-S02-M06-T08``) is a separate method,
+``stream()``, not a ``stream: bool`` field on ``LLMRequest`` itself** —
+the same, already-reduced request contract, per this ticket's own
+Input, drives both; which method is called is the real selector.
 """
 
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from decimal import Decimal
 from typing import Any
 
@@ -52,7 +57,14 @@ from ai_os_kernel.llm_gateway.error_taxonomy import (
     parse_retry_after_seconds,
 )
 from ai_os_kernel.llm_gateway.errors import LLMProviderError, LLMRefusalError
-from ai_os_kernel.llm_gateway.models import LLMRequest, LLMResponse, StopReason, UsageRecord
+from ai_os_kernel.llm_gateway.models import (
+    LLMRequest,
+    LLMResponse,
+    LLMStreamEvent,
+    StopReason,
+    StreamEventType,
+    UsageRecord,
+)
 from ai_os_kernel.llm_gateway.router import Router
 from ai_os_kernel.secrets_manager.provider import SecretProvider
 
@@ -224,6 +236,205 @@ class AnthropicAdapter:
             ) from exc
 
         return result.input_tokens
+
+    async def stream(self, request: LLMRequest) -> AsyncIterator[LLMStreamEvent]:
+        """llm_gateway.md §4.3: real, incremental delivery — a genuine
+        SSE round trip against Anthropic's own real streaming endpoint
+        (``messages.create(..., stream=True)``), never a single
+        blocking response dressed up as a stream.
+
+        Never retried or fallen back by
+        :class:`~ai_os_kernel.llm_gateway.gateway.DispatchingLLMGateway`
+        (see that class's own :meth:`~ai_os_kernel.llm_gateway.gateway.
+        DispatchingLLMGateway.stream` docstring for why) — this method
+        itself makes exactly one real attempt too.
+
+        §4.3's own event set is ``message_start | content_start |
+        content_delta | content_stop | message_delta | message_stop |
+        error``; ``error`` is deliberately not one of
+        :class:`~ai_os_kernel.llm_gateway.models.StreamEventType`'s six
+        values — a real provider failure raises
+        :class:`LLMProviderError` out of this generator, the identical
+        channel every other real failure in this Gateway already
+        uses, rather than a second, parallel in-band error-delivery
+        event type.
+        """
+        decision = self._router.resolve(request.model_alias)
+        if decision.provider != PROVIDER_NAME:
+            raise LLMProviderError(
+                f"model_alias {request.model_alias!r} routes to provider "
+                f"{decision.provider!r}, which this adapter does not serve "
+                f"(it only calls {PROVIDER_NAME!r})",
+                category=MISROUTED.category,
+                error_code=MISROUTED.error_code,
+                retriable=MISROUTED.retriable,
+            )
+        model_id = decision.model_id
+
+        pricing = self._pricing.get(model_id)
+        if pricing is None:
+            raise LLMProviderError(
+                f"model id {model_id!r} (alias {request.model_alias!r}) has no configured "
+                "pricing — cost_usd cannot be honestly computed for a real call",
+                category=NO_PRICING.category,
+                error_code=NO_PRICING.error_code,
+                retriable=NO_PRICING.retriable,
+            )
+
+        kwargs: dict[str, Any] = {
+            "model": model_id,
+            "max_tokens": request.max_output_tokens,
+            "messages": [
+                {"role": message.role.value, "content": message.content}
+                for message in request.messages
+            ],
+        }
+        if request.system is not None:
+            kwargs["system"] = request.system
+
+        started = time.monotonic()
+        # Anthropic's own real `message_delta.usage.input_tokens` is
+        # optional on the wire (the SDK's own `MessageDeltaUsage` type
+        # marks it so) — remembered here from the one real place input
+        # tokens are unambiguously reported, `message_start`, so a real
+        # `message_delta` that omits it still gets an honest, real
+        # total rather than a wrong `0`.
+        input_tokens_from_start = 0
+        try:
+            raw_stream = await self._client.messages.create(**kwargs, stream=True)
+            async for raw_event in raw_stream:
+                if raw_event.type == "ping":
+                    # A real Anthropic keep-alive, not part of §4.3's
+                    # own event set at all — silently skipped, never
+                    # reported as a fabricated event of some other
+                    # type.
+                    continue
+                if raw_event.type == "message_start":
+                    input_tokens_from_start = raw_event.message.usage.input_tokens
+                yield _map_stream_event(
+                    raw_event,
+                    model_id=model_id,
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                    pricing=pricing,
+                    input_tokens_hint=input_tokens_from_start,
+                )
+        except anthropic.APIStatusError as exc:
+            classification = classify_http_status(exc.status_code)
+            retry_after_seconds = parse_retry_after_seconds(exc.response.headers.get("retry-after"))
+            raise LLMProviderError(
+                f"Anthropic returned HTTP {exc.status_code} streaming for model_alias "
+                f"{request.model_alias!r}: {exc.message}",
+                category=classification.category,
+                error_code=classification.error_code,
+                retriable=classification.retriable,
+                retry_after_seconds=retry_after_seconds,
+            ) from exc
+        except anthropic.APIConnectionError as exc:
+            raise LLMProviderError(
+                f"could not reach Anthropic to stream for model_alias "
+                f"{request.model_alias!r}: {exc}",
+                category=NETWORK_FAILURE.category,
+                error_code=NETWORK_FAILURE.error_code,
+                retriable=NETWORK_FAILURE.retriable,
+            ) from exc
+
+
+_STREAM_EVENT_TYPE_MAP: dict[str, StreamEventType] = {
+    "message_start": StreamEventType.MESSAGE_START,
+    "content_block_start": StreamEventType.CONTENT_START,
+    "content_block_delta": StreamEventType.CONTENT_DELTA,
+    "content_block_stop": StreamEventType.CONTENT_STOP,
+    "message_delta": StreamEventType.MESSAGE_DELTA,
+    "message_stop": StreamEventType.MESSAGE_STOP,
+}
+
+
+def _map_stream_event(
+    event: Any,
+    *,
+    model_id: str,
+    latency_ms: int,
+    pricing: ModelPricing,
+    input_tokens_hint: int,
+) -> LLMStreamEvent:
+    """Pure, synchronous mapping from one real Anthropic raw SSE event
+    to §4.3's normalised :class:`LLMStreamEvent` — the identical "map
+    the real wire shape, no I/O" role :func:`_map_response` already
+    plays for a real, complete ``Message``.
+
+    Anthropic's own real event ``type`` strings (``content_block_*``)
+    are normalised to §4.3's shorter, platform-neutral names
+    (``content_*``) here — "normalised across providers into this
+    event set" is this doc section's own stated design, not something
+    this function invents. Never called for a real ``ping`` event —
+    :meth:`AnthropicAdapter.stream` filters that real keep-alive out
+    before reaching here.
+    """
+    event_type = _STREAM_EVENT_TYPE_MAP.get(event.type)
+    if event_type is None:
+        raise LLMProviderError(
+            f"Anthropic returned stream event type={event.type!r}, which this reduced "
+            "contract does not represent",
+            category=CAPABILITY_UNSUPPORTED.category,
+            error_code=CAPABILITY_UNSUPPORTED.error_code,
+            retriable=CAPABILITY_UNSUPPORTED.retriable,
+        )
+
+    if event_type is StreamEventType.CONTENT_START:
+        if event.content_block.type != "text":
+            raise LLMProviderError(
+                f"Anthropic started a real content_block of type={event.content_block.type!r}, "
+                "which this reduced contract does not represent (no tools or thinking are "
+                "declared, so only 'text' should be reachable)",
+                category=CAPABILITY_UNSUPPORTED.category,
+                error_code=CAPABILITY_UNSUPPORTED.error_code,
+                retriable=CAPABILITY_UNSUPPORTED.retriable,
+            )
+        return LLMStreamEvent(type=event_type, index=event.index)
+
+    if event_type is StreamEventType.CONTENT_DELTA:
+        if event.delta.type != "text_delta":
+            raise LLMProviderError(
+                f"Anthropic returned a real delta of type={event.delta.type!r}, which this "
+                "reduced contract does not represent (no tools or thinking are declared, so "
+                "only 'text_delta' should be reachable)",
+                category=CAPABILITY_UNSUPPORTED.category,
+                error_code=CAPABILITY_UNSUPPORTED.error_code,
+                retriable=CAPABILITY_UNSUPPORTED.retriable,
+            )
+        return LLMStreamEvent(type=event_type, index=event.index, delta=event.delta.text)
+
+    if event_type is StreamEventType.CONTENT_STOP:
+        return LLMStreamEvent(type=event_type, index=event.index)
+
+    if event_type is StreamEventType.MESSAGE_DELTA:
+        usage = event.usage
+        input_tokens = usage.input_tokens if usage.input_tokens is not None else input_tokens_hint
+        cost_usd = (
+            Decimal(input_tokens) * pricing.input_per_million_usd
+            + Decimal(usage.output_tokens) * pricing.output_per_million_usd
+        ) / Decimal(1_000_000)
+        return LLMStreamEvent(
+            type=event_type,
+            usage=UsageRecord(
+                input_tokens=input_tokens,
+                output_tokens=usage.output_tokens,
+                cache_read_tokens=usage.cache_read_input_tokens or 0,
+                cache_write_tokens=usage.cache_creation_input_tokens or 0,
+                cost_usd=cost_usd,
+                latency_ms=latency_ms,
+                provider=PROVIDER_NAME,
+                model_id=model_id,
+                retries=0,
+                fallback_used=False,
+            ),
+        )
+
+    # StreamEventType.MESSAGE_START / MESSAGE_STOP: real, honest "no
+    # further real fact to attach" events per this module's own
+    # docstring — see LLMStreamEvent's own docstring for why
+    # message_start/message_stop never carry usage here.
+    return LLMStreamEvent(type=event_type)
 
 
 def _map_response(response: Any, *, latency_ms: int, pricing: ModelPricing) -> LLMResponse:

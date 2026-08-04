@@ -10,6 +10,7 @@ network-calling adapter).
 
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from decimal import Decimal
 
 import pytest
@@ -29,8 +30,10 @@ from ai_os_kernel.llm_gateway.models import (
     EmbeddingResponse,
     LLMRequest,
     LLMResponse,
+    LLMStreamEvent,
     Message,
     MessageRole,
+    StreamEventType,
     TraceContext,
     UsageRecord,
 )
@@ -1270,5 +1273,116 @@ async def test_embed_never_falls_back_to_a_different_provider() -> None:
 
     with pytest.raises(LLMProviderError) as exc_info:
         await dispatcher.embed(_embedding_request())
+
+    assert exc_info.value.error_code == "llm.capability_unsupported"
+
+
+# --- DispatchingLLMGateway.stream() (P02-S02-M06-T08) ---------------------
+
+
+class _FakeStreamingGateway:
+    """A real, deterministic fake implementing both ``LLMGateway`` and
+    ``Streamer`` -- used only to prove genuine resolution/dispatch
+    wiring at this class's own level. The real provider-endpoint
+    streaming call itself is proven against a real local SSE server in
+    tests/unit/kernel/llm_gateway/adapters/test_anthropic_adapter.py."""
+
+    def __init__(self, deltas: list[str]) -> None:
+        self._deltas = deltas
+
+    async def complete(self, request: LLMRequest) -> LLMResponse:
+        return await EchoLLMGateway().complete(request)
+
+    async def stream(self, request: LLMRequest) -> AsyncIterator[LLMStreamEvent]:
+        for delta in self._deltas:
+            yield LLMStreamEvent(type=StreamEventType.CONTENT_DELTA, delta=delta)
+
+
+@pytest.mark.asyncio
+async def test_stream_resolves_the_alias_and_delegates_to_the_registered_gateway() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    dispatcher = DispatchingLLMGateway(
+        router=router, gateways={"provider-a": _FakeStreamingGateway(["a", "b"])}
+    )
+
+    events = [event async for event in dispatcher.stream(_request("fast-cheap"))]
+
+    assert [event.delta for event in events] == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_stream_raises_clearly_when_the_resolved_gateway_cannot_stream() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    dispatcher = DispatchingLLMGateway(router=router, gateways={"provider-a": EchoLLMGateway()})
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        dispatcher.stream(_request("fast-cheap"))
+
+    assert exc_info.value.error_code == "llm.capability_unsupported"
+    assert exc_info.value.retriable is False
+
+
+@pytest.mark.asyncio
+async def test_stream_raises_clearly_for_an_unregistered_provider() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="unregistered-provider", model_id="x")}
+    )
+    dispatcher = DispatchingLLMGateway(
+        router=router, gateways={"provider-a": _FakeStreamingGateway(["a"])}
+    )
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        dispatcher.stream(_request("fast-cheap"))
+
+    assert exc_info.value.error_code == "llm.capability_unsupported"
+
+
+@pytest.mark.asyncio
+async def test_stream_raises_eagerly_before_any_iteration_not_lazily_on_first_next() -> None:
+    # DispatchingLLMGateway.stream() is deliberately not `async def` --
+    # resolution/capability-check errors must surface at call time,
+    # not only once a caller starts iterating.
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="unregistered-provider", model_id="x")}
+    )
+    dispatcher = DispatchingLLMGateway(router=router, gateways={})
+
+    raised_at_call_time = False
+    try:
+        dispatcher.stream(_request("fast-cheap"))
+    except LLMProviderError:
+        raised_at_call_time = True
+
+    assert raised_at_call_time
+
+
+@pytest.mark.asyncio
+async def test_stream_never_falls_back_to_a_different_provider() -> None:
+    # A stream that has already delivered real partial content to the
+    # caller must never silently restart against a different fallback
+    # candidate.
+    router = StaticRouter(
+        routes={
+            "fast-cheap": RoutingDecision(
+                provider="provider-a",
+                model_id="model-a",
+                fallback=RoutingDecision(provider="provider-b", model_id="model-b"),
+            )
+        }
+    )
+    dispatcher = DispatchingLLMGateway(
+        router=router,
+        gateways={
+            "provider-a": EchoLLMGateway(),
+            "provider-b": _FakeStreamingGateway(["a"]),
+        },
+    )
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        dispatcher.stream(_request("fast-cheap"))
 
     assert exc_info.value.error_code == "llm.capability_unsupported"

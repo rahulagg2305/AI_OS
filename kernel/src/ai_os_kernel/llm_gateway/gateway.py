@@ -59,7 +59,7 @@ between llm_gateway.md §6's and platform_sdk.md §5.1's own field lists.
 
 import asyncio
 import time
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
@@ -84,6 +84,7 @@ from ai_os_kernel.llm_gateway.models import (
     EmbeddingResponse,
     LLMRequest,
     LLMResponse,
+    LLMStreamEvent,
     StopReason,
     UsageRecord,
 )
@@ -136,6 +137,22 @@ class Embedder(Protocol):
     already is."""
 
     async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse: ...
+
+
+@runtime_checkable
+class Streamer(Protocol):
+    """A real ``LLMGateway`` implementation that can also answer a
+    genuine, incremental streaming request (llm_gateway.md §4.3,
+    ``P02-S02-M06-T08``) — kept off :class:`LLMGateway` itself, the
+    identical reasoning :class:`TokenCounter`/:class:`Embedder` already
+    apply: ``AnthropicAdapter`` genuinely streams; ``LocalAdapter`` and
+    :class:`EchoLLMGateway` do not (yet) — forcing every
+    :class:`LLMGateway` to declare ``stream()`` would ship a method
+    some real adapters must always raise from. ``@runtime_checkable``
+    for the identical reason :class:`TokenCounter`/:class:`Embedder`
+    already are."""
+
+    def stream(self, request: LLMRequest) -> AsyncIterator[LLMStreamEvent]: ...
 
 
 class EchoLLMGateway:
@@ -492,6 +509,50 @@ class DispatchingLLMGateway:
                 retriable=CAPABILITY_UNSUPPORTED.retriable,
             )
         return await gateway.embed(request)
+
+    def stream(self, request: LLMRequest) -> AsyncIterator[LLMStreamEvent]:
+        """Real, incremental delivery (llm_gateway.md §4.3,
+        ``P02-S02-M06-T08``) — never a single blocking response
+        dressed up as a stream.
+
+        Deliberately synchronous (not ``async def``): resolution and
+        the :class:`Streamer` capability check happen *eagerly*, at
+        call time, exactly like :meth:`embed`/:meth:`count_tokens` —
+        a caller learns immediately that ``model_alias`` is
+        unconfigured or unstreamable, rather than only on its first
+        ``async for`` iteration. The real network round trip itself
+        still only begins once the caller actually iterates the
+        returned generator — real I/O cannot start any earlier than
+        that regardless of this method's own signature.
+
+        Never retried or fallen back: once even one real
+        :data:`~ai_os_kernel.llm_gateway.models.StreamEventType.CONTENT_DELTA`
+        event has been yielded to the caller, some real content has
+        already been delivered — silently starting a fresh stream
+        against a different fallback candidate would deliver a second,
+        unrelated partial response on top of the first, not a clean
+        retry. This mirrors :meth:`count_tokens`/:meth:`embed`'s own
+        "exactly one resolved candidate, never ``fallback``" shape,
+        for a different, stream-specific reason.
+
+        Raises :class:`LLMProviderError`
+        (:data:`~ai_os_kernel.llm_gateway.error_taxonomy.CAPABILITY_UNSUPPORTED`)
+        when the resolved provider has no registered gateway at all, or
+        when its registered gateway does not implement
+        :class:`Streamer` — today, every provider except ``anthropic``.
+        """
+        decision = self._router.resolve(request.model_alias)
+        gateway = self._gateways.get(decision.provider)
+        if gateway is None or not isinstance(gateway, Streamer):
+            raise LLMProviderError(
+                f"model_alias {request.model_alias!r} routes to provider "
+                f"{decision.provider!r}, which does not support real "
+                "incremental streaming",
+                category=CAPABILITY_UNSUPPORTED.category,
+                error_code=CAPABILITY_UNSUPPORTED.error_code,
+                retriable=CAPABILITY_UNSUPPORTED.retriable,
+            )
+        return gateway.stream(request)
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
         decision = self._router.resolve(request.model_alias)
