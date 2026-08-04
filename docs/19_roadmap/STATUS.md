@@ -68,13 +68,12 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-35 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+34 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P02-S03-M07-T05` Composition and inheritance
 - `P02-S03-M07-T06` Cache boundary index
 - `P02-S03-M08-T07` AI-context-pack resolver
 - `P02-S03-M08-T08` Runtime-config resolver
-- `P02-S04-M10-T03` Promotion logic
 - `P02-S06-M15-T05` Gate Registry
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P03-S02-M29-T07` code-reviewer agent
@@ -95,7 +94,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P06-S05-M22-T01` Notification channels
 - `P06-S06-M25-T01` Speech Gateway
 - `P07-S01-M40-T01` Kubernetes manifests and Helm chart
-- ... and 10 more
+- `P07-S01-M40-T03` Backup and restore rehearsal
+- ... and 9 more
 
 ## Dependency review signal
 
