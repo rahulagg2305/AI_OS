@@ -62,10 +62,10 @@ Complies with the Caching Strategy (configurable, observable, explicit invalidat
 
 ---
 
-## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+## Implementation Status (appended 2026-07-28 — not part of the Accepted decision; updated 2026-08-04)
 
-**Status in code:** Not yet implemented
+**Status in code:** §3 (response cache) partially real; §1 (platform caches) and §2 (provider prompt caching) not yet implemented.
 
-There is no Redis usage anywhere in the Kernel code — no `Cache` Protocol, no in-memory adapter, and no cached configuration, secrets, documents, retrieval results, or rate-limit counters; the Redis container in `infra/docker-compose.yml` is started but nothing connects to it. Provider prompt caching is not exploited either: the capability negotiator models `supports_prompt_caching`/`prompt_cache_min_tokens` as provider metadata, but no request is ever marked cacheable. No response cache exists, so the experiment prohibition is trivially satisfied.
+`kernel/src/ai_os_kernel/caching/` now has a real Redis client (`P02-S07-M23-T01`) and a real `ResponseCache` (`P02-S07-M23-T02`): identical-request → stored-response caching over real `LLMRequest`/`LLMResponse`, with §3's "unconditionally disabled for experiments" rule enforced structurally — `LLMRequest.metadata.experiment_id` (a real, disclosed addition this same step) gates every cache read and write, proven against a real Redis container, not merely satisfied by the feature's prior absence. `LLMResponse.served_from_cache` is real too, defaulting `False`. Not yet done: no `Cache` Protocol; no cached configuration, secrets, documents, retrieval results, or rate-limit counters (§1); provider prompt caching is not exploited (§2) — the capability negotiator models `supports_prompt_caching`/`prompt_cache_min_tokens` as provider metadata, but no request is ever marked cacheable; `ResponseCache` itself is not wired into `llm_gateway.gateway`'s real call path yet, so no real Gateway call is served from cache today.
 
 Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

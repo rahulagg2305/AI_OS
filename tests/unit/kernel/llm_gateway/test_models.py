@@ -4,7 +4,15 @@ only — no gateway, no I/O."""
 import pytest
 from pydantic import ValidationError
 
-from ai_os_kernel.llm_gateway.models import LLMRequest, Message, MessageRole, TraceContext
+from ai_os_kernel.llm_gateway.models import (
+    LLMRequest,
+    LLMResponse,
+    Message,
+    MessageRole,
+    StopReason,
+    TraceContext,
+    UsageRecord,
+)
 
 
 def _message(content: str = "hello") -> Message:
@@ -94,3 +102,45 @@ def test_trace_context_is_frozen() -> None:
 
     with pytest.raises(ValidationError):
         context.workflow_id = "different-workflow"  # type: ignore[misc]
+
+
+def test_trace_context_experiment_id_defaults_to_none() -> None:
+    assert TraceContext().experiment_id is None
+
+
+def test_trace_context_accepts_an_experiment_id() -> None:
+    context = TraceContext(experiment_id="exp-1")
+
+    assert context.experiment_id == "exp-1"
+
+
+def _response(**overrides: object) -> LLMResponse:
+    defaults: dict[str, object] = {
+        "content": "hello",
+        "stop_reason": StopReason.END_TURN,
+        "usage": UsageRecord(
+            input_tokens=1,
+            output_tokens=1,
+            cache_read_tokens=0,
+            cache_write_tokens=0,
+            cost_usd=0,
+            latency_ms=1,
+            provider="anthropic",
+            model_id="claude-x",
+            retries=0,
+            fallback_used=False,
+        ),
+        "provider": "anthropic",
+        "model_id": "claude-x",
+        "model_version": "1",
+    }
+    defaults.update(overrides)
+    return LLMResponse.model_validate(defaults)
+
+
+def test_llm_response_served_from_cache_defaults_to_false() -> None:
+    assert _response().served_from_cache is False
+
+
+def test_llm_response_served_from_cache_can_be_set_true() -> None:
+    assert _response(served_from_cache=True).served_from_cache is True

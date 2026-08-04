@@ -8,11 +8,11 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-08-04)
 
-**Built: nothing. This document is a design specification only.** **No Kernel code uses Redis at all**, despite Redis 7 being provisioned in `infra/docker-compose.yml` and declared in the technology stack. There is no `Cache` Protocol, no platform cache, and no rate limiter.
+**Built:** a real Redis client (`kernel/src/ai_os_kernel/caching/client.py:build_redis_client`, `settings.py:RedisSettings`, `P02-S07-M23-T01`) and the Response Cache (`response_cache.py:ResponseCache`, `P02-S07-M23-T02`) — real `LLMRequest` → `LLMResponse` caching, keyed on every field that affects the result (`model_alias`/`messages`/`system`/`max_output_tokens`, per this document's own "a key that omits an input is a correctness bug" rule). [ADR-0025](../../18_decision_log/adr/ADR-0025-caching-strategy.md) §3's "unconditionally disabled for experiments" rule is now a real, structural enforcement, not honoured merely by absence: `LLMRequest.metadata.experiment_id` (added this same step — a real, disclosed gap; there was no field to check) gates both `get` and `set`, proven end to end against a real Redis container.
 
-One rule here is nonetheless already honoured *by absence*: the response cache that [ADR-0025](../../18_decision_log/adr/ADR-0025-caching-strategy.md) requires to be off by default and unconditionally disabled for experiment runs does not exist, so no cache-served response can currently contaminate a benchmark. That protection becomes a real enforcement requirement the moment this document is implemented. Stage B deliverable.
+**Not built:** the `Cache` Protocol §1 describes (this module has a concrete `ResponseCache` only, no Protocol, no in-memory test adapter — no second implementation is real or imminent yet, ADR-0004); no platform cache (resolved configuration, resolved secrets, parsed documents, retrieval results, pack registry metadata); no rate limiter; `ResponseCache` is not wired into `llm_gateway.gateway`'s real call path yet — nothing in a real Kernel composition calls it. Stage B deliverable, still in progress.
 
 Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 

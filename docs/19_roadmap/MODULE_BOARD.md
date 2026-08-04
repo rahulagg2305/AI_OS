@@ -34,7 +34,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M20 | Sandbox / SandboxExecutor | P03 | 5 | 4 | 80% |
 | M21 | Storage Service | P02 | 1 | 0 | 0% |
 | M22 | Notification Service | P06 | 2 | 0 | 0% |
-| M23 | Caching (Redis) | P02 | 2 | 1 | 50% |
+| M23 | Caching (Redis) | P02 | 2 | 2 | 100% |
 | M24 | Git Integration Service | P03 | 3 | 3 | 100% |
 | M25 | Speech Gateway | P06 | 1 | 0 | 0% |
 | M26 | Document Processing | P05 | 2 | 0 | 0% |

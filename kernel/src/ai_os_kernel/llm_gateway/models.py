@@ -24,20 +24,24 @@ Contract (docs/03_architecture/kernel/llm_gateway.md §4/§5) — the same
   Enforcer's per-workflow slice: reduced from the documented
   ``TraceContext`` (platform_sdk.md §4.1: ``trace_id; span_id;
   workflow_id?; step_id?; agent_id?; experiment_id?; run_id?`` —
-  "Field names are normative") to exactly two of its seven fields,
-  ``workflow_id``/``step_id``, via the new :class:`TraceContext` class
-  below. ``trace_id``/``span_id`` (real values already exist via the
+  "Field names are normative") to three of its seven fields,
+  ``workflow_id``/``step_id``/``experiment_id``, via the
+  :class:`TraceContext` class below. ``experiment_id`` was added at
+  ``P02-S07-M23-T02`` — the Response Cache's own ADR-0025 §3 hard rule
+  ("unconditionally disabled for any run belonging to an experiment")
+  has no way to hold without it; a real, structural gap found and
+  resolved there, not part of this step's own original scope.
+  ``trace_id``/``span_id`` (real values already exist via the
   OpenTelemetry span context ADR-0017 documents, but wiring that in is
   a distinct, later step — see :mod:`ai_os_kernel.llm_gateway.models`'s
-  own note on :class:`TraceContext`) and ``agent_id``/``experiment_id``/
-  ``run_id`` (this step's own approved exclusions: no agent metadata,
-  no experiment metadata) are deliberately not fields on this reduced
-  ``TraceContext`` at all — not present-but-``None``, because an
-  always-``None`` field for a capability nothing populates would be
-  exactly the "placeholder architecture" this step avoids. Whole-field
-  ``metadata: TraceContext | None`` (not the documented contract's
-  unconditionally-required ``TraceContext``) so every existing caller
-  that never supplies it is completely unaffected.
+  own note on :class:`TraceContext`) and ``agent_id``/``run_id`` (this
+  step's own approved exclusions: no agent metadata, no run metadata)
+  remain deliberately absent as fields — not present-but-``None``,
+  because an always-``None`` field for a capability nothing populates
+  would be exactly the "placeholder architecture" this step avoids.
+  Whole-field ``metadata: TraceContext | None`` (not the documented
+  contract's unconditionally-required ``TraceContext``) so every
+  existing caller that never supplies it is completely unaffected.
 
 **Excluded, each belonging to an explicitly deferred subsystem:**
 ``tools``/``tool_choice`` (tool-calling), ``response_format`` (structured
@@ -73,9 +77,17 @@ minimal contract itself needs).
   deferred Router (which decides *which* provider/model — a fixed,
   honestly-labelled sentinel here needs no routing to produce).
 
-**Excluded from the response:** ``served_from_cache`` (caching),
-``degradations`` (capability negotiation), ``raw`` (a debug passthrough
-for a real provider payload that does not exist here).
+- ``served_from_cache`` — added at ``P02-S07-M23-T02``: the Response
+  Cache's own real, disclosed reason for previously excluding this
+  field ("caching... out of scope this step") no longer applies.
+  Defaults ``False`` — every existing caller not going through the
+  cache is completely unaffected; :class:`~ai_os_kernel.caching.
+  response_cache.ResponseCache` is the one place that ever sets it
+  ``True``, on a genuine cache hit.
+
+**Excluded from the response:** ``degradations`` (capability
+negotiation), ``raw`` (a debug passthrough for a real provider payload
+that does not exist here).
 """
 
 from __future__ import annotations
@@ -109,11 +121,14 @@ class TraceContext(BaseModel):
     ``TraceContext`` (``trace_id; span_id; workflow_id?; step_id?;
     agent_id?; experiment_id?; run_id?`` — "Field names are normative").
 
-    Carries only ``workflow_id``/``step_id`` — the two fields the LLM
-    Gateway's Policy & Budget Enforcer needs for a per-workflow cost
-    ceiling (llm_gateway.md §9: "Workflow cost ceiling |
-    BudgetExceededError"). The other five documented fields are not
-    present here at all, by deliberate choice, not oversight:
+    Carries ``workflow_id``/``step_id`` (the LLM Gateway's Policy &
+    Budget Enforcer's own per-workflow cost ceiling, llm_gateway.md §9:
+    "Workflow cost ceiling | BudgetExceededError") and, as of
+    ``P02-S07-M23-T02``, ``experiment_id`` — the Response Cache's own
+    ADR-0025 §3 hard rule ("unconditionally disabled for any run
+    belonging to an experiment") needs a real field to check; there was
+    none. The other four documented fields are still not present here
+    at all, by deliberate choice, not oversight:
 
     - ``trace_id``/``span_id`` (distributed-trace correlation) already
       have real values available today — ADR-0017/observability.md
@@ -123,24 +138,28 @@ class TraceContext(BaseModel):
       context and threading it through here is a distinct, later step
       (Observability integration, not Policy & Budget), so it is left
       out entirely rather than added as a field nothing populates.
-    - ``agent_id``/``experiment_id``/``run_id`` are this step's own
-      approved exclusions ("no agent metadata, no experiment
-      metadata").
+    - ``agent_id``/``run_id`` are this step's own approved exclusions
+      ("no agent metadata, no run metadata").
 
-    Both this step's own explicit exclusions and the "not yet wired"
-    ``trace_id``/``span_id`` are absent as *fields*, not present as
-    always-``None`` ones — an always-``None`` field for a capability
-    nothing populates would be exactly the "placeholder architecture"
-    this step is required to avoid. Adding any of the five once a real
+    Both these exclusions and the "not yet wired" ``trace_id``/
+    ``span_id`` are absent as *fields*, not present as always-``None``
+    ones — an always-``None`` field for a capability nothing populates
+    would be exactly the "placeholder architecture" this step is
+    required to avoid. Adding any of the remaining four once a real
     source exists is a strictly additive, non-breaking change to this
-    class, the identical shape every other reduced contract in this
-    module already uses.
+    class, the identical shape ``experiment_id`` itself was just added
+    by.
     """
 
     model_config = ConfigDict(frozen=True)
 
     workflow_id: str | None = None
     step_id: str | None = None
+    experiment_id: str | None = None
+    """``None`` means "not part of an experiment" — the Response Cache
+    (:class:`~ai_os_kernel.caching.response_cache.ResponseCache`)
+    treats any non-``None`` value as an unconditional cache bypass,
+    per ADR-0025 §3."""
 
 
 class LLMRequest(BaseModel):
@@ -210,3 +229,9 @@ class LLMResponse(BaseModel):
     provider: str
     model_id: str
     model_version: str
+    served_from_cache: bool = False
+    """``True`` only when :class:`~ai_os_kernel.caching.response_cache.
+    ResponseCache` returned this response from a real cache hit — every
+    other caller's response is a genuine model output. ADR-0025 §3:
+    the Evaluation Engine excludes ``served_from_cache=true`` runs from
+    comparison results."""
