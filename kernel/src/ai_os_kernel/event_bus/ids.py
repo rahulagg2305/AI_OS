@@ -13,3 +13,7 @@ from ulid import ULID
 
 def new_event_id() -> str:
     return f"bevt_{ULID()}"
+
+
+def new_outbox_id() -> str:
+    return f"obx_{ULID()}"
