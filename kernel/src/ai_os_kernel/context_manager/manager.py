@@ -1,36 +1,44 @@
 """The Context Assembler (context_manager.md §4) — combines every
 configured :class:`~ai_os_kernel.context_manager.resolvers.
 ContextSourceResolver`'s items into one :class:`~ai_os_kernel.
-context_manager.models.AssembledContext`, then enforces a real token
-budget (the Size & Token Budget Enforcer, context_manager.md §4/§6).
+context_manager.models.AssembledContext`, ranks them by relevance (the
+Context Filter / Ranker), then enforces a real token budget (the Size &
+Token Budget Enforcer) — context_manager.md §4's three distinct boxes,
+in that documented order, all real as of ``P02-S03-M08-T09``.
 
-**Budget enforcement, not yet filtering or ranking — this step's own
-approved scope.** context_manager.md §4 names a "Context Filter /
-Ranker" and a "Size & Token Budget Enforcer" as two *distinct* internal
-components. This step builds only the second. At the time this module
-was first built, there was exactly one real resolver with a constant
-``relevance_score`` (no ranking model existed yet), so there was
-nothing for a real Filter/Ranker to rank *by*. **Updated
-``P02-S03-M08-T05``:** ``KnowledgeResolver`` (``resolvers.py``) now
-gives ``relevance_score`` genuine variance (a real fused RRF score, not
-a constant) — the precondition this docstring named is now real, but
-building the Filter/Ranker component itself remains out of scope for
-that step too, deliberately left for its own dedicated one. The budget
-enforcer below still reuses ``relevance_score`` only as a stable
-tie-break for *which* items survive when there isn't room for all of
-them — that is truncation, the behaviour context_manager.md §6
-documents ("assembly truncates by rank and reports
-``items_excluded_count``"), not ranking as a first-class capability of
-its own.
+**The Filter/Ranker is now real (``P02-S03-M08-T09``).** Building it
+was blocked until ``relevance_score`` had genuine cross-source variance
+— true only since ``KnowledgeResolver`` (``P02-S03-M08-T05``) started
+returning real fused RRF scores alongside ``WorkflowStateResolver``'s
+fixed constant. :func:`_rank_by_relevance` is the real component:
+:class:`~ai_os_kernel.context_manager.models.ContextItem`\\ s, sorted
+descending by ``relevance_score``, ties broken by original
+resolver-arrival order (a stable sort — ADR-0022's determinism
+requirement).
+
+**A deliberate, disclosed reversal of this module's own prior
+decision.** Before this step, :func:`_apply_token_budget` used
+``relevance_score`` only to decide *which* items survive truncation,
+then deliberately returned survivors in their *original* resolver
+order — a real, tested guarantee
+(``test_surviving_items_are_returned_in_original_resolver_order_not_rank_order``,
+now rewritten to assert the opposite). This ticket's own Goal — "rank
+and trim candidates ... by relevance, not order" — and its Output — "a
+ranked, trimmed set" — are explicit that the *final presented order*
+must now be rank order too, matching context_manager.md §4's own
+diagram sequencing (Filter/Ranker *before* the Budget Enforcer, not
+folded into it). Confirmed as the intended reading via product-owner
+sign-off before reversing the prior test's own guarantee, not decided
+unilaterally.
 
 **No budget is enforced unless one is real — the same "disabled means
 ``None``, zero behaviour change" shape every other Kernel policy limit
 in this codebase already uses** (``budget_enforcer``/
 ``workflow_budget_enforcer`` on ``DispatchingLLMGateway``, ``circuit_
 breaker``, ``backoff_policy``). A request with no ``token_budget`` and
-an assembler with no ``default_token_budget`` behaves exactly as before
-this step: every resolved item included, ``items_excluded_count``
-honestly ``0``.
+an assembler with no ``default_token_budget`` still ranks every item
+(this step's own new behaviour) but excludes none — every resolved item
+included, ``items_excluded_count`` honestly ``0``.
 """
 
 from __future__ import annotations
@@ -103,13 +111,15 @@ class DefaultContextManager:
             sources_queried.append(resolver.source_type)
             items.extend(resolver_items)
 
+        ranked_items = _rank_by_relevance(items)
+
         budget = (
             request.token_budget if request.token_budget is not None else self._default_token_budget
         )
         if budget is None:
-            included, excluded_count = items, 0
+            included, excluded_count = ranked_items, 0
         else:
-            included, excluded_count = _apply_token_budget(items, budget)
+            included, excluded_count = _apply_token_budget(ranked_items, budget)
 
         return AssembledContext(
             items=included,
@@ -120,33 +130,36 @@ class DefaultContextManager:
         )
 
 
-def _apply_token_budget(items: Sequence[ContextItem], budget: int) -> tuple[list[ContextItem], int]:
-    """Admits items in descending ``relevance_score`` order — a stable
-    sort, so items tied on score keep their original resolver order
-    (ADR-0022: "context assembly ... is deterministic given the same
-    inputs") — greedily including each one that still fits within the
-    remaining budget and skipping (not stopping at) any that doesn't,
-    so a smaller, lower-ranked item can still fill room a larger,
-    higher-ranked one left unused.
-
-    The returned list preserves the *original* resolver order among
-    whichever items survive — truncation decides only which items are
-    dropped, never reorders the ones that remain (this step's own
-    "preserve stable ordering" requirement) — context_manager.md §6's
-    "truncates by rank" governs admission, not final presentation
-    order.
+def _rank_by_relevance(items: Sequence[ContextItem]) -> list[ContextItem]:
+    """The real Context Filter / Ranker (context_manager.md §4) —
+    descending ``relevance_score``, ties broken by a stable sort that
+    preserves original resolver-arrival order (ADR-0022: "context
+    assembly ... is deterministic given the same inputs"). Runs before
+    any budget is applied, so ranking always reflects every candidate,
+    not only the survivors.
     """
-    ranked_indices = sorted(
-        range(len(items)), key=lambda index: items[index].relevance_score, reverse=True
-    )
-    admitted = [False] * len(items)
-    remaining = budget
-    for index in ranked_indices:
-        token_count = items[index].token_count
-        if token_count <= remaining:
-            admitted[index] = True
-            remaining -= token_count
+    return sorted(items, key=lambda item: item.relevance_score, reverse=True)
 
-    included = [item for index, item in enumerate(items) if admitted[index]]
+
+def _apply_token_budget(items: Sequence[ContextItem], budget: int) -> tuple[list[ContextItem], int]:
+    """The Size & Token Budget Enforcer — ``items`` is assumed already
+    ranked (:func:`_rank_by_relevance`, called first in
+    :meth:`DefaultContextManager.assemble`). Greedily admits each item,
+    in that rank order, that still fits within the remaining budget,
+    skipping (not stopping at) any that doesn't — so a smaller,
+    lower-ranked item can still fill room a larger, higher-ranked one
+    left unused.
+
+    The returned list is in **rank order**, not original resolver
+    order — this step's own reversal of a prior decision; see this
+    module's own docstring for why.
+    """
+    included: list[ContextItem] = []
+    remaining = budget
+    for item in items:
+        if item.token_count <= remaining:
+            included.append(item)
+            remaining -= item.token_count
+
     excluded_count = len(items) - len(included)
     return included, excluded_count

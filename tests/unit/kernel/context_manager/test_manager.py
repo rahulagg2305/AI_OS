@@ -210,19 +210,22 @@ async def test_higher_relevance_items_are_admitted_before_lower_relevance_ones()
 
 
 @pytest.mark.asyncio
-async def test_surviving_items_are_returned_in_original_resolver_order_not_rank_order() -> None:
+async def test_surviving_items_are_returned_in_rank_order_not_resolver_order() -> None:
+    # P02-S03-M08-T09: a deliberate reversal of this test's own prior
+    # name/assertion (then "..._not_rank_order") — the real Filter/
+    # Ranker now presents survivors by relevance_score, not arrival
+    # order, matching this ticket's own "by relevance, not order" Goal.
     resolver = _FakeResolver(
         SourceType.WORKFLOW_STATE,
         [_item_scored("low", 3, 0.1), _item_scored("high", 3, 0.9)],
     )
     manager = DefaultContextManager(resolvers=[resolver])
-    # Budget fits both — admission order is irrelevant here; the
-    # returned *list* order must still be the original resolver order.
+    # Budget fits both — admission is not in question here, only order.
     request = ContextRequest(workflow_id="wf_1", step_id="step_1", token_budget=100)
 
     assembled = await manager.assemble(request)
 
-    assert [item.content for item in assembled.items] == ["low", "high"]
+    assert [item.content for item in assembled.items] == ["high", "low"]
 
 
 @pytest.mark.asyncio
@@ -289,3 +292,24 @@ async def test_budget_enforcement_is_deterministic_across_repeated_calls() -> No
 
     assert [item.content for item in first.items] == [item.content for item in second.items]
     assert first.items_excluded_count == second.items_excluded_count == 1
+
+
+@pytest.mark.asyncio
+async def test_ranking_reorders_across_multiple_sources_even_with_no_budget() -> None:
+    # The Filter/Ranker is its own real step, not merely a side effect
+    # of budget truncation -- two different sources, no budget at all,
+    # and the low-relevance source's item still moves after the
+    # high-relevance one.
+    workflow_state = _FakeResolver(
+        SourceType.WORKFLOW_STATE, [_item_scored("workflow-item", 5, 0.2)]
+    )
+    knowledge = _FakeResolver(SourceType.KNOWLEDGE, [_item_scored("knowledge-item", 5, 0.8)])
+    manager = DefaultContextManager(resolvers=[workflow_state, knowledge])
+
+    assembled = await manager.assemble(_REQUEST)
+
+    # workflow_state resolved first (arrival order), yet knowledge-item
+    # outranks it and is presented first -- genuine cross-source
+    # reordering, not a trivial pass-through.
+    assert [item.content for item in assembled.items] == ["knowledge-item", "workflow-item"]
+    assert assembled.items_excluded_count == 0
