@@ -8,13 +8,13 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-07-28; embedding writer added 2026-08-04)
 
-**Partially built — the keyword half only; there is no vector search.**
+**Partially built — keyword search, and now a real embedding writer; still no vector search.**
 
-**Built:** the four `knowledge.*` tables (migration `0029`, with the `pgvector` extension enabled and a generated `content_tsv` column + GIN index); a real writer (`kernel/src/ai_os_kernel/persistence/knowledge_writer.py`) persisting a document and its already-chunked content in one transaction; and a real keyword searcher (`knowledge_keyword_search.py`) ranking chunks via `plainto_tsquery`/`ts_rank`.
+**Built:** the four `knowledge.*` tables (migration `0029`, with the `pgvector` extension enabled and a generated `content_tsv` column + GIN index); a real writer (`kernel/src/ai_os_kernel/persistence/knowledge_writer.py`) persisting a document and its already-chunked content in one transaction; a real keyword searcher (`knowledge_keyword_search.py`) ranking chunks via `plainto_tsquery`/`ts_rank`; and, as of `P02-S04-M11-T03`, a real embeddings writer (`kernel/src/ai_os_kernel/retrieval/embedding_writer.py`: `SqlEmbeddingWriter` + `embed_chunk`) that calls the real, already-built `embed()` (`P02-S02-M06-T09`) for an already-real `knowledge.chunks` row and persists a genuine vector, `embedding_model_id`/`embedding_model_version`/`dimensions`, into `knowledge.embeddings` — proven end to end against real Postgres/pgvector. `index_generation` starts at a real, disclosed constant (`1`, the only generation that has ever existed) since no re-index mechanism or `platform.schema_metadata` counter exists yet to produce a second one.
 
-**Not built:** **vector search, the Hybrid Ranker, and Reciprocal Rank Fusion** — none exists, so the central claim of this document is unimplemented. Also absent: any embeddings writer (nothing ever populates `knowledge.embeddings`), the Indexing Pipeline and chunking engine (the writer requires input already chunked and hashed precisely because nothing produces it), metadata/`trust`/`project_id` filtering, SQL-predicate access control, `index_generation` pinning, and a Retrieval Service (`kernel/src/ai_os_kernel/retrieval/` is a docstring-only stub). **Neither the writer nor the reader has any consumer** — no Context Manager resolver, no Knowledge Manager, and no API route calls either.
+**Not built:** **vector search, the Hybrid Ranker, and Reciprocal Rank Fusion** — none exists, so the central claim of this document is unimplemented; nothing yet *queries* the real vectors this writer now produces. Also absent: the Indexing Pipeline and chunking engine (the writer requires input already chunked and hashed precisely because nothing produces it), metadata/`trust`/`project_id` filtering, SQL-predicate access control, real `index_generation` pinning in a search request (no search request exists yet to pin one), and a Retrieval Service (`kernel/src/ai_os_kernel/retrieval/` has the one real writer above, nothing else). **No consumer calls any of this** — no Context Manager resolver, no Knowledge Manager, and no API route calls either.
 
 Two deliberate deferrals pending a real embedding-model decision this codebase has not made: `embeddings.embedding` has **no fixed dimension**, and its documented HNSW cosine index **does not exist**. Any step that starts generating embeddings must choose a model and dimension, then add that index in an additive migration. Outstanding Stage B deliverable.
 
