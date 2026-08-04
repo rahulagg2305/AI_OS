@@ -19,7 +19,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M05 | Workflow Engine | P02 | 15 | 15 | 100% |
 | M06 | LLM Gateway | P02 | 12 | 10 | 88% |
 | M07 | Prompt Engine | P02 | 6 | 4 | 67% |
-| M08 | Context Manager | P02 | 10 | 6 | 60% |
+| M08 | Context Manager | P02 | 10 | 7 | 70% |
 | M09 | Knowledge Manager | P02 | 5 | 4 | 80% |
 | M10 | Memory Manager | P02 | 3 | 0 | 0% |
 | M11 | Retrieval / Search & Vector Search | P02 | 6 | 6 | 100% |

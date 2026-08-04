@@ -39,6 +39,14 @@ breaker``, ``backoff_policy``). A request with no ``token_budget`` and
 an assembler with no ``default_token_budget`` still ranks every item
 (this step's own new behaviour) but excludes none — every resolved item
 included, ``items_excluded_count`` honestly ``0``.
+
+**The Context Audit Logger is real too (``P02-S03-M08-T10``)**, the
+identical optional-collaborator shape ``audit_logger``/
+``budget_enforcer`` above already use: ``None`` (the default) means no
+persistence and zero behaviour change for every existing caller; a real
+:class:`~ai_os_kernel.context_manager.audit_logger.ContextAuditLogger`
+means every ``assemble`` call is durably recorded (§9: "every context
+assembly must record ...") before its result is returned.
 """
 
 from __future__ import annotations
@@ -46,6 +54,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
+from ai_os_kernel.context_manager.audit_logger import ContextAuditLogger
 from ai_os_kernel.context_manager.ids import new_assembly_id
 from ai_os_kernel.context_manager.models import (
     AssembledContext,
@@ -99,9 +108,11 @@ class DefaultContextManager:
         resolvers: Sequence[ContextSourceResolver],
         *,
         default_token_budget: int | None = None,
+        audit_logger: ContextAuditLogger | None = None,
     ) -> None:
         self._resolvers = resolvers
         self._default_token_budget = default_token_budget
+        self._audit_logger = audit_logger
 
     async def assemble(self, request: ContextRequest) -> AssembledContext:
         sources_queried: list[SourceType] = []
@@ -121,13 +132,18 @@ class DefaultContextManager:
         else:
             included, excluded_count = _apply_token_budget(ranked_items, budget)
 
-        return AssembledContext(
+        assembled = AssembledContext(
             items=included,
             total_tokens=sum(item.token_count for item in included),
             sources_queried=sources_queried,
             items_excluded_count=excluded_count,
             assembly_id=new_assembly_id(),
         )
+
+        if self._audit_logger is not None:
+            await self._audit_logger.record(request=request, assembled=assembled)
+
+        return assembled
 
 
 def _rank_by_relevance(items: Sequence[ContextItem]) -> list[ContextItem]:

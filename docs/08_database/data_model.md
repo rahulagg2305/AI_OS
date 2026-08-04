@@ -55,6 +55,7 @@ Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `
 | `trace` | Traceability artifacts and links |
 | `governance` | Audit log, configuration change history |
 | `security` | Role grants (`P03-S05-M14-T07`) |
+| `context` | Context assembly audit records (`P02-S03-M08-T10`) |
 | `platform` | Outbox, idempotency keys, schema metadata |
 
 ---
@@ -244,6 +245,29 @@ Its own bounded context, distinct from `governance` — a real, previously-undoc
 A partial unique index (`principal_id`, `role`) `WHERE status = 'active'` prevents two simultaneously-active grants of the identical role to the identical principal — a real, enforced invariant, not merely a convention. `UPDATE` is real and expected here (unlike `governance.audit_log`'s own append-only rule) — a grant transitions `active` -> `revoked` in place, its own real audit trail living in `governance.audit_log`, not in row history.
 
 Real, disclosed, narrower-than-full-RBAC scope: only the `admin`-gated grant/revoke this ticket's own Input/Output asks for is built — no self-service request flow, no expiring grants, no bulk operations.
+
+---
+
+## 9b. Context Assembly Audit (`P02-S03-M08-T10`)
+
+Its own bounded context, distinct from `governance` — the same "genuinely distinct concern, not a security control" reasoning `9a`'s own header gives for `security`. `context_manager.md` §9 names the fields a real audit record needs; this section is the first place any of them get a documented schema (§3's schema list had no `context` row before this table). Inserted here (not renumbering `10. Platform` onward), the same convention `9a` itself established.
+
+### 9b.1 `context.context_assemblies`
+
+| Column | Type | Notes |
+|---|---|---|
+| `assembly_id` | text PK | `asm_<ULID>` (`ai_os_kernel.context_manager.ids.new_assembly_id`), already generated per call before this table existed |
+| `workflow_id`, `step_id` | text NOT NULL | From the originating `ContextRequest` — "exactly what context *each step* actually received" (this ticket's own Goal) needs both, not only `workflow_id` |
+| `agent_id` | text NULL | From `ContextRequest.agent_id` — optional there, so optional here |
+| `sources_queried` | jsonb NOT NULL | `AssembledContext.sources_queried`, a JSON array of `SourceType` values |
+| `included_items` | jsonb NOT NULL | `AssembledContext.items`, full fidelity per item (`content`, `provenance`, `relevance_score`, `token_count`, `trust`) — enables §9's own "exact replay," not only a summary |
+| `items_excluded_count` | integer NOT NULL | `AssembledContext.items_excluded_count` |
+| `total_tokens` | integer NOT NULL | `AssembledContext.total_tokens` |
+| `recorded_at` | timestamptz NOT NULL | Database-generated at insert — §9's own "Timestamp" |
+
+Two of §9's five named fields are real, disclosed gaps, not silently omitted: **Trace ID** has no column, because no `TraceContext` (`llm_gateway.models.TraceContext`) is threaded into context assembly anywhere in this codebase — `ContextRequest` carries no trace identifier to record. **Which specific items were excluded** is not recoverable beyond the count: `AssembledContext` itself (§6) only ever carries a count, not the excluded items' own identities — a pre-existing limitation of the Filter/Ranker's own return shape (`P02-S03-M08-T09`), not something this table invents. Both are recorded here exactly as they are, not fabricated to appear complete.
+
+No foreign key to `workflow.workflow_instances`: an assembly record should outlive and stay insertable independent of that row's own lifecycle, the same "loose pointer, not a hard dependency" reasoning `governance.audit_log` already gives for referencing no single table.
 
 ---
 
