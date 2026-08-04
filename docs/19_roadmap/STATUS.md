@@ -6,11 +6,11 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-08-03 from 238 Task tickets.
+**Generated:** 2026-08-04 from 238 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 61%** (145.5 of 238 Task-equivalents complete)
+**Overall: 62%** (146.5 of 238 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -26,7 +26,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 4 | 0 | 10 | 29% |
 | P02 (B) | S05 Capability Manager and Platform SDK | 19 | 19 | 0 | 0 | 100% |
 | P02 (B) | S06 Quality Gate Engine | 8 | 4 | 0 | 4 | 50% |
-| P02 (B) | S07 Platform Services and Error Model | 7 | 2 | 0 | 5 | 29% |
+| P02 (B) | S07 Platform Services and Error Model | 7 | 3 | 0 | 4 | 43% |
 | P02 (B) | S08 Kernel HTTP Surface | 4 | 4 | 0 | 0 | 100% |
 | P03 (C) | S01 Sandboxed Tool Execution | 8 | 7 | 0 | 1 | 88% |
 | P03 (C) | S02 Software Engineering Pack Agents | 8 | 6 | 0 | 2 | 75% |
@@ -57,7 +57,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
-| P02 (Stage B) - Minimum Viable Kernel | 95 | 62 | 66% |
+| P02 (Stage B) - Minimum Viable Kernel | 95 | 63 | 67% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 30 | 79% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
@@ -68,7 +68,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-43 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+45 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P02-S02-M06-T08` Streaming completions
 - `P02-S02-M06-T09` Embeddings
@@ -84,7 +84,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P02-S04-M09-T05` Provenance and versioning
 - `P02-S04-M10-T01` Memory store
 - `P02-S06-M15-T05` Gate Registry
-- `P02-S07-M17-T02` In-process asyncio event bus
+- `P02-S07-M17-T03` Outbox relay
 - `P02-S07-M21-T01` Content-addressed artifact store
 - `P02-S07-M23-T01` Redis client integration
 - `P03-S01-M20-T05` Stronger isolation tier
@@ -95,7 +95,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P03-S06-M41-T02` Remaining T2-T12 controls
 - `P04-S01-M12-T04` Metrics collector
 - `P04-S01-M12-T05` Run manifest recorder
-- ... and 18 more
+- ... and 20 more
 
 ## Dependency review signal
 
