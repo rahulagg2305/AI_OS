@@ -12,10 +12,16 @@ Implemented so far: a real Indexing component
 turning real source content into real, chunked
 ``knowledge.documents``/``knowledge.chunks`` rows through the real
 :class:`~ai_os_kernel.persistence.knowledge_writer.SqlKnowledgeWriter`,
-with a real archive-and-replace policy for a changed ``source_uri``.
-Still not implemented: Query Engine, Version Manager, Provenance
-Tracker, and Access/Filter Layer as components of this package (their
-real prerequisites exist one layer down — see
+with a real archive-and-replace policy for a changed ``source_uri``;
+and a real Query Engine
+(:mod:`ai_os_kernel.knowledge_manager.query_engine`, ``P02-S04-M09-T04``)
+composing the real
+:class:`~ai_os_kernel.retrieval.retrieval_service.RetrievalService`
+with real provenance enrichment (source ``document_id``/``source_uri``/
+``trust``/``content``), also excluding archived documents from what it
+returns. Still not implemented: Version Manager, Provenance Tracker
+(as a dedicated component), and Access/Filter Layer (their real
+prerequisites exist one layer down — see
 docs/03_architecture/kernel/knowledge_manager.md's own Implementation
 Status).
 """

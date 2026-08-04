@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 67%** (159.5 of 238 Task-equivalents complete)
+**Overall: 67%** (160.5 of 238 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -23,7 +23,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (B) | S01 Workflow Execution Core | 15 | 15 | 0 | 0 | 100% |
 | P02 (B) | S02 LLM Gateway | 12 | 10 | 1 | 1 | 88% |
 | P02 (B) | S03 Prompt and Context Assembly | 16 | 8 | 0 | 8 | 50% |
-| P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 9 | 0 | 5 | 64% |
+| P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 10 | 0 | 4 | 71% |
 | P02 (B) | S05 Capability Manager and Platform SDK | 19 | 19 | 0 | 0 | 100% |
 | P02 (B) | S06 Quality Gate Engine | 8 | 4 | 0 | 4 | 50% |
 | P02 (B) | S07 Platform Services and Error Model | 7 | 7 | 0 | 0 | 100% |
@@ -57,7 +57,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
-| P02 (Stage B) - Minimum Viable Kernel | 95 | 76 | 81% |
+| P02 (Stage B) - Minimum Viable Kernel | 95 | 77 | 82% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 30 | 79% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
@@ -72,11 +72,11 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 - `P02-S03-M07-T05` Composition and inheritance
 - `P02-S03-M07-T06` Cache boundary index
+- `P02-S03-M08-T05` Knowledge resolver
 - `P02-S03-M08-T07` AI-context-pack resolver
 - `P02-S03-M08-T08` Runtime-config resolver
 - `P02-S03-M08-T09` Filter and ranker
 - `P02-S03-M08-T10` Persisted context audit logger
-- `P02-S04-M09-T04` Query engine
 - `P02-S04-M09-T05` Provenance and versioning
 - `P02-S04-M10-T01` Memory store
 - `P02-S06-M15-T05` Gate Registry
