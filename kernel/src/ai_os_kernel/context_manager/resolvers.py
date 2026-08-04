@@ -1,24 +1,40 @@
 """Source Resolvers (context_manager.md §4) — the components that each
 know how to pull items from exactly one source.
 
-**Two real resolvers now: Workflow State, and, as of
-``P02-S03-M08-T05``, Knowledge.** context_manager.md §3 lists six
-sources an assembly may draw on: Workflow State, Knowledge Manager,
+**Three real resolvers now: Workflow State, Knowledge (``P02-S03-M08-T05``),
+and, as of ``P02-S03-M08-T06``, Memory.** context_manager.md §3 lists
+six sources an assembly may draw on: Workflow State, Knowledge Manager,
 Memory Manager, AI Context Packs, Runtime Configuration, and
 User-provided inputs. Workflow State was the first real one —
 :class:`~ai_os_kernel.workflow_engine.repository.WorkflowInstanceRepository`,
-already built and already real. :class:`KnowledgeResolver` (below) is
-the second, calling the real
-:class:`~ai_os_kernel.knowledge_manager.query_engine.QueryEngine`
-(``P02-S04-M09-T04``) — the first genuine consumer any Knowledge
-Manager/Retrieval component built this session has had. Memory
-Manager and AI Context Packs remain entirely unbuilt Kernel components
+already built and already real. :class:`KnowledgeResolver` calls the
+real :class:`~ai_os_kernel.knowledge_manager.query_engine.QueryEngine`
+(``P02-S04-M09-T04``). :class:`MemoryResolver` (below) calls the real
+:class:`~ai_os_kernel.persistence.memory_writer.MemoryStore`
+(``P02-S04-M10-T01``) — the first genuine consumer that store has had.
+AI Context Packs remain an entirely unbuilt Kernel component
 (kernel_architecture.md's own component list); Runtime Configuration
 (the Configuration Manager) is real but is deliberately still
-deferred — two real sources are enough to prove the end-to-end request
-flow and give the Size & Token Budget Enforcer's own ``relevance_score``
-genuine variance (see ``manager.py``'s own updated docstring); a third
-real source remains a natural, additive next slice.
+deferred — three real sources are now enough to calibrate
+context_manager.md's own "Knowledge outranks Memory in authority"
+cross-source-ranking question against a genuine third source (see
+``MemoryResolver``'s own docstring for how); a fourth real source
+remains a natural, additive next slice.
+
+**``MemoryResolver`` deliberately does not filter by
+``source_workflow_id`` — genuinely cross-run, matching the Memory
+Store's own Goal ("durable store for cross-run memory"), not scoped to
+the current request's own ``workflow_id``.** A resolver that filtered
+by the current run would only ever see memory that run itself already
+wrote earlier — functionally a second Workflow State resolver, not a
+genuine Memory source. **Disclosed, not fabricated:** ``promoted_at``
+is real but always ``NULL`` today (no promotion logic exists yet —
+``P02-S04-M10-T01``'s own disclosure), so this surfaces every real row
+of its configured ``memory_type`` ever written by any workflow, not
+only "reviewed" ones. ``memory_type`` is a real constructor parameter (mirroring
+``KnowledgeResolver``'s own caller-supplied ``embedding_model_alias``)
+— this module never picks one on the composer's behalf, honoring "no
+hardcoded values."
 
 **"User-provided inputs" is not a separate resolver.** context_manager.md
 §3 lists it alongside Workflow State as a distinct source, but in this
@@ -60,6 +76,7 @@ from ai_os_kernel.context_manager.models import ContextItem, ContextRequest, Sou
 from ai_os_kernel.knowledge_manager.query_engine import QueryEngine
 from ai_os_kernel.llm_gateway.gateway import Embedder
 from ai_os_kernel.llm_gateway.models import EmbeddingRequest
+from ai_os_kernel.persistence.memory_writer import MemoryStore, MemoryType
 from ai_os_kernel.retrieval.retrieval_service import RetrievalRequest
 
 if TYPE_CHECKING:
@@ -231,6 +248,66 @@ class KnowledgeResolver:
                 trust=result.trust,
             )
             for result in results
+        ]
+
+
+class MemoryResolver:
+    """Brings real, durable, cross-run memory into step context — this
+    ticket's own Goal (``P02-S03-M08-T06``). Calls the real
+    :class:`~ai_os_kernel.persistence.memory_writer.MemoryStore`
+    unchanged — no parallel storage mechanism.
+
+    Deliberately not filtered by ``source_workflow_id`` — see this
+    module's own docstring for why "cross-run" requires that.
+
+    **``relevance_score`` reuses the real ``quality_signal`` column
+    when a caller has set one; ``0.0`` (the lowest a real score can
+    meaningfully be) when it hasn't** — nothing computes
+    ``quality_signal`` yet (``P02-S04-M10-T01``'s own disclosure), so
+    most memory today gets ``0.0``. This is a real, principled default
+    ("no confidence signal recorded" is honestly zero relevance, not a
+    guessed positive number), not an arbitrary tuning constant — and it
+    is exactly what calibrates context_manager.md's own "Knowledge
+    outranks Memory in authority" rule for the first time: an
+    unscored memory item (``0.0``) now genuinely ranks below every real
+    Knowledge hit (RRF scores are always positive) and below
+    :class:`WorkflowStateResolver`'s constant ``1.0``, without this
+    resolver needing to know either of their real ranges in advance.
+
+    ``trust`` is fixed ``"untrusted"`` for every memory item — the
+    identical reasoning :class:`WorkflowStateResolver` already applies
+    (ADR-0016: "no untrusted content can confer authority"): memory
+    content is typically an agent's own synthesized experience, not a
+    reviewed, human-authored document, and ``memory_items`` has no
+    per-row trust column of its own to read instead.
+    """
+
+    source_type = SourceType.MEMORY
+
+    def __init__(self, *, memory_store: MemoryStore, memory_type: MemoryType, limit: int) -> None:
+        self._memory_store = memory_store
+        self._memory_type = memory_type
+        self._limit = limit
+
+    async def resolve(self, request: ContextRequest) -> list[ContextItem]:
+        records = await self._memory_store.query_memories(
+            memory_type=self._memory_type, limit=self._limit
+        )
+
+        return [
+            ContextItem(
+                content=record.content,
+                provenance=SourceRef(
+                    source_type=SourceType.MEMORY,
+                    identifier=f"memory_item:{record.memory_id}",
+                ),
+                relevance_score=(
+                    float(record.quality_signal) if record.quality_signal is not None else 0.0
+                ),
+                token_count=estimate_tokens(record.content),
+                trust="untrusted",
+            )
+            for record in records
         ]
 
 
