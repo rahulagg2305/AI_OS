@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 70%** (167.5 of 238 Task-equivalents complete)
+**Overall: 71%** (168.5 of 238 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -22,7 +22,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S06 CI and Test Infrastructure | 10 | 10 | 0 | 0 | 100% |
 | P02 (B) | S01 Workflow Execution Core | 15 | 15 | 0 | 0 | 100% |
 | P02 (B) | S02 LLM Gateway | 12 | 10 | 1 | 1 | 88% |
-| P02 (B) | S03 Prompt and Context Assembly | 16 | 12 | 0 | 4 | 75% |
+| P02 (B) | S03 Prompt and Context Assembly | 16 | 13 | 0 | 3 | 81% |
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 13 | 0 | 1 | 93% |
 | P02 (B) | S05 Capability Manager and Platform SDK | 19 | 19 | 0 | 0 | 100% |
 | P02 (B) | S06 Quality Gate Engine | 8 | 4 | 0 | 4 | 50% |
@@ -57,7 +57,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
-| P02 (Stage B) - Minimum Viable Kernel | 95 | 84 | 89% |
+| P02 (Stage B) - Minimum Viable Kernel | 95 | 85 | 90% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 30 | 79% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
@@ -68,9 +68,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-34 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+33 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
-- `P02-S03-M07-T05` Composition and inheritance
 - `P02-S03-M07-T06` Cache boundary index
 - `P02-S03-M08-T07` AI-context-pack resolver
 - `P02-S03-M08-T08` Runtime-config resolver
@@ -95,7 +94,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P06-S06-M25-T01` Speech Gateway
 - `P07-S01-M40-T01` Kubernetes manifests and Helm chart
 - `P07-S01-M40-T03` Backup and restore rehearsal
-- ... and 9 more
+- `P07-S02-M14-T01` OIDC authentication
+- ... and 8 more
 
 ## Dependency review signal
 

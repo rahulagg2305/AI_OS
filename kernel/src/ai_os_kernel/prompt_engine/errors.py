@@ -45,3 +45,22 @@ class PromptVariableMissingError(Exception):
     listing every missing name so a caller sees the whole problem at
     once, not one name per retry.
     """
+
+
+class PromptCompositionError(Exception):
+    """A fragment composition request was itself invalid — e.g. an
+    empty fragment sequence, which cannot compose to any meaningful
+    template (:mod:`ai_os_kernel.prompt_engine.composition`).
+    """
+
+
+class PromptFragmentOverrideError(Exception):
+    """An inheritance override named a fragment the parent does not
+    declare (:mod:`ai_os_kernel.prompt_engine.composition`).
+
+    Deliberately not a silent no-op or a silently-appended new
+    fragment — the identical "no guessing a typo'd or unconfigured
+    name into something else" discipline
+    :class:`PromptRoleNotBoundError` already establishes for role
+    binding.
+    """
