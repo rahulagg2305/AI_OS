@@ -1,8 +1,27 @@
-"""The real Query Engine (``P02-S04-M09-T04``) — "Answer knowledge
-queries behind one interface" (this ticket's own Goal), reusing the
-already-real :class:`~ai_os_kernel.retrieval.retrieval_service.
-RetrievalService` (``P02-S04-M11-T06``) unchanged — no parallel search
-mechanism.
+"""The real Query Engine (``P02-S04-M09-T04``; provenance/versioning
+extended ``P02-S04-M09-T05``) — "Answer knowledge queries behind one
+interface" (this ticket's own Goal), reusing the already-real
+:class:`~ai_os_kernel.retrieval.retrieval_service.RetrievalService`
+(``P02-S04-M11-T06``) unchanged — no parallel search mechanism.
+
+**Version provenance (``P02-S04-M09-T05``): surfaced, not managed.**
+``P02-S04-M09-T05``'s own Goal — "every retrieved item carries source
+and version" — is satisfied by joining two already-real, already-
+documented columns onto every result, not by building a new
+mechanism: ``chunks.chunk_strategy_version`` (data_model.md §7, real
+since ``P02-S04-M09-T03``) is present on every result unconditionally
+— every chunk, however it was found, was chunked with a real, stored
+strategy version. ``embeddings.embedding_model_id``/
+``embedding_model_version``/``index_generation`` are present only when
+this exact chunk has a real embedding row under the request's own
+queried model/version (``None`` for a keyword-only hit — a real,
+disclosed absence, not a guess). **Deliberately not built: a real
+"Version Manager" that decides or manages what a second
+``index_generation`` means** — knowledge_manager.md's own
+Implementation Status already names that as unbuilt, and nothing about
+"every retrieved item carries source and version" requires deciding
+that; it only requires reporting whichever generation a matching
+embedding row genuinely has.
 
 **Real value this step adds: provenance enrichment.**
 :class:`~ai_os_kernel.retrieval.hybrid_search.FusedResult` (the real
@@ -56,6 +75,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.persistence.knowledge_schema import chunks as chunks_table
 from ai_os_kernel.persistence.knowledge_schema import documents as documents_table
+from ai_os_kernel.persistence.knowledge_schema import embeddings as embeddings_table
 from ai_os_kernel.retrieval.retrieval_service import RetrievalRequest, RetrievalService
 
 
@@ -67,9 +87,10 @@ class QueryError(Exception):
 
 
 class KnowledgeQueryResult(BaseModel):
-    """One ranked result, real fusion score plus real source
-    provenance — this ticket's own "ranked results with provenance,"
-    fully assembled."""
+    """One ranked result, real fusion score plus real source *and
+    version* provenance (``P02-S04-M09-T05``'s own Goal: "every
+    retrieved item carries source and version") — this ticket's own
+    "ranked results with provenance," fully assembled."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -81,6 +102,10 @@ class KnowledgeQueryResult(BaseModel):
     fused_score: float
     keyword_rank: int | None
     vector_rank: int | None
+    chunk_strategy_version: str
+    embedding_model_id: str | None
+    embedding_model_version: str | None
+    index_generation: int | None
 
 
 class QueryEngine:
@@ -97,6 +122,16 @@ class QueryEngine:
             return []
 
         chunk_ids = [result.chunk_id for result in fused_results]
+        # Real embedding provenance only for the exact model/version
+        # this request actually searched with -- an embedding row
+        # under a different model would never be the reason this chunk
+        # matched, so joining on anything broader would attach
+        # provenance that misrepresents why the hit happened.
+        embedding_join_condition = sa.and_(
+            embeddings_table.c.chunk_id == chunks_table.c.chunk_id,
+            embeddings_table.c.embedding_model_id == request.embedding_model_id,
+            embeddings_table.c.embedding_model_version == request.embedding_model_version,
+        )
         try:
             async with self._engine.connect() as connection:
                 rows = (
@@ -106,17 +141,34 @@ class QueryEngine:
                                 chunks_table.c.chunk_id,
                                 chunks_table.c.document_id,
                                 chunks_table.c.content,
+                                chunks_table.c.chunk_strategy_version,
                                 documents_table.c.source_uri,
                                 documents_table.c.trust,
+                                embeddings_table.c.embedding_model_id,
+                                embeddings_table.c.embedding_model_version,
+                                embeddings_table.c.index_generation,
                             )
                             .select_from(
                                 chunks_table.join(
                                     documents_table,
                                     chunks_table.c.document_id == documents_table.c.document_id,
-                                )
+                                ).outerjoin(embeddings_table, embedding_join_condition)
                             )
                             .where(chunks_table.c.chunk_id.in_(chunk_ids))
                             .where(documents_table.c.archived_at.is_(None))
+                            # Deterministic (ADR-0022) even in the
+                            # currently-unreachable case of more than one
+                            # embedding row for the same chunk under this
+                            # exact model/version: the highest
+                            # index_generation wins, tie-broken by
+                            # embedding_id -- the dict below keeps the
+                            # *last* row per chunk_id, so ascending order
+                            # here means the winner is deterministically
+                            # the highest generation.
+                            .order_by(
+                                embeddings_table.c.index_generation.asc(),
+                                embeddings_table.c.embedding_id.asc(),
+                            )
                         )
                     )
                     .mappings()
@@ -146,6 +198,10 @@ class QueryEngine:
                     fused_score=fused_result.fused_score,
                     keyword_rank=fused_result.keyword_rank,
                     vector_rank=fused_result.vector_rank,
+                    chunk_strategy_version=row["chunk_strategy_version"],
+                    embedding_model_id=row["embedding_model_id"],
+                    embedding_model_version=row["embedding_model_version"],
+                    index_generation=row["index_generation"],
                 )
             )
         return results
