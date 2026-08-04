@@ -1,21 +1,24 @@
 """Source Resolvers (context_manager.md §4) — the components that each
 know how to pull items from exactly one source.
 
-**One real resolver this step: Workflow State.** context_manager.md §3
-lists six sources an assembly may draw on: Workflow State, Knowledge
-Manager, Memory Manager, AI Context Packs, Runtime Configuration, and
-User-provided inputs. Of these, only Workflow State has a real,
-existing implementation to read from today —
+**Two real resolvers now: Workflow State, and, as of
+``P02-S03-M08-T05``, Knowledge.** context_manager.md §3 lists six
+sources an assembly may draw on: Workflow State, Knowledge Manager,
+Memory Manager, AI Context Packs, Runtime Configuration, and
+User-provided inputs. Workflow State was the first real one —
 :class:`~ai_os_kernel.workflow_engine.repository.WorkflowInstanceRepository`,
-already built and already real. Knowledge Manager, Memory Manager, and
-AI Context Packs are entirely unbuilt Kernel components
+already built and already real. :class:`KnowledgeResolver` (below) is
+the second, calling the real
+:class:`~ai_os_kernel.knowledge_manager.query_engine.QueryEngine`
+(``P02-S04-M09-T04``) — the first genuine consumer any Knowledge
+Manager/Retrieval component built this session has had. Memory
+Manager and AI Context Packs remain entirely unbuilt Kernel components
 (kernel_architecture.md's own component list); Runtime Configuration
-(the Configuration Manager) is real but is deliberately deferred here
-too, since a single real resolver is enough to prove the end-to-end
-request flow this step's own approved framing asks for ("the minimum
-number of real context resolvers required") — adding a second real
-source is a natural, additive next slice, not something this one needs
-to prove the abstraction works.
+(the Configuration Manager) is real but is deliberately still
+deferred — two real sources are enough to prove the end-to-end request
+flow and give the Size & Token Budget Enforcer's own ``relevance_score``
+genuine variance (see ``manager.py``'s own updated docstring); a third
+real source remains a natural, additive next slice.
 
 **"User-provided inputs" is not a separate resolver.** context_manager.md
 §3 lists it alongside Workflow State as a distinct source, but in this
@@ -54,6 +57,10 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ai_os_kernel.context_manager.models import ContextItem, ContextRequest, SourceRef, SourceType
+from ai_os_kernel.knowledge_manager.query_engine import QueryEngine
+from ai_os_kernel.llm_gateway.gateway import Embedder
+from ai_os_kernel.llm_gateway.models import EmbeddingRequest
+from ai_os_kernel.retrieval.retrieval_service import RetrievalRequest
 
 if TYPE_CHECKING:
     # Deferred to type-checking time only, to break a real, otherwise
@@ -139,6 +146,91 @@ class WorkflowStateResolver:
                 token_count=estimate_tokens(content),
                 trust="untrusted",
             )
+        ]
+
+
+class KnowledgeResolver:
+    """Brings real, queried knowledge-base content into step context —
+    this ticket's own Goal (``P02-S03-M08-T05``). Calls the real
+    :class:`~ai_os_kernel.knowledge_manager.query_engine.QueryEngine`
+    unchanged — no parallel search mechanism.
+
+    ``request.knowledge_query`` is ``None`` for most requests today (no
+    caller sets it yet) — the identical "an unresolvable source
+    contributing nothing is not a failure" shape :class:`WorkflowStateResolver`
+    already established, not an error.
+
+    **A real query vector, not a fabricated one.** ``RetrievalRequest``
+    requires ``query_vector``/``embedding_model_id``/
+    ``embedding_model_version`` — this resolver is the LLM Gateway's
+    real :class:`~ai_os_kernel.llm_gateway.gateway.Embedder`'s second
+    real caller (after :func:`~ai_os_kernel.retrieval.embedding_writer.
+    embed_chunk`), calling the real ``embed()`` with a caller-supplied
+    ``embedding_model_alias`` (ADR-0002: never a literal model id) —
+    genuine semantic+keyword fusion, not a placeholder model id chosen
+    to make vector search silently return nothing.
+
+    **``relevance_score`` is the real fused RRF score** —
+    :class:`~ai_os_kernel.retrieval.hybrid_search.FusedResult.fused_score`
+    passed straight through, the first resolver in this package whose
+    score is not a constant (see ``manager.py``'s own updated
+    docstring).
+
+    ``trust`` is the queried document's own real classification
+    (:class:`~ai_os_kernel.knowledge_manager.query_engine.
+    KnowledgeQueryResult.trust`) — genuinely ``"trusted"`` or
+    ``"untrusted"`` per source, unlike :class:`WorkflowStateResolver`'s
+    fixed constant, since Knowledge Manager content really does carry
+    its own per-document trust.
+    """
+
+    source_type = SourceType.KNOWLEDGE
+
+    def __init__(
+        self,
+        *,
+        query_engine: QueryEngine,
+        embedder: Embedder,
+        embedding_model_alias: str,
+        limit: int,
+    ) -> None:
+        self._query_engine = query_engine
+        self._embedder = embedder
+        self._embedding_model_alias = embedding_model_alias
+        self._limit = limit
+
+    async def resolve(self, request: ContextRequest) -> list[ContextItem]:
+        if not request.knowledge_query or not request.knowledge_query.strip():
+            return []
+
+        embedding_response = await self._embedder.embed(
+            EmbeddingRequest(
+                model_alias=self._embedding_model_alias, inputs=[request.knowledge_query]
+            )
+        )
+
+        results = await self._query_engine.query(
+            RetrievalRequest(
+                query_text=request.knowledge_query,
+                query_vector=embedding_response.vectors[0],
+                embedding_model_id=embedding_response.model_id,
+                embedding_model_version=embedding_response.model_version,
+                limit=self._limit,
+            )
+        )
+
+        return [
+            ContextItem(
+                content=result.content,
+                provenance=SourceRef(
+                    source_type=SourceType.KNOWLEDGE,
+                    identifier=f"knowledge_chunk:{result.chunk_id}",
+                ),
+                relevance_score=result.fused_score,
+                token_count=estimate_tokens(result.content),
+                trust=result.trust,
+            )
+            for result in results
         ]
 
 

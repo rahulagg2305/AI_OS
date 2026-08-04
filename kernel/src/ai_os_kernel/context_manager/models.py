@@ -8,13 +8,16 @@ Request`` names ``workflow_id``, ``step_id``, ``agent_id``,
 ``required_context_types``, ``token_budget or size limit``, and
 ``experiment / run identifiers``. :class:`ContextRequest` here now
 carries the first three plus ``token_budget`` — the Size & Token Budget
-Enforcer's own step adds exactly the one field it needs, nothing else.
-``required_context_types`` and the experiment/run identifiers remain
-absent as *fields*, not present as always-``None`` ones — the same
-"reduced slice" shape :class:`~ai_os_kernel.llm_gateway.models.
-TraceContext` already established: ``required_context_types`` still has
-no declared source (workflow_architecture.md's Step Contract has no
-field naming which context types a step needs — only
+Enforcer's own step adds exactly the one field it needs, nothing else —
+plus ``knowledge_query`` (``P02-S03-M08-T05``), added the identical way
+once :class:`~ai_os_kernel.context_manager.resolvers.KnowledgeResolver`
+gave it a real, immediate need. ``required_context_types`` and the
+experiment/run identifiers remain absent as *fields*, not present as
+always-``None`` ones — the same "reduced slice" shape
+:class:`~ai_os_kernel.llm_gateway.models.TraceContext` already
+established: ``required_context_types`` still has no declared source
+(workflow_architecture.md's Step Contract has no field naming which
+context types a step needs — only
 ``agentId``/``toolId``/``promptId``/``promptVersion``/``modelAlias``),
 and no experiment support exists anywhere in this codebase
 (evaluation_engine.md §5.1: experiment definition lives in the
@@ -68,11 +71,14 @@ from pydantic import BaseModel, ConfigDict, Field
 class SourceType(StrEnum):
     """Which :class:`~ai_os_kernel.context_manager.resolvers.
     ContextSourceResolver` produced a given item — context_manager.md
-    §4's "Source Resolvers" list five; only the first is real here.
+    §4's "Source Resolvers" list five; two are real here.
     """
 
     WORKFLOW_STATE = "workflow_state"
-    # Deliberately not yet present: KNOWLEDGE, MEMORY, AI_CONTEXT_PACK,
+    # Real as of P02-S03-M08-T05 -- see resolvers.py's own
+    # KnowledgeResolver.
+    KNOWLEDGE = "knowledge"
+    # Deliberately not yet present: MEMORY, AI_CONTEXT_PACK,
     # CONFIGURATION — each names a resolver this step does not build
     # (see resolvers.py's own docstring for why).
 
@@ -124,6 +130,12 @@ class ContextRequest(BaseModel):
     # <= 0 rather than silently admitting nothing, or nothing at all:
     # a nonsensical value is a caller error, not a degenerate context.
     token_budget: int | None = Field(default=None, gt=0)
+    # Added at P02-S03-M08-T05: real, per-request query text for
+    # KnowledgeResolver (resolvers.py). None means "no knowledge query
+    # declared for this request" -- the identical "an unresolvable
+    # source contributing nothing is not a failure" shape every other
+    # resolver in this package already establishes, not an error.
+    knowledge_query: str | None = None
 
 
 class AssembledContext(BaseModel):

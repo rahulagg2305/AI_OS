@@ -7,16 +7,21 @@ budget (the Size & Token Budget Enforcer, context_manager.md §4/§6).
 **Budget enforcement, not yet filtering or ranking — this step's own
 approved scope.** context_manager.md §4 names a "Context Filter /
 Ranker" and a "Size & Token Budget Enforcer" as two *distinct* internal
-components. This step builds only the second. With exactly one real
-resolver and a constant ``relevance_score`` (no ranking model exists
-yet — see ``resolvers.py``), there is nothing for a real Filter/Ranker
-to rank *by*; adding one is deferred until a second resolver gives
-``relevance_score`` genuine variance to act on. The budget enforcer
-below reuses ``relevance_score`` only as a stable tie-break for *which*
-items survive when there isn't room for all of them — that is
-truncation, the behaviour context_manager.md §6 documents ("assembly
-truncates by rank and reports ``items_excluded_count``"), not ranking
-as a first-class capability of its own.
+components. This step builds only the second. At the time this module
+was first built, there was exactly one real resolver with a constant
+``relevance_score`` (no ranking model existed yet), so there was
+nothing for a real Filter/Ranker to rank *by*. **Updated
+``P02-S03-M08-T05``:** ``KnowledgeResolver`` (``resolvers.py``) now
+gives ``relevance_score`` genuine variance (a real fused RRF score, not
+a constant) — the precondition this docstring named is now real, but
+building the Filter/Ranker component itself remains out of scope for
+that step too, deliberately left for its own dedicated one. The budget
+enforcer below still reuses ``relevance_score`` only as a stable
+tie-break for *which* items survive when there isn't room for all of
+them — that is truncation, the behaviour context_manager.md §6
+documents ("assembly truncates by rank and reports
+``items_excluded_count``"), not ranking as a first-class capability of
+its own.
 
 **No budget is enforced unless one is real — the same "disabled means
 ``None``, zero behaviour change" shape every other Kernel policy limit
