@@ -8,9 +8,11 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-07-28; updated 2026-08-04)
 
-**Built: nothing. This document is a design specification only.** No Platform Service exists in code — the `platform_services/` directory has **no tracked content at all**, so it is absent from a fresh clone (git does not track empty directories). No Kernel component consumes this service. There is no content-addressed artifact store; workflow artifacts today are plain files in per-agent temporary directories created by the Software Engineering pack's own agents. Stage B deliverable.
+**Built:** a real, local-filesystem content-addressed artifact store — `kernel/src/ai_os_kernel/storage_service/local_store.py`'s `LocalFilesystemArtifactStore` (`P02-S07-M21-T01`), plus `StorageSettings` (`AIOS_STORAGE_ROOT`). Content is addressed by its own real SHA-256 digest and returned as the real, pre-existing SDK boundary model `ai_os_sdk.models.common.ArtifactRef` (`sha256:<hex>`), not a new, duplicate shape. Proven against a real filesystem: identical content deduplicates to one real stored file and an equal `ArtifactRef`; different content produces different files and different ids; a round trip returns the exact original bytes. This module lives at `kernel/src/ai_os_kernel/storage_service/`, not `platform_services/` — that directory still has **no tracked content at all** (git does not track empty directories), and remains the planned, SDK-level Platform Service home this design document describes; today's real code is Kernel-internal.
+
+**Not built:** no S3-compatible "prod" backend (no S3 client dependency, configuration, or endpoint exists anywhere in this codebase to build or test one against yet); no `Cache`-style `Protocol` over the store (a single real implementation exists; a second is documented intent, not yet real, ADR-0004); no real Kernel caller constructs this store yet — workflow artifacts remain plain files in per-agent temporary directories created by the Software Engineering pack's own agents, unchanged by this step. Stage B deliverable, still in progress.
 
 Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
