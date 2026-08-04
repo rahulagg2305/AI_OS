@@ -1040,3 +1040,22 @@ def test_capabilities_is_a_synchronous_method_not_a_coroutine() -> None:
 
     assert not asyncio.iscoroutine(result)
     assert isinstance(result, ProviderCapabilities)
+
+
+@pytest.mark.asyncio
+async def test_no_rate_limiter_configured_never_blocks_a_call() -> None:
+    # P02-S02-M06-T11: the identical "absent means disabled, zero
+    # observable change" default every other optional collaborator in
+    # this class already establishes. The real, Redis-backed
+    # RateLimiter itself, and its genuine over-limit-refusal behavior,
+    # is proven against real Redis in
+    # tests/integration/llm_gateway/test_rate_limiter.py — this is
+    # pure-logic coverage of the default-off branch, needing no I/O.
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    dispatcher = DispatchingLLMGateway(router=router, gateways={"provider-a": EchoLLMGateway()})
+
+    response = await dispatcher.complete(_request("fast-cheap"))
+
+    assert response.content == "hello"

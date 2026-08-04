@@ -74,10 +74,12 @@ from ai_os_kernel.llm_gateway.error_taxonomy import (
     CHAIN_EXHAUSTED,
     CIRCUIT_OPEN,
     NO_PROVIDER,
+    RATE_LIMIT_EXCEEDED,
     ErrorCategory,
 )
 from ai_os_kernel.llm_gateway.errors import LLMProviderError
 from ai_os_kernel.llm_gateway.models import LLMRequest, LLMResponse, StopReason, UsageRecord
+from ai_os_kernel.llm_gateway.rate_limiter import RateLimiter
 from ai_os_kernel.llm_gateway.router import Router, RoutingDecision
 
 _CIRCUIT_BREAKER_CATEGORIES = (ErrorCategory.TRANSIENT, ErrorCategory.INFRASTRUCTURE)
@@ -208,6 +210,27 @@ class DispatchingLLMGateway:
     provider's hint is larger, never less than what the provider asked
     for.
 
+    ``rate_limiter`` (``P02-S02-M06-T11``) defaults to ``None`` — the
+    identical "absent means disabled, zero observable change" shape
+    every other optional collaborator here already uses. When
+    supplied, it is consulted right after the two budget checks and
+    before the Circuit Breaker: a proactive, per-provider request-
+    volume gate (llm_gateway.md §9's own "respect per-provider rate
+    limits proactively"), distinct from and checked earlier than the
+    Circuit Breaker's own reactive, failure-driven gate. A rejection is
+    classified :data:`~ai_os_kernel.llm_gateway.error_taxonomy.RATE_LIMIT_EXCEEDED`
+    (``transient``, retriable) with a real ``retry_after_seconds``
+    computed from the limiter's own window countdown — honoured by
+    :meth:`_call_with_backoff` exactly like a real provider's own
+    ``Retry-After`` hint, and, with no ``backoff_policy`` configured,
+    triggers the identical fallback-chain traversal any other
+    provider-scoped failure already does (unlike a budget failure,
+    a rate limit is scoped to *this* provider, so trying the next
+    candidate in the chain is a real, useful escape, not futile). A
+    rate-limit rejection never calls ``circuit_breaker.record_failure``
+    — no real network call was attempted, so there is nothing new to
+    remember about this provider's own health.
+
     ``circuit_breaker`` defaults to ``None`` — "disabled," in this
     step's own terms: every existing caller that never passes it (every
     test and composition written before this step) gets byte-for-byte
@@ -325,6 +348,7 @@ class DispatchingLLMGateway:
         budget_enforcer: BudgetEnforcer | None = None,
         workflow_budget_enforcer: BudgetEnforcer | None = None,
         capability_negotiator: CapabilityNegotiator | None = None,
+        rate_limiter: RateLimiter | None = None,
     ) -> None:
         self._router = router
         self._gateways = dict(gateways)
@@ -333,6 +357,7 @@ class DispatchingLLMGateway:
         self._budget_enforcer = budget_enforcer
         self._workflow_budget_enforcer = workflow_budget_enforcer
         self._capability_negotiator = capability_negotiator
+        self._rate_limiter = rate_limiter
 
     def capabilities(self, model_alias: str) -> ProviderCapabilities:
         """The Capability Negotiator's own documented lookup
@@ -472,6 +497,19 @@ class DispatchingLLMGateway:
                 error_code="llm.budget_exceeded",
                 retriable=False,
             )
+
+        if self._rate_limiter is not None:
+            rate_limit_result = await self._rate_limiter.check(decision.provider)
+            if not rate_limit_result.allowed:
+                raise LLMProviderError(
+                    f"model_alias {request.model_alias!r} routes to provider "
+                    f"{decision.provider!r}, which has exceeded its configured "
+                    "rate limit — no further calls are permitted this window",
+                    category=RATE_LIMIT_EXCEEDED.category,
+                    error_code=RATE_LIMIT_EXCEEDED.error_code,
+                    retriable=RATE_LIMIT_EXCEEDED.retriable,
+                    retry_after_seconds=rate_limit_result.retry_after_seconds,
+                )
 
         if self._circuit_breaker is not None and not self._circuit_breaker.is_available(
             decision.provider

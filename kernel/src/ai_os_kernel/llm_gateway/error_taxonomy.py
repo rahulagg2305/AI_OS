@@ -113,6 +113,12 @@ MISROUTED = ErrorClassification(ErrorCategory.PERMANENT, "llm.misrouted", False)
 NO_PRICING = ErrorClassification(ErrorCategory.PERMANENT, "llm.no_pricing", False)
 NO_CAPABILITIES = ErrorClassification(ErrorCategory.PERMANENT, "llm.no_capabilities", False)
 UNPARSEABLE_RESPONSE = ErrorClassification(ErrorCategory.TRANSIENT, "llm.provider_error", True)
+# Deliberately identical to classify_http_status(429)'s own
+# classification — the same real condition (this provider is being
+# called too fast), whether discovered proactively, here, before any
+# network call is attempted, or reactively, from a provider's own real
+# 429 response after one was.
+RATE_LIMIT_EXCEEDED = ErrorClassification(ErrorCategory.TRANSIENT, "llm.rate_limited", True)
 
 
 def classify_http_status(status_code: int) -> ErrorClassification:
