@@ -160,6 +160,71 @@ class AnthropicAdapter:
 
         return _map_response(response, latency_ms=latency_ms, pricing=pricing)
 
+    async def count_tokens(self, request: LLMRequest) -> int:
+        """llm_gateway.md §12: "Token counts come only from provider
+        token-counting endpoints" — calls the real, documented
+        ``POST /v1/messages/count_tokens`` Anthropic endpoint
+        (``anthropic.AsyncAnthropic.messages.count_tokens``), never a
+        third-party or approximated tokenizer. A separate real network
+        call from :meth:`complete`, since Anthropic's own count-tokens
+        endpoint is unpriced and independent of a real completion — no
+        pricing lookup is needed here.
+
+        Never walks a fallback chain: a token count is specific to
+        *this* resolved model's own real tokenizer, so silently
+        substituting a different provider's count would be a real,
+        wrong answer for the model the caller actually asked about, not
+        an honest approximation of it.
+        (:class:`~ai_os_kernel.llm_gateway.gateway.DispatchingLLMGateway`'s
+        own :meth:`~ai_os_kernel.llm_gateway.gateway.DispatchingLLMGateway.count_tokens`
+        resolves ``model_alias`` once and calls this exactly once,
+        never retrying against a fallback candidate.)
+        """
+        decision = self._router.resolve(request.model_alias)
+        if decision.provider != PROVIDER_NAME:
+            raise LLMProviderError(
+                f"model_alias {request.model_alias!r} routes to provider "
+                f"{decision.provider!r}, which this adapter does not serve "
+                f"(it only calls {PROVIDER_NAME!r})",
+                category=MISROUTED.category,
+                error_code=MISROUTED.error_code,
+                retriable=MISROUTED.retriable,
+            )
+
+        kwargs: dict[str, Any] = {
+            "model": decision.model_id,
+            "messages": [
+                {"role": message.role.value, "content": message.content}
+                for message in request.messages
+            ],
+        }
+        if request.system is not None:
+            kwargs["system"] = request.system
+
+        try:
+            result = await self._client.messages.count_tokens(**kwargs)
+        except anthropic.APIStatusError as exc:
+            classification = classify_http_status(exc.status_code)
+            retry_after_seconds = parse_retry_after_seconds(exc.response.headers.get("retry-after"))
+            raise LLMProviderError(
+                f"Anthropic returned HTTP {exc.status_code} counting tokens for model_alias "
+                f"{request.model_alias!r}: {exc.message}",
+                category=classification.category,
+                error_code=classification.error_code,
+                retriable=classification.retriable,
+                retry_after_seconds=retry_after_seconds,
+            ) from exc
+        except anthropic.APIConnectionError as exc:
+            raise LLMProviderError(
+                f"could not reach Anthropic to count tokens for model_alias "
+                f"{request.model_alias!r}: {exc}",
+                category=NETWORK_FAILURE.category,
+                error_code=NETWORK_FAILURE.error_code,
+                retriable=NETWORK_FAILURE.retriable,
+            ) from exc
+
+        return result.input_tokens
+
 
 def _map_response(response: Any, *, latency_ms: int, pricing: ModelPricing) -> LLMResponse:
     """Pure, synchronous mapping from a real ``anthropic.types.Message``

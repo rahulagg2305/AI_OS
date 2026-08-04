@@ -61,7 +61,7 @@ import asyncio
 import time
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
 from ai_os_kernel.llm_gateway.budget_enforcer import BudgetEnforcer
@@ -71,6 +71,7 @@ from ai_os_kernel.llm_gateway.capability_negotiator import (
 )
 from ai_os_kernel.llm_gateway.circuit_breaker import CircuitBreaker
 from ai_os_kernel.llm_gateway.error_taxonomy import (
+    CAPABILITY_UNSUPPORTED,
     CHAIN_EXHAUSTED,
     CIRCUIT_OPEN,
     NO_PROVIDER,
@@ -95,6 +96,24 @@ class LLMGateway(Protocol):
     behind this Protocol yet — those are later steps."""
 
     async def complete(self, request: LLMRequest) -> LLMResponse: ...
+
+
+@runtime_checkable
+class TokenCounter(Protocol):
+    """A real ``LLMGateway`` implementation that can also answer a
+    genuine provider-endpoint token count (llm_gateway.md §12,
+    ``P02-S02-M06-T10``) — kept off :class:`LLMGateway` itself, the
+    identical "not every implementation can honestly answer this"
+    reasoning already applied to keeping ``capabilities()`` off that
+    Protocol too. ``@runtime_checkable`` so
+    :class:`DispatchingLLMGateway` can ask "does the resolved
+    provider's own registered gateway support this?" via
+    ``isinstance`` without every :class:`LLMGateway` having to declare
+    it, the identical shape :class:`~ai_os_sdk.contracts.agent.Agent`
+    already establishes for this exact kind of optional-capability
+    check."""
+
+    async def count_tokens(self, request: LLMRequest) -> int: ...
 
 
 class EchoLLMGateway:
@@ -379,6 +398,42 @@ class DispatchingLLMGateway:
                 retriable=False,
             )
         return self._capability_negotiator.capabilities(model_alias)
+
+    async def count_tokens(self, request: LLMRequest) -> int:
+        """A real, exact provider-endpoint token count
+        (llm_gateway.md §12, ``P02-S02-M06-T10``) — never a
+        character-length or third-party-tokenizer approximation.
+
+        Resolves ``request.model_alias`` exactly once, the same
+        :class:`~ai_os_kernel.llm_gateway.router.Router` call
+        :meth:`complete` makes, then asks *only* that one resolved
+        candidate's registered :class:`LLMGateway` — never its
+        ``fallback``. A token count is specific to one real model's own
+        tokenizer; silently reporting a different provider's count
+        would be a real, wrong answer for the model actually named,
+        not an honest substitute for it (llm_gateway.md §12's own "no
+        approximation" rule applies just as much to "the wrong
+        provider's exact count" as to a heuristic one).
+
+        Raises :class:`LLMProviderError`
+        (:data:`~ai_os_kernel.llm_gateway.error_taxonomy.CAPABILITY_UNSUPPORTED`)
+        when the resolved provider has no registered gateway at all, or
+        when its registered gateway does not implement
+        :class:`TokenCounter` — deliberately not a silent ``0`` or a
+        fabricated estimate.
+        """
+        decision = self._router.resolve(request.model_alias)
+        gateway = self._gateways.get(decision.provider)
+        if gateway is None or not isinstance(gateway, TokenCounter):
+            raise LLMProviderError(
+                f"model_alias {request.model_alias!r} routes to provider "
+                f"{decision.provider!r}, which does not support a real "
+                "provider-endpoint token count",
+                category=CAPABILITY_UNSUPPORTED.category,
+                error_code=CAPABILITY_UNSUPPORTED.error_code,
+                retriable=CAPABILITY_UNSUPPORTED.retriable,
+            )
+        return await gateway.count_tokens(request)
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
         decision = self._router.resolve(request.model_alias)

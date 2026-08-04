@@ -1059,3 +1059,97 @@ async def test_no_rate_limiter_configured_never_blocks_a_call() -> None:
     response = await dispatcher.complete(_request("fast-cheap"))
 
     assert response.content == "hello"
+
+
+# --- DispatchingLLMGateway.count_tokens() (P02-S02-M06-T10) ---------------
+
+
+class _FakeTokenCountingGateway:
+    """A real, deterministic fake implementing both ``LLMGateway`` and
+    ``TokenCounter`` — used only to prove genuine resolution/dispatch
+    wiring at this class's own level. The real provider-endpoint call
+    itself (the actual token count) is proven against a real local HTTP
+    server and, opt-in, the real live Anthropic API in
+    tests/unit/kernel/llm_gateway/adapters/test_anthropic_adapter.py
+    and tests/integration/llm_gateway/test_anthropic_adapter_live.py —
+    this fake never claims to be that proof."""
+
+    def __init__(self, count: int) -> None:
+        self._count = count
+
+    async def complete(self, request: LLMRequest) -> LLMResponse:
+        return await EchoLLMGateway().complete(request)
+
+    async def count_tokens(self, request: LLMRequest) -> int:
+        return self._count
+
+
+@pytest.mark.asyncio
+async def test_count_tokens_resolves_the_alias_and_delegates_to_the_registered_gateway() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    dispatcher = DispatchingLLMGateway(
+        router=router, gateways={"provider-a": _FakeTokenCountingGateway(42)}
+    )
+
+    count = await dispatcher.count_tokens(_request("fast-cheap"))
+
+    assert count == 42
+
+
+@pytest.mark.asyncio
+async def test_count_tokens_raises_clearly_when_the_resolved_gateway_cannot_count() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    dispatcher = DispatchingLLMGateway(router=router, gateways={"provider-a": EchoLLMGateway()})
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        await dispatcher.count_tokens(_request("fast-cheap"))
+
+    assert exc_info.value.error_code == "llm.capability_unsupported"
+    assert exc_info.value.retriable is False
+
+
+@pytest.mark.asyncio
+async def test_count_tokens_raises_clearly_for_an_unregistered_provider() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="unregistered-provider", model_id="x")}
+    )
+    dispatcher = DispatchingLLMGateway(
+        router=router, gateways={"provider-a": _FakeTokenCountingGateway(42)}
+    )
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        await dispatcher.count_tokens(_request("fast-cheap"))
+
+    assert exc_info.value.error_code == "llm.capability_unsupported"
+
+
+@pytest.mark.asyncio
+async def test_count_tokens_never_falls_back_to_a_different_provider() -> None:
+    # A token count is specific to the primary resolved model's own
+    # tokenizer — a fallback candidate that *can* count must never be
+    # silently substituted for a primary that cannot.
+    router = StaticRouter(
+        routes={
+            "fast-cheap": RoutingDecision(
+                provider="provider-a",
+                model_id="model-a",
+                fallback=RoutingDecision(provider="provider-b", model_id="model-b"),
+            )
+        }
+    )
+    dispatcher = DispatchingLLMGateway(
+        router=router,
+        gateways={
+            "provider-a": EchoLLMGateway(),
+            "provider-b": _FakeTokenCountingGateway(42),
+        },
+    )
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        await dispatcher.count_tokens(_request("fast-cheap"))
+
+    assert exc_info.value.error_code == "llm.capability_unsupported"

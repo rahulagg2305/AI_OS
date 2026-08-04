@@ -70,3 +70,54 @@ async def test_a_real_completion_against_the_live_anthropic_api() -> None:
     assert response.usage.cost_usd > Decimal("0")
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0
+
+
+@pytest.mark.asyncio
+async def test_a_real_token_count_against_the_live_anthropic_api() -> None:
+    """llm_gateway.md §12, P02-S02-M06-T10: a genuine, exact count from
+    Anthropic's own real ``/v1/messages/count_tokens`` endpoint — not a
+    character-length heuristic. The unit suite
+    (``tests/unit/kernel/llm_gateway/adapters/test_anthropic_adapter.py``)
+    already proves the request/response wire format against a real
+    local HTTP server; this is the one test in this tree that proves
+    the real Anthropic service itself answers this real request the
+    way this adapter assumes."""
+    config = load_provider_config(REPO_ROOT / "config" / "llm.yaml")
+    adapter = await build_anthropic_adapter(
+        secret_provider=EnvSecretProvider(),
+        api_key_secret_reference=_API_KEY_SECRET_REFERENCE,
+        router=StaticRouter(
+            routes={
+                alias: RoutingDecision(
+                    provider=config.providers.get(alias, PROVIDER_NAME), model_id=model_id
+                )
+                for alias, model_id in config.model_ids.items()
+            }
+        ),
+        pricing=config.pricing,
+    )
+    short_request = LLMRequest(
+        model_alias="fast-cheap",
+        messages=[Message(role=MessageRole.USER, content="hi")],
+        max_output_tokens=16,
+    )
+    longer_request = LLMRequest(
+        model_alias="fast-cheap",
+        messages=[
+            Message(
+                role=MessageRole.USER,
+                content="Please write several complete sentences about the ocean.",
+            )
+        ],
+        max_output_tokens=16,
+    )
+
+    short_count = await adapter.count_tokens(short_request)
+    longer_count = await adapter.count_tokens(longer_request)
+
+    assert isinstance(short_count, int)
+    assert short_count > 0
+    # A genuinely longer prompt must produce a genuinely larger real
+    # count -- the one property that would catch this silently
+    # degrading into a fixed or heuristic stand-in.
+    assert longer_count > short_count

@@ -436,6 +436,115 @@ async def test_complete_honours_a_real_retry_after_header() -> None:
     assert exc_info.value.retry_after_seconds == 7.0
 
 
+# --- AnthropicAdapter.count_tokens(): real provider endpoint (§12) --------
+
+
+class _SuccessfulCountTokensHandler(http.server.BaseHTTPRequestHandler):
+    """Serves a real, well-formed ``MessageTokensCount`` JSON body — the
+    SDK parses this exactly as it would a genuine Anthropic
+    ``/v1/messages/count_tokens`` response."""
+
+    _body = b'{"input_tokens":37}'
+
+    def do_POST(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(self._body)))
+        self.end_headers()
+        self.wfile.write(self._body)
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        pass
+
+
+@pytest.fixture
+def successful_count_tokens_server() -> Generator[str, None, None]:
+    server = http.server.HTTPServer(("127.0.0.1", 0), _SuccessfulCountTokensHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+@pytest.mark.asyncio
+async def test_count_tokens_returns_the_real_provider_reported_count(
+    successful_count_tokens_server: str,
+) -> None:
+    adapter = _adapter_against(successful_count_tokens_server)
+
+    count = await adapter.count_tokens(_request(system="be terse"))
+
+    assert count == 37
+
+
+@pytest.mark.asyncio
+async def test_count_tokens_refuses_a_routing_decision_for_a_different_provider() -> None:
+    adapter = AnthropicAdapter(
+        client=anthropic.AsyncAnthropic(api_key="unused"),
+        router=_router({"coding-balanced": "claude-sonnet-5"}, provider="openai"),
+        pricing={"claude-sonnet-5": _PRICING},
+    )
+
+    with pytest.raises(LLMProviderError, match="does not serve") as exc_info:
+        await adapter.count_tokens(_request())
+
+    assert exc_info.value.category == ErrorCategory.PERMANENT
+    assert exc_info.value.error_code == "llm.misrouted"
+    assert exc_info.value.retriable is False
+
+
+@pytest.mark.asyncio
+async def test_count_tokens_wraps_a_real_connection_failure() -> None:
+    closed_port = _unused_local_port()
+    adapter = AnthropicAdapter(
+        client=anthropic.AsyncAnthropic(
+            api_key="unused",
+            base_url=f"http://127.0.0.1:{closed_port}",
+            timeout=2.0,
+            max_retries=0,
+        ),
+        router=_router({"coding-balanced": "claude-sonnet-5"}),
+        pricing={"claude-sonnet-5": _PRICING},
+    )
+
+    with pytest.raises(LLMProviderError, match="could not reach Anthropic") as exc_info:
+        await adapter.count_tokens(_request())
+
+    assert exc_info.value.category == ErrorCategory.TRANSIENT
+    assert exc_info.value.error_code == "llm.network"
+    assert exc_info.value.retriable is True
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_category", "expected_error_code", "expected_retriable"),
+    [
+        (400, ErrorCategory.PERMANENT, "llm.invalid_request", False),
+        (401, ErrorCategory.INFRASTRUCTURE, "llm.auth_failed", False),
+        (429, ErrorCategory.TRANSIENT, "llm.rate_limited", True),
+        (500, ErrorCategory.TRANSIENT, "llm.provider_error", True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_count_tokens_classifies_real_http_error_responses(
+    status_code: int,
+    expected_category: ErrorCategory,
+    expected_error_code: str,
+    expected_retriable: bool,
+) -> None:
+    with _status_server(status_code) as base_url:
+        adapter = _adapter_against(base_url)
+
+        with pytest.raises(LLMProviderError) as exc_info:
+            await adapter.count_tokens(_request())
+
+    assert exc_info.value.category == expected_category
+    assert exc_info.value.error_code == expected_error_code
+    assert exc_info.value.retriable is expected_retriable
+
+
 # --- build_anthropic_adapter: resolves the key via SecretProvider ---------
 
 

@@ -10,12 +10,21 @@ target. The real, working ``DispatchingLLMGateway`` implements exactly
 two of them; this Protocol is exactly that shape, so the real class
 satisfies it without modification.
 
-``stream()``, ``embed()``, and ``count_tokens()`` are **not defined
-anywhere in v1.0.0** — no provider adapter implements streaming,
-embeddings, or token counting, so declaring them would ship methods
-every real adapter must raise from. Adding one later, once a real
-adapter backs it, is a **minor** SDK version bump (§8): additive for
-every existing caller.
+``stream()``, ``embed()``, and ``count_tokens()`` are **not defined on
+this Protocol in v1.0.0** — declaring one here would ship a method
+every implementation must satisfy, and not every real
+``LLMGateway``/adapter can honestly do so.
+
+**Updated 2026-08-04 (Kernel-side, `P02-S02-M06-T10`):**
+``AnthropicAdapter`` now genuinely implements token counting against
+Anthropic's own real ``/v1/messages/count_tokens`` endpoint
+(``kernel/src/ai_os_kernel/llm_gateway/adapters/anthropic_adapter.py``),
+and ``DispatchingLLMGateway.count_tokens()`` dispatches to it via a
+Kernel-local ``TokenCounter`` Protocol — but this SDK-level
+``LLMGateway`` Protocol is intentionally unchanged: adding
+``count_tokens()`` here, per §8, is still its own, separate **minor**
+SDK version bump, not implied by a Kernel-side capability existing.
+``stream()``/``embed()`` remain unbacked by any real adapter.
 """
 
 from __future__ import annotations
