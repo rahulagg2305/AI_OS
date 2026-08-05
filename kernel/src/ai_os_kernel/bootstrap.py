@@ -500,6 +500,7 @@ from ai_os_kernel.workflow_engine.registry import (
     SqlAgentRegistry,
 )
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
+from ai_os_kernel.workflow_engine.run_manifest_recorder import SqlRunManifestRecorder
 from ai_os_kernel.workflow_engine.scheduler import (
     SCHEDULER_INTERVAL_SECONDS,
     WorkflowScheduler,
@@ -1144,6 +1145,7 @@ async def build_workflow_worker_loop(engine: AsyncEngine) -> WorkflowWorkerLoop:
                     default_executor=NoOpStepExecutor(),
                 ),
                 definition_catalog=worker_loop_definition_catalog,
+                run_manifest_recorder=SqlRunManifestRecorder(engine),
             ),
             lease_service=WorkflowLeaseService(SqlWorkflowLeaseRepository(engine)),
         ),
@@ -1202,6 +1204,7 @@ def _build_workflow_trigger(
             default_executor=NoOpStepExecutor(),
         ),
         definition_catalog=SqlWorkflowDefinitionCatalog(engine),
+        run_manifest_recorder=SqlRunManifestRecorder(engine),
     )
     advance_runner = WorkflowAdvanceRunner(
         instance_service=instance_service,

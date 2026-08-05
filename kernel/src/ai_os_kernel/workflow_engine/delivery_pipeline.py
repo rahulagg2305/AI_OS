@@ -263,6 +263,7 @@ from ai_os_kernel.workflow_engine.repository import (
     SqlWorkflowInstanceRepository,
     WorkflowInstanceRepository,
 )
+from ai_os_kernel.workflow_engine.run_manifest_recorder import SqlRunManifestRecorder
 from ai_os_kernel.workflow_engine.service import WorkflowInstanceService
 from ai_os_kernel.workflow_engine.step_executor import (
     AgentStepExecutor,
@@ -629,6 +630,7 @@ def _build_pipeline_composition(
         ),
         definition_catalog=definition_catalog,
         gate_result_recorder=SqlGateResultRecorder(engine),
+        run_manifest_recorder=SqlRunManifestRecorder(engine),
     )
     advance_runner = WorkflowAdvanceRunner(
         instance_service=instance_service,

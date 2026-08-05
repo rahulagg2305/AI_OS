@@ -29,3 +29,7 @@ def new_gate_result_id() -> str:
 
 def new_approval_id() -> str:
     return f"appr_{ULID()}"
+
+
+def new_run_manifest_id() -> str:
+    return f"rm_{ULID()}"

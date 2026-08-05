@@ -27,10 +27,11 @@ from ai_os_kernel.workflow_engine.input_validation import (
     validate_principal,
     validate_reason,
 )
-from ai_os_kernel.workflow_engine.instance import WorkflowInstance
+from ai_os_kernel.workflow_engine.instance import WorkflowInstance, WorkflowInstanceStatus
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowDefinition, WorkflowStep
 from ai_os_kernel.workflow_engine.quality_gate import _latest_completed_output
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
+from ai_os_kernel.workflow_engine.run_manifest_recorder import RunManifestRecorder
 from ai_os_kernel.workflow_engine.step_executor import StepExecutor
 
 
@@ -48,11 +49,13 @@ class WorkflowInstanceService:
         step_executor: StepExecutor,
         definition_catalog: WorkflowDefinitionCatalog,
         gate_result_recorder: GateResultRecorder | None = None,
+        run_manifest_recorder: RunManifestRecorder | None = None,
     ) -> None:
         self._repository = repository
         self._step_executor = step_executor
         self._definition_catalog = definition_catalog
         self._gate_result_recorder = gate_result_recorder
+        self._run_manifest_recorder = run_manifest_recorder
 
     async def create_instance(
         self,
@@ -328,6 +331,8 @@ class WorkflowInstanceService:
             await self._maybe_record_gate_result(
                 workflow_id=workflow_id, definition=definition, step=next_step
             )
+        elif result.status is WorkflowInstanceStatus.COMPLETED:
+            await self._maybe_record_run_manifest(workflow_id=workflow_id, definition=definition)
         return result
 
     async def _maybe_record_gate_result(
@@ -364,6 +369,27 @@ class WorkflowInstanceService:
 
         await self._gate_result_recorder.record(
             workflow_id=workflow_id, gate_version=definition.version, step=step_record
+        )
+
+    async def _maybe_record_run_manifest(
+        self, *, workflow_id: str, definition: WorkflowDefinition
+    ) -> None:
+        """Called exactly once per real run, at the exact moment
+        :meth:`advance` itself just observed genuine completion
+        (``next_step is None``, the same signal :meth:`advance_workflow`
+        uses to write ``workflow_instances.status = "completed"``) —
+        every real ``workflow_steps`` row for this run now exists,
+        which is what the injected
+        :class:`~ai_os_kernel.workflow_engine.run_manifest_recorder.
+        RunManifestRecorder` needs to join against. A no-op when no
+        recorder was injected — every existing caller/test.
+        """
+        if self._run_manifest_recorder is None:
+            return
+        await self._run_manifest_recorder.record(
+            workflow_id=workflow_id,
+            definition_id=definition.id,
+            definition_version=definition.version,
         )
 
     async def _resolve_next_step(

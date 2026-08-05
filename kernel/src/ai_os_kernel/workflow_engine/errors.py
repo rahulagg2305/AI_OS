@@ -353,3 +353,13 @@ class GateResultRecordingError(Exception):
     LLMCallRecordingError` already established for its own, analogous
     writer.
     """
+
+
+class RunManifestRecordingError(Exception):
+    """An ``evaluation.run_manifests`` row could not be recorded.
+
+    The identical "wrap a persistence-layer failure with a clear
+    message, chain via ``from``" shape
+    :class:`GateResultRecordingError` already establishes for its own,
+    analogous writer.
+    """
