@@ -379,6 +379,7 @@ suggest.
 """
 
 import asyncio
+import hashlib
 import os
 import socket
 from collections.abc import AsyncIterator
@@ -389,6 +390,7 @@ from typing import Any
 
 import sqlalchemy as sa
 from fastapi import FastAPI
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.capability_manager.errors import (
@@ -456,6 +458,8 @@ from ai_os_kernel.observability import (
     run_periodic_audit_chain_verification,
 )
 from ai_os_kernel.observability.settings import ObservabilitySettings
+from ai_os_kernel.persistence.catalog_schema import agents as catalog_agents
+from ai_os_kernel.persistence.catalog_schema import prompts as catalog_prompts
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.persistence.knowledge_keyword_search import SqlKeywordSearcher
 from ai_os_kernel.persistence.memory_writer import MemoryType, SqlMemoryStore
@@ -652,6 +656,26 @@ _DEMO_WORKFLOW_STEP_ID = "ask_prompted_agent"
 _DEMO_WORKFLOW_PROMPT_ID = "platform.prompted_agent_smoke_test/greeting"
 _DEMO_WORKFLOW_PROMPT_VERSION = "1.0.0"
 _DEMO_WORKFLOW_MODEL_ALIAS = "fast-cheap"
+
+# The real content this demo prompt renders — the identical literal
+# tests/integration/test_bootstrap_workflow_trigger.py's own
+# _GREETING_TEMPLATE already uses for the same prompt id/version, so
+# this is not a fresh invention, only a second real place the same
+# real value lives.
+_DEMO_WORKFLOW_PROMPT_CONTENT = "Hello from the smoke test!"
+
+# catalog.agents/catalog.prompts real, enforced foreign keys that
+# evaluation.llm_calls.agent_id/(prompt_id, prompt_version) require
+# (persistence/evaluation_schema.py) — _PROMPTED_AGENT_ID and
+# _DEMO_WORKFLOW_PROMPT_ID/_VERSION above were never rows in either
+# table, so a real call-recorder write for this demo composition would
+# fail with a foreign-key violation right after a real LLM call already
+# succeeded. _seed_prompted_agent_catalog_rows (below) makes both real,
+# idempotently, at the same startup point that already registers this
+# agent — closing that gap rather than leaving it to surface as a
+# runtime error the first time a real completion tries to record.
+_PROMPTED_AGENT_VERSION = "0.1.0"
+_PROMPTED_AGENT_ENTRYPOINT = "ai_os_kernel.workflow_engine.prompted_agent:PromptedAgent"
 
 # Bounds for driving the demo instance to completion — a one-step
 # workflow completes in a single WorkflowAdvanceRunner.run_once() call,
@@ -919,6 +943,75 @@ def _build_router(provider_config: LLMProviderConfig) -> Router:
     )
 
 
+async def _seed_prompted_agent_catalog_rows(engine: AsyncEngine) -> None:
+    """Real, idempotent rows for the two foreign keys ``evaluation.
+    llm_calls`` enforces (``agent_id`` -> ``catalog.agents.agent_id``;
+    ``(prompt_id, prompt_version)`` -> ``catalog.prompts``' composite
+    key) — without these, the moment :data:`_PROMPTED_AGENT_ID`'s own
+    ``PromptedAgent`` genuinely completes a real call and its already-
+    wired ``SqlLLMCallRecorder`` tries to record it, the insert fails
+    with a real ``IntegrityError`` *after* that real (and, against a
+    live provider, billed) completion already succeeded — turning a
+    silent no-op (today, since :func:`~ai_os_kernel.workflow_engine.
+    step_executor.AgentStepExecutor` never supplied ``stepId``/
+    ``agentId``/``workflowId`` for the guard to even fire) into a real
+    regression the moment that gap closes.
+
+    ``ON CONFLICT ... DO NOTHING`` on both inserts: called on every real
+    startup that reaches this composition (mirroring
+    :func:`_register_and_activate_discovered_packs`'s own idempotent
+    shape), so a second and every subsequent call against the same
+    database must be a safe no-op, not a duplicate-key error.
+
+    Every value inserted is a real, already-declared fact about this
+    demo composition, not fabricated to satisfy the foreign key:
+    ``entrypoint`` names the real :class:`~ai_os_kernel.workflow_engine.
+    prompted_agent.PromptedAgent` class; ``output_schema`` is that
+    class's own real, already-declared attribute; ``content`` is the
+    identical literal :data:`_DEMO_WORKFLOW_PROMPT_CONTENT` names above,
+    also the exact template `test_bootstrap_workflow_trigger.py`'s own
+    ``_GREETING_TEMPLATE`` already renders in tests; ``content_hash`` is
+    a real ``sha256`` of that same content, computed the identical way
+    :func:`~ai_os_kernel.capability_manager.manifest_catalog_installer.
+    _register_prompt`-equivalent real writers already do. ``input_schema``
+    on both rows and ``required_permissions``/``required_tools`` on the
+    agent row have no real source — this synthetic, no-manifest
+    composition declares none — so they are stored honestly empty
+    (``{}``/``[]``), the same "no field maps to this yet" convention
+    :mod:`~ai_os_kernel.llm_gateway.call_recorder` already documents for
+    ``degradations``.
+    """
+    async with engine.begin() as connection:
+        await connection.execute(
+            pg_insert(catalog_agents)
+            .values(
+                agent_id=_PROMPTED_AGENT_ID,
+                pack_id=_DEMO_WORKFLOW_PACK_ID,
+                version=_PROMPTED_AGENT_VERSION,
+                entrypoint=_PROMPTED_AGENT_ENTRYPOINT,
+                input_schema={},
+                output_schema=PromptedAgent.output_schema,
+                required_permissions=[],
+                required_tools=[],
+            )
+            .on_conflict_do_nothing(index_elements=["agent_id"])
+        )
+        await connection.execute(
+            pg_insert(catalog_prompts)
+            .values(
+                prompt_id=_DEMO_WORKFLOW_PROMPT_ID,
+                version=_DEMO_WORKFLOW_PROMPT_VERSION,
+                pack_id=_DEMO_WORKFLOW_PACK_ID,
+                content=_DEMO_WORKFLOW_PROMPT_CONTENT,
+                input_schema={},
+                content_hash=(
+                    f"sha256:{hashlib.sha256(_DEMO_WORKFLOW_PROMPT_CONTENT.encode('utf-8')).hexdigest()}"
+                ),
+            )
+            .on_conflict_do_nothing(index_elements=["prompt_id", "version"])
+        )
+
+
 async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
     """Real Secrets Resolution + ``AnthropicAdapter`` (+ a real
     ``LocalAdapter`` when ``config/llm.yaml`` configures one) +
@@ -955,6 +1048,9 @@ async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
     only makes ``DispatchingLLMGateway.capabilities(alias)`` answerable
     for real — nothing in the completion path calls it, so this changes
     no observable request-handling behaviour for any existing caller.
+
+    **Also seeds the two real catalog rows this agent's own real call
+    recording needs** — see :func:`_seed_prompted_agent_catalog_rows`.
     """
     try:
         provider_config = load_provider_config(Path.cwd() / "config" / "llm.yaml")
@@ -997,6 +1093,19 @@ async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
         logger.warning("kernel.bootstrap.prompted_agent_unavailable", error=str(exc))
         return InMemoryAgentRegistry({})
 
+    try:
+        await _seed_prompted_agent_catalog_rows(engine)
+    except Exception as exc:
+        # A genuinely unreachable database at this exact moment must not
+        # revoke the agent registration above (the identical Stage-A-
+        # must-not-depend-on-Stage-B-being-configured reasoning this
+        # function's own outer except already applies) -- and, in
+        # every real test that intentionally never connects its engine
+        # (e.g. tests/unit/kernel/test_bootstrap.py's own fake
+        # AIOS_DATABASE_URL, documented there as "engine construction
+        # is lazy... only complete() does [real I/O]"), this is the
+        # only place that invariant would otherwise break.
+        logger.warning("kernel.bootstrap.prompted_agent_catalog_seed_failed", error=str(exc))
     agent = PromptedAgent(service=service, max_output_tokens=_PROMPTED_AGENT_MAX_OUTPUT_TOKENS)
     logger.info("kernel.bootstrap.prompted_agent_registered", agent_id=_PROMPTED_AGENT_ID)
     return InMemoryAgentRegistry({_PROMPTED_AGENT_ID: agent})

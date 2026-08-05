@@ -127,7 +127,7 @@ async def test_agent_step_executor_passes_no_inputs_when_the_step_declares_none(
 
     await executor.execute(_AGENT_STEP)
 
-    assert agent.received_inputs == {}
+    assert agent.received_inputs == {"stepId": _AGENT_STEP.id, "agentId": _AGENT_ID}
 
 
 @pytest.mark.asyncio
@@ -146,6 +146,8 @@ async def test_agent_step_executor_forwards_the_declared_invocation_fields_as_in
     await executor.execute(step)
 
     assert agent.received_inputs == {
+        "stepId": "analyze_with_prompt",
+        "agentId": _AGENT_ID,
         "promptId": "prompt_greeting",
         "promptVersion": "1.0.0",
         "modelAlias": "fast-cheap",
@@ -165,7 +167,25 @@ async def test_agent_step_executor_forwards_only_the_fields_a_step_actually_decl
 
     await executor.execute(step)
 
-    assert agent.received_inputs == {"modelAlias": "fast-cheap"}
+    assert agent.received_inputs == {
+        "stepId": "analyze_with_alias_only",
+        "agentId": _AGENT_ID,
+        "modelAlias": "fast-cheap",
+    }
+
+
+@pytest.mark.asyncio
+async def test_agent_step_executor_forwards_workflow_id_only_when_the_caller_supplies_one() -> None:
+    agent = _InputCapturingAgent()
+    executor = AgentStepExecutor(_registry_with(agent))
+
+    await executor.execute(_AGENT_STEP, workflow_id="wf_real")
+
+    assert agent.received_inputs == {
+        "stepId": _AGENT_STEP.id,
+        "agentId": _AGENT_ID,
+        "workflowId": "wf_real",
+    }
 
 
 class _FakeContextManager:
@@ -198,7 +218,8 @@ async def test_no_context_manager_configured_never_adds_a_context_key() -> None:
 
     await executor.execute(_AGENT_STEP, workflow_id="wf_1")
 
-    assert "context" not in (agent.received_inputs or {})
+    assert agent.received_inputs is not None
+    assert "context" not in agent.received_inputs
 
 
 @pytest.mark.asyncio
@@ -249,6 +270,9 @@ async def test_context_is_assembled_alongside_the_declared_invocation_fields() -
     await executor.execute(step, workflow_id="wf_1")
 
     assert agent.received_inputs == {
+        "stepId": "analyze_with_prompt",
+        "agentId": _AGENT_ID,
+        "workflowId": "wf_1",
         "promptId": "prompt_greeting",
         "promptVersion": "1.0.0",
         "modelAlias": "fast-cheap",

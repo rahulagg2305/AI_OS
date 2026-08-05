@@ -159,18 +159,39 @@ class AgentStepExecutor:
     output against that agent's declared ``output_schema``.
 
     Passes the step's declared ``promptId``/``promptVersion``/
-    ``modelAlias`` through as ``inputs`` — nothing more, still. This is
-    not a per-step input-mapping mechanism: these three fields are the
-    only ones workflow_architecture.md's Step Contract documents for an
-    agent step, and agent_architecture.md is explicit that "the
-    Workflow Engine passes them through without acting on them itself"
-    — this executor does not read, validate, or interpret their
-    values, it only forwards whichever of the three the step declared
-    (all three are optional on `WorkflowStep`; a step declaring none of
-    them still executes with an otherwise-empty ``inputs`` dict, exactly
-    as before this changed — see :mod:`ai_os_kernel.workflow_engine.agent`
-    for :class:`~ai_os_kernel.workflow_engine.agent.EchoAgent`, which
-    still ignores whatever it receives).
+    ``modelAlias`` through as ``inputs`` — this is not a per-step
+    input-mapping mechanism: these three fields are the only ones
+    workflow_architecture.md's Step Contract documents for an agent
+    step, and agent_architecture.md is explicit that "the Workflow
+    Engine passes them through without acting on them itself" — this
+    executor does not read, validate, or interpret their values, it
+    only forwards whichever of the three the step declared (all three
+    are optional on `WorkflowStep`; a step declaring none of them still
+    gets an otherwise-empty ``inputs`` dict aside from the two fields
+    below — see :mod:`ai_os_kernel.workflow_engine.agent` for
+    :class:`~ai_os_kernel.workflow_engine.agent.EchoAgent`, which
+    ignores whatever it receives).
+
+    **``stepId``/``agentId``/``workflowId`` are now also forwarded —
+    the real, disclosed gap this closes.** :class:`~ai_os_kernel.
+    workflow_engine.prompted_agent.PromptedAgent` (and every SDK-native
+    agent built on ``ai_os_pack_software_engineering``'s own pattern,
+    e.g. ``RequirementsAnalystAgentEntrypoint``) already read
+    ``inputs.get("stepId")``/``inputs.get("agentId")``/
+    ``inputs.get("workflowId")`` to build a real ``TraceContext`` for
+    call recording and budget enforcement — this executor simply never
+    supplied them, so every real agent invocation anywhere in this
+    codebase silently built a ``TraceContext`` of all-``None``, and
+    :meth:`~ai_os_kernel.prompted_completion.PromptedCompletionService.
+    complete_from_prompt`'s own call-recording guard
+    (``workflow_id is not None and step_id is not None``) never fired.
+    ``stepId``/``agentId`` come from the step itself and are always
+    forwarded (a step reaching this executor always has both); ``workflowId``
+    is forwarded only when the caller supplies one, mirroring the
+    existing ``context`` key's own gating — every caller/test that never
+    passes ``workflow_id`` (there were none before this, but a future
+    unit test constructing this executor directly still can) is
+    unaffected on that one key.
 
     **Context assembly is no longer out of scope.** When constructed
     with a real ``context_manager`` *and* called with a real
@@ -227,7 +248,9 @@ class AgentStepExecutor:
     async def _invocation_inputs(
         self, step: WorkflowStep, workflow_id: str | None
     ) -> dict[str, Any]:
-        inputs: dict[str, Any] = {}
+        inputs: dict[str, Any] = {"stepId": step.id, "agentId": step.agent_id}
+        if workflow_id is not None:
+            inputs["workflowId"] = workflow_id
         if step.prompt_id is not None:
             inputs["promptId"] = step.prompt_id
         if step.prompt_version is not None:
