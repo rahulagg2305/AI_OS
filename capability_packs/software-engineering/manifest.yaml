@@ -46,6 +46,24 @@
 # The QA/Test Agent's own entry below no longer declares a decoy
 # `modelAlias` either — the schema itself was fixed the same step to
 # require it only when an agent's own permissions declare `llm:invoke`.
+#
+# **`qualityGates:` now declares this pack's two real gate definitions
+# (2026-08-05, `P02-S06-M15-T06`)** — `se.build_lint_clean`/
+# `se.build_tests_pass`, the exact ids `workflows/delivery_pipeline.yaml`'s
+# own top-level `qualityGates:` list already referenced before this step,
+# with no real definition anywhere to back them. Each `entrypoint` points
+# at the real agent class that actually performs the check today (the
+# Lint/QA-Test Agent) — quality_gates_framework.md §4's own
+# "evaluationMethod: how the gate is evaluated," not a standalone
+# gate-evaluator class (none exists yet; Gate Executor is a separate,
+# unbuilt component, `P02-S06-M15-T07`). `successCriteria` describes the
+# one real mechanism that actually enforces these gates today
+# (`ai_os_kernel.workflow_engine.quality_gate.QualityGateStepExecutor`
+# reading the configured source step's own real `passed` field) — schema
+# only, nothing resolves/invokes this `entrypoint` yet, the identical
+# "schema only, nothing reads this column yet" precedent
+# `catalog.agents.entrypoint`/`catalog.tools.entrypoint` already
+# establish.
 
 apiVersion: ai-os/v1
 kind: CapabilityPack
@@ -245,6 +263,29 @@ workflows:
       - sandbox:execute
       - git:write
     trigger: manual
+
+qualityGates:
+  - id: se.build_lint_clean
+    name: Build Lint Clean
+    version: 0.1.0
+    description: >-
+      Static analysis (python -m py_compile) passes with zero findings
+      against the file the Build Agent wrote.
+    entrypoint: ai_os_pack_software_engineering.agents.lint:LintAgentEntrypoint
+    severity: blocking
+    successCriteria: >-
+      The source step's own real `passed` field is `True`.
+
+  - id: se.build_tests_pass
+    name: Build Tests Pass
+    version: 0.1.0
+    description: >-
+      The real test command the QA/Test Agent runs against the file
+      the Build Agent wrote exits zero, with no failures.
+    entrypoint: ai_os_pack_software_engineering.agents.verification:TestAgentEntrypoint
+    severity: blocking
+    successCriteria: >-
+      The source step's own real `passed` field is `True`.
 
 prompts:
   - id: requirements.analyze

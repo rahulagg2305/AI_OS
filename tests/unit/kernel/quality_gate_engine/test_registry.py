@@ -1,12 +1,22 @@
 """Unit tests for the Gate Registry (`P02-S06-M15-T05`) — pure logic,
 no I/O, real schema-conformant manifest fixtures (matching
 ``platform_sdk/schemas/manifest.schema.json``'s own ``qualityGates[]``
-shape exactly), not fabricated data."""
+shape exactly), not fabricated data.
+
+The final test (`P02-S06-M15-T06`) proves the real, on-disk Software
+Engineering pack manifest — loaded through the real, schema-validating
+:class:`~ai_os_kernel.manifest_loader.loader.ManifestLoader`, never a
+hand-typed fixture — resolves its two real, pack-declared gates
+(``se.build_lint_clean``/``se.build_tests_pass``) through the real Gate
+Registry."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from ai_os_kernel.manifest_loader.loader import ManifestLoader
 from ai_os_kernel.quality_gate_engine.errors import DuplicateGateIdError, GateNotRegisteredError
 from ai_os_kernel.quality_gate_engine.registry import (
     GateDefinition,
@@ -14,6 +24,10 @@ from ai_os_kernel.quality_gate_engine.registry import (
     build_gate_registry,
     derive_gate_definitions,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+SCHEMA_PATH = REPO_ROOT / "platform_sdk" / "schemas" / "manifest.schema.json"
+PACK_MANIFEST_PATH = REPO_ROOT / "capability_packs" / "software-engineering" / "manifest.yaml"
 
 _LINT_GATE = {
     "id": "se.build_lint_clean",
@@ -127,3 +141,33 @@ def test_duplicate_gate_id_across_packs_is_refused() -> None:
         build_gate_registry(
             [(manifest_one, "software-engineering"), (manifest_two, "another-pack")]
         )
+
+
+@pytest.mark.asyncio
+async def test_the_real_pack_manifests_own_declared_gates_resolve_through_the_real_registry() -> (
+    None
+):
+    # P02-S06-M15-T06's own proof: the real, on-disk Software
+    # Engineering pack manifest, loaded through the real,
+    # schema-validating ManifestLoader (never a hand-typed fixture),
+    # genuinely declares se.build_lint_clean/se.build_tests_pass --
+    # the exact ids delivery_pipeline.yaml already referenced with no
+    # real definition to back them -- and both resolve through the
+    # real Gate Registry.
+    loader = ManifestLoader(pack_dirs=[], schema_path=SCHEMA_PATH)
+    discovered = loader.load_one(PACK_MANIFEST_PATH)
+
+    registry = build_gate_registry([(discovered.raw, discovered.metadata.id)])
+
+    lint_gate = await registry.resolve_gate("se.build_lint_clean")
+    assert lint_gate.pack_id == "software-engineering"
+    assert lint_gate.severity == "blocking"
+    assert lint_gate.entrypoint == "ai_os_pack_software_engineering.agents.lint:LintAgentEntrypoint"
+
+    tests_gate = await registry.resolve_gate("se.build_tests_pass")
+    assert tests_gate.pack_id == "software-engineering"
+    assert tests_gate.severity == "blocking"
+    assert (
+        tests_gate.entrypoint
+        == "ai_os_pack_software_engineering.agents.verification:TestAgentEntrypoint"
+    )
