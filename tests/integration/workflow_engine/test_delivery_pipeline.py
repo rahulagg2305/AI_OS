@@ -567,6 +567,21 @@ async def test_all_six_agent_steps_and_both_gates_genuinely_chain_through_real_p
         assert lint_gate_outputs is not None
         assert lint_gate_outputs["passed"] is True
 
+        # P02-S06-M15-T09's own real proof: this real, production-wired
+        # QualityGateStepExecutor (via _build_pipeline_composition's own
+        # real gate_registry/gate_ids) now genuinely resolves both real
+        # gates through the real Gate Registry -- real, manifest-declared
+        # gateId/gateVersion, not the workflow-local step id, while the
+        # pass/fail outcome above is completely unchanged.
+        tests_gate_outputs = next(
+            s.outputs for s in steps if s.step_name == "quality-gate-tests-pass"
+        )
+        assert tests_gate_outputs is not None
+        assert lint_gate_outputs["gateId"] == "se.build_lint_clean"
+        assert lint_gate_outputs["gateVersion"] == "0.1.0"
+        assert tests_gate_outputs["gateId"] == "se.build_tests_pass"
+        assert tests_gate_outputs["gateVersion"] == "0.1.0"
+
         # The real proof this feature step exists for: both real,
         # passing gates each genuinely wrote their own
         # evaluation.gate_results row — the Evaluation Engine's first

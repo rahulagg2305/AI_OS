@@ -46,6 +46,31 @@ is still genuinely data-driven (no pack id, no agent id, no threshold
 baked in here) rather than the full Gate Contract's
 ``evaluationMethod``/``successCriteria`` machinery, which needs a real
 Gate Registry this step does not build.
+
+**The real Gate Registry now optionally cross-wires in (``P02-S06-M15-T09``)
+— genuinely resolving each step's real, manifest-declared ``gateId``,
+never changing the real, currently-working enforcement decision.**
+``gate_registry``/``gate_ids`` (both ``None`` by default — every
+existing caller/test unaffected) let a composition supply a real
+:class:`~ai_os_kernel.quality_gate_engine.registry.GateRegistry` plus
+the identical composition-level ``{workflow_step_id: real gateId}``
+mapping shape ``gate_sources`` above already establishes, for the same
+"cross-step reference belongs in the composition layer" reason —
+``WorkflowStep`` has no field of its own linking a step to a
+pack-declared gate id either. When both are supplied for a step, this
+executor resolves the real definition and uses its real ``id``/
+``version`` in the returned output (``gateId``/``gateVersion``) instead
+of the workflow-local step id — genuinely richer, real data, not
+fabricated. **The pass/fail decision itself is completely unchanged**:
+it still comes from the identical ``source_output.get(success_field)``
+check below, regardless of whether a registry resolved anything. The
+one real, new failure mode this can introduce —
+:class:`~ai_os_kernel.workflow_engine.errors.UnsupportedGateSeverityError`
+— fires only if a resolved gate ever declares ``severity="warning"``,
+which this executor cannot yet honour (no Policy Enforcer,
+``P02-S06-M15-T07``, exists to distinguish blocking from warning); both
+of the one real pack's own declared gates are ``severity="blocking"``
+today, so this never fires for `se.delivery_pipeline`'s own real runs.
 """
 
 from __future__ import annotations
@@ -53,7 +78,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from ai_os_kernel.workflow_engine.errors import QualityGateFailedError
+from ai_os_kernel.quality_gate_engine.registry import GateRegistry
+from ai_os_kernel.workflow_engine.errors import QualityGateFailedError, UnsupportedGateSeverityError
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
@@ -112,10 +138,14 @@ class QualityGateStepExecutor:
         *,
         gate_sources: Mapping[str, str],
         success_field: str = "passed",
+        gate_registry: GateRegistry | None = None,
+        gate_ids: Mapping[str, str] | None = None,
     ) -> None:
         self._repository = repository
         self._gate_sources = dict(gate_sources)
         self._success_field = success_field
+        self._gate_registry = gate_registry
+        self._gate_ids = dict(gate_ids or {})
 
     async def execute(
         self,
@@ -139,6 +169,20 @@ class QualityGateStepExecutor:
                 "its source step's persisted output"
             )
 
+        gate_id: str = step.id
+        gate_version: str | None = None
+        real_gate_id = self._gate_ids.get(step.id)
+        if self._gate_registry is not None and real_gate_id is not None:
+            definition = await self._gate_registry.resolve_gate(real_gate_id)
+            if definition.severity != "blocking":
+                raise UnsupportedGateSeverityError(
+                    f"gate '{definition.id}' (step '{step.id}') declares "
+                    f"severity={definition.severity!r} — this executor only "
+                    "enforces blocking severity today"
+                )
+            gate_id = definition.id
+            gate_version = definition.version
+
         steps = await self._repository.list_steps(workflow_id)
         source_output = _latest_completed_output(steps, source_step_id)
         if source_output is None:
@@ -157,4 +201,11 @@ class QualityGateStepExecutor:
                 gate_step_id=step.id,
             )
 
-        return {"gateId": step.id, "sourceStepId": source_step_id, self._success_field: True}
+        outputs: dict[str, Any] = {
+            "gateId": gate_id,
+            "sourceStepId": source_step_id,
+            self._success_field: True,
+        }
+        if gate_version is not None:
+            outputs["gateVersion"] = gate_version
+        return outputs

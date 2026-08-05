@@ -240,6 +240,8 @@ from ai_os_kernel.context_manager.resolvers import (
     WorkflowStateResolver,
     WorkflowStepOutputResolver,
 )
+from ai_os_kernel.manifest_loader.loader import ManifestLoader
+from ai_os_kernel.quality_gate_engine.registry import GateRegistry, build_gate_registry
 from ai_os_kernel.sandbox.default_executor import default_python_command
 from ai_os_kernel.workflow_engine.advance_runner import (
     WorkflowAdvanceRunner,
@@ -324,6 +326,38 @@ _GATE_SOURCES: dict[str, str] = {
     "quality-gate-lint-clean": "lint",
     "quality-gate-tests-pass": "test",
 }
+
+# Which real, manifest-declared gateId (capability_packs/software-engineering/
+# manifest.yaml's own qualityGates[]) each real quality_gate workflow step
+# resolves to (P02-S06-M15-T09) -- a genuinely separate id space from
+# `_GATE_SOURCES` above (workflow-step-id -> source-step-id): `WorkflowStep`
+# has no field of its own linking a step to a pack-declared gate id (the
+# identical "cross-step reference belongs in the composition layer" reasoning
+# `_GATE_SOURCES` itself already establishes, applied to this second,
+# distinct question). `manifest.yaml`'s own comment on its `qualityGates:`
+# section confirms these are the exact, pre-existing ids
+# delivery_pipeline.yaml's own top-level `qualityGates:` list already named.
+_GATE_IDS: dict[str, str] = {
+    "quality-gate-lint-clean": "se.build_lint_clean",
+    "quality-gate-tests-pass": "se.build_tests_pass",
+}
+
+_MANIFEST_PATH = Path("capability_packs") / "software-engineering" / "manifest.yaml"
+_MANIFEST_SCHEMA_PATH = Path("platform_sdk") / "schemas" / "manifest.schema.json"
+
+
+def _build_gate_registry() -> GateRegistry:
+    """Builds the real Gate Registry from the pack's own real,
+    schema-validated manifest (``P02-S06-M15-T05``/``T06``) — loaded
+    fresh via the real :class:`~ai_os_kernel.manifest_loader.loader.
+    ManifestLoader`, the identical "cheap to construct a second one"
+    reasoning ``kernel/bootstrap.py``'s own ``_build_configuration_manager``
+    already establishes, rather than threading a shared instance through
+    from wherever pack discovery happens to run."""
+    loader = ManifestLoader(pack_dirs=[], schema_path=_MANIFEST_SCHEMA_PATH)
+    discovered = loader.load_one(_MANIFEST_PATH)
+    return build_gate_registry([(discovered.raw, discovered.metadata.id)])
+
 
 # Bounded step retry (added 2026-07-30; widened the same day beyond
 # the two quality gates to `build` itself) — the same composition-level
@@ -580,7 +614,12 @@ def _build_pipeline_composition(
             agent_executor=AgentStepExecutor(agent_registry, context_manager=context_manager),
             tool_executor=ToolStepExecutor(InMemoryToolRegistry({})),
             default_executor=NoOpStepExecutor(),
-            quality_gate_executor=QualityGateStepExecutor(repository, gate_sources=_GATE_SOURCES),
+            quality_gate_executor=QualityGateStepExecutor(
+                repository,
+                gate_sources=_GATE_SOURCES,
+                gate_registry=_build_gate_registry(),
+                gate_ids=_GATE_IDS,
+            ),
             decision_executor=DecisionStepExecutor(repository),
             human_approval_executor=HumanApprovalStepExecutor(
                 approval_repository=SqlApprovalRepository(engine),
