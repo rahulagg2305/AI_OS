@@ -185,7 +185,10 @@ agent_architecture.md's Invocation Lifecycle places it.**
 ``_lifespan`` constructs a
 :class:`~ai_os_kernel.context_manager.manager.DefaultContextManager`
 with one real resolver
-(:class:`~ai_os_kernel.context_manager.resolvers.WorkflowStateResolver`),
+(:class:`~ai_os_kernel.context_manager.resolvers.WorkflowStateResolver`,
+joined as of ``P02-S03-M08-T11`` by
+:class:`~ai_os_kernel.context_manager.resolvers.RuntimeConfigResolver`
+— see that ticket's own note below for why),
 attaches it to ``app.state.context_manager`` (the same "reachable
 independently of any one closure" reasoning
 ``app.state.workflow_instance_repository`` already established), and
@@ -328,6 +331,34 @@ Paths to configuration files, the manifest schema, and pack directories
 are resolved relative to the current working directory — every
 documented way of running the Kernel (``uv run uvicorn ...``, the
 Docker image, Kubernetes) starts the process from the repository root.
+
+**``RuntimeConfigResolver`` now reaches a real production composition
+too (``P02-S03-M08-T11``) — the first of the four resolvers built
+disclosed as "not yet wired into any production composition" to close
+that gap.** No roadmap ticket named this wiring before this step (found
+by regenerating ``STATUS.md`` fresh and sweeping every ``todo`` ticket
+tree-wide for a match); a new, minimal ticket was authored for it with
+explicit product-owner sign-off, rather than guessing an existing
+ticket's scope. Both real compositions that build a
+:class:`~ai_os_kernel.context_manager.manager.DefaultContextManager` —
+``_lifespan`` (the ``api`` role) and :func:`build_workflow_worker_loop`
+(the ``worker`` role) — now also construct a real
+:class:`~ai_os_kernel.configuration_manager.loader.ConfigurationManager`/
+:class:`~ai_os_kernel.configuration_manager.runtime_overrides.RuntimeOverrideStore`
+pair (:func:`_build_configuration_manager`, factored out of
+:func:`load_configuration` unchanged) and add a
+:class:`~ai_os_kernel.context_manager.resolvers.RuntimeConfigResolver`
+reading ``_RUNTIME_CONTEXT_CONFIG_KEYS`` (``env``/``role``/``log_level``
+— real, meaningful-to-an-agent fields, not the test-only
+``*_interval_seconds`` override knobs) alongside the pre-existing
+``WorkflowStateResolver``. This is also the first production composition
+to keep a live ``RuntimeOverrideStore`` running at all — previously a
+fully-built, fully-tested Layer 5 with zero real callers. Every
+existing test/composition that never touches
+``app.state.configuration_manager``/``app.state.runtime_override_store``
+sees no behaviour change; the one real agent step now additionally
+receives real runtime configuration in its assembled context, alongside
+the workflow's own declared ``inputs``.
 """
 
 import asyncio
@@ -358,9 +389,14 @@ from ai_os_kernel.capability_manager.repository import (
     PackLifecycleRepository,
     SqlPackLifecycleRepository,
 )
-from ai_os_kernel.configuration_manager import BootstrapEnv, ConfigurationManager, PlatformConfig
+from ai_os_kernel.configuration_manager import (
+    BootstrapEnv,
+    ConfigurationManager,
+    PlatformConfig,
+    RuntimeOverrideStore,
+)
 from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextManager
-from ai_os_kernel.context_manager.resolvers import WorkflowStateResolver
+from ai_os_kernel.context_manager.resolvers import RuntimeConfigResolver, WorkflowStateResolver
 from ai_os_kernel.git_integration.default_service import build_git_integration_service_from_env
 from ai_os_kernel.health import ComponentStatus, GracefulShutdownCoordinator, HealthService
 from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
@@ -501,6 +537,14 @@ _PROMPTED_AGENT_MAX_OUTPUT_TOKENS = 1024
 # would need to be unusually large before this ceiling ever excludes it.
 _CONTEXT_TOKEN_BUDGET = 8000
 
+# RuntimeConfigResolver's own config_keys parameter (P02-S03-M08-T07's
+# module docstring: "no guessing a typo'd name" -- validated against
+# PlatformConfig.model_fields at construction). These three are real,
+# meaningful-to-an-agent-step fields, not test-only override knobs (the
+# *_interval_seconds fields exist purely to let a test skip a real
+# production wait -- see PlatformConfig's own docstring for each).
+_RUNTIME_CONTEXT_CONFIG_KEYS: tuple[str, ...] = ("env", "role", "log_level")
+
 # The Retry & Fallback Manager's Circuit Breaker (llm_gateway.md §10)
 # needs a consecutive-failure threshold and a half-open reset timer;
 # §10 names neither number, so these are the identical "named,
@@ -598,6 +642,20 @@ def _build_demo_workflow_definition() -> WorkflowDefinition:
     )
 
 
+def _build_configuration_manager(environment: str) -> ConfigurationManager:
+    """The identical construction :func:`load_configuration` below uses,
+    factored out so a caller needing a *persistent* instance
+    (:class:`~ai_os_kernel.context_manager.resolvers.RuntimeConfigResolver`
+    calls ``.load()`` again on every real request, per that class's own
+    docstring) does not duplicate the three real path arguments."""
+    repo_root = Path.cwd()
+    return ConfigurationManager(
+        environment=environment,
+        platform_config_path=repo_root / "config" / "platform.yaml",
+        environments_dir=repo_root / "infra" / "environments",
+    )
+
+
 def load_configuration() -> PlatformConfig:
     """Loads real, ``AIOS_``-env-driven configuration — the identical
     construction :func:`build_app` (the ``api`` role) already used
@@ -607,13 +665,8 @@ def load_configuration() -> PlatformConfig:
     from (``P01-S01-M40-T05``). Public for exactly that reason — every
     other ``_build_*`` helper in this module stays private, since only
     this module's own functions call them."""
-    repo_root = Path.cwd()
     bootstrap_env = BootstrapEnv()
-    manager = ConfigurationManager(
-        environment=bootstrap_env.env,
-        platform_config_path=repo_root / "config" / "platform.yaml",
-        environments_dir=repo_root / "infra" / "environments",
-    )
+    manager = _build_configuration_manager(bootstrap_env.env)
     return manager.load(role=bootstrap_env.role)
 
 
@@ -928,10 +981,26 @@ async def build_workflow_worker_loop(engine: AsyncEngine) -> WorkflowWorkerLoop:
     threading and real quality_gate/decision/human_approval executors
     this loop was never given; the approvals route's own synchronous
     resume is the sole safe resumption path for it).
+
+    **``RuntimeConfigResolver`` (``P02-S03-M08-T11``) now rides alongside
+    ``WorkflowStateResolver`` here too**, the identical "cheap to
+    construct a second one" reasoning above already covers a second,
+    independent ``ConfigurationManager``/``RuntimeOverrideStore`` pair —
+    real, live runtime configuration is now part of every agent step's
+    real, assembled context, not only reachable from an isolated test.
     """
     agent_registry = await _build_prompted_agent_registry(engine)
+    config = load_configuration()
     context_manager = DefaultContextManager(
-        resolvers=[WorkflowStateResolver(SqlWorkflowInstanceRepository(engine))],
+        resolvers=[
+            WorkflowStateResolver(SqlWorkflowInstanceRepository(engine)),
+            RuntimeConfigResolver(
+                configuration_manager=_build_configuration_manager(config.env),
+                runtime_override_store=RuntimeOverrideStore(),
+                role=config.role,
+                config_keys=_RUNTIME_CONTEXT_CONFIG_KEYS,
+            ),
+        ],
         default_token_budget=_CONTEXT_TOKEN_BUDGET,
     )
     worker_loop_definition_catalog = SqlWorkflowDefinitionCatalog(engine)
@@ -1368,8 +1437,30 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # wrapper over the engine, safe to construct separately"
         # reasoning workflow_instance_repository below already
         # establishes.
+        # RuntimeConfigResolver's own real, persistent collaborators
+        # (P02-S03-M08-T11) -- kept alive on app.state, the identical
+        # "reachable independently of any one closure" reasoning
+        # app.state.context_manager itself already establishes, since
+        # RuntimeConfigResolver.resolve() calls .load() again on every
+        # real request (never a value cached once here). Environment
+        # comes from a fresh BootstrapEnv() read, the identical real,
+        # AIOS_-env-var-driven source load_configuration() itself uses
+        # -- not app.state.config.env, which a caller supplying its own
+        # PlatformConfig (build_app(config=...), every test in this
+        # suite) may have set to a value ConfigurationManager's own
+        # closed environment vocabulary does not recognise.
+        app.state.configuration_manager = _build_configuration_manager(BootstrapEnv().env)
+        app.state.runtime_override_store = RuntimeOverrideStore()
         app.state.context_manager = DefaultContextManager(
-            resolvers=[WorkflowStateResolver(SqlWorkflowInstanceRepository(engine))],
+            resolvers=[
+                WorkflowStateResolver(SqlWorkflowInstanceRepository(engine)),
+                RuntimeConfigResolver(
+                    configuration_manager=app.state.configuration_manager,
+                    runtime_override_store=app.state.runtime_override_store,
+                    role=app.state.config.role,
+                    config_keys=_RUNTIME_CONTEXT_CONFIG_KEYS,
+                ),
+            ],
             default_token_budget=_CONTEXT_TOKEN_BUDGET,
         )
         app.state.trigger_prompted_agent_workflow = _build_workflow_trigger(

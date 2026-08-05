@@ -23,7 +23,7 @@ from ai_os_kernel.bootstrap import build_app
 from ai_os_kernel.capability_manager.repository import SqlPackLifecycleRepository
 from ai_os_kernel.configuration_manager import PlatformConfig
 from ai_os_kernel.context_manager.manager import DefaultContextManager
-from ai_os_kernel.context_manager.resolvers import WorkflowStateResolver
+from ai_os_kernel.context_manager.resolvers import RuntimeConfigResolver, WorkflowStateResolver
 from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
 from ai_os_kernel.llm_gateway.budget_enforcer import PerScopeBudgetEnforcer
 from ai_os_kernel.llm_gateway.capability_negotiator import StaticCapabilityNegotiator
@@ -211,6 +211,9 @@ def test_the_real_composition_root_wires_a_real_context_manager_with_a_token_bud
 
     assert isinstance(context_manager, DefaultContextManager)
     assert isinstance(context_manager._resolvers[0], WorkflowStateResolver)
+    # P02-S03-M08-T11: RuntimeConfigResolver now rides alongside it in
+    # the real production composition -- previously wired nowhere.
+    assert isinstance(context_manager._resolvers[1], RuntimeConfigResolver)
     assert context_manager._default_token_budget is not None
     assert context_manager._default_token_budget > 0
 

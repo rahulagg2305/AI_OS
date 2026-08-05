@@ -32,10 +32,12 @@ from ai_os_kernel.bootstrap import (
     _DEMO_WORKFLOW_PROMPT_ID,
     _DEMO_WORKFLOW_PROMPT_VERSION,
     _PROMPTED_AGENT_ID,
+    _RUNTIME_CONTEXT_CONFIG_KEYS,
     _build_workflow_trigger,
 )
+from ai_os_kernel.configuration_manager import ConfigurationManager, RuntimeOverrideStore
 from ai_os_kernel.context_manager.manager import DefaultContextManager
-from ai_os_kernel.context_manager.resolvers import WorkflowStateResolver
+from ai_os_kernel.context_manager.resolvers import RuntimeConfigResolver, WorkflowStateResolver
 from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
@@ -131,6 +133,32 @@ def test_the_demo_workflow_fails_clearly_when_the_agent_is_not_registered(
     asyncio.run(_run())
 
 
+def _context_manager_with_runtime_config(engine: AsyncEngine) -> DefaultContextManager:
+    # The real, production-shaped composition P02-S03-M08-T11 adds to
+    # _lifespan/build_workflow_worker_loop -- a real ConfigurationManager
+    # against this repo's own real config/platform.yaml + a real,
+    # valid environment file (infra/environments/local.yaml), not a
+    # tmp_path fixture, proving the production wiring itself, not just
+    # RuntimeConfigResolver in isolation (already proven in
+    # tests/unit/kernel/context_manager/test_runtime_config_resolver.py).
+    configuration_manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=REPO_ROOT / "config" / "platform.yaml",
+        environments_dir=REPO_ROOT / "infra" / "environments",
+    )
+    return DefaultContextManager(
+        resolvers=[
+            WorkflowStateResolver(SqlWorkflowInstanceRepository(engine)),
+            RuntimeConfigResolver(
+                configuration_manager=configuration_manager,
+                runtime_override_store=RuntimeOverrideStore(),
+                role="api",
+                config_keys=_RUNTIME_CONTEXT_CONFIG_KEYS,
+            ),
+        ],
+    )
+
+
 def _context_aware_agent_registry() -> InMemoryAgentRegistry:
     prompt_engine = InMemoryPromptEngine(
         {(_DEMO_WORKFLOW_PROMPT_ID, _DEMO_WORKFLOW_PROMPT_VERSION): "Task: {{context}}"}
@@ -163,6 +191,44 @@ def test_the_demo_workflow_agent_receives_real_assembled_context_from_a_real_dat
             outputs = steps[0].outputs
             assert outputs is not None
             assert '"task": "write tests"' in outputs["content"]
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_runtime_config_flows_into_a_real_agent_step_via_the_production_wiring(
+    database_url: str,
+) -> None:
+    # P02-S03-M08-T11's own proof: the same real DefaultContextManager
+    # shape _lifespan/build_workflow_worker_loop now construct in
+    # production (WorkflowStateResolver + RuntimeConfigResolver
+    # together) genuinely puts real runtime configuration into a real
+    # agent's rendered prompt, through the real _build_workflow_trigger
+    # path -- not RuntimeConfigResolver exercised standalone.
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            trigger = _build_workflow_trigger(
+                engine,
+                _context_aware_agent_registry(),
+                _context_manager_with_runtime_config(engine),
+            )
+
+            result = await trigger({"task": "write tests"}, "test-principal")
+
+            assert result.outcome is WorkflowRunOutcome.COMPLETED
+            steps = await SqlWorkflowInstanceRepository(engine).list_steps(result.workflow_id)
+            assert len(steps) == 1
+            outputs = steps[0].outputs
+            assert outputs is not None
+            content = outputs["content"]
+            # Both real sources present in one real, assembled context:
+            # the workflow's own inputs (WorkflowStateResolver, proven
+            # already above) and now real runtime configuration too.
+            assert '"task": "write tests"' in content
+            assert 'env: "local"' in content
+            assert 'role: "api"' in content
         finally:
             await engine.dispose()
 
