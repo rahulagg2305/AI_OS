@@ -391,12 +391,17 @@ from ai_os_kernel.capability_manager.repository import (
 )
 from ai_os_kernel.configuration_manager import (
     BootstrapEnv,
+    ConfigurationError,
     ConfigurationManager,
     PlatformConfig,
     RuntimeOverrideStore,
 )
 from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextManager
-from ai_os_kernel.context_manager.resolvers import RuntimeConfigResolver, WorkflowStateResolver
+from ai_os_kernel.context_manager.resolvers import (
+    ContextSourceResolver,
+    RuntimeConfigResolver,
+    WorkflowStateResolver,
+)
 from ai_os_kernel.git_integration.default_service import build_git_integration_service_from_env
 from ai_os_kernel.health import ComponentStatus, GracefulShutdownCoordinator, HealthService
 from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
@@ -988,19 +993,28 @@ async def build_workflow_worker_loop(engine: AsyncEngine) -> WorkflowWorkerLoop:
     independent ``ConfigurationManager``/``RuntimeOverrideStore`` pair —
     real, live runtime configuration is now part of every agent step's
     real, assembled context, not only reachable from an isolated test.
+    Degrades gracefully, the identical reasoning ``_lifespan``'s own
+    construction applies, when ``BootstrapEnv().env`` is not one of
+    ConfigurationManager's real, documented environments.
     """
     agent_registry = await _build_prompted_agent_registry(engine)
-    config = load_configuration()
-    context_manager = DefaultContextManager(
-        resolvers=[
-            WorkflowStateResolver(SqlWorkflowInstanceRepository(engine)),
+    bootstrap_env = BootstrapEnv()
+    context_resolvers: list[ContextSourceResolver] = [
+        WorkflowStateResolver(SqlWorkflowInstanceRepository(engine))
+    ]
+    try:
+        context_resolvers.append(
             RuntimeConfigResolver(
-                configuration_manager=_build_configuration_manager(config.env),
+                configuration_manager=_build_configuration_manager(bootstrap_env.env),
                 runtime_override_store=RuntimeOverrideStore(),
-                role=config.role,
+                role=bootstrap_env.role,
                 config_keys=_RUNTIME_CONTEXT_CONFIG_KEYS,
-            ),
-        ],
+            )
+        )
+    except ConfigurationError as exc:
+        logger.warning("kernel.bootstrap.runtime_config_resolver_unavailable", error=str(exc))
+    context_manager = DefaultContextManager(
+        resolvers=context_resolvers,
         default_token_budget=_CONTEXT_TOKEN_BUDGET,
     )
     worker_loop_definition_catalog = SqlWorkflowDefinitionCatalog(engine)
@@ -1438,29 +1452,43 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # reasoning workflow_instance_repository below already
         # establishes.
         # RuntimeConfigResolver's own real, persistent collaborators
-        # (P02-S03-M08-T11) -- kept alive on app.state, the identical
-        # "reachable independently of any one closure" reasoning
-        # app.state.context_manager itself already establishes, since
-        # RuntimeConfigResolver.resolve() calls .load() again on every
-        # real request (never a value cached once here). Environment
-        # comes from a fresh BootstrapEnv() read, the identical real,
-        # AIOS_-env-var-driven source load_configuration() itself uses
-        # -- not app.state.config.env, which a caller supplying its own
-        # PlatformConfig (build_app(config=...), every test in this
-        # suite) may have set to a value ConfigurationManager's own
-        # closed environment vocabulary does not recognise.
-        app.state.configuration_manager = _build_configuration_manager(BootstrapEnv().env)
-        app.state.runtime_override_store = RuntimeOverrideStore()
-        app.state.context_manager = DefaultContextManager(
-            resolvers=[
-                WorkflowStateResolver(SqlWorkflowInstanceRepository(engine)),
+        # (P02-S03-M08-T11) -- kept alive on app.state when available,
+        # the identical "reachable independently of any one closure"
+        # reasoning app.state.context_manager itself already
+        # establishes, since RuntimeConfigResolver.resolve() calls
+        # .load() again on every real request (never a value cached
+        # once here). Environment comes from a fresh BootstrapEnv()
+        # read, the identical real, AIOS_-env-var-driven source
+        # load_configuration() itself uses -- not app.state.config.env,
+        # which a caller supplying its own PlatformConfig
+        # (build_app(config=...), every test in this suite) may have
+        # set to a value ConfigurationManager's own closed environment
+        # vocabulary does not recognise. Degrades gracefully -- the
+        # identical "catch, report, don't crash the process" shape
+        # _build_token_verifier above already uses -- rather than
+        # crash Kernel startup: deployment_architecture.md §4 names
+        # exactly four real deployment environments
+        # (local/dev/staging/production), and this repository's own CI
+        # workflow sets AIOS_ENV=ci, an identity never meant to satisfy
+        # that closed, documented vocabulary.
+        context_resolvers: list[ContextSourceResolver] = [
+            WorkflowStateResolver(SqlWorkflowInstanceRepository(engine))
+        ]
+        try:
+            app.state.configuration_manager = _build_configuration_manager(BootstrapEnv().env)
+            app.state.runtime_override_store = RuntimeOverrideStore()
+            context_resolvers.append(
                 RuntimeConfigResolver(
                     configuration_manager=app.state.configuration_manager,
                     runtime_override_store=app.state.runtime_override_store,
                     role=app.state.config.role,
                     config_keys=_RUNTIME_CONTEXT_CONFIG_KEYS,
-                ),
-            ],
+                )
+            )
+        except ConfigurationError as exc:
+            logger.warning("kernel.bootstrap.runtime_config_resolver_unavailable", error=str(exc))
+        app.state.context_manager = DefaultContextManager(
+            resolvers=context_resolvers,
             default_token_budget=_CONTEXT_TOKEN_BUDGET,
         )
         app.state.trigger_prompted_agent_workflow = _build_workflow_trigger(

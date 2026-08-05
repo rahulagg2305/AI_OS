@@ -204,6 +204,13 @@ def test_the_real_composition_root_wires_a_real_context_manager_with_a_token_bud
 ) -> None:
     monkeypatch.setenv("AIOS_DATABASE_URL", "postgresql+asyncpg://fake:fake@127.0.0.1:1/fake")
     monkeypatch.setenv("AIOS_SECRET_LLM_ANTHROPIC_API_KEY", "test-key-value")
+    # RuntimeConfigResolver's own wiring (below) resolves a real
+    # ConfigurationManager off a fresh BootstrapEnv() read -- this
+    # suite's own CI workflow sets the real AIOS_ENV to "ci", not one
+    # of ConfigurationManager's real, documented environments, so this
+    # assertion pins a real, valid one deterministically rather than
+    # depending on whatever the ambient shell happens to have.
+    monkeypatch.setenv("AIOS_ENV", "local")
     app = build_app(_config())
 
     with TestClient(app):
