@@ -1,23 +1,63 @@
 """Source Resolvers (context_manager.md §4) — the components that each
 know how to pull items from exactly one source.
 
-**Four real resolvers now: Workflow State, Knowledge (``P02-S03-M08-T05``),
-Memory (``P02-S03-M08-T06``), and, as of ``P02-S03-M08-T08``, Runtime
-Configuration.** context_manager.md §3 lists six sources an assembly
-may draw on: Workflow State, Knowledge Manager, Memory Manager, AI
-Context Packs, Runtime Configuration, and User-provided inputs.
-Workflow State was the first real one —
+**All six documented sources are now real: Workflow State, Knowledge
+(``P02-S03-M08-T05``), Memory (``P02-S03-M08-T06``), Runtime
+Configuration (``P02-S03-M08-T08``), and, as of ``P02-S03-M08-T07``,
+AI Context Packs.** context_manager.md §3 lists six sources an
+assembly may draw on: Workflow State, Knowledge Manager, Memory
+Manager, AI Context Packs, Runtime Configuration, and User-provided
+inputs. Workflow State was the first real one —
 :class:`~ai_os_kernel.workflow_engine.repository.WorkflowInstanceRepository`,
 already built and already real. :class:`KnowledgeResolver` calls the
 real :class:`~ai_os_kernel.knowledge_manager.query_engine.QueryEngine`
 (``P02-S04-M09-T04``). :class:`MemoryResolver` calls the real
 :class:`~ai_os_kernel.persistence.memory_writer.MemoryStore`
-(``P02-S04-M10-T01``). :class:`RuntimeConfigResolver` (below) calls the
+(``P02-S04-M10-T01``). :class:`RuntimeConfigResolver` calls the
 real :class:`~ai_os_kernel.configuration_manager.loader.
-ConfigurationManager` (``P01-S02-M01-T04``) — the first Context Manager
-consumer that layered configuration resolver has had. AI Context Packs
-remain an entirely unbuilt Kernel component (kernel_architecture.md's
-own component list) — the last of the six documented sources.
+ConfigurationManager` (``P01-S02-M01-T04``).
+
+**``AIContextPackResolver`` (below) is real, disclosed-narrow logic
+against a documented-but-currently-empty real structure — not a
+built-ahead-of-need fabrication.** ``docs/ai_context/
+context_pack_structure.md`` §3/§4 fully specifies a real directory
+layout (``<category>/<pack_name>/manifest.yaml`` plus numbered content
+files) and real manifest fields (``id``/``name``/``version``/``type``/
+``description``/``applies_to``/``priority``) — the gap this ticket
+faced was never missing documentation (contrast
+``P02-S04-M10-T03``'s Promotion Logic, which found no documented
+shape at all and was correctly left ``blocked``); it is that the real
+``ai_context/`` directory itself is absent from a fresh clone (that
+document's own words: "Built: nothing... absent from a fresh clone"),
+and CLAUDE.md's own standing rule forbids creating a planned folder
+speculatively. This resolver never creates or assumes that directory
+exists — ``base_dir`` is a real, constructor-injected path (mirroring
+:class:`~ai_os_kernel.configuration_manager.loader.
+ConfigurationManager`'s own ``platform_config_path``/
+``environments_dir`` injection), and a missing directory, missing
+``manifest.yaml``, or missing individual content file all resolve to
+"no such pack"/"no such section," never an error — the identical
+"an unresolvable source contributing nothing is not a failure" shape
+every other resolver in this module already establishes. Proven
+against real files written to a real ``tmp_path`` directory — real
+file I/O against the real documented format, the identical precedent
+``test_loader.py`` already uses for ``ConfigurationManager``'s own
+not-yet-populated YAML files — never the actual repository
+``ai_context/`` directory. ``pack_references`` is a real constructor
+parameter (mirroring ``RuntimeConfigResolver``'s own ``config_keys``):
+automatic, ``applies_to``-based pack selection is deliberately out of
+scope — a caller names exactly which packs it wants.
+
+**``relevance_score`` reads the pack's own real, manifest-declared
+``priority`` — a real authored signal, not a constant.** A pack with no
+declared ``priority`` gets ``0.0``, the identical "no signal recorded
+is honestly zero relevance" default :class:`MemoryResolver` already
+establishes for an unset ``quality_signal``. ``id``/``version`` are
+required, not optional-with-an-invented-default: §7 of that same
+document states "every context pack must have a version," and ``id``
+is a pack's own primary identity — a manifest missing either is
+malformed input, not a sparse-but-valid one, so both are validated,
+not guessed.
 
 **``RuntimeConfigResolver`` re-resolves configuration fresh on every
 ``resolve()`` call, including the live ``RuntimeOverrideStore``
@@ -97,7 +137,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
+
+import yaml
 
 from ai_os_kernel.configuration_manager.loader import ConfigurationManager
 from ai_os_kernel.configuration_manager.models import PlatformConfig
@@ -408,6 +451,101 @@ class RuntimeConfigResolver:
                     # -- the identical constant WorkflowStateResolver
                     # already uses for the same "no real signal" case.
                     relevance_score=1.0,
+                    token_count=estimate_tokens(content),
+                    trust="trusted",
+                )
+            )
+        return items
+
+
+class AIContextPackError(Exception):
+    """A pack's ``manifest.yaml`` exists but is malformed — invalid
+    YAML, not a mapping, or missing its required ``id``/``version``
+    (docs/ai_context/context_pack_structure.md §7: "every context pack
+    must have a version"). A genuinely *missing* manifest, content
+    file, or pack directory is not this error — see
+    :class:`AIContextPackResolver`'s own docstring for why that
+    resolves to "no such pack" instead.
+    """
+
+
+# The numbered content files docs/ai_context/context_pack_structure.md
+# §3 documents, in the same order that document lists them. "Not every
+# pack needs every file" (that document's own words) -- a real,
+# disclosed reason to skip whichever are absent, not an invented list.
+_CONTENT_FILENAMES = (
+    "00_invariants.md",
+    "01_architecture.md",
+    "02_standards.md",
+    "03_current_state.md",
+    "04_task_guidance.md",
+)
+
+
+class AIContextPackResolver:
+    """Loads real, declared AI Context Packs — this ticket's own Goal
+    (``P02-S03-M08-T07``). See this module's own docstring for why
+    ``base_dir`` is a real, constructor-injected path rather than the
+    actual repository ``ai_context/`` directory, and why a missing
+    pack resolves to no items rather than an error.
+    """
+
+    source_type = SourceType.AI_CONTEXT_PACK
+
+    def __init__(self, *, base_dir: Path, pack_references: Sequence[str]) -> None:
+        self._base_dir = base_dir
+        self._pack_references = tuple(pack_references)
+
+    async def resolve(self, request: ContextRequest) -> list[ContextItem]:
+        items: list[ContextItem] = []
+        for pack_reference in self._pack_references:
+            items.extend(self._resolve_one_pack(pack_reference))
+        return items
+
+    def _resolve_one_pack(self, pack_reference: str) -> list[ContextItem]:
+        pack_dir = self._base_dir / pack_reference
+        manifest_path = pack_dir / "manifest.yaml"
+        if not manifest_path.exists():
+            # Not "declared" at all -- an unresolvable source
+            # contributing nothing is not a failure, the same shape
+            # every other resolver in this module already establishes.
+            return []
+
+        try:
+            with manifest_path.open("r", encoding="utf-8") as fh:
+                manifest = yaml.safe_load(fh)
+        except yaml.YAMLError as exc:
+            raise AIContextPackError(f"{manifest_path}: not valid YAML: {exc}") from exc
+        if not isinstance(manifest, dict):
+            raise AIContextPackError(
+                f"{manifest_path}: must contain a YAML mapping at the top level"
+            )
+
+        pack_id = manifest.get("id")
+        version = manifest.get("version")
+        if not pack_id or not version:
+            raise AIContextPackError(
+                f"{manifest_path}: 'id' and 'version' are both required "
+                "(docs/ai_context/context_pack_structure.md §7)"
+            )
+        priority = manifest.get("priority", 0)
+
+        items: list[ContextItem] = []
+        for filename in _CONTENT_FILENAMES:
+            file_path = pack_dir / filename
+            if not file_path.exists():
+                continue
+            content = file_path.read_text(encoding="utf-8")
+            if not content.strip():
+                continue
+            items.append(
+                ContextItem(
+                    content=content,
+                    provenance=SourceRef(
+                        source_type=SourceType.AI_CONTEXT_PACK,
+                        identifier=f"ai_context_pack:{pack_id}@{version}:{filename}",
+                    ),
+                    relevance_score=float(priority),
                     token_count=estimate_tokens(content),
                     trust="trusted",
                 )
