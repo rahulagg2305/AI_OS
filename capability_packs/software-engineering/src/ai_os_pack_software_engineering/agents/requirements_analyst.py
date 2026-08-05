@@ -221,6 +221,8 @@ class RequirementsAnalystAgentEntrypoint:
                 workflow_id=workflow_id,
                 step_id=step_id,
                 agent_id=agent_id,
+                prompt_id=prompt_id,
+                prompt_version=prompt_version,
             )
             if workflow_id is not None or step_id is not None
             else None

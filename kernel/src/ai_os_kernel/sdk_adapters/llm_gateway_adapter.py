@@ -42,20 +42,63 @@ this conversion:**
 - ``ProviderCapabilities``: identical 13 fields on both sides — step 4
   extended the SDK's shape to match the Kernel's real one exactly for
   precisely this reason. A direct, lossless 1:1 mapping.
+
+**Real call recording (``P04-S01-M12-T10``) — reusing
+:class:`~ai_os_kernel.llm_gateway.call_recorder.SqlLLMCallRecorder`
+unchanged, the identical Protocol
+:class:`~ai_os_kernel.prompted_completion.PromptedCompletionService`
+already records through, not a parallel mechanism.** Every SDK-native
+agent already builds a real ``TraceContext`` with ``workflow_id``/
+``step_id``/``agent_id`` (see this class's own ``metadata`` note above)
+and, since ``P04-S01-M12-T10`` added the two new optional fields
+(``ai_os_sdk.models.common.TraceContext``'s own docstring), now also
+``prompt_id``/``prompt_version`` — the two fields ``evaluation.
+llm_calls`` requires alongside ``agent_id``, real foreign keys, never
+optional at the storage layer. ``agent_id`` itself cannot travel this
+same route: it is dropped by the narrowing above (this class has no
+way to recover it from the Kernel-side request after the fact), so it
+is instead supplied once, at construction time, by whichever caller
+already resolved *which* agent this adapter instance backs
+(:func:`~ai_os_kernel.sdk_adapters.pack_context.build_pack_context`,
+threaded from :class:`~ai_os_kernel.workflow_engine.registry.
+SqlAgentRegistry`'s own already-resolved ``agent_id`` — see that
+module's own docstring). Recording fires only when every one of
+``call_recorder``/``agent_id``/``metadata``/``workflow_id``/
+``step_id``/``prompt_id``/``prompt_version`` is present — the identical
+all-or-nothing guard
+:meth:`~ai_os_kernel.prompted_completion.PromptedCompletionService.
+complete_from_prompt` already applies, so a call missing any one of
+them (e.g. a raw, non-prompt-driven completion) is silently never
+recorded, never a partial or malformed row.
+
+**A real, billed completion's own response is never lost to a
+downstream recording failure.** The real Kernel ``complete()`` call
+happens first and its response is always returned; recording is
+attempted only after, inside its own ``try``/``except`` — a genuinely
+unreachable database at that moment (or any other recorder failure)
+is logged as a warning and never propagates, the identical "catch,
+warn, don't crash a real, already-succeeded operation" shape
+``bootstrap._seed_prompted_agent_catalog_rows``'s own caller already
+established for the analogous risk in the ``PromptedAgent`` path
+(``P04-S01-M12-T09``).
 """
 
 from __future__ import annotations
 
 from ai_os_kernel.llm_gateway import models as kernel_models
+from ai_os_kernel.llm_gateway.call_recorder import LLMCallRecorder
 from ai_os_kernel.llm_gateway.capability_negotiator import (
     ProviderCapabilities as KernelProviderCapabilities,
 )
 from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
+from ai_os_kernel.observability.logging import get_logger
 from ai_os_sdk.models.llm import LLMRequest as SdkLLMRequest
 from ai_os_sdk.models.llm import LLMResponse as SdkLLMResponse
 from ai_os_sdk.models.llm import ProviderCapabilities as SdkProviderCapabilities
 from ai_os_sdk.models.llm import StopReason as SdkStopReason
 from ai_os_sdk.models.llm import UsageRecord as SdkUsageRecord
+
+logger = get_logger("ai_os_kernel.sdk_adapters.llm_gateway_adapter")
 
 
 def _to_kernel_request(request: SdkLLMRequest) -> kernel_models.LLMRequest:
@@ -135,13 +178,58 @@ class LLMGatewayAdapter:
     follows elsewhere.
     """
 
-    def __init__(self, gateway: KernelLLMGatewayProtocol) -> None:
+    def __init__(
+        self,
+        gateway: KernelLLMGatewayProtocol,
+        *,
+        agent_id: str | None = None,
+        call_recorder: LLMCallRecorder | None = None,
+    ) -> None:
         self._gateway = gateway
+        self._agent_id = agent_id
+        self._call_recorder = call_recorder
 
     async def complete(self, request: SdkLLMRequest) -> SdkLLMResponse:
         kernel_request = _to_kernel_request(request)
         kernel_response = await self._gateway.complete(kernel_request)
+        await self._maybe_record(request, kernel_request, kernel_response)
         return _to_sdk_response(kernel_response)
+
+    async def _maybe_record(
+        self,
+        request: SdkLLMRequest,
+        kernel_request: kernel_models.LLMRequest,
+        kernel_response: kernel_models.LLMResponse,
+    ) -> None:
+        if self._call_recorder is None or self._agent_id is None:
+            return
+        metadata = request.metadata
+        if (
+            metadata is None
+            or metadata.workflow_id is None
+            or metadata.step_id is None
+            or metadata.prompt_id is None
+            or metadata.prompt_version is None
+        ):
+            return
+        try:
+            await self._call_recorder.record(
+                request=kernel_request,
+                response=kernel_response,
+                workflow_id=metadata.workflow_id,
+                step_id=metadata.step_id,
+                agent_id=self._agent_id,
+                prompt_id=metadata.prompt_id,
+                prompt_version=metadata.prompt_version,
+            )
+        except Exception as exc:
+            logger.warning(
+                "sdk_adapters.llm_gateway_adapter.call_recording_failed",
+                agent_id=self._agent_id,
+                workflow_id=metadata.workflow_id,
+                step_id=metadata.step_id,
+                error=str(exc),
+            )
 
     def capabilities(self, model_alias: str) -> SdkProviderCapabilities:
         capabilities_method = getattr(self._gateway, "capabilities", None)

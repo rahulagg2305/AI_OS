@@ -47,6 +47,7 @@ from collections.abc import Collection
 
 from ai_os_kernel.capability_manager.pack_contract import PackContext
 from ai_os_kernel.git_integration.service import GitIntegrationService
+from ai_os_kernel.llm_gateway.call_recorder import LLMCallRecorder
 from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
 from ai_os_kernel.prompt_engine.renderer import PromptEngine
 from ai_os_kernel.sandbox.executor import SandboxExecutor
@@ -68,6 +69,8 @@ def build_pack_context(
     prompt_engine: PromptEngine | None = None,
     sandbox: SandboxExecutor | None = None,
     git_service: GitIntegrationService | None = None,
+    agent_id: str | None = None,
+    call_recorder: LLMCallRecorder | None = None,
 ) -> PackContext:
     """Build the real ``PackContext`` one entrypoint should receive,
     given *that entrypoint's own* declared ``permissions`` (see this
@@ -119,6 +122,16 @@ def build_pack_context(
     still exposes no Git tools — the genuine misconfiguration case is
     still caught, just one layer up, where the caller's real intent
     (a configured `remote_url`) is actually known).
+
+    **``agent_id``/``call_recorder`` (``P04-S01-M12-T10``) are forwarded
+    only to the constructed ``LLMGatewayAdapter``** — real call
+    recording for this entrypoint's own LLM calls, reusing
+    ``SqlLLMCallRecorder`` unchanged (see that adapter's own module
+    docstring for the full design). Both default to ``None``, so every
+    existing caller is unaffected; a *tool*'s own resolution never
+    passes ``agent_id`` either (a tool's id is not a real
+    ``catalog.agents`` foreign key, so recording under it would be
+    incorrect, not merely unimplemented).
     """
     llm: KernelLLMGatewayProtocol | LLMGatewayAdapter | None = None
     prompts: PromptEngine | PromptRegistryAdapter | None = None
@@ -129,7 +142,7 @@ def build_pack_context(
                 "was supplied to build_pack_context() — a granted permission this builder "
                 "cannot actually back is a configuration error, not a silent no-op"
             )
-        llm = LLMGatewayAdapter(llm_gateway)
+        llm = LLMGatewayAdapter(llm_gateway, agent_id=agent_id, call_recorder=call_recorder)
         prompts = PromptRegistryAdapter(prompt_engine)
 
     tools: ToolInvokerAdapter | None = None

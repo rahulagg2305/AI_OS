@@ -117,6 +117,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.git_integration.service import GitIntegrationService
+from ai_os_kernel.llm_gateway.call_recorder import LLMCallRecorder
 from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
 from ai_os_kernel.persistence.catalog_schema import agents as agents_table
 from ai_os_kernel.persistence.catalog_schema import packs as packs_table
@@ -285,6 +286,7 @@ def _bind_pack_context_if_receiver(
     prompt_engine: PromptEngine | None,
     sandbox: SandboxExecutor | None,
     git_service: GitIntegrationService | None,
+    call_recorder: LLMCallRecorder | None = None,
 ) -> None:
     """Shared by :class:`SqlAgentRegistry`/:class:`SqlToolRegistry`: if
     ``loaded`` implements
@@ -318,6 +320,15 @@ def _bind_pack_context_if_receiver(
     nothing can call :meth:`SqlAgentRegistry.resolve_agent` before the
     whole module system has already settled — breaks the cycle without
     restructuring either package.
+
+    **``call_recorder`` (``P04-S01-M12-T10``) is forwarded as
+    ``agent_id``/``call_recorder`` to :func:`~ai_os_kernel.sdk_adapters.
+    pack_context.build_pack_context` only when ``kind == "agent"``.**
+    ``declared_id`` for a tool is a ``catalog.tools`` id, not the real
+    ``catalog.agents`` foreign key ``evaluation.llm_calls.agent_id``
+    requires — recording an LLM call a tool happened to make under a
+    tool id would write a wrong, not merely absent, row, so a tool's
+    own resolution never receives either.
     """
     if not isinstance(loaded, PackContextReceiver):
         return
@@ -333,6 +344,8 @@ def _bind_pack_context_if_receiver(
             prompt_engine=prompt_engine,
             sandbox=sandbox,
             git_service=git_service,
+            agent_id=declared_id if kind == "agent" else None,
+            call_recorder=call_recorder if kind == "agent" else None,
         )
     except ValueError as exc:
         # A structural, permanent cause (retriable=False, the default)
@@ -454,6 +467,7 @@ class SqlAgentRegistry:
         prompt_engine: PromptEngine | None = None,
         sandbox: SandboxExecutor | None = None,
         git_service: GitIntegrationService | None = None,
+        call_recorder: LLMCallRecorder | None = None,
     ) -> None:
         self._engine = engine
         self._loader = loader or EntrypointLoader()
@@ -480,6 +494,11 @@ class SqlAgentRegistry:
         # default every current caller already relies on — until a real
         # caller supplies one.
         self._git_service = git_service
+        # call_recorder (P04-S01-M12-T10) has no real-default builder
+        # here either, the identical llm_gateway/prompt_engine reasoning
+        # above -- None means "no real call recording," never a crash,
+        # for every existing caller/test that does not supply one.
+        self._call_recorder = call_recorder
 
     async def resolve_agent(
         self,
@@ -565,6 +584,7 @@ class SqlAgentRegistry:
             prompt_engine=self._prompt_engine,
             sandbox=self._sandbox,
             git_service=self._git_service,
+            call_recorder=self._call_recorder,
         )
 
         return loaded

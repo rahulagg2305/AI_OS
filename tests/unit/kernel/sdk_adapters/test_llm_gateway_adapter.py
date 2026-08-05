@@ -10,11 +10,15 @@ and capability-negotiation path underneath.
 
 from __future__ import annotations
 
+from typing import Any
+
 from ai_os_kernel.llm_gateway.capability_negotiator import (
     ProviderCapabilities as KernelProviderCapabilities,
 )
 from ai_os_kernel.llm_gateway.capability_negotiator import StaticCapabilityNegotiator
 from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway
+from ai_os_kernel.llm_gateway.models import LLMRequest as KernelLLMRequest
+from ai_os_kernel.llm_gateway.models import LLMResponse as KernelLLMResponse
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 from ai_os_kernel.sdk_adapters.llm_gateway_adapter import LLMGatewayAdapter
 from ai_os_sdk.contracts import LLMGateway as SdkLLMGateway
@@ -184,3 +188,138 @@ class TestCapabilitiesWithoutANegotiator:
             assert "capabilities()" in str(exc)
         else:
             raise AssertionError("expected AttributeError")
+
+
+class _FakeCallRecorder:
+    """ADR-0004's own sanctioned fake Protocol substitute — records
+    exactly what it was called with, or raises on demand, so a unit
+    test can assert the adapter's own guard/error-isolation logic
+    without a real database (proven separately, against real Postgres,
+    in ``tests/integration/workflow_engine/
+    test_requirements_analyst_agent_pack.py``)."""
+
+    def __init__(self, *, raises: bool = False) -> None:
+        self._raises = raises
+        self.calls: list[dict[str, Any]] = []
+
+    async def record(
+        self,
+        *,
+        request: KernelLLMRequest,
+        response: KernelLLMResponse,
+        workflow_id: str,
+        step_id: str,
+        agent_id: str | None = None,
+        prompt_id: str | None = None,
+        prompt_version: str | None = None,
+    ) -> None:
+        if self._raises:
+            raise RuntimeError("simulated recorder failure")
+        self.calls.append(
+            {
+                "workflow_id": workflow_id,
+                "step_id": step_id,
+                "agent_id": agent_id,
+                "prompt_id": prompt_id,
+                "prompt_version": prompt_version,
+            }
+        )
+
+
+def _full_trace_context() -> TraceContext:
+    return TraceContext(
+        trace_id="t",
+        span_id="s",
+        workflow_id="wf_1",
+        step_id="stp_1",
+        prompt_id="prompt.greeting",
+        prompt_version="1.0.0",
+    )
+
+
+class TestCallRecording:
+    async def test_a_call_with_full_correlation_data_is_genuinely_recorded(self) -> None:
+        recorder = _FakeCallRecorder()
+        adapter = LLMGatewayAdapter(EchoLLMGateway(), agent_id="pkg/agent", call_recorder=recorder)
+        request = LLMRequest(
+            model_alias=_ALIAS,
+            messages=[Message(role=MessageRole.USER, content="hi")],
+            max_output_tokens=10,
+            metadata=_full_trace_context(),
+        )
+
+        await adapter.complete(request)
+
+        assert recorder.calls == [
+            {
+                "workflow_id": "wf_1",
+                "step_id": "stp_1",
+                "agent_id": "pkg/agent",
+                "prompt_id": "prompt.greeting",
+                "prompt_version": "1.0.0",
+            }
+        ]
+
+    async def test_no_call_recorder_configured_never_attempts_to_record(self) -> None:
+        adapter = LLMGatewayAdapter(EchoLLMGateway(), agent_id="pkg/agent")
+        request = LLMRequest(
+            model_alias=_ALIAS,
+            messages=[Message(role=MessageRole.USER, content="hi")],
+            max_output_tokens=10,
+            metadata=_full_trace_context(),
+        )
+
+        response = await adapter.complete(request)
+
+        assert response.content == "hi"
+
+    async def test_no_agent_id_configured_never_attempts_to_record(self) -> None:
+        recorder = _FakeCallRecorder()
+        adapter = LLMGatewayAdapter(EchoLLMGateway(), call_recorder=recorder)
+        request = LLMRequest(
+            model_alias=_ALIAS,
+            messages=[Message(role=MessageRole.USER, content="hi")],
+            max_output_tokens=10,
+            metadata=_full_trace_context(),
+        )
+
+        await adapter.complete(request)
+
+        assert recorder.calls == []
+
+    async def test_missing_prompt_correlation_is_silently_never_recorded(self) -> None:
+        """A real, non-prompt-driven completion (no ``prompt_id``/
+        ``prompt_version`` on its metadata) must not raise -- it is
+        simply never recorded, the identical all-or-nothing guard
+        ``PromptedCompletionService.complete_from_prompt`` already
+        applies for the Kernel-native path."""
+        recorder = _FakeCallRecorder()
+        adapter = LLMGatewayAdapter(EchoLLMGateway(), agent_id="pkg/agent", call_recorder=recorder)
+        request = LLMRequest(
+            model_alias=_ALIAS,
+            messages=[Message(role=MessageRole.USER, content="hi")],
+            max_output_tokens=10,
+            metadata=TraceContext(trace_id="t", span_id="s", workflow_id="wf_1", step_id="stp_1"),
+        )
+
+        response = await adapter.complete(request)
+
+        assert response.content == "hi"
+        assert recorder.calls == []
+
+    async def test_a_recorder_failure_never_loses_the_real_completions_response(self) -> None:
+        """The exact risk this class's own module docstring names: a
+        real, already-succeeded completion's response must still reach
+        the caller even when the downstream recording write fails."""
+        recorder = _FakeCallRecorder(raises=True)
+        adapter = LLMGatewayAdapter(EchoLLMGateway(), agent_id="pkg/agent", call_recorder=recorder)
+        request = LLMRequest(
+            model_alias=_ALIAS,
+            messages=[Message(role=MessageRole.USER, content="hi")],
+            max_output_tokens=10,
+            metadata=_full_trace_context(),
+        )
+
+        response = await adapter.complete(request)
+
+        assert response.content == "hi"

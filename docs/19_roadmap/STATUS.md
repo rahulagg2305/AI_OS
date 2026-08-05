@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 74%** (180.5 of 245 Task-equivalents complete)
+**Overall: 74%** (181.5 of 245 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -34,7 +34,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S04 Pack Tools and Declared Quality Gates | 4 | 2 | 0 | 2 | 50% |
 | P03 (C) | S05 Security and Human Approval | 10 | 10 | 0 | 0 | 100% |
 | P03 (C) | S06 Threat Controls | 2 | 1 | 0 | 1 | 50% |
-| P04 (D) | S01 Evaluation Engine | 10 | 5 | 0 | 5 | 50% |
+| P04 (D) | S01 Evaluation Engine | 10 | 6 | 0 | 4 | 60% |
 | P04 (D) | S02 Traceability Engine | 3 | 0 | 0 | 3 | 0% |
 | P04 (D) | S03 Benchmarking Pack | 4 | 0 | 0 | 4 | 0% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 0 | 2 | 0% |
@@ -59,7 +59,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
 | P02 (Stage B) - Minimum Viable Kernel | 100 | 95 | 96% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 30 | 79% |
-| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 17 | 5 | 29% |
+| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 17 | 6 | 35% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 0 | 0% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 0 | 0% |
@@ -68,7 +68,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-32 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+31 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P02-S06-M15-T07` Result Evaluator and Policy Enforcer
 - `P02-S06-M15-T08` Parallel gate execution
@@ -80,7 +80,6 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P03-S04-M31-T03` Pack-declared gate definitions
 - `P03-S06-M41-T02` Remaining T2-T12 controls
 - `P04-S01-M12-T04` Metrics collector
-- `P04-S01-M12-T10` Call recording for SDK-native agents (LLMGatewayAdapter path)
 - `P04-S02-M16-T01` trace.links writer
 - `P04-S03-M34-T01` Experiment definition with pinned conditions
 - `P05-S01-M26-T01` Parser adapters
@@ -95,7 +94,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P07-S01-M40-T03` Backup and restore rehearsal
 - `P07-S02-M14-T01` OIDC authentication
 - `P07-S02-M19-T01` Vault secrets backend
-- ... and 7 more
+- `P07-S03-M42-T01` Chaos tests
+- ... and 6 more
 
 ## Dependency review signal
 

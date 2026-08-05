@@ -93,6 +93,22 @@ class TraceContext(BaseModel):
     cannot be correlated to a span is not a trace context; everything
     else is optional because a given call may genuinely not be inside a
     workflow, a step, an agent, or an experiment.
+
+    **``prompt_id``/``prompt_version`` added (2026-08-05, additive —
+    this module's own docstring: a new optional field is a minor bump
+    under §8, never breaking; the package itself has not yet cut a
+    version past ``0.1.0``, so this stays there too, matching every
+    prior SDK addition's own precedent — see ``CHANGELOG.md``).**
+    ``platform_sdk.md``'s own §4.1 shape had no
+    carrier for which prompt a given ``LLMRequest`` rendered, so a
+    caller resolving :class:`LLMGateway <ai_os_sdk.contracts.llm_gateway>`
+    for a real Kernel completion had no documented way to correlate the
+    call back to ``catalog.prompts`` for durable recording
+    (``evaluation.llm_calls`` requires ``prompt_id``/``prompt_version``
+    together with ``agent_id``, real foreign keys, never optional at the
+    storage layer). Both fields are optional here for the identical
+    reason ``agent_id`` already is: a call genuinely may not be prompt-
+    driven at all (a raw tool-calling loop, for instance).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -104,6 +120,8 @@ class TraceContext(BaseModel):
     agent_id: str | None = None
     experiment_id: str | None = None
     run_id: str | None = None
+    prompt_id: str | None = None
+    prompt_version: str | None = None
 
 
 class SecurityContext(BaseModel):

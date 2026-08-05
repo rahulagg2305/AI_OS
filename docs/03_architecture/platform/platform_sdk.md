@@ -102,12 +102,14 @@ Presented as field contracts. Field names are normative.
 ```text
 ArtifactRef        artifact_id: "sha256:<hex>"; media_type; size_bytes; uri
 TraceContext       trace_id; span_id; workflow_id?; step_id?; agent_id?;
-                   experiment_id?; run_id?
+                   experiment_id?; run_id?; prompt_id?; prompt_version?
 SecurityContext    principal_id; principal_type: user|service_account|agent;
                    roles[]; permissions[] (effective, already narrowed);
                    tenant_id (reserved, always "default" in v1)
                    -- immutable; may only be narrowed, never widened
 ```
+
+> **🔵 DECISION (2026-08-05, `P04-S01-M12-T10`): add `prompt_id`/`prompt_version` to `TraceContext`, additive (§8 minor).** Wiring real call recording (`evaluation.llm_calls`) into the SDK-native agent path found no documented carrier for which prompt an `LLMRequest` rendered — `agent_id`/`prompt_id`/`prompt_version` are required together at the storage layer, but only `agent_id` had a field here. Both new fields are optional, for the identical reason `agent_id` already is (`ai_os_sdk.models.common.TraceContext`'s own docstring). No existing caller is affected.
 
 ### 4.2 Agent contract
 

@@ -437,6 +437,7 @@ from ai_os_kernel.llm_gateway.adapters.local_adapter import build_local_adapter
 from ai_os_kernel.llm_gateway.adapters.model_config import LLMProviderConfig, load_provider_config
 from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
 from ai_os_kernel.llm_gateway.budget_enforcer import PerScopeBudgetEnforcer
+from ai_os_kernel.llm_gateway.call_recorder import SqlLLMCallRecorder
 from ai_os_kernel.llm_gateway.capability_negotiator import StaticCapabilityNegotiator
 from ai_os_kernel.llm_gateway.circuit_breaker import InMemoryCircuitBreaker
 from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway, LLMGateway
@@ -1405,6 +1406,24 @@ async def _build_se_delivery_pipeline_registry(engine: AsyncEngine) -> AgentRegi
     safe, existing no-op every current caller already relies on — when
     ``AIOS_GIT_REMOTE_URL`` is absent entirely, so a Kernel with no Git
     configuration at all still starts exactly as before this step.
+
+    **``call_recorder`` (``P04-S01-M12-T10``) closes the disclosed gap
+    named in ``P04-S01-M12-T09``'s own docstring** — this pipeline's
+    real, SDK-native agents call ``LLMGatewayAdapter.complete()``
+    directly, never ``PromptedCompletionService``, so they needed their
+    own real path to ``evaluation.llm_calls``. Unconditional and
+    unguarded (unlike ``llm_gateway`` above): ``SqlLLMCallRecorder``
+    does no I/O at construction, only when a call is actually recorded
+    — and that write is itself wrapped in its own ``try``/``except``
+    inside ``LLMGatewayAdapter`` (see that module's own docstring), so
+    a genuinely unreachable database at call time degrades to a logged
+    warning, never a crash. Real catalog rows for this pack's own
+    agents/prompts already exist by the time any real call happens —
+    ``SqlPackLifecycleRepository.register()`` derives and writes them
+    from the real manifest at pack registration (``manifest_catalog_
+    installer.py``), unlike ``P04-S01-M12-T09``'s synthetic demo
+    composition, which had no such installer and needed its own seeded
+    rows — so no analogous foreign-key risk applies here.
     """
     llm_gateway: LLMGateway | None = None
     try:
@@ -1443,6 +1462,7 @@ async def _build_se_delivery_pipeline_registry(engine: AsyncEngine) -> AgentRegi
         prompt_engine=SqlPromptCatalog(engine),
         sandbox=sandbox,
         git_service=git_service,
+        call_recorder=SqlLLMCallRecorder(engine),
     )
 
 

@@ -4,9 +4,22 @@ All notable changes to this package are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/). This
 package has not yet cut a version past `0.1.0`.
 
-## [0.1.0] - 2026-07-28 (last updated 2026-07-29)
+## [0.1.0] - 2026-07-28 (last updated 2026-08-05)
 
 ### Added
+
+- **`TraceContext.prompt_id`/`prompt_version`** (`P04-S01-M12-T10`), two new
+  optional fields (§8: a new optional field is a minor bump, never breaking).
+  Closes a real gap found wiring call recording into the SDK-native agent
+  path: `evaluation.llm_calls` requires `prompt_id`/`prompt_version` together
+  with `agent_id` (real foreign keys, never optional at the storage layer),
+  but the documented §4.1 shape had no carrier for which prompt a given
+  `LLMRequest` rendered. Every agent in the one real pack that calls the LLM
+  already has both values locally (read from its own `inputs` to render the
+  prompt) — each now also passes them into the `TraceContext` it already
+  builds. **No existing caller supplying neither is affected** — both default
+  to `None`, the identical "absent means unaffected" shape `agent_id` already
+  established. `platform_sdk.md` §4.1's documented shape updated to match.
 
 - **The `ToolInvoker` Protocol, `ToolDescriptor`, `ToolStatus`, `ToolResult`, and
   the `platform.sandbox.run_command` tool concept** (`platform_sdk_v1_scope.md`

@@ -13,13 +13,19 @@ supplies directly to `SqlAgentRegistry`'s own constructor —
 `_build_real_llm_gateway_and_prompt_engine` below is the identical real
 composition the agent's own pre-migration `_build_real_service` used to
 assemble internally, moved to this file's own composition root since
-the agent no longer builds anything itself. **One real, accepted
-capability loss, not silently dropped:** the pre-migration composition
-always wired a real `SqlLLMCallRecorder`, so every live completion was
-recorded to `evaluation.llm_calls`; the Platform SDK has no
-`Telemetry`/call-recording surface in v1.0.0, so this test's own real,
-live completion below is no longer recorded — see the agent's own
-module docstring for the full reasoning.
+the agent no longer builds anything itself.
+
+**The "no call-recording surface in v1.0.0" capability loss this
+docstring used to name here is now closed (`P04-S01-M12-T10`).**
+`SqlAgentRegistry` now accepts an optional `call_recorder`, threaded
+through `build_pack_context`/`LLMGatewayAdapter`; every real completion
+through this agent's own real `TraceContext` (`workflow_id`/`step_id`/
+`agent_id`/`prompt_id`/`prompt_version`, all real by the time the
+entrypoint builds it) is recorded to `evaluation.llm_calls` again, the
+identical row shape `SqlLLMCallRecorder` always wrote before migration
+— reusing that class unchanged, not a new mechanism.
+`test_a_deterministic_completion_genuinely_records_a_real_llm_calls_row`
+below proves it without a live credential.
 
 Two tiers, against a real Postgres container (ADR-0015 — no mocking the
 database):
@@ -62,16 +68,19 @@ from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
     build_anthropic_adapter,
 )
 from ai_os_kernel.llm_gateway.adapters.model_config import load_provider_config
+from ai_os_kernel.llm_gateway.call_recorder import SqlLLMCallRecorder
 from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway
 from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 from ai_os_kernel.persistence.engine import build_engine
+from ai_os_kernel.persistence.evaluation_schema import llm_calls
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine, PromptEngine
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 from ai_os_kernel.workflow_engine.agent import Agent
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.registry import SqlAgentRegistry
+from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.step_executor import AgentStepExecutor
 from ai_os_pack_software_engineering.agents.requirements_analyst import (
     RequirementsAnalysisOutput,
@@ -237,6 +246,105 @@ def test_sql_agent_registry_genuinely_resolves_the_requirements_analyst_agent(
                 "required": ["analysis"],
                 "additionalProperties": False,
             }
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+async def _seed_workflow_instance_for_recording(engine: AsyncEngine) -> str:
+    """A real `workflow_instances` row — `evaluation.llm_calls.workflow_id`
+    is a real foreign key to it, the identical dependency
+    `test_run_manifest_recorder.py`'s own `_seed_workflow_definition`
+    already establishes for the same reason."""
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text(
+                "INSERT INTO catalog.workflow_definitions "
+                "(definition_id, version, pack_id, graph, inputs_schema, "
+                " outputs_schema, declared_permissions, validated_at) "
+                "VALUES ('test.call-recording-workflow', '1.0.0', :pack_id, '{}'::jsonb, "
+                " '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, now()) "
+                "ON CONFLICT (definition_id, version) DO NOTHING"
+            ),
+            {"pack_id": _PACK_ID},
+        )
+    instance = await SqlWorkflowInstanceRepository(engine).create(
+        definition_id="test.call-recording-workflow",
+        definition_version="1.0.0",
+        inputs={},
+        principal_id="test-principal",
+    )
+    return instance.workflow_id
+
+
+def test_a_deterministic_completion_genuinely_records_a_real_llm_calls_row(
+    database_url: str,
+) -> None:
+    """Real proof for `P04-S01-M12-T10`: a genuine completion through
+    this pack's own real `RequirementsAnalystAgentEntrypoint` — resolved
+    through the real `SqlAgentRegistry`, backed by real `catalog.agents`/
+    `catalog.prompts` rows the real pack installer already wrote — now
+    produces a real, populated `evaluation.llm_calls` row. Echo-backed
+    for determinism (no live credential); the mechanism itself does not
+    depend on which provider is behind `LLMGatewayAdapter`.
+
+    Calls the resolved entrypoint's own `execute()` directly, not
+    through `AgentStepExecutor` — this focused proof does not need a
+    full `WorkflowStep`/Context Manager assembly, only the same real
+    `workflowId`/`stepId`/`agentId`/`promptId`/`promptVersion` fields
+    `AgentStepExecutor` itself would supply (`P04-S01-M12-T09`), plus an
+    explicit `variables["context"]` satisfying `requirements_analysis.md`'s
+    own real `{{context}}` placeholder (`render_template` is strict —
+    a missing placeholder raises, not silently blanks)."""
+
+    async def _run() -> None:
+        await _register_and_activate_pack(database_url)
+
+        engine = build_engine(database_url)
+        try:
+            workflow_id = await _seed_workflow_instance_for_recording(engine)
+            registry = SqlAgentRegistry(
+                engine,
+                llm_gateway=EchoLLMGateway(),
+                prompt_engine=SqlPromptCatalog(engine),
+                call_recorder=SqlLLMCallRecorder(engine),
+            )
+            resolved = await registry.resolve_agent(_AGENT_ID)
+
+            outputs = await resolved.execute(
+                {
+                    "workflowId": workflow_id,
+                    "stepId": "analyze_requirements",
+                    "agentId": _AGENT_ID,
+                    "promptId": "requirements.analyze",
+                    "promptVersion": "0.1.0",
+                    "modelAlias": "fast-cheap",
+                    "variables": {"context": "Build a URL shortener service."},
+                }
+            )
+
+            RequirementsAnalysisOutput.model_validate(outputs)
+
+            async with engine.connect() as connection:
+                call_row = (
+                    (
+                        await connection.execute(
+                            sa.select(llm_calls).where(llm_calls.c.workflow_id == workflow_id)
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+
+            # Before P04-S01-M12-T10, LLMGatewayAdapter.complete() never
+            # recorded anything -- this row would not exist at all.
+            assert call_row["step_id"] == "analyze_requirements"
+            assert call_row["agent_id"] == _AGENT_ID
+            assert call_row["prompt_id"] == "requirements.analyze"
+            assert call_row["prompt_version"] == "0.1.0"
+            assert call_row["provider"] == "echo"
+            assert call_row["model_id"] == "echo-1"
         finally:
             await engine.dispose()
 
