@@ -93,6 +93,7 @@ import asyncio
 import contextlib
 import os
 from collections.abc import Generator
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -111,21 +112,28 @@ from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
     build_anthropic_adapter,
 )
 from ai_os_kernel.llm_gateway.adapters.model_config import load_provider_config
+from ai_os_kernel.llm_gateway.call_recorder import SqlLLMCallRecorder
 from ai_os_kernel.llm_gateway.errors import LLMProviderError
 from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway
 from ai_os_kernel.llm_gateway.gateway import LLMGateway as KernelLLMGatewayProtocol
-from ai_os_kernel.llm_gateway.models import LLMRequest, LLMResponse
+from ai_os_kernel.llm_gateway.models import LLMRequest, LLMResponse, StopReason, UsageRecord
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 from ai_os_kernel.persistence.engine import build_engine
-from ai_os_kernel.persistence.evaluation_schema import gate_results
+from ai_os_kernel.persistence.evaluation_schema import gate_results, run_manifests
+from ai_os_kernel.persistence.schema import workflow_instances
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine, PromptEngine
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
 from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
+from ai_os_kernel.security_manager.models import Principal, PrincipalType
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
-from ai_os_kernel.workflow_engine.delivery_pipeline import build_pipeline_trigger
+from ai_os_kernel.workflow_engine.delivery_pipeline import (
+    build_pipeline_trigger,
+    resume_pipeline_after_approval,
+)
 from ai_os_kernel.workflow_engine.errors import QualityGateFailedError
+from ai_os_kernel.workflow_engine.human_approval import ApprovalService, SqlApprovalRepository
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry, SqlAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
@@ -1317,6 +1325,184 @@ def test_the_real_pipeline_genuinely_runs_end_to_end_against_the_live_api(
             documentation_path = working_directory / documentation_step.outputs["documentationPath"]
             assert documentation_path.is_file()
             assert documentation_path.read_text(encoding="utf-8").strip() != ""
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+class _BuildCompatibleEchoGateway:
+    """A real, deterministic fake `LLMGateway` (ADR-0015 — fake network,
+    real everything else), not the shared `EchoLLMGateway`: this
+    pipeline's real, shipped `build.write_file` prompt asks a real model
+    to *follow* the `FILE_PATH`/`FILE_CONTENT_BEGIN`/`FILE_CONTENT_END`
+    format, in natural-language instructions — echoing that prompt text
+    back verbatim (what `EchoLLMGateway` does) is not a completion that
+    follows it, and `BuildAgentEntrypoint`'s own real parser correctly
+    refuses it (confirmed by a real, first attempt at this test failing
+    exactly there, with a real `LintInstructionError`, not assumed).
+
+    Returns the identical fixed, valid `FILE_PATH`/`FILE_CONTENT_BEGIN`/
+    `FILE_CONTENT_END` block regardless of which step calls it —
+    `requirements-analyst`/`architecture`/`documentation` accept any
+    non-empty string as their own free-text output (confirmed by reading
+    each entrypoint's own `response.content` handling), so only `build`
+    actually parses this content's specific shape. `provider`/`model_id`
+    stay `"echo"`/`"echo-1"` — the identical, real, hardcoded self-
+    description `EchoLLMGateway` itself already returns — so this
+    remains an honest "echo-family fake," not a different provider
+    identity, and this test's own `resolved_provider`/`resolved_model_id`
+    assertions stay meaningful."""
+
+    _CONTENT = (
+        "FILE_PATH: solution.py\n"
+        "FILE_CONTENT_BEGIN\n"
+        'print("hello from the real pipeline")\n'
+        "FILE_CONTENT_END"
+    )
+
+    async def complete(self, request: LLMRequest) -> LLMResponse:
+        return LLMResponse(
+            content=self._CONTENT,
+            stop_reason=StopReason.END_TURN,
+            usage=UsageRecord(
+                input_tokens=0,
+                output_tokens=0,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                cost_usd=Decimal("0"),
+                latency_ms=0,
+                provider="echo",
+                model_id="echo-1",
+                retries=0,
+                fallback_used=False,
+            ),
+            provider="echo",
+            model_id="echo-1",
+            model_version="1.0.0",
+        )
+
+
+def test_the_real_sdk_native_pipeline_closes_the_run_manifest_recorders_own_gap(
+    database_url: str,
+) -> None:
+    """The last link in the ``P04-S01-M12-T05`` -> ``T09`` -> ``T10``
+    chain, closing the residual gap those steps' own reports disclosed:
+    every other test that drives ``se.delivery_pipeline`` all the way to
+    genuine completion (``test_delivery_pipeline_git_push.py``'s own
+    single test) uses a deterministic, hand-built ``InMemoryAgentRegistry``
+    — never registered into ``catalog.agents``/``catalog.prompts`` the
+    way a genuinely installed pack is, and never given a ``call_recorder``
+    either, so its own manifest assertions are honestly ``None`` by
+    construction, not proof either way for the real path.
+
+    Mirrors ``test_the_real_pipeline_genuinely_runs_end_to_end_against_
+    the_live_api`` above exactly — the real, catalog-installed pack,
+    resolved through the real ``SqlAgentRegistry``, driving the real,
+    declared ``se.delivery_pipeline.yaml`` — but backed by a fake
+    gateway instead of a live credential (see ``_BuildCompatibleEchoGateway``'s
+    own docstring for why the shared ``EchoLLMGateway`` alone cannot
+    drive this specific real pipeline through to completion) and
+    carried one step further, through the real ``approve-git-push``
+    human-approval resume, to genuine completion. ``git-push`` itself
+    needs no real remote configured: an absent ``remote_url`` is
+    `GitPushAgentEntrypoint`'s own real, documented no-op ("never a
+    failure"), so the pipeline still reaches ``COMPLETED`` honestly.
+
+    The one addition neither prior test needed: ``call_recorder=
+    SqlLLMCallRecorder(engine)`` on the registry — real call recording
+    for a real, catalog-resolved agent path is exactly what
+    ``P04-S01-M12-T10`` added."""
+
+    async def _run() -> None:
+        await _register_and_activate_pack(database_url)
+
+        engine = build_engine(database_url)
+        try:
+            registry = SqlAgentRegistry(
+                engine,
+                llm_gateway=_BuildCompatibleEchoGateway(),
+                prompt_engine=SqlPromptCatalog(engine),
+                call_recorder=SqlLLMCallRecorder(engine),
+            )
+            trigger = build_pipeline_trigger(engine, registry)
+
+            requirement = "Write a Python script that prints exactly: hello from the pipeline"
+            result = await trigger({"requirement": requirement}, "test-principal")
+
+            assert result.outcome == WorkflowRunOutcome.WAITING_FOR_HUMAN, result.error
+            assert result.last_instance is not None
+            workflow_id = result.last_instance.workflow_id
+
+            approval_repository = SqlApprovalRepository(engine)
+            pending = await approval_repository.get_by_step(
+                workflow_id=workflow_id, step_id="approve-git-push"
+            )
+            assert pending is not None
+            approval_service = ApprovalService(approval_repository)
+            authorized_principal = Principal(
+                principal_id="release-manager",
+                principal_type=PrincipalType.USER,
+                roles=frozenset({"approver:approve-git-push"}),
+            )
+            decided = await approval_service.decide(
+                approval_id=pending.approval_id,
+                principal=authorized_principal,
+                decision="approved",
+                comment="Deterministic proof run — no real push needed.",
+            )
+            assert decided.status == "approved"
+
+            final_result = await resume_pipeline_after_approval(engine, registry, workflow_id)
+            assert final_result.outcome == WorkflowRunOutcome.COMPLETED, final_result.error
+
+            # git-push itself: a real, documented no-op (no remote_url
+            # configured) — proves completion did not silently skip it.
+            steps = await SqlWorkflowInstanceRepository(engine).list_steps(workflow_id)
+            git_push_step = next(s for s in steps if s.step_name == "git-push")
+            assert git_push_step.outputs is not None
+            assert git_push_step.outputs["pushed"] is False
+            assert git_push_step.outputs["reason"] == "no remote_url configured"
+
+            async with engine.connect() as connection:
+                instance_row = (
+                    (
+                        await connection.execute(
+                            sa.select(workflow_instances.c.run_manifest_id).where(
+                                workflow_instances.c.workflow_id == workflow_id
+                            )
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                manifest_row = (
+                    (
+                        await connection.execute(
+                            sa.select(run_manifests.c.manifest).where(
+                                run_manifests.c.run_manifest_id == instance_row["run_manifest_id"]
+                            )
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+
+            steps_by_id = {entry["step_id"]: entry for entry in manifest_row["manifest"]["steps"]}
+            # The real proof: every step that genuinely called the LLM,
+            # through the real SqlAgentRegistry/LLMGatewayAdapter path,
+            # now has a real, non-None resolved_provider/resolved_model_id
+            # — where every prior test's own InMemoryAgentRegistry-based
+            # proof was honestly None. Also real (not None) now, since
+            # this pack is genuinely catalog-installed, unlike every
+            # InMemoryAgentRegistry-based test: agent_version/pack_version.
+            for step_id in ("requirements-analyst", "architecture", "build", "documentation"):
+                entry = steps_by_id[step_id]
+                assert entry["resolved_provider"] == "echo", step_id
+                assert entry["resolved_model_id"] == "echo-1", step_id
+                assert entry["agent_version"] == _PACK_VERSION, step_id
+                assert entry["pack_id"] == _PACK_ID, step_id
+                assert entry["pack_version"] == _PACK_VERSION, step_id
         finally:
             await engine.dispose()
 
