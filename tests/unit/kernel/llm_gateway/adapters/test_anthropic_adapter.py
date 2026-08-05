@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import http.server
+import json
 import socket
 import threading
 import time
@@ -743,6 +744,112 @@ async def test_stream_refuses_a_real_unsupported_content_block_type(
             pass
 
     assert exc_info.value.error_code == "llm.capability_unsupported"
+
+
+# --- AnthropicAdapter.complete(): Prompt Cache Planner integration --------
+
+
+class _CapturingMessageHandler(http.server.BaseHTTPRequestHandler):
+    """Captures the real outgoing request body onto a shared, mutable
+    list the test inspects afterward, then serves the identical real
+    ``Message`` body :class:`_SuccessfulMessageHandler` does — proving
+    the real wire format actually sent, not merely that some request
+    reached the server."""
+
+    captured_bodies: list[dict[str, object]] = []
+
+    _body = _SuccessfulMessageHandler._body
+
+    def do_POST(self) -> None:
+        content_length = int(self.headers["Content-Length"])
+        raw_body = self.rfile.read(content_length)
+        self.captured_bodies.append(json.loads(raw_body))
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(self._body)))
+        self.end_headers()
+        self.wfile.write(self._body)
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        pass
+
+
+@pytest.fixture
+def capturing_message_server() -> Generator[tuple[str, list[dict[str, object]]], None, None]:
+    _CapturingMessageHandler.captured_bodies = []
+    server = http.server.HTTPServer(("127.0.0.1", 0), _CapturingMessageHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", _CapturingMessageHandler.captured_bodies
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+@pytest.mark.asyncio
+async def test_complete_sends_a_real_cache_breakpoint_in_the_real_wire_format(
+    capturing_message_server: tuple[str, list[dict[str, object]]],
+) -> None:
+    base_url, captured_bodies = capturing_message_server
+    adapter = AnthropicAdapter(
+        client=anthropic.AsyncAnthropic(
+            api_key="unused", base_url=base_url, timeout=2.0, max_retries=0
+        ),
+        router=_router({"coding-balanced": "claude-sonnet-5"}),
+        pricing={"claude-sonnet-5": _PRICING},
+    )
+    system = "You are a careful reviewer.Please review this diff."
+    boundary_index = len("You are a careful reviewer.")
+
+    await adapter.complete(
+        LLMRequest(
+            model_alias="coding-balanced",
+            messages=[PlatformMessage(role=MessageRole.USER, content="hi")],
+            max_output_tokens=1024,
+            system=system,
+            system_cache_boundary_index=boundary_index,
+        )
+    )
+
+    assert len(captured_bodies) == 1
+    sent_system = captured_bodies[0]["system"]
+    # The real Anthropic wire format: a list of real text blocks, the
+    # stable prefix marked with a real cache_control breakpoint, the
+    # volatile suffix left unmarked -- verified against the installed
+    # anthropic SDK's own TextBlockParam/CacheControlEphemeralParam
+    # types, not guessed.
+    assert sent_system == [
+        {
+            "type": "text",
+            "text": "You are a careful reviewer.",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {"type": "text", "text": "Please review this diff."},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_complete_sends_a_plain_system_string_when_no_boundary_is_set(
+    capturing_message_server: tuple[str, list[dict[str, object]]],
+) -> None:
+    base_url, captured_bodies = capturing_message_server
+    adapter = AnthropicAdapter(
+        client=anthropic.AsyncAnthropic(
+            api_key="unused", base_url=base_url, timeout=2.0, max_retries=0
+        ),
+        router=_router({"coding-balanced": "claude-sonnet-5"}),
+        pricing={"claude-sonnet-5": _PRICING},
+    )
+
+    await adapter.complete(_request(system="be terse"))
+
+    assert len(captured_bodies) == 1
+    # Zero behaviour change for every caller that never sets a real
+    # cache boundary -- the real wire payload is the identical plain
+    # string it always was, not a one-element block list in disguise.
+    assert captured_bodies[0]["system"] == "be terse"
 
 
 # --- build_anthropic_adapter: resolves the key via SecretProvider ---------

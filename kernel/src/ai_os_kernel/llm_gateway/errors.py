@@ -22,6 +22,14 @@ class LLMCallRecordingError(Exception):
     """
 
 
+class LLMPromptCacheError(Exception):
+    """A ``cache_boundary_index`` could not be turned into a real
+    prompt-cache plan (:mod:`ai_os_kernel.llm_gateway.
+    prompt_cache_planner`) — an out-of-range index, or content that
+    resolves to zero real segments (blank content).
+    """
+
+
 class LLMProviderError(Exception):
     """A real provider adapter (:class:`~ai_os_kernel.llm_gateway.adapters.
     anthropic_adapter.AnthropicAdapter`,

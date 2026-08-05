@@ -14,8 +14,14 @@ Contract (docs/03_architecture/kernel/llm_gateway.md §4/§5) — the same
 - ``system`` — reduced from the documented ``SystemBlock[]`` to a plain
   ``str | None``: §4 gives ``SystemBlock`` no further shape than its
   name, and the only reason a real implementation would need a *list*
-  of blocks is per-block prompt-cache breakpoints (§8) — caching is out
-  of scope this step. A single string is the honest remaining shape.
+  of blocks is per-block prompt-cache breakpoints (§8) — caching was
+  out of scope at this step's own original writing. **As of
+  ``P02-S02-M06-T12``**, that exact anticipated need is real:
+  ``system_cache_boundary_index`` is a real, additive, optional
+  companion field (not a jump to the full ``SystemBlock[]``/
+  ``CacheHint[]`` shape, neither of which §4/§8 gives any further
+  internal fields for either) — the smallest real extension of this
+  same reduced ``str`` shape, not a new one.
 - ``max_output_tokens`` — every provider call needs a length bound;
   this is the request's own basic shape, not part of the deferred
   Budget Enforcer (which enforces a *workflow*/*experiment* cost
@@ -95,7 +101,7 @@ from __future__ import annotations
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 class MessageRole(StrEnum):
@@ -172,6 +178,17 @@ class LLMRequest(BaseModel):
     model_alias: str
     messages: list[Message]
     system: str | None = None
+    system_cache_boundary_index: int | None = Field(default=None, ge=0)
+    """The real value :func:`~ai_os_kernel.prompt_engine.cache_boundary.
+    render_with_cache_boundary` returns (``P02-S03-M07-T06``) — added at
+    ``P02-S02-M06-T12``, the "per-block prompt-cache breakpoints" need
+    this module's own docstring already named as the one reason
+    ``system`` would ever need to be more than a plain string (§8).
+    ``None`` (the default) means no cache boundary — every existing
+    caller is unaffected, and an adapter sends ``system`` exactly as it
+    always has. A real index reduces cost (ADR-0025 §2); it never
+    changes model behaviour, since it only controls *how* the same
+    ``system`` text is transmitted."""
     max_output_tokens: int = Field(gt=0)
     metadata: TraceContext | None = None
 
@@ -187,6 +204,15 @@ class LLMRequest(BaseModel):
     def _at_least_one_message(cls, value: list[Message]) -> list[Message]:
         if not value:
             raise ValueError("messages must contain at least one message")
+        return value
+
+    @field_validator("system_cache_boundary_index")
+    @classmethod
+    def _boundary_requires_a_real_system(
+        cls, value: int | None, info: ValidationInfo
+    ) -> int | None:
+        if value is not None and info.data.get("system") is None:
+            raise ValueError("system_cache_boundary_index requires a real system prompt")
         return value
 
 

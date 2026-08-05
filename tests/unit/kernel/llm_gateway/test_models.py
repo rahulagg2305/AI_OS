@@ -46,6 +46,45 @@ def test_system_prompt_is_optional_but_settable() -> None:
     assert request.system == "You are a helpful assistant."
 
 
+def test_system_cache_boundary_index_defaults_to_none() -> None:
+    request = LLMRequest(model_alias="fast-cheap", messages=[_message()], max_output_tokens=100)
+
+    assert request.system_cache_boundary_index is None
+
+
+def test_system_cache_boundary_index_is_settable_alongside_a_real_system_prompt() -> None:
+    request = LLMRequest(
+        model_alias="fast-cheap",
+        messages=[_message()],
+        system="Be terse.Task: summarize.",
+        system_cache_boundary_index=9,
+        max_output_tokens=100,
+    )
+
+    assert request.system_cache_boundary_index == 9
+
+
+def test_system_cache_boundary_index_rejects_a_negative_value() -> None:
+    with pytest.raises(ValidationError):
+        LLMRequest(
+            model_alias="fast-cheap",
+            messages=[_message()],
+            system="Be terse.",
+            system_cache_boundary_index=-1,
+            max_output_tokens=100,
+        )
+
+
+def test_system_cache_boundary_index_requires_a_real_system_prompt() -> None:
+    with pytest.raises(ValidationError, match="requires a real system prompt"):
+        LLMRequest(
+            model_alias="fast-cheap",
+            messages=[_message()],
+            system_cache_boundary_index=0,
+            max_output_tokens=100,
+        )
+
+
 def test_blank_model_alias_is_rejected() -> None:
     with pytest.raises(ValidationError, match="model_alias must not be blank"):
         LLMRequest(model_alias="   ", messages=[_message()], max_output_tokens=100)

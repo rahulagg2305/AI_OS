@@ -8,9 +8,15 @@ implementation name).
 
 This is one adapter behind the Gateway's one seam, not a Gateway
 redesign: no Request Validator, Capability Negotiator, Policy & Budget
-Enforcer, Prompt Cache Planner, or Rate Limiter — those are the
-Gateway's remaining documented internal subsystems (§3), still out of
-scope. Alias
+Enforcer, or Rate Limiter — those are the Gateway's remaining
+documented internal subsystems (§3), still out of scope. **The Prompt
+Cache Planner is real as of `P02-S02-M06-T12`**: this adapter is its
+one real consumer, translating a real
+:class:`~ai_os_kernel.llm_gateway.prompt_cache_planner.
+PromptCacheSegment` list into a real Anthropic content-block payload
+(:func:`_build_system_param`) — the provider-specific translation step
+the Planner itself deliberately leaves to whichever adapter needs it.
+Alias
 resolution is the real :class:`~ai_os_kernel.llm_gateway.router.Router`
 (injected, not a flat dict this module owns itself). The SDK's own
 ``max_retries`` (default 2) is the only *SDK-level* retry behaviour
@@ -65,6 +71,7 @@ from ai_os_kernel.llm_gateway.models import (
     StreamEventType,
     UsageRecord,
 )
+from ai_os_kernel.llm_gateway.prompt_cache_planner import plan_prompt_cache_segments
 from ai_os_kernel.llm_gateway.router import Router
 from ai_os_kernel.secrets_manager.provider import SecretProvider
 
@@ -81,6 +88,37 @@ _STOP_REASON_MAP: dict[str, StopReason] = {
     "end_turn": StopReason.END_TURN,
     "max_tokens": StopReason.MAX_TOKENS,
 }
+
+
+def _build_system_param(request: LLMRequest) -> str | list[dict[str, Any]] | None:
+    """Builds the real Anthropic ``system`` payload — the Prompt Cache
+    Planner's one real consumer (``P02-S02-M06-T12``).
+
+    Unchanged, byte-for-byte, for every existing caller: a plain string
+    when ``system_cache_boundary_index`` is ``None`` (the default), or
+    ``None`` when there is no ``system`` at all. Only when a real
+    boundary is set does this build a real content-block list — each
+    real :class:`~ai_os_kernel.llm_gateway.prompt_cache_planner.
+    PromptCacheSegment` becomes one real Anthropic ``TextBlockParam``,
+    with a real ``cache_control: {"type": "ephemeral"}`` marker on the
+    cacheable (stable) segment — verified against the installed
+    ``anthropic`` SDK's own ``TextBlockParam``/
+    ``CacheControlEphemeralParam`` types by direct inspection, not
+    guessed.
+    """
+    if request.system is None:
+        return None
+    if request.system_cache_boundary_index is None:
+        return request.system
+
+    segments = plan_prompt_cache_segments(request.system, request.system_cache_boundary_index)
+    blocks: list[dict[str, Any]] = []
+    for segment in segments:
+        block: dict[str, Any] = {"type": "text", "text": segment.content}
+        if segment.cacheable:
+            block["cache_control"] = {"type": "ephemeral"}
+        blocks.append(block)
+    return blocks
 
 
 class AnthropicAdapter:
@@ -144,8 +182,9 @@ class AnthropicAdapter:
                 for message in request.messages
             ],
         }
-        if request.system is not None:
-            kwargs["system"] = request.system
+        system_param = _build_system_param(request)
+        if system_param is not None:
+            kwargs["system"] = system_param
 
         started = time.monotonic()
         try:
@@ -289,8 +328,9 @@ class AnthropicAdapter:
                 for message in request.messages
             ],
         }
-        if request.system is not None:
-            kwargs["system"] = request.system
+        system_param = _build_system_param(request)
+        if system_param is not None:
+            kwargs["system"] = system_param
 
         started = time.monotonic()
         # Anthropic's own real `message_delta.usage.input_tokens` is

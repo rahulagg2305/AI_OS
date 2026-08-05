@@ -17,7 +17,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M03 | Health & Lifecycle | P01 | 6 | 6 | 100% |
 | M04 | Observability & Audit | P01 | 6 | 6 | 100% |
 | M05 | Workflow Engine | P02 | 15 | 15 | 100% |
-| M06 | LLM Gateway | P02 | 12 | 10 | 88% |
+| M06 | LLM Gateway | P02 | 12 | 11 | 96% |
 | M07 | Prompt Engine | P02 | 6 | 6 | 100% |
 | M08 | Context Manager | P02 | 10 | 8 | 80% |
 | M09 | Knowledge Manager | P02 | 5 | 5 | 100% |
