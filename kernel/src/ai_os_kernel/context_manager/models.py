@@ -71,7 +71,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class SourceType(StrEnum):
     """Which :class:`~ai_os_kernel.context_manager.resolvers.
     ContextSourceResolver` produced a given item — context_manager.md
-    §4's "Source Resolvers" list five; three are real here.
+    §4's "Source Resolvers" list five; four are real here.
     """
 
     WORKFLOW_STATE = "workflow_state"
@@ -81,9 +81,12 @@ class SourceType(StrEnum):
     # Real as of P02-S03-M08-T06 -- see resolvers.py's own
     # MemoryResolver.
     MEMORY = "memory"
-    # Deliberately not yet present: AI_CONTEXT_PACK, CONFIGURATION —
-    # each names a resolver this step does not build
-    # (see resolvers.py's own docstring for why).
+    # Real as of P02-S03-M08-T08 -- see resolvers.py's own
+    # RuntimeConfigResolver.
+    CONFIGURATION = "configuration"
+    # Deliberately not yet present: AI_CONTEXT_PACK -- names a
+    # resolver this step does not build (see resolvers.py's own
+    # docstring for why).
 
 
 class SourceRef(BaseModel):

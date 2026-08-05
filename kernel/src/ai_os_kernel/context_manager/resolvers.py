@@ -1,25 +1,52 @@
 """Source Resolvers (context_manager.md §4) — the components that each
 know how to pull items from exactly one source.
 
-**Three real resolvers now: Workflow State, Knowledge (``P02-S03-M08-T05``),
-and, as of ``P02-S03-M08-T06``, Memory.** context_manager.md §3 lists
-six sources an assembly may draw on: Workflow State, Knowledge Manager,
-Memory Manager, AI Context Packs, Runtime Configuration, and
-User-provided inputs. Workflow State was the first real one —
+**Four real resolvers now: Workflow State, Knowledge (``P02-S03-M08-T05``),
+Memory (``P02-S03-M08-T06``), and, as of ``P02-S03-M08-T08``, Runtime
+Configuration.** context_manager.md §3 lists six sources an assembly
+may draw on: Workflow State, Knowledge Manager, Memory Manager, AI
+Context Packs, Runtime Configuration, and User-provided inputs.
+Workflow State was the first real one —
 :class:`~ai_os_kernel.workflow_engine.repository.WorkflowInstanceRepository`,
 already built and already real. :class:`KnowledgeResolver` calls the
 real :class:`~ai_os_kernel.knowledge_manager.query_engine.QueryEngine`
-(``P02-S04-M09-T04``). :class:`MemoryResolver` (below) calls the real
+(``P02-S04-M09-T04``). :class:`MemoryResolver` calls the real
 :class:`~ai_os_kernel.persistence.memory_writer.MemoryStore`
-(``P02-S04-M10-T01``) — the first genuine consumer that store has had.
-AI Context Packs remain an entirely unbuilt Kernel component
-(kernel_architecture.md's own component list); Runtime Configuration
-(the Configuration Manager) is real but is deliberately still
-deferred — three real sources are now enough to calibrate
-context_manager.md's own "Knowledge outranks Memory in authority"
-cross-source-ranking question against a genuine third source (see
-``MemoryResolver``'s own docstring for how); a fourth real source
-remains a natural, additive next slice.
+(``P02-S04-M10-T01``). :class:`RuntimeConfigResolver` (below) calls the
+real :class:`~ai_os_kernel.configuration_manager.loader.
+ConfigurationManager` (``P01-S02-M01-T04``) — the first Context Manager
+consumer that layered configuration resolver has had. AI Context Packs
+remain an entirely unbuilt Kernel component (kernel_architecture.md's
+own component list) — the last of the six documented sources.
+
+**``RuntimeConfigResolver`` re-resolves configuration fresh on every
+``resolve()`` call, including the live ``RuntimeOverrideStore``
+snapshot — never a value cached once at composition time.** This
+ticket's own Goal is "expose *runtime* configuration as context";
+Layer 5 (``P01-S02-M01-T04``) exists specifically so an override takes
+effect without a process restart, and ``ConfigurationManager.load()``
+is documented as synchronous, non-I/O merging (its own module
+docstring: "never awaits anything") — cheap enough to call every time,
+so caching would only risk serving a stale value for no real benefit.
+``config_keys`` is a real constructor parameter (mirroring
+``MemoryResolver``'s own caller-supplied ``memory_type``) validated
+against :class:`~ai_os_kernel.configuration_manager.models.
+PlatformConfig`'s own real, declared fields at construction time — an
+unknown key is rejected immediately, the identical "no guessing a
+typo'd name" discipline :class:`~ai_os_kernel.prompt_engine.resolver.
+PromptResolver` already establishes for role binding, not deferred
+to a confusing failure on first use.
+
+**``trust`` is ``"trusted"`` here — the opposite of
+``WorkflowStateResolver``'s own classification, for a real, reasoned
+cause, not an inconsistency.** ADR-0016's own rationale
+(``WorkflowStateResolver``'s docstring below) is "no untrusted content
+can confer authority... treat anything not authored by the Kernel
+itself as untrusted." Runtime configuration is the inverse case: an
+operator-authored, schema-validated ``PlatformConfig`` value, not
+externally-supplied content — genuinely authored by the Kernel's own
+trusted subsystems, so ADR-0016's own rule places it on the *other*
+side of the same line.
 
 **``MemoryResolver`` deliberately does not filter by
 ``source_workflow_id`` — genuinely cross-run, matching the Memory
@@ -72,6 +99,9 @@ import json
 from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
+from ai_os_kernel.configuration_manager.loader import ConfigurationManager
+from ai_os_kernel.configuration_manager.models import PlatformConfig
+from ai_os_kernel.configuration_manager.runtime_overrides import RuntimeOverrideStore
 from ai_os_kernel.context_manager.models import ContextItem, ContextRequest, SourceRef, SourceType
 from ai_os_kernel.knowledge_manager.query_engine import QueryEngine
 from ai_os_kernel.llm_gateway.gateway import Embedder
@@ -309,6 +339,80 @@ class MemoryResolver:
             )
             for record in records
         ]
+
+
+class RuntimeConfigKeyUnknownError(Exception):
+    """A ``config_keys`` entry names a field
+    :class:`~ai_os_kernel.configuration_manager.models.PlatformConfig`
+    does not declare — raised at :class:`RuntimeConfigResolver`
+    construction time, not deferred to a confusing failure on first
+    ``resolve()`` call.
+    """
+
+
+class RuntimeConfigResolver:
+    """Brings real, live runtime configuration into step context —
+    this ticket's own Goal (``P02-S03-M08-T08``). Calls the real
+    :class:`~ai_os_kernel.configuration_manager.loader.
+    ConfigurationManager` unchanged — no parallel configuration
+    mechanism.
+
+    ``role``/``pack_manifests`` are the identical, real parameters
+    :meth:`ConfigurationManager.load` already requires/accepts — this
+    resolver invents no new configuration-resolution behaviour, only
+    calls the real one on every request.
+    """
+
+    source_type = SourceType.CONFIGURATION
+
+    def __init__(
+        self,
+        *,
+        configuration_manager: ConfigurationManager,
+        runtime_override_store: RuntimeOverrideStore,
+        role: str,
+        config_keys: Sequence[str],
+        pack_manifests: Sequence[Mapping[str, Any]] = (),
+    ) -> None:
+        unknown = sorted(set(config_keys) - set(PlatformConfig.model_fields))
+        if unknown:
+            raise RuntimeConfigKeyUnknownError(
+                f"config_keys name field(s) PlatformConfig does not declare: {', '.join(unknown)}"
+            )
+
+        self._configuration_manager = configuration_manager
+        self._runtime_override_store = runtime_override_store
+        self._role = role
+        self._config_keys = tuple(config_keys)
+        self._pack_manifests = pack_manifests
+
+    async def resolve(self, request: ContextRequest) -> list[ContextItem]:
+        config = self._configuration_manager.load(
+            role=self._role,
+            pack_manifests=self._pack_manifests,
+            runtime_overrides=self._runtime_override_store.snapshot(),
+        )
+
+        items = []
+        for key in self._config_keys:
+            value = getattr(config, key)
+            content = f"{key}: {json.dumps(value, sort_keys=True, default=str)}"
+            items.append(
+                ContextItem(
+                    content=content,
+                    provenance=SourceRef(
+                        source_type=SourceType.CONFIGURATION,
+                        identifier=f"config_key:{key}",
+                    ),
+                    # No ranking model exists for configuration either
+                    # -- the identical constant WorkflowStateResolver
+                    # already uses for the same "no real signal" case.
+                    relevance_score=1.0,
+                    token_count=estimate_tokens(content),
+                    trust="trusted",
+                )
+            )
+        return items
 
 
 class WorkflowStepOutputResolver:
