@@ -359,6 +359,23 @@ existing test/composition that never touches
 sees no behaviour change; the one real agent step now additionally
 receives real runtime configuration in its assembled context, alongside
 the workflow's own declared ``inputs``.
+
+**``MemoryResolver`` reaches the identical two real compositions too
+(``P02-S03-M08-T13``) — the third of the four resolvers to close the
+same disclosed gap** (``KnowledgeResolver`` closed it separately, into
+``se.delivery_pipeline``'s ``requirements-analyst`` step specifically,
+``P02-S03-M08-T12`` — see :mod:`ai_os_kernel.workflow_engine.
+delivery_pipeline`` for that one). Simpler than either: a plain
+:class:`~ai_os_kernel.persistence.memory_writer.SqlMemoryStore` read,
+no router/embedder/environment-validation dependency, so it is
+unconditional in both compositions rather than wrapped in a ``try`` —
+there is no real failure mode here worth degrading gracefully from.
+``_MEMORY_RESOLVER_TYPE`` (``"engineering"``) is a real, considered
+default from memory_manager.md's own documented taxonomy — the
+cross-run, long-lived category, matching this resolver's own
+deliberate "not scoped to one workflow" design, not the short-lived
+``"workflow"`` category a single-run composition would otherwise
+suggest.
 """
 
 import asyncio
@@ -400,6 +417,7 @@ from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextM
 from ai_os_kernel.context_manager.resolvers import (
     ContextSourceResolver,
     KnowledgeResolver,
+    MemoryResolver,
     RuntimeConfigResolver,
     WorkflowStateResolver,
 )
@@ -440,6 +458,7 @@ from ai_os_kernel.observability import (
 from ai_os_kernel.observability.settings import ObservabilitySettings
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.persistence.knowledge_keyword_search import SqlKeywordSearcher
+from ai_os_kernel.persistence.memory_writer import MemoryType, SqlMemoryStore
 from ai_os_kernel.persistence.settings import DatabaseSettings
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
@@ -569,6 +588,16 @@ _RUNTIME_CONTEXT_CONFIG_KEYS: tuple[str, ...] = ("env", "role", "log_level")
 # per-request/per-step configuration mechanism exists.
 _KNOWLEDGE_EMBEDDING_MODEL_ALIAS = "embedding-fast"
 _KNOWLEDGE_RESOLVER_LIMIT = 10
+
+# MemoryResolver's own real constructor parameters (P02-S03-M08-T13).
+# "engineering" (memory_manager.md's own documented taxonomy: workflow/
+# engineering/reusable-asset) is the real, cross-run, long-lived
+# category -- the one meaningful default for a generic composition
+# reused by every agent step, not scoped to one workflow's own
+# short-lived run. 10 is the identical named, documented placeholder
+# ceiling _KNOWLEDGE_RESOLVER_LIMIT above already uses.
+_MEMORY_RESOLVER_TYPE: MemoryType = "engineering"
+_MEMORY_RESOLVER_LIMIT = 10
 
 # The Retry & Fallback Manager's Circuit Breaker (llm_gateway.md §10)
 # needs a consecutive-failure threshold and a half-open reset timer;
@@ -1069,11 +1098,22 @@ async def build_workflow_worker_loop(engine: AsyncEngine) -> WorkflowWorkerLoop:
     Degrades gracefully, the identical reasoning ``_lifespan``'s own
     construction applies, when ``BootstrapEnv().env`` is not one of
     ConfigurationManager's real, documented environments.
+
+    **``MemoryResolver`` (``P02-S03-M08-T13``) rides alongside too** —
+    a real, plain ``SqlMemoryStore(engine)`` read, no embeddings/router
+    dependency and no failure mode worth degrading (unlike
+    ``RuntimeConfigResolver``'s environment validation), so it is
+    unconditional, not wrapped in a ``try``.
     """
     agent_registry = await _build_prompted_agent_registry(engine)
     bootstrap_env = BootstrapEnv()
     context_resolvers: list[ContextSourceResolver] = [
-        WorkflowStateResolver(SqlWorkflowInstanceRepository(engine))
+        WorkflowStateResolver(SqlWorkflowInstanceRepository(engine)),
+        MemoryResolver(
+            memory_store=SqlMemoryStore(engine),
+            memory_type=_MEMORY_RESOLVER_TYPE,
+            limit=_MEMORY_RESOLVER_LIMIT,
+        ),
     ]
     try:
         context_resolvers.append(
@@ -1524,6 +1564,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # wrapper over the engine, safe to construct separately"
         # reasoning workflow_instance_repository below already
         # establishes.
+        # MemoryResolver (P02-S03-M08-T13) -- a real, plain
+        # SqlMemoryStore(engine) read, no failure mode worth degrading
+        # (unlike RuntimeConfigResolver's environment validation below),
+        # so it is unconditional.
         # RuntimeConfigResolver's own real, persistent collaborators
         # (P02-S03-M08-T11) -- kept alive on app.state when available,
         # the identical "reachable independently of any one closure"
@@ -1545,7 +1589,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # workflow sets AIOS_ENV=ci, an identity never meant to satisfy
         # that closed, documented vocabulary.
         context_resolvers: list[ContextSourceResolver] = [
-            WorkflowStateResolver(SqlWorkflowInstanceRepository(engine))
+            WorkflowStateResolver(SqlWorkflowInstanceRepository(engine)),
+            MemoryResolver(
+                memory_store=SqlMemoryStore(engine),
+                memory_type=_MEMORY_RESOLVER_TYPE,
+                limit=_MEMORY_RESOLVER_LIMIT,
+            ),
         ]
         try:
             app.state.configuration_manager = _build_configuration_manager(BootstrapEnv().env)

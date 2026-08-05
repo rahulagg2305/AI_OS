@@ -24,6 +24,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -31,15 +32,22 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ai_os_kernel.bootstrap import (
     _DEMO_WORKFLOW_PROMPT_ID,
     _DEMO_WORKFLOW_PROMPT_VERSION,
+    _MEMORY_RESOLVER_LIMIT,
+    _MEMORY_RESOLVER_TYPE,
     _PROMPTED_AGENT_ID,
     _RUNTIME_CONTEXT_CONFIG_KEYS,
     _build_workflow_trigger,
 )
 from ai_os_kernel.configuration_manager import ConfigurationManager, RuntimeOverrideStore
 from ai_os_kernel.context_manager.manager import DefaultContextManager
-from ai_os_kernel.context_manager.resolvers import RuntimeConfigResolver, WorkflowStateResolver
+from ai_os_kernel.context_manager.resolvers import (
+    MemoryResolver,
+    RuntimeConfigResolver,
+    WorkflowStateResolver,
+)
 from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
 from ai_os_kernel.persistence.engine import build_engine
+from ai_os_kernel.persistence.memory_writer import SqlMemoryStore
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import PromptedCompletionService
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
@@ -229,6 +237,111 @@ def test_runtime_config_flows_into_a_real_agent_step_via_the_production_wiring(
             assert '"task": "write tests"' in content
             assert 'env: "local"' in content
             assert 'role: "api"' in content
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+async def _ensure_workflow_definition_registered(
+    engine: AsyncEngine, *, definition_id: str, version: str
+) -> None:
+    async with engine.begin() as connection:
+        await connection.execute(
+            sa.text(
+                "INSERT INTO catalog.workflow_definitions "
+                "(definition_id, version, pack_id, graph, inputs_schema, "
+                " outputs_schema, declared_permissions, validated_at) "
+                "VALUES (:definition_id, :version, 'test.pack', '{}'::jsonb, "
+                " '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, now()) "
+                "ON CONFLICT (definition_id, version) DO NOTHING"
+            ),
+            {"definition_id": definition_id, "version": version},
+        )
+
+
+async def _create_a_prior_real_workflow_instance(engine: AsyncEngine) -> str:
+    # A real workflow_instances row genuinely distinct from the demo
+    # workflow the test below triggers -- satisfies memory_items' own
+    # real FK to workflow_instances, and proves MemoryResolver's own
+    # cross-run behaviour: memory written under this instance must
+    # still surface in a completely different, later-triggered run.
+    definition_id = "test.memory-prior-workflow"
+    version = "1.0.0"
+    await _ensure_workflow_definition_registered(
+        engine, definition_id=definition_id, version=version
+    )
+    instance = await SqlWorkflowInstanceRepository(engine).create(
+        definition_id=definition_id,
+        definition_version=version,
+        inputs={},
+        principal_id="test-principal",
+    )
+    return instance.workflow_id
+
+
+def _context_manager_with_memory(
+    engine: AsyncEngine, memory_store: SqlMemoryStore
+) -> DefaultContextManager:
+    # The real, production-shaped composition P02-S03-M08-T13 adds to
+    # _lifespan/build_workflow_worker_loop -- WorkflowStateResolver +
+    # MemoryResolver together, proving the production wiring itself,
+    # not just MemoryResolver in isolation (already proven in
+    # tests/integration/context_manager/test_memory_resolver.py).
+    return DefaultContextManager(
+        resolvers=[
+            WorkflowStateResolver(SqlWorkflowInstanceRepository(engine)),
+            MemoryResolver(
+                memory_store=memory_store,
+                memory_type=_MEMORY_RESOLVER_TYPE,
+                limit=_MEMORY_RESOLVER_LIMIT,
+            ),
+        ]
+    )
+
+
+def test_memory_flows_into_a_real_agent_step_via_the_production_wiring(
+    database_url: str,
+) -> None:
+    # P02-S03-M08-T13's own proof: the same real DefaultContextManager
+    # shape _lifespan/build_workflow_worker_loop now construct in
+    # production (WorkflowStateResolver + MemoryResolver together)
+    # genuinely puts real, persisted, cross-run memory into a real
+    # agent's rendered prompt, through the real _build_workflow_trigger
+    # path -- not MemoryResolver exercised standalone.
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            memory_store = SqlMemoryStore(engine)
+            prior_workflow_id = await _create_a_prior_real_workflow_instance(engine)
+            written = await memory_store.write_memory(
+                memory_type=_MEMORY_RESOLVER_TYPE,
+                content="past run learned: retry writes with exponential backoff",
+                source_workflow_id=prior_workflow_id,
+            )
+
+            trigger = _build_workflow_trigger(
+                engine,
+                _context_aware_agent_registry(),
+                _context_manager_with_memory(engine, memory_store),
+            )
+
+            result = await trigger({"task": "write tests"}, "test-principal")
+
+            assert result.outcome is WorkflowRunOutcome.COMPLETED
+            steps = await SqlWorkflowInstanceRepository(engine).list_steps(result.workflow_id)
+            assert len(steps) == 1
+            outputs = steps[0].outputs
+            assert outputs is not None
+            content = outputs["content"]
+            # Both real sources present in one real, assembled context:
+            # this run's own inputs (WorkflowStateResolver) and a
+            # different, prior run's own real, persisted memory
+            # (MemoryResolver) -- genuinely cross-run, not scoped to
+            # result.workflow_id.
+            assert '"task": "write tests"' in content
+            assert "past run learned: retry writes with exponential backoff" in content
+            assert written.source_workflow_id != result.workflow_id
         finally:
             await engine.dispose()
 
