@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 73%** (175.5 of 242 Task-equivalents complete)
+**Overall: 73%** (176.5 of 242 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -25,7 +25,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (B) | S03 Prompt and Context Assembly | 20 | 19 | 0 | 1 | 95% |
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 13 | 0 | 1 | 93% |
 | P02 (B) | S05 Capability Manager and Platform SDK | 19 | 19 | 0 | 0 | 100% |
-| P02 (B) | S06 Quality Gate Engine | 8 | 4 | 0 | 4 | 50% |
+| P02 (B) | S06 Quality Gate Engine | 8 | 5 | 0 | 3 | 62% |
 | P02 (B) | S07 Platform Services and Error Model | 7 | 7 | 0 | 0 | 100% |
 | P02 (B) | S08 Kernel HTTP Surface | 4 | 4 | 0 | 0 | 100% |
 | P03 (C) | S01 Sandboxed Tool Execution | 8 | 7 | 0 | 1 | 88% |
@@ -57,7 +57,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
-| P02 (Stage B) - Minimum Viable Kernel | 99 | 92 | 93% |
+| P02 (Stage B) - Minimum Viable Kernel | 99 | 93 | 94% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 30 | 79% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 15 | 3 | 20% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
@@ -68,9 +68,11 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-30 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+32 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
-- `P02-S06-M15-T05` Gate Registry
+- `P02-S06-M15-T06` Pack-declared gate definitions
+- `P02-S06-M15-T07` Result Evaluator and Policy Enforcer
+- `P02-S06-M15-T08` Parallel gate execution
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P03-S02-M29-T07` code-reviewer agent
 - `P03-S02-M29-T08` technical-planner agent
@@ -93,9 +95,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P07-S01-M40-T03` Backup and restore rehearsal
 - `P07-S02-M14-T01` OIDC authentication
 - `P07-S02-M19-T01` Vault secrets backend
-- `P07-S03-M42-T01` Chaos tests
-- `P08-S01-M29-T02` database agent
-- ... and 5 more
+- ... and 7 more
 
 ## Dependency review signal
 
