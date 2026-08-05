@@ -399,11 +399,13 @@ from ai_os_kernel.configuration_manager import (
 from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextManager
 from ai_os_kernel.context_manager.resolvers import (
     ContextSourceResolver,
+    KnowledgeResolver,
     RuntimeConfigResolver,
     WorkflowStateResolver,
 )
 from ai_os_kernel.git_integration.default_service import build_git_integration_service_from_env
 from ai_os_kernel.health import ComponentStatus, GracefulShutdownCoordinator, HealthService
+from ai_os_kernel.knowledge_manager.query_engine import QueryEngine
 from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
     PROVIDER_NAME,
     build_anthropic_adapter,
@@ -412,13 +414,18 @@ from ai_os_kernel.llm_gateway.adapters.local_adapter import (
     PROVIDER_NAME as LOCAL_PROVIDER_NAME,
 )
 from ai_os_kernel.llm_gateway.adapters.local_adapter import build_local_adapter
-from ai_os_kernel.llm_gateway.adapters.model_config import load_provider_config
+from ai_os_kernel.llm_gateway.adapters.model_config import LLMProviderConfig, load_provider_config
 from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
 from ai_os_kernel.llm_gateway.budget_enforcer import PerScopeBudgetEnforcer
 from ai_os_kernel.llm_gateway.capability_negotiator import StaticCapabilityNegotiator
 from ai_os_kernel.llm_gateway.circuit_breaker import InMemoryCircuitBreaker
 from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway, EchoLLMGateway, LLMGateway
-from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter, build_routing_chain
+from ai_os_kernel.llm_gateway.router import (
+    Router,
+    RoutingDecision,
+    StaticRouter,
+    build_routing_chain,
+)
 from ai_os_kernel.manifest_loader import ManifestLoader
 from ai_os_kernel.observability import (
     AUDIT_CHAIN_VERIFICATION_INTERVAL_SECONDS,
@@ -432,10 +439,13 @@ from ai_os_kernel.observability import (
 )
 from ai_os_kernel.observability.settings import ObservabilitySettings
 from ai_os_kernel.persistence.engine import build_engine
+from ai_os_kernel.persistence.knowledge_keyword_search import SqlKeywordSearcher
 from ai_os_kernel.persistence.settings import DatabaseSettings
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import build_anthropic_prompted_completion_service
+from ai_os_kernel.retrieval.retrieval_service import RetrievalService
+from ai_os_kernel.retrieval.vector_search import SqlVectorSearcher
 from ai_os_kernel.routes.approvals import router as approvals_router
 from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
 from ai_os_kernel.routes.health import router as health_router
@@ -549,6 +559,16 @@ _CONTEXT_TOKEN_BUDGET = 8000
 # *_interval_seconds fields exist purely to let a test skip a real
 # production wait -- see PlatformConfig's own docstring for each).
 _RUNTIME_CONTEXT_CONFIG_KEYS: tuple[str, ...] = ("env", "role", "log_level")
+
+# KnowledgeResolver's own real constructor parameters (P02-S03-M08-T12).
+# "embedding-fast" is the one real alias config/llm.yaml already
+# declares for embeddings (-> nomic-embed-text, routed to `local` --
+# see that file's own comment); never a literal model id, per ADR-0002.
+# 10 is a named, documented placeholder ceiling, the identical carve-out
+# _PROMPTED_AGENT_MAX_OUTPUT_TOKENS above already uses, until a real
+# per-request/per-step configuration mechanism exists.
+_KNOWLEDGE_EMBEDDING_MODEL_ALIAS = "embedding-fast"
+_KNOWLEDGE_RESOLVER_LIMIT = 10
 
 # The Retry & Fallback Manager's Circuit Breaker (llm_gateway.md §10)
 # needs a consecutive-failure threshold and a half-open reset timer;
@@ -847,6 +867,28 @@ def _build_health_service(
     return HealthService([configuration_manager_check, manifest_loader_check, database_check])
 
 
+def _build_router(provider_config: LLMProviderConfig) -> Router:
+    """The real, ``config/llm.yaml``-driven router construction
+    :func:`_build_prompted_agent_registry` already performed inline —
+    factored out (``P02-S03-M08-T12``) so :func:`_build_knowledge_resolver`
+    below can build a second, independent one from a second, fresh
+    ``load_provider_config()`` read, the identical "cheap to construct
+    a second one" reasoning :func:`_build_configuration_manager` already
+    established for ``ConfigurationManager``."""
+    return StaticRouter(
+        routes={
+            alias: build_routing_chain(
+                [(provider_config.providers.get(alias, PROVIDER_NAME), model_id)]
+                + [
+                    (candidate.provider, candidate.model_id)
+                    for candidate in provider_config.fallbacks.get(alias, [])
+                ]
+            )
+            for alias, model_id in provider_config.model_ids.items()
+        }
+    )
+
+
 async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
     """Real Secrets Resolution + ``AnthropicAdapter`` (+ a real
     ``LocalAdapter`` when ``config/llm.yaml`` configures one) +
@@ -886,18 +928,7 @@ async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
     """
     try:
         provider_config = load_provider_config(Path.cwd() / "config" / "llm.yaml")
-        router = StaticRouter(
-            routes={
-                alias: build_routing_chain(
-                    [(provider_config.providers.get(alias, PROVIDER_NAME), model_id)]
-                    + [
-                        (candidate.provider, candidate.model_id)
-                        for candidate in provider_config.fallbacks.get(alias, [])
-                    ]
-                )
-                for alias, model_id in provider_config.model_ids.items()
-            }
-        )
+        router = _build_router(provider_config)
 
         additional_gateways: dict[str, LLMGateway] = {}
         if provider_config.local_base_url is not None:
@@ -939,6 +970,48 @@ async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
     agent = PromptedAgent(service=service, max_output_tokens=_PROMPTED_AGENT_MAX_OUTPUT_TOKENS)
     logger.info("kernel.bootstrap.prompted_agent_registered", agent_id=_PROMPTED_AGENT_ID)
     return InMemoryAgentRegistry({_PROMPTED_AGENT_ID: agent})
+
+
+def _build_knowledge_resolver(engine: AsyncEngine) -> KnowledgeResolver | None:
+    """The real, production ``KnowledgeResolver`` for ``se.delivery_pipeline``'s
+    ``requirements-analyst`` step (``P02-S03-M08-T12``) — real
+    ``QueryEngine``/``RetrievalService`` (module 9/11, unchanged, no
+    parallel search mechanism) plus a real ``Embedder``, exactly the
+    same real ``LocalAdapter`` :func:`_build_prompted_agent_registry`
+    already builds for chat completions, built here a second time from
+    a second, fresh ``load_provider_config()`` read — the identical
+    "cheap to construct a second one" reasoning :func:`_build_router`
+    above already documents.
+
+    **Degrades to ``None``, not a crash, when no local embeddings
+    server is configured** — ``config/llm.yaml``'s own comment states
+    ``local_provider`` is "absent by default in a fresh checkout," the
+    identical real, honest default :func:`_build_prompted_agent_registry`
+    already tolerates for ``additional_gateways``. A caller wiring this
+    into a composition must itself treat ``None`` as "no knowledge
+    resolver available," the same shape :class:`RuntimeConfigResolver`'s
+    own degrade-gracefully caller in ``_lifespan`` already establishes.
+    """
+    provider_config = load_provider_config(Path.cwd() / "config" / "llm.yaml")
+    if provider_config.local_base_url is None:
+        return None
+
+    router = _build_router(provider_config)
+    embedder = build_local_adapter(
+        base_url=provider_config.local_base_url, router=router, pricing=provider_config.pricing
+    )
+    query_engine = QueryEngine(
+        engine=engine,
+        retrieval_service=RetrievalService(
+            keyword_searcher=SqlKeywordSearcher(engine), vector_searcher=SqlVectorSearcher(engine)
+        ),
+    )
+    return KnowledgeResolver(
+        query_engine=query_engine,
+        embedder=embedder,
+        embedding_model_alias=_KNOWLEDGE_EMBEDDING_MODEL_ALIAS,
+        limit=_KNOWLEDGE_RESOLVER_LIMIT,
+    )
 
 
 def _generate_worker_id(prefix: str) -> str:
@@ -1690,8 +1763,21 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # _build_se_delivery_pipeline_registry's own docstring), so the
         # route still reaches the real Workflow Engine and returns an
         # honest, structured `failed` outcome instead of a blanket 503.
+        # KnowledgeResolver for requirements-analyst (P02-S03-M08-T12) —
+        # degrades gracefully to None, the identical "catch, report,
+        # don't crash the process" shape RuntimeConfigResolver's own
+        # construction above already uses, since a fresh checkout
+        # configures no real local embeddings server (config/llm.yaml's
+        # own comment: "absent by default").
+        try:
+            se_delivery_pipeline_knowledge_resolver = _build_knowledge_resolver(engine)
+        except Exception as exc:
+            logger.warning("kernel.bootstrap.knowledge_resolver_unavailable", error=str(exc))
+            se_delivery_pipeline_knowledge_resolver = None
         app.state.trigger_se_delivery_pipeline = build_pipeline_trigger(
-            engine, se_delivery_pipeline_registry
+            engine,
+            se_delivery_pipeline_registry,
+            knowledge_resolver=se_delivery_pipeline_knowledge_resolver,
         )
         # Exposed so ai_os_kernel.routes.approvals can genuinely resume
         # a paused se.delivery_pipeline instance after a real decision
@@ -1701,6 +1787,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # platform demo's own app.state.agent_registry, which does not
         # know this pack's agents at all.
         app.state.se_delivery_pipeline_agent_registry = se_delivery_pipeline_registry
+        app.state.se_delivery_pipeline_knowledge_resolver = se_delivery_pipeline_knowledge_resolver
 
     try:
         yield

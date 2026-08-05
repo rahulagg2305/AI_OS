@@ -236,6 +236,7 @@ from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextM
 from ai_os_kernel.context_manager.models import ContextItem, ContextRequest, SourceType
 from ai_os_kernel.context_manager.resolvers import (
     ContextSourceResolver,
+    KnowledgeResolver,
     WorkflowStateResolver,
     WorkflowStepOutputResolver,
 )
@@ -442,6 +443,46 @@ class _StepScopedResolver:
         return await self._inner.resolve(request)
 
 
+class _QueryFromRequirementInputResolver:
+    """Derives ``KnowledgeResolver``'s own ``request.knowledge_query``
+    from this pipeline's real, required ``requirement`` input
+    (``delivery_pipeline.yaml``'s own ``inputsSchema``: ``required:
+    [requirement]``) — the identical real text ``WorkflowStateResolver``
+    already surfaces to the ``requirements-analyst`` step, not an
+    invented heuristic (``P02-S03-M08-T12``).
+
+    No caller anywhere threads ``knowledge_query`` onto a
+    ``ContextRequest`` today — ``context_manager.md``'s own documented
+    Step Contract has no field for it, and adding one is a real,
+    separate architecture decision this pipeline's own composition does
+    not need to make just to give ``KnowledgeResolver`` real content
+    here. Wraps the real, unchanged ``KnowledgeResolver`` — no parallel
+    search mechanism — and delegates to it with a derived
+    :class:`~ai_os_kernel.context_manager.models.ContextRequest`, the
+    identical "wrapper composes, does not reimplement" shape
+    :class:`_StepScopedResolver` above already establishes. A missing
+    instance or a blank/non-string ``requirement`` resolves to no
+    items, not an error — the same "an unresolvable source contributing
+    nothing is not a failure" shape every resolver in this codebase
+    already follows.
+    """
+
+    def __init__(self, inner: KnowledgeResolver, repository: WorkflowInstanceRepository) -> None:
+        self.source_type: SourceType = inner.source_type
+        self._inner = inner
+        self._repository = repository
+
+    async def resolve(self, request: ContextRequest) -> list[ContextItem]:
+        instance = await self._repository.get_instance(request.workflow_id)
+        if instance is None:
+            return []
+        requirement = instance.inputs.get("requirement")
+        if not isinstance(requirement, str) or not requirement.strip():
+            return []
+        derived_request = request.model_copy(update={"knowledge_query": requirement})
+        return await self._inner.resolve(derived_request)
+
+
 def load_pipeline_definition() -> WorkflowDefinition:
     """Loads and validates ``workflows/delivery_pipeline.yaml`` through
     the real :class:`WorkflowDefinitionLoader` — the one canonical
@@ -451,7 +492,10 @@ def load_pipeline_definition() -> WorkflowDefinition:
 
 
 def build_pipeline_context_manager(
-    repository: WorkflowInstanceRepository, *, python_command: tuple[str, ...] | None = None
+    repository: WorkflowInstanceRepository,
+    *,
+    python_command: tuple[str, ...] | None = None,
+    knowledge_resolver: KnowledgeResolver | None = None,
 ) -> ContextManager:
     """The real step-output-to-next-step-input seam, configured for
     this pipeline specifically — see this module's own docstring for
@@ -469,24 +513,43 @@ def build_pipeline_context_manager(
     default. A caller that constructs its own agents with an explicit
     ``sandbox=`` override (any test wanting a specific, non-default
     backend) must pass the matching ``python_command`` here too.
+
+    ``knowledge_resolver`` (``P02-S03-M08-T12``), when supplied, is
+    wrapped in :class:`_QueryFromRequirementInputResolver` then
+    :class:`_StepScopedResolver` — the identical `requirements-analyst`-only
+    scoping ``WorkflowStateResolver`` above already gets, since that is
+    the one step in this pipeline that safely free-text-flattens
+    however many context items it receives (unlike ``documentation``'s
+    own strict single-JSON-object contract — see this module's own
+    docstring). ``None`` (the default, every caller before this step)
+    changes nothing: no real local embeddings server is configured in
+    a fresh checkout, so production callers get ``None`` from
+    ``bootstrap._build_knowledge_resolver`` too, until an operator
+    configures one.
     """
     resolved_python_command = python_command or default_python_command()
-    return DefaultContextManager(
-        [
+    resolvers: list[ContextSourceResolver] = [
+        _StepScopedResolver(
+            WorkflowStateResolver(repository), frozenset({_REQUIREMENTS_ANALYST_STEP_ID})
+        ),
+        WorkflowStepOutputResolver(
+            repository,
+            step_sources=_STEP_SOURCES,
+            field_selectors=_FIELD_SELECTORS,
+            output_transforms={
+                "lint": _make_lint_command_with_python(resolved_python_command),
+                "test": _make_run_generated_file_with_python(resolved_python_command),
+            },
+        ),
+    ]
+    if knowledge_resolver is not None:
+        resolvers.append(
             _StepScopedResolver(
-                WorkflowStateResolver(repository), frozenset({_REQUIREMENTS_ANALYST_STEP_ID})
-            ),
-            WorkflowStepOutputResolver(
-                repository,
-                step_sources=_STEP_SOURCES,
-                field_selectors=_FIELD_SELECTORS,
-                output_transforms={
-                    "lint": _make_lint_command_with_python(resolved_python_command),
-                    "test": _make_run_generated_file_with_python(resolved_python_command),
-                },
-            ),
-        ]
-    )
+                _QueryFromRequirementInputResolver(knowledge_resolver, repository),
+                frozenset({_REQUIREMENTS_ANALYST_STEP_ID}),
+            )
+        )
+    return DefaultContextManager(resolvers)
 
 
 def _build_pipeline_composition(
@@ -494,6 +557,7 @@ def _build_pipeline_composition(
     agent_registry: AgentRegistry,
     *,
     python_command: tuple[str, ...] | None = None,
+    knowledge_resolver: KnowledgeResolver | None = None,
 ) -> tuple[WorkflowInstanceService, WorkflowAdvanceRunner]:
     """The real composition shared by :func:`build_pipeline_trigger`
     (create a brand-new instance, then run it) and
@@ -502,9 +566,13 @@ def _build_pipeline_composition(
     ``DispatchingStepExecutor`` (including, since ``P03-S03-M30-T05``,
     a real ``human_approval_executor``) rather than one drifting from
     the other. ``agent_registry`` is the one thing a caller must
-    choose — see :func:`build_pipeline_trigger`'s own docstring."""
+    choose — see :func:`build_pipeline_trigger`'s own docstring.
+    ``knowledge_resolver`` is forwarded to
+    :func:`build_pipeline_context_manager` unchanged."""
     repository = SqlWorkflowInstanceRepository(engine)
-    context_manager = build_pipeline_context_manager(repository, python_command=python_command)
+    context_manager = build_pipeline_context_manager(
+        repository, python_command=python_command, knowledge_resolver=knowledge_resolver
+    )
     definition_catalog = SqlWorkflowDefinitionCatalog(engine)
     instance_service = WorkflowInstanceService(
         repository=repository,
@@ -535,6 +603,7 @@ def build_pipeline_trigger(
     agent_registry: AgentRegistry,
     *,
     python_command: tuple[str, ...] | None = None,
+    knowledge_resolver: KnowledgeResolver | None = None,
 ) -> WorkflowTrigger:
     """Mirrors ``kernel/bootstrap.py``'s own ``_build_workflow_trigger``
     shape exactly — real, ``engine``-backed persistence driving one
@@ -546,8 +615,11 @@ def build_pipeline_trigger(
     convention (the deterministic integration tests) — this function
     does not care which.
 
-    ``python_command`` is forwarded to :func:`build_pipeline_context_manager`
-    unchanged — see that function's own docstring.
+    ``python_command``/``knowledge_resolver`` are forwarded to
+    :func:`build_pipeline_context_manager` unchanged — see that
+    function's own docstring. ``knowledge_resolver`` (``P02-S03-M08-T12``)
+    defaults to ``None`` — zero behaviour change for every existing
+    caller.
 
     **One-shot: a returned ``WorkflowRunOutcome.WAITING_FOR_HUMAN`` is
     the trigger's own honest final answer for this call, not an error**
@@ -557,7 +629,7 @@ def build_pipeline_trigger(
     own, separate job, not this closure's.
     """
     instance_service, advance_runner = _build_pipeline_composition(
-        engine, agent_registry, python_command=python_command
+        engine, agent_registry, python_command=python_command, knowledge_resolver=knowledge_resolver
     )
     definition = load_pipeline_definition()
 
@@ -596,6 +668,7 @@ async def resume_pipeline_after_approval(
     workflow_id: str,
     *,
     python_command: tuple[str, ...] | None = None,
+    knowledge_resolver: KnowledgeResolver | None = None,
 ) -> WorkflowRunResult:
     """Re-drives an existing, real ``se.delivery_pipeline`` instance to
     completion after a real ``human_approval`` decision
@@ -611,13 +684,17 @@ async def resume_pipeline_after_approval(
     re-enter an instance it did not just create — resuming after a real
     approval decision is a genuinely separate operation, not something
     ``trigger()`` could be made to do without also creating a second,
-    unwanted instance. ``agent_registry``/``python_command`` must match
-    whatever the original ``build_pipeline_trigger`` call used — this
-    function does not remember them, since nothing about a resumed run
-    should silently change composition mid-flight.
+    unwanted instance. ``agent_registry``/``python_command``/
+    ``knowledge_resolver`` must match whatever the original
+    ``build_pipeline_trigger`` call used — this function does not
+    remember them, since nothing about a resumed run should silently
+    change composition mid-flight. In practice this never matters for
+    ``requirements-analyst`` specifically, since a resume always starts
+    from a later step — but the parameter is threaded through for the
+    same composition-consistency reason ``python_command`` already is.
     """
     _, advance_runner = _build_pipeline_composition(
-        engine, agent_registry, python_command=python_command
+        engine, agent_registry, python_command=python_command, knowledge_resolver=knowledge_resolver
     )
     return await advance_runner.run_to_completion(
         workflow_id=workflow_id,

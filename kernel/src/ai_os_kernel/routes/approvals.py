@@ -57,6 +57,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_os_kernel.context_manager.resolvers import KnowledgeResolver
 from ai_os_kernel.security_manager import SecurityContext, authenticate
 from ai_os_kernel.security_manager.errors import ApprovalNotAuthorizedError
 from ai_os_kernel.security_manager.role_administration import SqlRoleGrantRepository
@@ -166,8 +167,13 @@ async def decide_approval(
         agent_registry: AgentRegistry | None = getattr(
             request.app.state, "se_delivery_pipeline_agent_registry", None
         )
+        knowledge_resolver: KnowledgeResolver | None = getattr(
+            request.app.state, "se_delivery_pipeline_knowledge_resolver", None
+        )
         if agent_registry is not None:
-            result = await resume_pipeline_after_approval(engine, agent_registry, workflow_id)
+            result = await resume_pipeline_after_approval(
+                engine, agent_registry, workflow_id, knowledge_resolver=knowledge_resolver
+            )
             resumed = True
             resumed_outcome = result.outcome
             resumed_error = str(result.error) if result.error is not None else None
