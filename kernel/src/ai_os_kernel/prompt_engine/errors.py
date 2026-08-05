@@ -64,3 +64,11 @@ class PromptFragmentOverrideError(Exception):
     :class:`PromptRoleNotBoundError` already establishes for role
     binding.
     """
+
+
+class PromptCacheBoundaryError(Exception):
+    """A template's real ``{{cache_boundary}}`` marker is missing, or
+    appears more than once (:mod:`ai_os_kernel.prompt_engine.
+    cache_boundary`) — an ambiguous split is real content the caller
+    must fix, not something this module arbitrates on its behalf.
+    """
