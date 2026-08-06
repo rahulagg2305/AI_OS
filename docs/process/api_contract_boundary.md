@@ -52,6 +52,16 @@ made for the roadmap trackers.
 
 ## Scheduled work
 
-- `P06-S01-M36-T01` — export the artifact and wire the drift check.
 - `P06-S03-M39-T01` — Dashboard scaffold consuming only the generated
   client.
+
+## Implementation Status (appended 2026-08-06, `P06-S01-M36-T01`)
+
+The artifact and drift check described above are now real: the
+committed `docs/07_api/openapi.json` had already gone stale (missing
+the role-administration routes) with nothing to catch it — the "already
+gated in CI" claim above was correct about the mechanism's *intent*
+(ADR-0018 line 27, the `frontend` job's client-drift step) but the
+Kernel side of the same rule had no enforcement of its own yet. Fixed
+by `tests/contract/test_openapi_contract.py`, which `ci.yml`'s existing
+`tests/contract` step already runs unconditionally.

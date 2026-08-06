@@ -29,6 +29,116 @@
         "title": "ComponentStatus",
         "type": "object"
       },
+      "DecideApprovalRequest": {
+        "description": "Mirrors :class:`~ai_os_kernel.workflow_engine.human_approval.\nDecision` \u2014 only ``approved``/``rejected`` are real decisions today\n(``human_approval.py``'s own disclosed scope: no ``changes_requested``\nhandling exists).",
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "decision": {
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "DecideApprovalRequest",
+        "type": "object"
+      },
+      "DecideApprovalResponse": {
+        "description": "The real, recorded decision, plus whether \u2014 and how \u2014 this\nspecific workflow was genuinely resumed. ``resumed`` is ``False``\nwhenever the decided workflow is not ``se.delivery_pipeline`` (the\none real, wired resumption target today) \u2014 a real, honest signal,\nnot a placeholder.",
+        "properties": {
+          "approval_id": {
+            "title": "Approval Id",
+            "type": "string"
+          },
+          "decided_by": {
+            "title": "Decided By",
+            "type": "string"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "resumed": {
+            "title": "Resumed",
+            "type": "boolean"
+          },
+          "resumed_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resumed Error"
+          },
+          "resumed_outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowRunOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approval_id",
+          "workflow_id",
+          "decision",
+          "decided_by",
+          "resumed",
+          "resumed_outcome",
+          "resumed_error"
+        ],
+        "title": "DecideApprovalResponse",
+        "type": "object"
+      },
+      "GrantRoleRequest": {
+        "description": "Mirrors :meth:`RoleAdministrationService.grant`'s own keyword\narguments exactly \u2014 no parallel request shape.",
+        "properties": {
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "principal_id",
+          "role",
+          "reason"
+        ],
+        "title": "GrantRoleRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -207,6 +317,112 @@
           "reason"
         ],
         "title": "RegisterPackRequest",
+        "type": "object"
+      },
+      "RevokeRoleRequest": {
+        "description": "Mirrors :meth:`RoleAdministrationService.revoke`'s own keyword\narguments exactly \u2014 no parallel request shape.",
+        "properties": {
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "principal_id",
+          "role",
+          "reason"
+        ],
+        "title": "RevokeRoleRequest",
+        "type": "object"
+      },
+      "RoleGrant": {
+        "description": "One ``security.role_grants`` row (data_model.md \u00a79a.1).",
+        "properties": {
+          "grant_id": {
+            "title": "Grant Id",
+            "type": "string"
+          },
+          "granted_at": {
+            "format": "date-time",
+            "title": "Granted At",
+            "type": "string"
+          },
+          "granted_by": {
+            "title": "Granted By",
+            "type": "string"
+          },
+          "granted_reason": {
+            "title": "Granted Reason",
+            "type": "string"
+          },
+          "principal_id": {
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "revoked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked By"
+          },
+          "revoked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked Reason"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "grant_id",
+          "principal_id",
+          "role",
+          "status",
+          "granted_by",
+          "granted_reason",
+          "granted_at",
+          "revoked_by",
+          "revoked_reason",
+          "revoked_at"
+        ],
+        "title": "RoleGrant",
         "type": "object"
       },
       "StartWorkflowRequest": {
@@ -541,6 +757,21 @@
             "title": "Principal Id",
             "type": "string"
           },
+          "principal_permissions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Principal Permissions"
+          },
           "run_manifest_id": {
             "anyOf": [
               {
@@ -551,6 +782,18 @@
               }
             ],
             "title": "Run Manifest Id"
+          },
+          "scheduled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled At"
           },
           "status": {
             "$ref": "#/components/schemas/WorkflowInstanceStatus"
@@ -585,6 +828,8 @@
           "experiment_id",
           "run_manifest_id",
           "principal_id",
+          "principal_permissions",
+          "scheduled_at",
           "last_event_seq",
           "error",
           "total_cost_usd",
@@ -646,7 +891,8 @@
         "enum": [
           "completed",
           "max_iterations_reached",
-          "failed"
+          "failed",
+          "waiting_for_human"
         ],
         "title": "WorkflowRunOutcome",
         "type": "string"
@@ -1081,6 +1327,96 @@
         ]
       }
     },
+    "/api/v1/security/role-grants": {
+      "delete": {
+        "operationId": "revoke_role_api_v1_security_role_grants_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleGrant"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke Role",
+        "tags": [
+          "role-administration"
+        ]
+      },
+      "post": {
+        "operationId": "grant_role_api_v1_security_role_grants_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleGrant"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Grant Role",
+        "tags": [
+          "role-administration"
+        ]
+      }
+    },
     "/api/v1/version": {
       "get": {
         "operationId": "get_version_api_v1_version_get",
@@ -1306,6 +1642,72 @@
         "summary": "Get Workflow",
         "tags": [
           "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/approvals/{approval_id}/decisions": {
+      "post": {
+        "operationId": "decide_approval_api_v1_workflows__workflow_id__approvals__approval_id__decisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecideApprovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decide Approval",
+        "tags": [
+          "approvals"
         ]
       }
     },

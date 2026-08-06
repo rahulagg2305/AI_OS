@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 76%** (187.5 of 246 Task-equivalents complete)
+**Overall: 77%** (188.5 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -39,7 +39,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P04 (D) | S03 Benchmarking Pack | 4 | 0 | 0 | 4 | 0% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 0 | 2 | 0% |
 | P05 (E) | S02 Project Intelligence Pack | 6 | 0 | 0 | 6 | 0% |
-| P06 (F) | S01 API Completion and Published Contract | 4 | 2 | 0 | 2 | 50% |
+| P06 (F) | S01 API Completion and Published Contract | 4 | 3 | 0 | 1 | 75% |
 | P06 (F) | S02 Realtime Stream | 1 | 0 | 0 | 1 | 0% |
 | P06 (F) | S03 Dashboard | 3 | 0 | 0 | 3 | 0% |
 | P06 (F) | S04 Command Line Interface | 1 | 0 | 0 | 1 | 0% |
@@ -61,14 +61,14 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (Stage C) - First Real Capability Pack | 38 | 31 | 82% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 7 | 39% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
-| P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 2 | 15% |
+| P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 3 | 23% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 0 | 0% |
 | P08 (Stage H) - Expansion | 9 | 0 | 0% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |
 
 ## Ready to start
 
-26 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+27 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P03-S02-M29-T07` code-reviewer agent
@@ -80,9 +80,10 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P04-S02-M16-T01` trace.links writer
 - `P04-S03-M34-T01` Experiment definition with pinned conditions
 - `P05-S01-M26-T01` Parser adapters
-- `P06-S01-M36-T01` Published OpenAPI contract artifact
 - `P06-S01-M36-T04` Remaining documented routes
 - `P06-S02-M37-T01` WebSocket stream endpoint
+- `P06-S03-M39-T01` Dashboard scaffold on the generated client
+- `P06-S04-M38-T01` aios CLI
 - `P06-S05-M22-T01` Notification channels
 - `P06-S06-M25-T01` Speech Gateway
 - `P07-S01-M40-T01` Kubernetes manifests and Helm chart
@@ -94,8 +95,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P08-S01-M29-T03` api-designer agent
 - `P08-S01-M29-T04` security-analysis agent
 - `P08-S01-M29-T05` release agent
-- `P08-S01-M29-T06` refactoring agent
-- ... and 1 more
+- ... and 2 more
 
 ## Dependency review signal
 
