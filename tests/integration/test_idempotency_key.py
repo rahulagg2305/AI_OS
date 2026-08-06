@@ -39,7 +39,7 @@ from tests.integration._postgres_fixture import postgres_container
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 SCHEMA_PATH = "platform_sdk/schemas/manifest.schema.json"
-_SIGNING_KEY = "idempotency-test-signing-key-at-least-32-bytes"
+_SIGNING_KEY = "idempotency-test-signing-key-at-least-32-bytes"  # gitleaks:allow
 
 
 @pytest.fixture(scope="module")
