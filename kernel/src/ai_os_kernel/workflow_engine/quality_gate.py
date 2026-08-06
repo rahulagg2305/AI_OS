@@ -61,16 +61,29 @@ pack-declared gate id either. When both are supplied for a step, this
 executor resolves the real definition and uses its real ``id``/
 ``version`` in the returned output (``gateId``/``gateVersion``) instead
 of the workflow-local step id — genuinely richer, real data, not
-fabricated. **The pass/fail decision itself is completely unchanged**:
-it still comes from the identical ``source_output.get(success_field)``
-check below, regardless of whether a registry resolved anything. The
-one real, new failure mode this can introduce —
-:class:`~ai_os_kernel.workflow_engine.errors.UnsupportedGateSeverityError`
-— fires only if a resolved gate ever declares ``severity="warning"``,
-which this executor cannot yet honour (no Policy Enforcer,
-``P02-S06-M15-T07``, exists to distinguish blocking from warning); both
-of the one real pack's own declared gates are ``severity="blocking"``
-today, so this never fires for `se.delivery_pipeline`'s own real runs.
+fabricated. **The evaluation itself is completely unchanged**: it
+still comes from the identical ``source_output.get(success_field)``
+check below, regardless of whether a registry resolved anything.
+
+**Evaluating a result is now separated from enforcing its severity
+(``P02-S06-M15-T07``) — the Policy Enforcer this class's own docstring
+above named as unbuilt.** A resolved gate's real ``severity``
+(``"blocking"`` when no registry entry resolves, matching every prior
+caller's own unchanged behaviour) decides the *consequence* of a
+non-passing evaluation, never the evaluation itself: ``"blocking"``
+still raises :class:`~ai_os_kernel.workflow_engine.errors.
+QualityGateFailedError`, halting the run exactly as before this step;
+``"warning"`` returns normally instead, with ``severity: "warning"``
+in the real, persisted output — genuinely recorded (see
+:mod:`~ai_os_kernel.workflow_engine.gate_result_recorder`'s own,
+correspondingly updated column mapping), never silently dropped, and
+never blocking progression. Both of the one real pack's own declared
+gates are ``severity="blocking"`` today, so this remains a zero-
+behaviour-change for `se.delivery_pipeline`'s own real runs; proven for
+the new, real ``"warning"`` case with a real, schema-conformant gate
+definition in this module's own unit tests (no manifest anywhere
+declares one yet — the identical "build real, wire later" precedent
+the Gate Registry itself was built under, `P02-S06-M15-T05`).
 """
 
 from __future__ import annotations
@@ -79,10 +92,13 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ai_os_kernel.quality_gate_engine.registry import GateRegistry
-from ai_os_kernel.workflow_engine.errors import QualityGateFailedError, UnsupportedGateSeverityError
+from ai_os_kernel.workflow_engine.errors import QualityGateFailedError
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
+
+_SEVERITY_BLOCKING = "blocking"
+_SEVERITY_WARNING = "warning"
 
 
 def _latest_completed_output(
@@ -121,15 +137,21 @@ class QualityGateStepExecutor:
 
     Raises :class:`QualityGateFailedError` — never returns a "failed"
     result silently — when the source step has no persisted output yet,
-    or when its output's ``success_field`` is not literally ``True``.
-    This mirrors :class:`~ai_os_kernel.workflow_engine.step_executor.
+    or when its output's ``success_field`` is not literally ``True``,
+    **and the resolved gate's severity is ``"blocking"``** (the default
+    when no registry entry resolves — every caller from before
+    ``P02-S06-M15-T07`` unaffected). This mirrors
+    :class:`~ai_os_kernel.workflow_engine.step_executor.
     AgentStepExecutor`/:class:`~ai_os_kernel.workflow_engine.
     step_executor.ToolStepExecutor`, which already raise
     (:class:`AgentOutputValidationError`/:class:`ToolOutputValidationError`)
     rather than returning a structured failure — the existing failure
     boundary this codebase already has (:class:`WorkflowAdvanceRunner.
     run_to_completion`'s own ``except Exception`` at its loop boundary),
-    not new orchestration logic.
+    not new orchestration logic. A ``"warning"``-severity gate's own
+    non-passing evaluation instead returns normally, with
+    ``severity: "warning"`` in the output — genuinely recorded, never
+    blocking (``P02-S06-M15-T07``'s own Policy Enforcer distinction).
     """
 
     def __init__(
@@ -171,41 +193,43 @@ class QualityGateStepExecutor:
 
         gate_id: str = step.id
         gate_version: str | None = None
+        severity = _SEVERITY_BLOCKING
         real_gate_id = self._gate_ids.get(step.id)
         if self._gate_registry is not None and real_gate_id is not None:
             definition = await self._gate_registry.resolve_gate(real_gate_id)
-            if definition.severity != "blocking":
-                raise UnsupportedGateSeverityError(
-                    f"gate '{definition.id}' (step '{step.id}') declares "
-                    f"severity={definition.severity!r} — this executor only "
-                    "enforces blocking severity today"
-                )
             gate_id = definition.id
             gate_version = definition.version
+            severity = definition.severity
 
         steps = await self._repository.list_steps(workflow_id)
         source_output = _latest_completed_output(steps, source_step_id)
         if source_output is None:
-            raise QualityGateFailedError(
-                f"quality gate step '{step.id}' blocked progression: source step "
-                f"'{source_step_id}' has no persisted output yet",
-                gate_step_id=step.id,
+            failure_detail = f"source step '{source_step_id}' has no persisted output yet"
+            passed = False
+        else:
+            result = source_output.get(self._success_field)
+            passed = result is True
+            failure_detail = (
+                f"source step '{source_step_id}' reported {self._success_field}={result!r}, "
+                "not True"
             )
 
-        result = source_output.get(self._success_field)
-        if result is not True:
+        if not passed and severity == _SEVERITY_BLOCKING:
             raise QualityGateFailedError(
-                f"quality gate step '{step.id}' blocked progression: source step "
-                f"'{source_step_id}' reported {self._success_field}={result!r}, "
-                "not True",
+                f"quality gate step '{step.id}' blocked progression: {failure_detail}",
                 gate_step_id=step.id,
             )
 
         outputs: dict[str, Any] = {
             "gateId": gate_id,
             "sourceStepId": source_step_id,
-            self._success_field: True,
+            self._success_field: passed,
         }
         if gate_version is not None:
             outputs["gateVersion"] = gate_version
+        if not passed:
+            # Reached only when severity == "warning" (blocking already
+            # raised above) — genuinely recorded, never blocks
+            # progression. See this class's own docstring.
+            outputs["severity"] = _SEVERITY_WARNING
         return outputs

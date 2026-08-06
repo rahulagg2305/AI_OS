@@ -66,16 +66,18 @@ caller that has it; nothing is invented or estimated**:
   already documents as undocumented-value-list, deliberately not
   translated into a separate ``"passed"``/``"failed"`` vocabulary this
   step would otherwise have to invent).
-- ``severity`` ← the fixed literal ``"blocking"`` — an honest structural
-  constant, not per-row invented data: quality_gate_engine.md §7 names
-  ``blocking``/``warning`` as the only two severities this design
-  documents, and every gate ``QualityGateStepExecutor`` can evaluate
-  today is unconditionally blocking (it always raises
-  ``QualityGateFailedError``, halting the run, on failure — no
-  warning-severity gate execution path exists in this codebase yet).
-  The identical "no field maps to this yet, store the honest constant"
-  convention ``SqlLLMCallRecorder``'s own ``degradations=[]`` already
-  established.
+- ``severity`` ← ``step.outputs.get("severity", "blocking")`` (added
+  ``P02-S06-M15-T07``, the Policy Enforcer) — ``QualityGateStepExecutor``
+  itself now only ever puts a real ``"severity"`` key in its own output
+  for the one case its own default omits: a genuinely non-passing
+  ``"warning"``-severity evaluation, since that is the one case this
+  recorder previously could not honestly reach at all (every prior
+  failure raised before any output was ever persisted). Every other
+  real case — every pass, and every real, resolved ``"blocking"``
+  gate's own failure (still raised, still recorded via ``step.error``
+  below, never reaching this column change) — has no ``"severity"``
+  key, so the fallback is exactly the identical, honest
+  ``"blocking"`` default this column has always recorded.
 - ``metrics`` ← ``{"attempt": step.attempt}`` — the one real,
   quantifiable number this resolution genuinely has; no numeric score
   exists anywhere in this design (the check is a single boolean field),
@@ -153,6 +155,7 @@ class SqlGateResultRecorder:
             else 0
         )
         messages: list[Any] = [step.error["message"]] if step.error is not None else []
+        severity = (step.outputs or {}).get("severity", _SEVERITY_BLOCKING)
 
         try:
             async with self._engine.begin() as connection:
@@ -164,7 +167,7 @@ class SqlGateResultRecorder:
                         gate_id=step.step_name,
                         gate_version=gate_version,
                         status=step.status,
-                        severity=_SEVERITY_BLOCKING,
+                        severity=severity,
                         metrics={"attempt": step.attempt},
                         messages=messages,
                         duration_ms=duration_ms,

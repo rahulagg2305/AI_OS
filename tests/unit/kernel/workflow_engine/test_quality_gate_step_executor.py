@@ -12,10 +12,7 @@ from typing import Any, Literal
 import pytest
 
 from ai_os_kernel.quality_gate_engine.registry import GateDefinition, InMemoryGateRegistry
-from ai_os_kernel.workflow_engine.errors import (
-    QualityGateFailedError,
-    UnsupportedGateSeverityError,
-)
+from ai_os_kernel.workflow_engine.errors import QualityGateFailedError
 from ai_os_kernel.workflow_engine.event_record import WorkflowEventRecord
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
@@ -256,7 +253,39 @@ async def test_a_registry_resolved_gate_still_blocks_on_a_real_failure() -> None
 
 
 @pytest.mark.asyncio
-async def test_a_resolved_warning_severity_gate_is_refused_not_silently_enforced() -> None:
+async def test_a_resolved_warning_severity_gate_genuinely_records_a_failure_without_blocking() -> (
+    None
+):
+    # P02-S06-M15-T07's own real proof: the Policy Enforcer distinction
+    # -- a "warning" gate's own non-passing evaluation returns normally
+    # (no exception -- the workflow genuinely proceeds), with a real,
+    # honest severity flag in its output, never silently dropped.
+    repository = _FakeRepository(
+        [_step_record(step_name="test", outputs={"passed": False, "exitCode": 1})]
+    )
+    registry = InMemoryGateRegistry(
+        {"se.build_tests_pass": _real_gate_definition(severity="warning")}
+    )
+    executor = QualityGateStepExecutor(
+        repository,
+        gate_sources={"quality-gate-tests-pass": "test"},
+        gate_registry=registry,
+        gate_ids={"quality-gate-tests-pass": "se.build_tests_pass"},
+    )
+
+    outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
+
+    assert outputs == {
+        "gateId": "se.build_tests_pass",
+        "gateVersion": "0.1.0",
+        "sourceStepId": "test",
+        "passed": False,
+        "severity": "warning",
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_resolved_warning_severity_gate_still_reports_a_genuine_pass_plainly() -> None:
     repository = _FakeRepository([_step_record(step_name="test", outputs={"passed": True})])
     registry = InMemoryGateRegistry(
         {"se.build_tests_pass": _real_gate_definition(severity="warning")}
@@ -268,8 +297,38 @@ async def test_a_resolved_warning_severity_gate_is_refused_not_silently_enforced
         gate_ids={"quality-gate-tests-pass": "se.build_tests_pass"},
     )
 
-    with pytest.raises(UnsupportedGateSeverityError, match="se.build_tests_pass"):
-        await executor.execute(_GATE_STEP, workflow_id="wf_fake")
+    outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
+
+    # A genuine pass carries no "severity" key regardless of the gate's
+    # own declared severity -- identical shape to a passing blocking
+    # gate, since severity only ever changes the *failure* consequence.
+    assert outputs == {
+        "gateId": "se.build_tests_pass",
+        "gateVersion": "0.1.0",
+        "sourceStepId": "test",
+        "passed": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_resolved_warning_severity_gate_with_no_persisted_output_yet_does_not_block() -> (
+    None
+):
+    repository = _FakeRepository([_step_record(step_name="test", outputs=None)])
+    registry = InMemoryGateRegistry(
+        {"se.build_tests_pass": _real_gate_definition(severity="warning")}
+    )
+    executor = QualityGateStepExecutor(
+        repository,
+        gate_sources={"quality-gate-tests-pass": "test"},
+        gate_registry=registry,
+        gate_ids={"quality-gate-tests-pass": "se.build_tests_pass"},
+    )
+
+    outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
+
+    assert outputs["passed"] is False
+    assert outputs["severity"] == "warning"
 
 
 @pytest.mark.asyncio

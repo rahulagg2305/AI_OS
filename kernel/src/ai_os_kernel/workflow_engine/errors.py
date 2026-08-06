@@ -318,19 +318,6 @@ class QualityGateFailedError(Exception):
         self.retriable = True
 
 
-class UnsupportedGateSeverityError(Exception):
-    """A real, registry-resolved :class:`~ai_os_kernel.quality_gate_engine.
-    registry.GateDefinition` declares ``severity="warning"`` —
-    :class:`~ai_os_kernel.workflow_engine.quality_gate.
-    QualityGateStepExecutor` only ever enforces blocking behaviour
-    today (``P02-S06-M15-T09``'s own disclosed limitation; a real
-    Policy Enforcer distinguishing the two, ``P02-S06-M15-T07``, does
-    not exist yet). Raised rather than silently treating a declared
-    warning gate as blocking (over-enforcing) or silently skipping it
-    (under-enforcing) — both would misrepresent what the manifest
-    actually declares."""
-
-
 class WorkflowLeaseUnavailableError(Exception):
     """A workflow instance's lease could not be acquired or released.
 
