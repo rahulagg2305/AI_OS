@@ -232,6 +232,26 @@ agents:
     requiredPrompts:
       - database.write_migration@0.1.0
 
+  - id: api-designer
+    name: API Designer Agent
+    version: 0.1.0
+    purpose: >-
+      Given a design or instruction (FR-037), produce one valid OpenAPI
+      3.1 contract document and genuinely write it through the sandbox
+      — validated against the real OpenAPI 3.1 specification before any
+      write, never a hand-rolled structural check. This pack's ninth
+      agent, and the second genuinely new agent (not a migration) since
+      the module-27 Platform SDK hard gate lifted.
+    entrypoint: ai_os_pack_software_engineering.agents.api_designer:ApiDesignerAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.api_designer:ApiContractInput
+    outputSchema: ai_os_pack_software_engineering.agents.api_designer:ApiDesignerAgentOutput
+    modelAlias: coding-strong
+    permissions:
+      - llm:invoke
+      - sandbox:execute
+    requiredPrompts:
+      - apidesigner.write_contract@0.1.0
+
   - id: git-push
     name: Git Push Agent
     version: 0.1.0
@@ -342,6 +362,15 @@ prompts:
       migration file (a "-- UP"/"-- DOWN" pair) implementing a given
       design/instruction, in a fixed, parseable format with no
       surrounding prose.
+
+  - id: apidesigner.write_contract
+    version: 0.1.0
+    location: prompts/api_designer_write_contract.md
+    inputSchema: ai_os_pack_software_engineering.agents.api_designer:ApiContractInput
+    description: >-
+      Instructs the model to produce exactly one valid OpenAPI 3.1
+      contract document implementing a given design/instruction, in a
+      fixed, parseable format with no surrounding prose.
 
   - id: documentation.record_artifact
     version: 0.1.0

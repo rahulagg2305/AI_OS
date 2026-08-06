@@ -42,6 +42,7 @@ from ai_os_kernel.capability_manager.manifest_catalog_installer import (
 from ai_os_kernel.capability_manager.repository import SqlPackLifecycleRepository
 from ai_os_kernel.persistence.catalog_schema import agents, prompts, tools, workflow_definitions
 from ai_os_kernel.persistence.engine import build_engine
+from ai_os_pack_software_engineering.agents.api_designer import ApiDesignerAgentOutput
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureProposalOutput
 from ai_os_pack_software_engineering.agents.build import BuildAgentOutput
 from ai_os_pack_software_engineering.agents.database import DatabaseAgentOutput
@@ -74,6 +75,7 @@ _EXPECTED_PERMISSIONS = {
     "qa-test": ["sandbox:execute"],
     "documentation": ["llm:invoke", "sandbox:execute"],
     "database": ["llm:invoke", "sandbox:execute"],
+    "api-designer": ["llm:invoke", "sandbox:execute"],
     "git-push": ["sandbox:execute", "git:write"],
 }
 _EXPECTED_OUTPUT_MODELS: dict[str, type[BaseModel]] = {
@@ -84,6 +86,7 @@ _EXPECTED_OUTPUT_MODELS: dict[str, type[BaseModel]] = {
     "qa-test": TestAgentOutput,
     "documentation": DocumentationAgentOutput,
     "database": DatabaseAgentOutput,
+    "api-designer": ApiDesignerAgentOutput,
     "git-push": GitPushAgentOutput,
 }
 
@@ -164,8 +167,8 @@ def test_registering_the_real_pack_derives_real_agent_prompt_and_tool_rows(
         finally:
             await engine.dispose()
 
-        # --- agents: real row for each of the 8 real, declared agents ---
-        assert len(agent_rows) == 8
+        # --- agents: real row for each of the 9 real, declared agents ---
+        assert len(agent_rows) == 9
         by_agent_id = {row["agent_id"]: row for row in agent_rows}
         for manifest_agent in manifest["agents"]:
             slug = manifest_agent["id"]
@@ -186,8 +189,8 @@ def test_registering_the_real_pack_derives_real_agent_prompt_and_tool_rows(
             # path, not a placeholder `{}`.
             assert row["output_schema"] == _EXPECTED_OUTPUT_MODELS[slug].model_json_schema()
 
-        # --- prompts: real row for each of the 5 real, shipped prompts ---
-        assert len(prompt_rows) == 5
+        # --- prompts: real row for each of the 6 real, shipped prompts ---
+        assert len(prompt_rows) == 6
         by_prompt_id = {(row["prompt_id"], row["version"]): row for row in prompt_rows}
         for manifest_prompt in manifest["prompts"]:
             row = by_prompt_id[(manifest_prompt["id"], manifest_prompt["version"])]

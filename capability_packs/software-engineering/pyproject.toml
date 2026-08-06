@@ -26,6 +26,18 @@ dependencies = [
     # LocalSubprocessSandbox, DockerSandbox) — it simply no longer
     # belongs in this pack's own published runtime dependency list.
     "ai-os-sdk",
+    # api_designer.py's own real, standards-grade validation of an
+    # LLM-produced OpenAPI 3.1 document (FR-037: "produced and
+    # validated") — chosen over a hand-rolled structural check
+    # (product-owner decision, 2026-08-06) precisely because a real
+    # spec validator catches genuine OpenAPI violations a few
+    # top-level-key checks would miss.
+    "openapi-spec-validator>=0.7,<1.0",
+    # pyyaml is already a real, transitive dependency via ai-os-sdk's
+    # own pyproject.toml (platform_sdk/pyproject.toml) — declared
+    # directly here too, since api_designer.py imports it directly,
+    # not merely relying on a dependency's own dependency.
+    "pyyaml>=6.0,<7.0",
 ]
 
 [build-system]
