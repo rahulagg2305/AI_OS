@@ -242,7 +242,10 @@ def test_sql_agent_registry_genuinely_resolves_the_requirements_analyst_agent(
             assert isinstance(resolved, RequirementsAnalystAgentEntrypoint)
             assert resolved.output_schema == {
                 "type": "object",
-                "properties": {"analysis": {"type": "string"}},
+                "properties": {
+                    "analysis": {"type": "string"},
+                    "specificationItems": {"type": "array", "items": {"type": "string"}},
+                },
                 "required": ["analysis"],
                 "additionalProperties": False,
             }

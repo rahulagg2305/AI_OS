@@ -63,6 +63,15 @@ class TriggerDeliveryPipelineRequest(BaseModel):
             "analyzed and refined by Requirements Analyst before Architecture ever sees it."
         ),
     )
+    specification: str | None = Field(
+        default=None,
+        description=(
+            "An optional, additional structured Markdown specification (FR-030, "
+            "`P03-S03-M30-T02`) — parsed into validated requirement items by "
+            "Requirements Analyst. `requirement` stays required and unaffected; omitting "
+            "this field changes nothing for any existing caller."
+        ),
+    )
 
 
 class TriggerDeliveryPipelineResponse(BaseModel):
@@ -107,9 +116,11 @@ async def trigger_delivery_pipeline(
     if trigger is None:
         raise HTTPException(status_code=503, detail="se.delivery_pipeline is not available")
 
-    result = await trigger(
-        {"requirement": body.requirement}, security_context.principal.principal_id
-    )
+    trigger_inputs: dict[str, Any] = {"requirement": body.requirement}
+    if body.specification is not None:
+        trigger_inputs["specification"] = body.specification
+
+    result = await trigger(trigger_inputs, security_context.principal.principal_id)
 
     documentation_path: str | None = None
     repository: WorkflowInstanceRepository | None = getattr(

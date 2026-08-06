@@ -344,7 +344,7 @@ agents:
 workflows:
   - id: se.delivery_pipeline
     name: Software Delivery Pipeline
-    version: 1.8.0
+    version: 1.9.0
     description: >-
       Chains Requirements Analyst, Architecture, Build, Lint, Code
       Review, QA/Test, Documentation, and Git Push into one real,
@@ -362,7 +362,12 @@ workflows:
       decision is required to proceed, never a timeout. Git Push then
       genuinely commits and pushes through the real Git Integration
       Service when configured with a real remote — a real, structured
-      no-op otherwise.
+      no-op otherwise. An optional `specification` input (FR-030,
+      `P03-S03-M30-T02`) lets a caller additionally supply a structured
+      Markdown spec, parsed into validated requirement items that
+      Requirements Analyst folds into its own context — `requirement`
+      stays required and unchanged, so every existing caller is
+      unaffected.
     definition: workflows/delivery_pipeline.yaml
     inputsSchema: ai_os_pack_software_engineering.workflows.models:PipelineInput
     outputsSchema: ai_os_pack_software_engineering.workflows.models:PipelineOutput

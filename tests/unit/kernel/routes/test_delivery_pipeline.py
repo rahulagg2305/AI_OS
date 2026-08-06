@@ -131,3 +131,23 @@ def test_an_authorized_principal_reaches_the_route_and_gets_a_clear_unavailable_
     # configured in this unit test), not from the security boundary.
     assert response.status_code == 503
     assert response.json()["detail"] == "se.delivery_pipeline is not available"
+
+
+def test_an_optional_specification_field_is_accepted_alongside_requirement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FR-030 (`P03-S03-M30-T02`): the new, optional `specification`
+    field is real request-body shape, not merely documented — proven by
+    FastAPI accepting it (reaching the same honest 503, not a 422)."""
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    monkeypatch.delenv("AIOS_DATABASE_URL", raising=False)
+    app = build_app(_config())
+
+    with TestClient(app) as client:
+        response = client.post(
+            _ROUTE,
+            json={"requirement": "x", "specification": "- Shorten a URL\n"},
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+
+    assert response.status_code == 503

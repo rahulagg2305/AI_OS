@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 79%** (195 of 246 Task-equivalents complete)
+**Overall: 80%** (196 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -30,7 +30,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (B) | S08 Kernel HTTP Surface | 4 | 4 | 0 | 0 | 100% |
 | P03 (C) | S01 Sandboxed Tool Execution | 8 | 7 | 0 | 1 | 88% |
 | P03 (C) | S02 Software Engineering Pack Agents | 8 | 7 | 0 | 1 | 88% |
-| P03 (C) | S03 Software Engineering Pack Workflows | 6 | 5 | 0 | 1 | 83% |
+| P03 (C) | S03 Software Engineering Pack Workflows | 6 | 6 | 0 | 0 | 100% |
 | P03 (C) | S04 Pack Tools and Declared Quality Gates | 4 | 2 | 0 | 2 | 50% |
 | P03 (C) | S05 Security and Human Approval | 10 | 10 | 0 | 0 | 100% |
 | P03 (C) | S06 Threat Controls | 2 | 2 | 0 | 0 | 100% |
@@ -58,7 +58,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
 | P02 (Stage B) - Minimum Viable Kernel | 100 | 97 | 98% |
-| P03 (Stage C) - First Real Capability Pack | 38 | 33 | 87% |
+| P03 (Stage C) - First Real Capability Pack | 38 | 34 | 89% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 7 | 39% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 3 | 27% |
@@ -68,11 +68,10 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-21 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+20 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P03-S02-M29-T08` technical-planner agent
-- `P03-S03-M30-T02` Structured Markdown specification input
 - `P03-S04-M31-T02` Manifest-declared file and build tools
 - `P03-S04-M31-T03` Pack-declared gate definitions
 - `P04-S01-M12-T04` Metrics collector

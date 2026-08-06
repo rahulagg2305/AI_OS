@@ -21,9 +21,11 @@ analysis) lives under the Kernel's own
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
+from ai_os_kernel.context_manager.models import AssembledContext, ContextItem, SourceRef, SourceType
 from ai_os_kernel.llm_gateway.gateway import EchoLLMGateway
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
@@ -44,6 +46,33 @@ _PACK_ID = "software-engineering"
 _PACK_VERSION = "0.1.0"
 _PROMPT_ID = "requirements.analyze"
 _PROMPT_VERSION = "0.1.0"
+
+
+def _workflow_state_context(instance_inputs: dict[str, object]) -> AssembledContext:
+    """The real shape ``WorkflowStateResolver`` genuinely produces
+    (``ai_os_kernel.context_manager.resolvers``) — a single
+    ``ContextItem`` whose ``content`` is the whole ``instance.inputs``
+    dict, JSON-dumped. Used here so this file's own tests of
+    ``specification`` extraction exercise the real production shape,
+    not a hand-invented one — the exact gap a prior draft's tests
+    missed (see this agent's own module docstring)."""
+    content = json.dumps(instance_inputs, sort_keys=True, default=str)
+    item = ContextItem(
+        content=content,
+        provenance=SourceRef(
+            source_type=SourceType.WORKFLOW_STATE, identifier="workflow_instance:wf-1"
+        ),
+        relevance_score=1.0,
+        token_count=len(content),
+        trust="trusted",
+    )
+    return AssembledContext(
+        items=[item],
+        total_tokens=item.token_count,
+        sources_queried=[SourceType.WORKFLOW_STATE],
+        items_excluded_count=0,
+        assembly_id="test-assembly",
+    )
 
 
 def _agent_with_prompt(template: str) -> RequirementsAnalystAgentEntrypoint:
@@ -72,7 +101,10 @@ def test_requirements_analyst_entrypoint_constructs_with_zero_arguments() -> Non
 
     assert agent.output_schema == {
         "type": "object",
-        "properties": {"analysis": {"type": "string"}},
+        "properties": {
+            "analysis": {"type": "string"},
+            "specificationItems": {"type": "array", "items": {"type": "string"}},
+        },
         "required": ["analysis"],
         "additionalProperties": False,
     }
@@ -161,4 +193,76 @@ async def test_missing_required_invocation_fields_raise_a_clear_error() -> None:
 
 def test_input_and_output_models_document_the_agent_contract() -> None:
     RequirementsAnalysisInput(requirement="Build a URL shortener service.")
+    RequirementsAnalysisInput(
+        requirement="Build a URL shortener service.", specification="- Shorten a URL\n"
+    )
     RequirementsAnalysisOutput(analysis="A requirements analysis.")
+    RequirementsAnalysisOutput(analysis="A requirements analysis.", specificationItems=["item"])
+
+
+@pytest.mark.asyncio
+async def test_a_valid_specification_is_parsed_and_folded_into_context() -> None:
+    """FR-030's own real, provable behavior: the parsed items reach the
+    rendered prompt (proven via EchoLLMGateway's own verbatim echo) and
+    are returned as this step's own new `specificationItems` output —
+    the literal "parsed, validated requirement items" the ticket asks
+    for, not inert plumbing."""
+    agent = _agent_with_prompt("{{context}}")
+    step_inputs = {
+        "promptId": _PROMPT_ID,
+        "promptVersion": _PROMPT_VERSION,
+        "modelAlias": "coding-strong",
+        "context": _workflow_state_context(
+            {
+                "requirement": "Build a URL shortener.",
+                "specification": "- Users can shorten a URL\n- Users can view click counts\n",
+            }
+        ),
+    }
+
+    outputs = await agent.execute(step_inputs)
+
+    assert outputs["specificationItems"] == [
+        "Users can shorten a URL",
+        "Users can view click counts",
+    ]
+    assert "Structured specification items:" in outputs["analysis"]
+    assert "1. Users can shorten a URL" in outputs["analysis"]
+    assert "2. Users can view click counts" in outputs["analysis"]
+
+
+@pytest.mark.asyncio
+async def test_omitting_specification_changes_nothing_for_an_existing_caller() -> None:
+    """Zero regression, proven directly: identical inputs to the
+    pre-existing shape produce an output with no `specificationItems`
+    key at all, not `null`."""
+    agent = _agent_with_prompt("Analyze this requirement: {{context}}")
+    step_inputs = {
+        "promptId": _PROMPT_ID,
+        "promptVersion": _PROMPT_VERSION,
+        "modelAlias": "coding-strong",
+        "variables": {"context": "a URL shortener service"},
+    }
+
+    outputs = await agent.execute(step_inputs)
+
+    assert outputs == {"analysis": "Analyze this requirement: a URL shortener service"}
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_specification_fails_the_step_with_a_clear_error() -> None:
+    agent = _agent_with_prompt("unused")
+    step_inputs = {
+        "promptId": _PROMPT_ID,
+        "promptVersion": _PROMPT_VERSION,
+        "modelAlias": "coding-strong",
+        "context": _workflow_state_context(
+            {
+                "requirement": "Build a URL shortener.",
+                "specification": "No bullet items here at all.",
+            }
+        ),
+    }
+
+    with pytest.raises(RequirementsAnalystInputError, match="failed to parse"):
+        await agent.execute(step_inputs)

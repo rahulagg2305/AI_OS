@@ -541,7 +541,16 @@ async def test_all_six_agent_steps_and_both_gates_genuinely_chain_through_real_p
             engine, registry, python_command=LocalSubprocessSandbox().python_command
         )
 
-        result = await trigger({"requirement": "print a friendly message"}, "test-principal")
+        result = await trigger(
+            {
+                "requirement": "print a friendly message",
+                # FR-030 (`P03-S03-M30-T02`): a real, additive input,
+                # proven end to end alongside every other real hand-off
+                # this test already covers, not in a separate test.
+                "specification": "- Users can shorten a URL\n- Users can view click counts\n",
+            },
+            "test-principal",
+        )
 
         # A real `approve-git-push` human_approval point (P03-S03-M30-T05)
         # now sits between `documentation` and `git-push` — this test's
@@ -571,6 +580,14 @@ async def test_all_six_agent_steps_and_both_gates_genuinely_chain_through_real_p
         # Analyst's own real prompt — read back from its own persisted
         # `analysis` field, not hand-copied.
         assert "print a friendly message" in requirements_analyst_outputs["analysis"]
+        # FR-030's own real, parsed, validated items — persisted as their
+        # own structured field, and genuinely folded into the same
+        # rendered prompt Architecture reads two hops downstream.
+        assert requirements_analyst_outputs["specificationItems"] == [
+            "Users can shorten a URL",
+            "Users can view click counts",
+        ]
+        assert "Structured specification items:" in requirements_analyst_outputs["analysis"]
 
         architecture_outputs = next(s.outputs for s in steps if s.step_name == "architecture")
         assert architecture_outputs is not None

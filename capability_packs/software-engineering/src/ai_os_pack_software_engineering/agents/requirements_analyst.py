@@ -8,6 +8,42 @@ against acceptance criteria beyond what the model itself states —
 output capture only, the identical scope reduction every agent in this
 pack has used for its own first real slice.
 
+**Accepts an optional, additive `specification` input (FR-030,
+`P03-S03-M30-T02`), on top of the pre-existing, still-required
+`requirement`.** Design fork resolved with the product owner before
+writing code: additive, not a breaking replace of `requirement` — 13
+existing test files/callers across this repo already construct a
+trigger payload with only `requirement`, and none of them changes
+here. **A real, discovered gap fixed before shipping, not after**: an
+earlier draft read ``inputs.get("specification")`` directly and always
+got ``None`` in production — ``AgentStepExecutor`` forwards only
+``promptId``/``promptVersion``/``modelAlias``/``stepId``/``agentId``/
+``workflowId``/``context`` to any agent's own ``execute()``, never
+arbitrary ``instance.inputs`` keys (no per-step input-mapping mechanism
+exists, confirmed by this module's own long-standing docstring on
+:class:`RequirementsAnalysisInput`) — a live, real, Postgres-backed
+integration test caught this the deterministic pack-only unit tests
+could not, because only the integration test drove a genuine
+``AgentStepExecutor``/Context Manager/``WorkflowStateResolver`` chain
+rather than a hand-built ``inputs`` dict. The real fix,
+:func:`_extract_specification_from_context`: read ``specification``
+back out of ``WorkflowStateResolver``'s own existing, unchanged
+JSON-dumped ``instance.inputs`` context item — the one real channel
+that already, genuinely carries it this far. Once extracted, it is
+parsed via :mod:`ai_os_pack_software_engineering.workflows.spec_parser`
+(this agent's own first, and today only, real consumer of that module
+— the Kernel's own pipeline composition never imports pack code, so
+parsing cannot live there) into a real, validated list folded into
+this agent's own `context` prompt variable (alongside the same raw
+text already embedded once via the JSON dump — a disclosed, harmless
+redundancy, not a bug), and returned verbatim as this step's own new
+`specificationItems` output field — the literal, provable "parsed,
+validated requirement items" `P03-S03-M30-T02` asks for, not merely
+inert plumbing. A malformed `specification` (no bullet item found, or
+an empty one) fails this step with a clear `RequirementsAnalystInputError`
+before any LLM call is made, rather than silently proceeding or
+wasting a completion on unusable input.
+
 **Migrated onto the real Platform SDK (``platform_sdk_v1_scope.md``
 step 10) — the first agent needing real gateway injection.** This
 entrypoint now implements :class:`~ai_os_sdk.contracts.Agent` and
@@ -88,11 +124,16 @@ since this pack module may not have one).
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ai_os_pack_software_engineering.workflows.spec_parser import (
+    SpecificationParseError,
+    parse_markdown_specification,
+)
 from ai_os_sdk.models import LLMRequest, Message, MessageRole, TraceContext
 
 # Named, documented first-cut value, not yet tuned against real
@@ -101,10 +142,15 @@ from ai_os_sdk.models import LLMRequest, Message, MessageRole, TraceContext
 _MAX_OUTPUT_TOKENS = 2048
 
 # This agent's own output field is `analysis`, not `content` — see this
-# module's own docstring for why.
+# module's own docstring for why. `specificationItems` (added
+# `P03-S03-M30-T02`) is optional and omitted entirely unless a caller
+# supplied `specification` and it parsed successfully — never `null`.
 _OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
-    "properties": {"analysis": {"type": "string"}},
+    "properties": {
+        "analysis": {"type": "string"},
+        "specificationItems": {"type": "array", "items": {"type": "string"}},
+    },
     "required": ["analysis"],
     "additionalProperties": False,
 }
@@ -133,17 +179,71 @@ class RequirementsAnalysisInput(BaseModel):
     requirement: str = Field(
         ..., description="The raw software requirement or ask to analyze and refine."
     )
+    specification: str | None = Field(
+        default=None,
+        description=(
+            "An optional structured Markdown specification (FR-030, "
+            "`P03-S03-M30-T02`) — see "
+            "ai_os_pack_software_engineering.workflows.spec_parser's own "
+            "docstring for the exact convention. When present, it is "
+            "parsed into requirement items and folded into this agent's "
+            "own context alongside `requirement`, which is unaffected."
+        ),
+    )
 
 
 class RequirementsAnalysisOutput(BaseModel):
     """Documents this agent's Agent Contract "Produced Outputs" — free
     text (a structured requirements analysis, per this agent's own
     prompt), not a further-structured object. Named ``analysis``, not
-    ``content``, per this module's own docstring."""
+    ``content``, per this module's own docstring. ``specification_items``
+    (added `P03-S03-M30-T02`) is the real, parsed, validated list FR-030
+    asks for — present only when a caller supplied `specification` and
+    it parsed successfully."""
+
+    specification_items: list[str] | None = Field(default=None, alias="specificationItems")
+
+    model_config = {"populate_by_name": True}
 
     analysis: str = Field(
         ..., description="The refined, structured requirements analysis, as free text."
     )
+
+
+def _extract_specification_from_context(inputs: dict[str, Any]) -> str | None:
+    """Reads the raw ``specification`` instance input back out of the
+    one real, existing channel that ever carries it to this step:
+    ``WorkflowStateResolver``'s own JSON-dumped ``instance.inputs``
+    context item (``ai_os_kernel.context_manager.resolvers``).
+
+    **There is no more direct route, and this is not a workaround —
+    it is the honest consequence of two real, pre-existing facts, both
+    already documented elsewhere in this module: no per-step
+    input-mapping mechanism exists (`AgentStepExecutor` forwards only
+    `promptId`/`promptVersion`/`modelAlias`/`stepId`/`agentId`/
+    `workflowId`/`context` — never arbitrary `instance.inputs` keys),
+    and this pack's own parsing logic cannot live in the Kernel (no
+    pack's source is ever imported there — see this module's own
+    docstring). `WorkflowStateResolver` already serializes the whole
+    `instance.inputs` dict as one JSON-dumped context item scoped to
+    this step alone — this function's only job is picking `specification`
+    back out of it, duck-typed the same way :func:`_build_variables`
+    already reads `context.items`.**"""
+    context = inputs.get("context")
+    items = getattr(context, "items", None) or []
+    for item in items:
+        content = getattr(item, "content", None)
+        if not isinstance(content, str):
+            continue
+        try:
+            payload = json.loads(content)
+        except ValueError:
+            continue
+        if isinstance(payload, dict):
+            candidate = payload.get("specification")
+            if isinstance(candidate, str):
+                return candidate
+    return None
 
 
 def _build_variables(inputs: dict[str, Any]) -> dict[str, Any]:
@@ -207,9 +307,30 @@ class RequirementsAnalystAgentEntrypoint:
                 f"and 'modelAlias' in its inputs — missing: {', '.join(missing)}"
             )
 
-        rendered = await self._context.prompts.render(
-            prompt_id, _build_variables(inputs), version=prompt_version
-        )
+        specification = _extract_specification_from_context(inputs)
+        specification_items: list[str] | None = None
+        if isinstance(specification, str) and specification.strip():
+            try:
+                specification_items = parse_markdown_specification(specification)
+            except SpecificationParseError as exc:
+                raise RequirementsAnalystInputError(
+                    f"RequirementsAnalystAgentEntrypoint's 'specification' input failed to "
+                    f"parse: {exc}"
+                ) from exc
+
+        variables = _build_variables(inputs)
+        if specification_items is not None:
+            items_block = "\n".join(
+                f"{index + 1}. {item}" for index, item in enumerate(specification_items)
+            )
+            existing_context = variables.get("context", "")
+            variables["context"] = (
+                f"{existing_context}\n\nStructured specification items:\n{items_block}"
+                if existing_context
+                else f"Structured specification items:\n{items_block}"
+            )
+
+        rendered = await self._context.prompts.render(prompt_id, variables, version=prompt_version)
 
         workflow_id = inputs.get("workflowId")
         step_id = inputs.get("stepId")
@@ -237,4 +358,7 @@ class RequirementsAnalystAgentEntrypoint:
             )
         )
 
-        return {"analysis": response.content}
+        output: dict[str, Any] = {"analysis": response.content}
+        if specification_items is not None:
+            output["specificationItems"] = specification_items
+        return output

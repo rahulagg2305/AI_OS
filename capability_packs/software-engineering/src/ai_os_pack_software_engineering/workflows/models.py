@@ -28,6 +28,14 @@ class PipelineInput(BaseModel):
             "analyzed and refined by Requirements Analyst before Architecture ever sees it."
         ),
     )
+    specification: str | None = Field(
+        default=None,
+        description=(
+            "An optional, additional structured Markdown specification (FR-030, "
+            "`P03-S03-M30-T02`) — parsed into validated requirement items by "
+            "Requirements Analyst. `requirement` stays required and unaffected."
+        ),
+    )
 
 
 class PipelineOutput(BaseModel):

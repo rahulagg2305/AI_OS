@@ -25,7 +25,7 @@
 # invokes was renamed to `qa-test`, since step ids are this workflow's
 # own naming, not a copy of the agent catalog.
 #
-# Four real, blocking quality_gate steps now exist (the third,
+# Three real, blocking quality_gate steps now exist (the third,
 # `quality-gate-code-review-clean`, added `P03-S03-M30-T03`) — the
 # smallest real slices of the Quality Gate Engine (see
 # ai_os_kernel.workflow_engine.quality_gate's own docstring), each
@@ -161,10 +161,10 @@ description: >-
   Point pauses the pipeline for a real, attributable, authorized
   decision, and Git Push then commits and pushes it through the real
   Git Integration Service when configured — eight real agent steps,
-  one real routing decision, one real human approval point, plus four
+  one real routing decision, one real human approval point, plus three
   real, blocking, retried quality gates, each genuinely consuming the
   previous step's real, persisted output.
-version: 1.8.0
+version: 1.9.0
 trigger: manual
 
 inputs:
@@ -176,6 +176,22 @@ inputs:
         The raw software requirement or ask to design, build, test, and
         document — analyzed and refined by Requirements Analyst before
         Architecture ever sees it.
+    specification:
+      type: string
+      description: >-
+        An optional, additional structured Markdown specification
+        (FR-030, `P03-S03-M30-T02`) — a document naming one or more
+        top-level bullet items, each parsed into its own validated
+        requirement item and folded into Requirements Analyst's own
+        context alongside `requirement`, which stays required and
+        unchanged. Malformed input (no bullet item found, or an empty
+        one) fails the `requirements-analyst` step with a clear error
+        rather than silently proceeding. See
+        ai_os_pack_software_engineering.workflows.spec_parser's own
+        docstring for the exact, documented convention. Omitting this
+        field changes nothing — every existing caller's own behavior is
+        unaffected (design fork resolved with the product owner:
+        additive, not a breaking replacement of `requirement`).
   required: [requirement]
   additionalProperties: false
 
