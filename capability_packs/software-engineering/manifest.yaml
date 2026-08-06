@@ -213,6 +213,25 @@ agents:
     requiredPrompts:
       - documentation.record_artifact@0.1.0
 
+  - id: database
+    name: Database Agent
+    version: 0.1.0
+    purpose: >-
+      Given a design or instruction (FR-036), produce one reversible SQL
+      migration file (a "-- UP"/"-- DOWN" pair) and genuinely write it
+      through the sandbox. This pack's eighth agent, and the first new
+      agent added since the module-27 Platform SDK hard gate lifted for
+      real new agents, not a migration of an existing one.
+    entrypoint: ai_os_pack_software_engineering.agents.database:DatabaseAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.database:DatabaseMigrationInput
+    outputSchema: ai_os_pack_software_engineering.agents.database:DatabaseAgentOutput
+    modelAlias: coding-strong
+    permissions:
+      - llm:invoke
+      - sandbox:execute
+    requiredPrompts:
+      - database.write_migration@0.1.0
+
   - id: git-push
     name: Git Push Agent
     version: 0.1.0
@@ -313,6 +332,16 @@ prompts:
       Instructs the model to produce exactly one file (path + content)
       implementing a given design/instruction, in a fixed, parseable
       format with no surrounding prose.
+
+  - id: database.write_migration
+    version: 0.1.0
+    location: prompts/database_write_migration.md
+    inputSchema: ai_os_pack_software_engineering.agents.database:DatabaseMigrationInput
+    description: >-
+      Instructs the model to produce exactly one reversible SQL
+      migration file (a "-- UP"/"-- DOWN" pair) implementing a given
+      design/instruction, in a fixed, parseable format with no
+      surrounding prose.
 
   - id: documentation.record_artifact
     version: 0.1.0
