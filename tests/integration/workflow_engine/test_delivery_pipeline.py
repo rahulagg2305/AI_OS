@@ -138,6 +138,7 @@ from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry, SqlAgen
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
 from ai_os_pack_software_engineering.agents.build import BuildAgentEntrypoint
+from ai_os_pack_software_engineering.agents.code_review import CodeReviewerAgentEntrypoint
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentEntrypoint
 from ai_os_pack_software_engineering.agents.git_push import GitPushAgentEntrypoint
 from ai_os_pack_software_engineering.agents.lint import LintAgentEntrypoint
@@ -210,10 +211,18 @@ _AGENT_IDS = {
     "architecture": f"{_PACK_ID}/architecture",
     "build": f"{_PACK_ID}/build",
     "lint": f"{_PACK_ID}/lint",
+    "code-review": f"{_PACK_ID}/code-review",
     "test": f"{_PACK_ID}/qa-test",
     "documentation": f"{_PACK_ID}/documentation",
     "git-push": f"{_PACK_ID}/git-push",
 }
+
+# A real, valid, empty findings array — the identical "template IS the
+# completion" convention every `EchoLLMGateway`-backed helper in this
+# file already relies on (the template is echoed back verbatim), not a
+# stand-in avoiding `CodeReviewerAgentEntrypoint`'s own real JSON
+# parser. An empty array is a real, passing review.
+_CODE_REVIEW_CLEAN_TEMPLATE = "[]"
 
 
 def _unconfigured_git_push_agent() -> GitPushAgentEntrypoint:
@@ -257,6 +266,28 @@ def _lint_agent_with_sandbox(sandbox: LocalSubprocessSandbox) -> LintAgentEntryp
             pack_version=_PACK_VERSION,
             permissions=["sandbox:execute"],
             sandbox=sandbox,
+        )
+    )
+    return agent
+
+
+def _code_review_agent_with_prompt(template: str, prompt_id: str) -> CodeReviewerAgentEntrypoint:
+    """code-review (added `P03-S03-M30-T03`) is SDK-native from its
+    first line — no migration, no `service_factory` override. Construct
+    zero-arg, exactly as `EntrypointLoader` does, then bind the real
+    `PackContext` a real caller would inject, granting both
+    `llm:invoke` and `sandbox:execute` — the identical shape
+    `_build_agent_with_prompt` already establishes for the other agent
+    needing both together."""
+    agent = CodeReviewerAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke", "sandbox:execute"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
+            sandbox=LocalSubprocessSandbox(),
         )
     )
     return agent
@@ -489,6 +520,9 @@ async def test_all_six_agent_steps_and_both_gates_genuinely_chain_through_real_p
                 build_template, "build.write_file", working_directory=tmp_path
             ),
             _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["code-review"]: _code_review_agent_with_prompt(
+                _CODE_REVIEW_CLEAN_TEMPLATE, "codereview.produce_findings"
+            ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -665,6 +699,9 @@ async def test_a_genuinely_failing_test_run_halts_the_pipeline_before_documentat
                 build_template, "build.write_file", working_directory=tmp_path
             ),
             _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["code-review"]: _code_review_agent_with_prompt(
+                _CODE_REVIEW_CLEAN_TEMPLATE, "codereview.produce_findings"
+            ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -797,6 +834,9 @@ async def test_a_gate_failure_within_the_retry_bound_eventually_succeeds(
                 build_template, "build.write_file", working_directory=tmp_path
             ),
             _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["code-review"]: _code_review_agent_with_prompt(
+                _CODE_REVIEW_CLEAN_TEMPLATE, "codereview.produce_findings"
+            ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -904,6 +944,9 @@ async def test_a_gate_that_fails_every_attempt_exhausts_the_retry_bound_and_halt
                 build_template, "build.write_file", working_directory=tmp_path
             ),
             _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["code-review"]: _code_review_agent_with_prompt(
+                _CODE_REVIEW_CLEAN_TEMPLATE, "codereview.produce_findings"
+            ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -999,6 +1042,9 @@ async def test_a_non_gate_step_failure_within_the_retry_bound_eventually_succeed
                 llm_gateway=flaky_build_gateway,
             ),
             _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["code-review"]: _code_review_agent_with_prompt(
+                _CODE_REVIEW_CLEAN_TEMPLATE, "codereview.produce_findings"
+            ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -1099,6 +1145,9 @@ async def test_a_genuinely_non_retriable_step_failure_halts_immediately_despite_
                 llm_gateway=always_failing_gateway,
             ),
             _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["code-review"]: _code_review_agent_with_prompt(
+                _CODE_REVIEW_CLEAN_TEMPLATE, "codereview.produce_findings"
+            ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -1176,6 +1225,9 @@ async def test_a_genuinely_lint_violating_build_halts_retries_and_exhausts_befor
                 build_template, "build.write_file", working_directory=tmp_path
             ),
             _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["code-review"]: _code_review_agent_with_prompt(
+                _CODE_REVIEW_CLEAN_TEMPLATE, "codereview.produce_findings"
+            ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
@@ -1347,12 +1399,16 @@ class _BuildCompatibleEchoGateway:
     `requirements-analyst`/`architecture`/`documentation` accept any
     non-empty string as their own free-text output (confirmed by reading
     each entrypoint's own `response.content` handling), so only `build`
-    actually parses this content's specific shape. `provider`/`model_id`
-    stay `"echo"`/`"echo-1"` — the identical, real, hardcoded self-
-    description `EchoLLMGateway` itself already returns — so this
-    remains an honest "echo-family fake," not a different provider
-    identity, and this test's own `resolved_provider`/`resolved_model_id`
-    assertions stay meaningful."""
+    actually parses this content's specific shape. **Except `code-review`
+    (added `P03-S03-M30-T03`), the first step whose own real parser
+    rejects that content outright — detected by inspecting the real
+    rendered prompt for a marker unique to its own prompt template, and
+    given a real, valid, empty (`"[]"`) findings array instead.**
+    `provider`/`model_id` stay `"echo"`/`"echo-1"` — the identical, real,
+    hardcoded self-description `EchoLLMGateway` itself already returns
+    — so this remains an honest "echo-family fake," not a different
+    provider identity, and this test's own `resolved_provider`/
+    `resolved_model_id` assertions stay meaningful."""
 
     _CONTENT = (
         "FILE_PATH: solution.py\n"
@@ -1361,9 +1417,29 @@ class _BuildCompatibleEchoGateway:
         "FILE_CONTENT_END"
     )
 
+    # `code-review` (added `P03-S03-M30-T03`) is the first step in this
+    # pipeline whose own real parser rejects the fixed `_CONTENT` above
+    # outright (it is not JSON) — every other step already accepted it
+    # as free text or FILE_PATH-shaped content. Detected by a marker
+    # string unique to `code_review_produce_findings.md`'s own rendered
+    # prompt, the identical "inspect the real rendered prompt, not the
+    # step id" technique this class's own docstring already establishes
+    # for why a single fixed completion cannot serve every step. An
+    # empty findings array is a real, valid, passing review — not a
+    # stand-in avoiding the real parser, genuinely accepted by
+    # `CodeReviewerAgentEntrypoint`'s own `_parse_findings`.
+    _CODE_REVIEW_PROMPT_MARKER = "File under review:"
+    _CODE_REVIEW_CONTENT = "[]"
+
     async def complete(self, request: LLMRequest) -> LLMResponse:
+        rendered_prompt = request.messages[-1].content
+        content = (
+            self._CODE_REVIEW_CONTENT
+            if self._CODE_REVIEW_PROMPT_MARKER in rendered_prompt
+            else self._CONTENT
+        )
         return LLMResponse(
-            content=self._CONTENT,
+            content=content,
             stop_reason=StopReason.END_TURN,
             usage=UsageRecord(
                 input_tokens=0,

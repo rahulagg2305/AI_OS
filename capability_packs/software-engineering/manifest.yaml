@@ -344,16 +344,19 @@ agents:
 workflows:
   - id: se.delivery_pipeline
     name: Software Delivery Pipeline
-    version: 1.7.0
+    version: 1.8.0
     description: >-
-      Chains Requirements Analyst, Architecture, Build, Lint, QA/Test,
-      Documentation, and Git Push into one real, declared workflow —
-      each step's genuine output reaches the next step's genuine input
-      through a real Context Manager resolver. A real decision step
-      routes straight to Test (skipping a wasted Lint invocation) when
-      Build's own write genuinely failed. Two real, blocking,
-      bounded-retry Quality Gates now exist: one between Build and Test
-      (Static Analysis), one between Test and Documentation (Testing).
+      Chains Requirements Analyst, Architecture, Build, Lint, Code
+      Review, QA/Test, Documentation, and Git Push into one real,
+      declared workflow — each step's genuine output reaches the next
+      step's genuine input through a real Context Manager resolver. A
+      real decision step routes straight to Test (skipping a wasted
+      Lint and Code Review invocation) when Build's own write
+      genuinely failed. Three real, blocking, bounded-retry Quality
+      Gates now exist: one reading Lint's own outcome (Static
+      Analysis), one reading Code Review's own outcome (FR-045's own
+      bounded review-revise loop, blocking on a genuine `high`
+      severity finding), one reading Test's own outcome (Testing).
       A real Human Approval Point (`approve-git-push`) now pauses the
       pipeline before its final step — a real, attributable, authorized
       decision is required to proceed, never a timeout. Git Push then
@@ -388,6 +391,19 @@ qualityGates:
       The real test command the QA/Test Agent runs against the file
       the Build Agent wrote exits zero, with no failures.
     entrypoint: ai_os_pack_software_engineering.agents.verification:TestAgentEntrypoint
+    severity: blocking
+    successCriteria: >-
+      The source step's own real `passed` field is `True`.
+
+  - id: se.code_review_clean
+    name: Code Review Clean
+    version: 0.1.0
+    description: >-
+      The Code Reviewer Agent finds no `high` severity issue in the
+      file the Build Agent wrote (FR-045's own bounded review-revise
+      loop) — `medium`/`low` findings are real but advisory, never
+      blocking.
+    entrypoint: ai_os_pack_software_engineering.agents.code_review:CodeReviewerAgentEntrypoint
     severity: blocking
     successCriteria: >-
       The source step's own real `passed` field is `True`.

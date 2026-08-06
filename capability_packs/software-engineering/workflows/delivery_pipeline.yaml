@@ -1,7 +1,8 @@
-# Chains this pack's own six independently-proven agents — Requirements
-# Analyst, Architecture, Build, Lint, QA/Test, Documentation (manifest
-# agent ids: `requirements-analyst`, `architecture`, `build`, `lint`,
-# `qa-test`, `documentation`) — into one real, declared Workflow Engine
+# Chains this pack's own independently-proven agents — Requirements
+# Analyst, Architecture, Build, Lint, Code Review, QA/Test,
+# Documentation (manifest agent ids: `requirements-analyst`,
+# `architecture`, `build`, `lint`, `code-review`, `qa-test`,
+# `documentation`) — into one real, declared Workflow Engine
 # pipeline. Each step's genuine output reaches the next step's genuine
 # input through ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver
 # (a Context Manager resolver, not a new orchestration mechanism) —
@@ -17,15 +18,16 @@
 # any more.
 #
 # Step ids below (`requirements-analyst`/`architecture`/`build`/
-# `quality-gate-lint-clean`/`test`/`quality-gate-tests-pass`/
-# `documentation`) are workflow-local identifiers, independent of the
-# agent catalog's own ids — the `test` step id was deliberately left
-# unchanged even though the agent it invokes was renamed to `qa-test`,
-# since step ids are this workflow's own naming, not a copy of the
-# agent catalog.
+# `quality-gate-lint-clean`/`code-review`/`quality-gate-code-review-clean`/
+# `test`/`quality-gate-tests-pass`/`documentation`) are workflow-local
+# identifiers, independent of the agent catalog's own ids — the `test`
+# step id was deliberately left unchanged even though the agent it
+# invokes was renamed to `qa-test`, since step ids are this workflow's
+# own naming, not a copy of the agent catalog.
 #
-# Two real, blocking quality_gate steps now exist — the smallest real
-# slices of the Quality Gate Engine (see
+# Four real, blocking quality_gate steps now exist (the third,
+# `quality-gate-code-review-clean`, added `P03-S03-M30-T03`) — the
+# smallest real slices of the Quality Gate Engine (see
 # ai_os_kernel.workflow_engine.quality_gate's own docstring), each
 # reading a named prior step's own real, persisted `passed` field and
 # halting the pipeline when it is not `True`. Which prior step each
@@ -40,36 +42,54 @@
 #   execution, matching quality_gates_framework.md §5's own documented
 #   category order (5.1 Build, 5.2 Static Analysis, 5.3 Testing). It
 #   reads the new `lint` step's own real `passed` field.
+# - `quality-gate-code-review-clean` (added `P03-S03-M30-T03`, FR-045's
+#   own bounded review-revise loop) sits between `quality-gate-lint-clean`
+#   and `test` — reads the new `code-review` step's own real `passed`
+#   field, mechanically derived from whether any finding's own severity
+#   is `high` (`medium`/`low` findings are real but advisory, never
+#   blocking — see ai_os_pack_software_engineering.agents.code_review's
+#   own docstring). This is the third quality gate category this same,
+#   unchanged mechanism now proves generalizes to, with zero changes to
+#   `QualityGateStepExecutor` itself — only this module's own
+#   `_GATE_SOURCES`/`_GATE_IDS`/`_STEP_RETRY_TARGETS` mappings grew.
 # - `quality-gate-tests-pass` (added 2026-07-30, earlier the same day)
 #   sits between `test` and `documentation`, reading `test`'s own real
 #   `passed` field.
 #
-# `retryPolicy` below (added 2026-07-30) bounds a real retry when either
+# `retryPolicy` below (added 2026-07-30) bounds a real retry when any
 # gate fails: up to 2 total attempts, and no more than 60 real seconds
 # spent retrying, before the pipeline genuinely halts — see
 # ai_os_kernel.workflow_engine.delivery_pipeline's own `_GATE_RETRY_TARGETS`
-# for which step each failed gate retries from (both retry from `build`
-# — see that constant's own comment for why), and
+# for which step each failed gate retries from (all three retry from
+# `build` — see that constant's own comment for why), and
 # WorkflowAdvanceRunner.run_to_completion's own docstring for the
 # mechanism. This field already existed and was already validated
 # (bounded attempts + bounded duration, per error_handling_retry.md §4)
-# before the first gate read it at runtime.
+# before the first gate read it at runtime. **A real, disclosed,
+# pre-existing gap, not introduced or worsened here**: FR-045 itself
+# also names a "token ceiling" bound; no workflow anywhere in this
+# codebase enforces one today (`WorkflowInstance.total_tokens` is
+# tracked, never checked against any ceiling) — this loop is bounded
+# by attempts and duration only, the identical bound every other gate
+# in this pipeline already has, not a narrower guarantee invented for
+# this one.
 #
 # A real `decision` step (added 2026-08-02, `P02-S01-M05-T15`) now
-# routes around `lint`/`quality-gate-lint-clean` entirely when `build`'s
-# own real `written` field is `false` — the write genuinely failed
-# (nonzero exit or timeout, ai_os_pack_software_engineering.agents.build's
-# own docstring), so there is nothing real for Lint to check; routing
-# straight to `test` instead skips a real, wasted Lint invocation (and
-# its own gate/retry-triggering) rather than blindly linting a file that
-# was never written. `test` still runs either way — genuinely failing
-# fast against the missing file, caught by the existing, unchanged
-# `quality-gate-tests-pass` halt/retry, so `documentation`'s own
-# `["build", "test"]` source requirement (delivery_pipeline.py's own
-# `_STEP_SOURCES`) is always satisfied by the time `documentation` could
-# ever be reached. See that module's own docstring for the full
-# reasoning and why this was chosen over the pipeline's other three
-# idle-capability candidates.
+# routes around `lint`/`quality-gate-lint-clean`/`code-review`/
+# `quality-gate-code-review-clean` entirely when `build`'s own real
+# `written` field is `false` — the write genuinely failed (nonzero exit
+# or timeout, ai_os_pack_software_engineering.agents.build's own
+# docstring), so there is nothing real for Lint or Code Review to
+# check; routing straight to `test` instead skips two real, wasted
+# invocations (and their own gate/retry-triggering) rather than blindly
+# checking a file that was never written. `test` still runs either
+# way — genuinely failing fast against the missing file, caught by the
+# existing, unchanged `quality-gate-tests-pass` halt/retry, so
+# `documentation`'s own `["build", "test"]` source requirement
+# (delivery_pipeline.py's own `_STEP_SOURCES`) is always satisfied by
+# the time `documentation` could ever be reached. See that module's own
+# docstring for the full reasoning and why this was chosen over the
+# pipeline's other three idle-capability candidates.
 #
 # Loaded by the already-real, already-existing, previously-unused
 # ai_os_kernel.workflow_engine.loader.WorkflowDefinitionLoader — the
@@ -130,19 +150,21 @@ name: Software Delivery Pipeline
 description: >-
   Requirements Analyst refines the raw ask, Architecture proposes a
   design against that refined analysis, Build implements it, a real
-  decision step routes straight to Test (skipping a wasted Lint
-  invocation) when Build's own write genuinely failed, a real Quality
-  Gate blocks on a genuine lint failure, Test verifies it, a second
-  real Quality Gate blocks on a genuine test failure (both
-  bounded-retry from Build once before giving up), Documentation
-  records it, a real Human Approval Point pauses the pipeline for a
-  real, attributable, authorized decision, and Git Push then commits
-  and pushes it through the real Git Integration Service when
-  configured — seven real agent steps, one real routing decision, one
-  real human approval point, plus two real, blocking, retried quality
-  gates, each genuinely consuming the previous step's real, persisted
-  output.
-version: 1.7.0
+  decision step routes straight to Test (skipping a wasted Lint and
+  Code Review invocation) when Build's own write genuinely failed, a
+  real Quality Gate blocks on a genuine lint failure, Code Review
+  produces real structured findings and a third real Quality Gate
+  blocks on a genuine `high` severity finding (FR-045's own bounded
+  review-revise loop), Test verifies it, a fourth real Quality Gate
+  blocks on a genuine test failure (all bounded-retry from Build once
+  before giving up), Documentation records it, a real Human Approval
+  Point pauses the pipeline for a real, attributable, authorized
+  decision, and Git Push then commits and pushes it through the real
+  Git Integration Service when configured — eight real agent steps,
+  one real routing decision, one real human approval point, plus four
+  real, blocking, retried quality gates, each genuinely consuming the
+  previous step's real, persisted output.
+version: 1.8.0
 trigger: manual
 
 inputs:
@@ -170,12 +192,14 @@ agents:
   - software-engineering/architecture
   - software-engineering/build
   - software-engineering/lint
+  - software-engineering/code-review
   - software-engineering/qa-test
   - software-engineering/documentation
   - software-engineering/git-push
 
 qualityGates:
   - se.build_lint_clean
+  - se.code_review_clean
   - se.build_tests_pass
 
 humanApprovalPoints:
@@ -236,6 +260,16 @@ steps:
     agentId: software-engineering/lint
 
   - id: quality-gate-lint-clean
+    type: quality_gate
+
+  - id: code-review
+    type: agent
+    agentId: software-engineering/code-review
+    promptId: codereview.produce_findings
+    promptVersion: 0.1.0
+    modelAlias: coding-strong
+
+  - id: quality-gate-code-review-clean
     type: quality_gate
 
   - id: test

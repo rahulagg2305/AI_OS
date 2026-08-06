@@ -83,9 +83,12 @@ contract can satisfy on its own.
   ``lintCommand = [*python_command, "-m", "py_compile", filePath]``
   from the now-known, real ``filePath`` — see
   :mod:`ai_os_pack_software_engineering.agents.lint`'s own docstring
-  for why ``py_compile`` (not ``ruff``, tried first and found to fail
-  against ``DockerSandbox``'s own default image) and the real
-  trade-off this choice accepts.
+  for the full reasoning.
+- ``code-review`` (added `P03-S03-M30-T03`) reads ``build``'s own
+  output, whole — the identical convention ``git-push`` already
+  establishes. **No transform needed**: `CodeReviewInput` requires only
+  ``workingDirectory``/``filePath``, both real, already-known ``build``
+  fields, unlike ``lint``'s/``test``'s own derived command fields.
 - ``test`` reads ``build``'s own output, whole (JSON — matching
   ``verification.py``'s own already-shipped ``_extract_payload()``
   convention). **The one deliberate exception**: the Test Agent's own
@@ -291,25 +294,30 @@ _DEFINITION_PATH = (
     Path("capability_packs") / "software-engineering" / "workflows" / "delivery_pipeline.yaml"
 )
 
-# Deliberately generous, not tuned — ten real steps (seven agent steps,
-# the `route-after-build` decision step, and the two real quality_gate
-# steps) plus one final completion transition need eleven `advance()`
-# calls in the happy path (or ten on the `route-after-build` "false"
-# branch, which skips `lint`/`quality-gate-lint-clean` entirely — fewer
-# calls, still well inside this bound). delivery_pipeline.yaml's own
+# Deliberately generous, not tuned — twelve real steps (eight agent
+# steps, the `route-after-build` decision step, and the three real
+# quality_gate steps) plus one final completion transition need
+# thirteen `advance()` calls in the happy path (or eleven on the
+# `route-after-build` "false" branch, which skips
+# `lint`/`quality-gate-lint-clean`/`code-review`/
+# `quality-gate-code-review-clean` entirely — fewer calls, still well
+# inside this bound). delivery_pipeline.yaml's own
 # `retryPolicy.maxAttempts` (2) allows exactly one bounded retry cycle
-# per step in `_STEP_RETRY_TARGETS` — both gates retry from `build`, so
-# either one's retry replays
-# build/lint/quality-gate-lint-clean/test/quality-gate-tests-pass
-# (5 more calls); allowing for both gates to each trigger their own one
-# retry in the same run (contrived, but not impossible) costs at most
-# 10 more calls; `build` retrying from itself costs at most 1 more call
-# — plus a few calls of margin, the identical "bound exists, not sized
-# precisely" reasoning kernel/bootstrap.py's own demo trigger already
-# uses for its own one-step workflow.
+# per step in `_STEP_RETRY_TARGETS` — all three gates retry from
+# `build`, so any one's retry replays build/lint/quality-gate-lint-clean/
+# code-review/quality-gate-code-review-clean/test/quality-gate-tests-pass
+# (7 more calls); allowing for all three gates to each trigger their own
+# one retry in the same run (contrived, but not impossible, `P03-S03-M30-T03`
+# widened this from two gates to three) costs at most 21 more calls;
+# `build` retrying from itself costs at most 1 more call — plus a few
+# calls of margin, the identical "bound exists, not sized precisely"
+# reasoning kernel/bootstrap.py's own demo trigger already uses for its
+# own one-step workflow. Raised from 25 to 40 accordingly — the same
+# margin philosophy, re-applied to a genuinely larger worst case, not a
+# newly tightened or loosened guarantee.
 _WORKER_ID = "software-engineering-pipeline-trigger"
 _LEASE_DURATION_SECONDS = 30
-_MAX_ITERATIONS = 25
+_MAX_ITERATIONS = 40
 
 # The real quality_gate steps' own source-step config (added
 # 2026-07-30) — composition-level, per ai_os_kernel.workflow_engine.
@@ -322,9 +330,13 @@ _MAX_ITERATIONS = 25
 # field — see delivery_pipeline.yaml's own comments on these step ids.
 # Zero changes to QualityGateStepExecutor were needed to add the
 # second entry — the mechanism itself is domain-agnostic by
-# construction; only this mapping grew.
+# construction; only this mapping grew. The third entry
+# (`quality-gate-code-review-clean`, `P03-S03-M30-T03`, FR-045's own
+# bounded review-revise loop) needed zero changes either — the same
+# "only this mapping grows" property, proven a second time.
 _GATE_SOURCES: dict[str, str] = {
     "quality-gate-lint-clean": "lint",
+    "quality-gate-code-review-clean": "code-review",
     "quality-gate-tests-pass": "test",
 }
 
@@ -340,6 +352,7 @@ _GATE_SOURCES: dict[str, str] = {
 # delivery_pipeline.yaml's own top-level `qualityGates:` list already named.
 _GATE_IDS: dict[str, str] = {
     "quality-gate-lint-clean": "se.build_lint_clean",
+    "quality-gate-code-review-clean": "se.code_review_clean",
     "quality-gate-tests-pass": "se.build_tests_pass",
 }
 
@@ -384,6 +397,7 @@ def _build_gate_registry() -> GateRegistry:
 _STEP_RETRY_TARGETS: dict[str, str] = {
     "build": "build",
     "quality-gate-lint-clean": "build",
+    "quality-gate-code-review-clean": "build",
     "quality-gate-tests-pass": "build",
 }
 
@@ -437,6 +451,7 @@ _STEP_SOURCES: dict[str, str | list[str]] = {
     "architecture": "requirements-analyst",
     "build": "architecture",
     "lint": "build",
+    "code-review": "build",
     "test": "build",
     "documentation": ["build", "test"],
     "git-push": "build",

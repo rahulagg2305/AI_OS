@@ -158,10 +158,21 @@ class _ModelFinding(BaseModel):
 
 class CodeReviewerAgentOutput(BaseModel):
     """Documents this agent's Agent Contract "Produced Outputs." Mirrors
-    the real fields :meth:`CodeReviewerAgentEntrypoint.execute` returns."""
+    the real fields :meth:`CodeReviewerAgentEntrypoint.execute` returns.
+
+    ``passed`` (added `P03-S03-M30-T03`) is mechanically derived —
+    ``True`` iff no finding's own ``severity`` is ``high`` — never a
+    second LLM judgment about the first. This is what lets a real
+    ``quality_gate`` step read this agent's own output the identical
+    way it already reads `lint`'s/`qa-test`'s: ``passed`` and nothing
+    else. ``medium``/``low`` findings are real and returned, but
+    advisory — they do not block, the same "high blocks, lower
+    severities are advisory" convention this ticket's own review
+    establishes for the first time in this pack."""
 
     file_path: str = Field(..., alias="filePath")
     findings: list[Finding]
+    passed: bool
 
     model_config = {"populate_by_name": True}
 
@@ -184,8 +195,9 @@ _OUTPUT_SCHEMA: dict[str, Any] = {
                 "required": ["file", "line", "severity", "confidence", "message"],
             },
         },
+        "passed": {"type": "boolean"},
     },
-    "required": ["filePath", "findings"],
+    "required": ["filePath", "findings", "passed"],
     "additionalProperties": False,
 }
 
@@ -386,4 +398,5 @@ class CodeReviewerAgentEntrypoint:
         return {
             "filePath": file_path_raw,
             "findings": [finding.model_dump() for finding in findings],
+            "passed": not any(finding.severity == Severity.HIGH for finding in findings),
         }

@@ -124,7 +124,7 @@ def _write(path: Path, content: str) -> None:
 def test_code_reviewer_agent_entrypoint_constructs_with_zero_arguments() -> None:
     agent = CodeReviewerAgentEntrypoint()
 
-    assert agent.output_schema["required"] == ["filePath", "findings"]
+    assert agent.output_schema["required"] == ["filePath", "findings", "passed"]
 
 
 def test_the_entrypoint_satisfies_both_sdk_protocols() -> None:
@@ -183,6 +183,8 @@ async def test_code_reviewer_agent_reads_a_real_file_and_returns_a_real_finding(
     assert finding["line"] == 2
     assert finding["severity"] == "medium"
     assert finding["confidence"] == 0.8
+    # A medium finding is real but advisory — it does not block.
+    assert outputs["passed"] is True
     # The agent writes nothing — only the source file exists afterward.
     names = await asyncio.to_thread(lambda: [p.name for p in tmp_path.iterdir()])
     assert names == ["messy.py"]
@@ -196,6 +198,25 @@ async def test_code_reviewer_agent_returns_an_empty_list_for_a_clean_file(tmp_pa
     outputs = await agent.execute(_invocation(tmp_path, "clean.py"))
 
     assert outputs["findings"] == []
+    assert outputs["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_code_reviewer_agent_fails_on_a_real_high_severity_finding(tmp_path: Path) -> None:
+    """The real proof `passed` is mechanically derived, never a second
+    LLM judgment: a `high` severity finding fails the gate, the
+    identical "high blocks" rule the new `se.code_review_clean`
+    quality gate reads directly."""
+    _write(tmp_path / "risky.py", "eval(user_input)\n")
+    high_finding = json.dumps(
+        [{"line": 1, "severity": "high", "confidence": 0.95, "message": "eval on user input"}]
+    )
+    agent = _agent_with_prompt(high_finding)
+
+    outputs = await agent.execute(_invocation(tmp_path, "risky.py"))
+
+    assert outputs["passed"] is False
+    assert len(outputs["findings"]) == 1
 
 
 @pytest.mark.asyncio

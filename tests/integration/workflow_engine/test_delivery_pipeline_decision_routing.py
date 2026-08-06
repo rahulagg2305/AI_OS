@@ -54,6 +54,7 @@ from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_pack_software_engineering.agents.architecture import ArchitectureAgentEntrypoint
 from ai_os_pack_software_engineering.agents.build import BuildAgentEntrypoint
+from ai_os_pack_software_engineering.agents.code_review import CodeReviewerAgentEntrypoint
 from ai_os_pack_software_engineering.agents.documentation import DocumentationAgentEntrypoint
 from ai_os_pack_software_engineering.agents.git_push import GitPushAgentEntrypoint
 from ai_os_pack_software_engineering.agents.lint import LintAgentEntrypoint
@@ -77,10 +78,16 @@ _AGENT_IDS = {
     "architecture": f"{_PACK_ID}/architecture",
     "build": f"{_PACK_ID}/build",
     "lint": f"{_PACK_ID}/lint",
+    "code-review": f"{_PACK_ID}/code-review",
     "test": f"{_PACK_ID}/qa-test",
     "documentation": f"{_PACK_ID}/documentation",
     "git-push": f"{_PACK_ID}/git-push",
 }
+
+# A real, valid, empty findings array — the identical "template IS the
+# completion" convention `test_delivery_pipeline.py`'s own identical
+# constant already establishes.
+_CODE_REVIEW_CLEAN_TEMPLATE = "[]"
 
 
 def _unconfigured_git_push_agent() -> GitPushAgentEntrypoint:
@@ -192,6 +199,21 @@ def _lint_agent_with_sandbox(sandbox: LocalSubprocessSandbox) -> LintAgentEntryp
     return agent
 
 
+def _code_review_agent_with_prompt(template: str, prompt_id: str) -> CodeReviewerAgentEntrypoint:
+    agent = CodeReviewerAgentEntrypoint()
+    agent.bind_pack_context(
+        build_pack_context(
+            pack_id=_PACK_ID,
+            pack_version=_PACK_VERSION,
+            permissions=["llm:invoke", "sandbox:execute"],
+            llm_gateway=EchoLLMGateway(),
+            prompt_engine=InMemoryPromptEngine(templates={(prompt_id, "0.1.0"): template}),
+            sandbox=LocalSubprocessSandbox(),
+        )
+    )
+    return agent
+
+
 def _test_agent_with_sandbox(sandbox: LocalSubprocessSandbox) -> TestAgentEntrypoint:
     agent = TestAgentEntrypoint()
     agent.bind_pack_context(
@@ -273,6 +295,9 @@ def test_a_successful_build_write_takes_the_true_branch_through_lint_unchanged(
                 build_template, "build.write_file", working_directory=tmp_path
             ),
             _AGENT_IDS["lint"]: _lint_agent_with_sandbox(LocalSubprocessSandbox()),
+            _AGENT_IDS["code-review"]: _code_review_agent_with_prompt(
+                _CODE_REVIEW_CLEAN_TEMPLATE, "codereview.produce_findings"
+            ),
             _AGENT_IDS["test"]: _test_agent_with_sandbox(LocalSubprocessSandbox()),
             _AGENT_IDS["documentation"]: _documentation_agent_with_prompt(
                 documentation_template, "documentation.record_artifact"
