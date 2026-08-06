@@ -252,6 +252,27 @@ agents:
     requiredPrompts:
       - apidesigner.write_contract@0.1.0
 
+  - id: security-analysis
+    name: Security Analysis Agent
+    version: 0.1.0
+    purpose: >-
+      Given a file the Build Agent wrote (FR-040), genuinely scan it
+      inside the sandbox for a small, well-known set of real,
+      AST-precise security patterns (eval/exec, subprocess
+      shell=True, unsafe pickle/yaml deserialization) and report the
+      real pass/fail outcome with structured findings — derived only
+      from the scan script's own exit code, never from an LLM's
+      opinion. This pack's tenth agent, and the third genuinely new
+      agent (not a migration) since the module-27 Platform SDK hard
+      gate lifted.
+    entrypoint: ai_os_pack_software_engineering.agents.security_analysis:SecurityAnalysisAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.security_analysis:SecurityAnalysisInput
+    outputSchema: ai_os_pack_software_engineering.agents.security_analysis:SecurityAnalysisOutput
+    # No modelAlias — this agent makes no LLM call at all, the identical
+    # shape lint's/qa-test's own entries already establish.
+    permissions:
+      - sandbox:execute
+
   - id: git-push
     name: Git Push Agent
     version: 0.1.0

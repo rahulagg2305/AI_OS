@@ -40,7 +40,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M26 | Document Processing | P05 | 2 | 0 | 0% |
 | M27 | Platform SDK (ai-os-sdk package) | P02 | 8 | 8 | 100% |
 | M28 | Manifest Schema (JSON Schema) | P01 | 2 | 1 | 50% |
-| M29 | SE Pack - Agents | P03+P08 | 15 | 8 | 53% |
+| M29 | SE Pack - Agents | P03+P08 | 15 | 9 | 60% |
 | M30 | SE Pack - Workflows | P03+P08 | 8 | 4 | 50% |
 | M31 | SE Pack - Tools & Quality Gates | P03 | 4 | 2 | 50% |
 | M32 | Project Intelligence Pack | P05 | 6 | 0 | 0% |

@@ -52,6 +52,7 @@ from ai_os_pack_software_engineering.agents.lint import LintAgentOutput
 from ai_os_pack_software_engineering.agents.requirements_analyst import (
     RequirementsAnalysisOutput,
 )
+from ai_os_pack_software_engineering.agents.security_analysis import SecurityAnalysisOutput
 from ai_os_pack_software_engineering.agents.verification import TestAgentOutput
 from tests.integration._postgres_fixture import postgres_container
 
@@ -76,6 +77,7 @@ _EXPECTED_PERMISSIONS = {
     "documentation": ["llm:invoke", "sandbox:execute"],
     "database": ["llm:invoke", "sandbox:execute"],
     "api-designer": ["llm:invoke", "sandbox:execute"],
+    "security-analysis": ["sandbox:execute"],
     "git-push": ["sandbox:execute", "git:write"],
 }
 _EXPECTED_OUTPUT_MODELS: dict[str, type[BaseModel]] = {
@@ -87,6 +89,7 @@ _EXPECTED_OUTPUT_MODELS: dict[str, type[BaseModel]] = {
     "documentation": DocumentationAgentOutput,
     "database": DatabaseAgentOutput,
     "api-designer": ApiDesignerAgentOutput,
+    "security-analysis": SecurityAnalysisOutput,
     "git-push": GitPushAgentOutput,
 }
 
@@ -167,8 +170,8 @@ def test_registering_the_real_pack_derives_real_agent_prompt_and_tool_rows(
         finally:
             await engine.dispose()
 
-        # --- agents: real row for each of the 9 real, declared agents ---
-        assert len(agent_rows) == 9
+        # --- agents: real row for each of the 10 real, declared agents ---
+        assert len(agent_rows) == 10
         by_agent_id = {row["agent_id"]: row for row in agent_rows}
         for manifest_agent in manifest["agents"]:
             slug = manifest_agent["id"]

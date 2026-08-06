@@ -65,6 +65,7 @@ _SE_REAL_AGENT_IDS = {
     f"{_SE_PACK_ID}/documentation",
     f"{_SE_PACK_ID}/database",
     f"{_SE_PACK_ID}/api-designer",
+    f"{_SE_PACK_ID}/security-analysis",
     f"{_SE_PACK_ID}/git-push",
 }
 

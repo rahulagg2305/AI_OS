@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 77%** (190.5 of 246 Task-equivalents complete)
+**Overall: 78%** (191.5 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -48,7 +48,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P07 (G) | S01 Deployment and Infrastructure | 3 | 0 | 0 | 3 | 0% |
 | P07 (G) | S02 Security Hardening | 3 | 0 | 0 | 3 | 0% |
 | P07 (G) | S03 Performance, Chaos and Coverage | 2 | 0 | 0 | 2 | 0% |
-| P08 (H) | S01 Remaining Pack Agents | 7 | 2 | 0 | 5 | 29% |
+| P08 (H) | S01 Remaining Pack Agents | 7 | 3 | 0 | 4 | 43% |
 | P08 (H) | S02 Remaining Pack Workflows | 2 | 0 | 0 | 2 | 0% |
 | P09 (-) | S01 Roadmap System Restructuring (R1-R4) | 5 | 5 | 0 | 0 | 100% |
 
@@ -63,12 +63,12 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 3 | 23% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 0 | 0% |
-| P08 (Stage H) - Expansion | 9 | 2 | 22% |
+| P08 (Stage H) - Expansion | 9 | 3 | 33% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |
 
 ## Ready to start
 
-25 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+24 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P03-S02-M29-T07` code-reviewer agent
@@ -91,7 +91,6 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P07-S02-M14-T01` OIDC authentication
 - `P07-S02-M19-T01` Vault secrets backend
 - `P07-S03-M42-T01` Chaos tests
-- `P08-S01-M29-T04` security-analysis agent
 - `P08-S01-M29-T05` release agent
 - `P08-S01-M29-T06` refactoring agent
 - `P08-S01-M29-T07` performance agent
