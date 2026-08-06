@@ -87,6 +87,7 @@ _REAL_AGENT_IDS = {
     f"{_PACK_ID}/lint",
     f"{_PACK_ID}/qa-test",
     f"{_PACK_ID}/documentation",
+    f"{_PACK_ID}/database",
     f"{_PACK_ID}/git-push",
 }
 
