@@ -6,26 +6,29 @@ is a legitimate substitute in a unit test). The end-to-end proof that
 this genuinely halts `se.delivery_pipeline` lives in
 `tests/integration/workflow_engine/test_delivery_pipeline.py`."""
 
+import asyncio
+import time
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 import pytest
 
+from ai_os_kernel.quality_gate_engine.errors import GateNotRegisteredError
 from ai_os_kernel.quality_gate_engine.registry import GateDefinition, InMemoryGateRegistry
 from ai_os_kernel.workflow_engine.errors import QualityGateFailedError
 from ai_os_kernel.workflow_engine.event_record import WorkflowEventRecord
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
-from ai_os_kernel.workflow_engine.quality_gate import QualityGateStepExecutor
+from ai_os_kernel.workflow_engine.quality_gate import GateCheck, QualityGateStepExecutor
 from ai_os_kernel.workflow_engine.repository import WorkflowListCursor
 from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
 
 
 def _real_gate_definition(
-    *, severity: Literal["blocking", "warning"] = "blocking"
+    *, gate_id: str = "se.build_tests_pass", severity: Literal["blocking", "warning"] = "blocking"
 ) -> GateDefinition:
     return GateDefinition(
-        id="se.build_tests_pass",
+        id=gate_id,
         name="Build Tests Pass",
         version="0.1.0",
         description="All unit tests pass with zero failures.",
@@ -348,3 +351,171 @@ async def test_a_gate_registry_with_no_matching_gate_ids_entry_falls_back_unchan
     outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
 
     assert outputs == {"gateId": "quality-gate-tests-pass", "sourceStepId": "test", "passed": True}
+
+
+class _SleepingGateRegistry:
+    """A real `GateRegistry` whose `resolve_gate()` genuinely awaits
+    `asyncio.sleep` for a configured duration before returning a real,
+    pre-seeded `GateDefinition` — the identical technique
+    `test_parallel_step_executor.py`'s own `_SleepingStepExecutor`
+    already established, so concurrency is proven by real wall-clock
+    timing against a real event loop, never simulated with a registry
+    that resolves instantly (which could look "concurrent" by
+    accident)."""
+
+    def __init__(self, *, definitions: dict[str, GateDefinition], duration: float) -> None:
+        self._definitions = definitions
+        self._duration = duration
+        self.resolved_gate_ids: list[str] = []
+
+    async def resolve_gate(self, gate_id: str) -> GateDefinition:
+        self.resolved_gate_ids.append(gate_id)
+        await asyncio.sleep(self._duration)
+        try:
+            return self._definitions[gate_id]
+        except KeyError:
+            raise GateNotRegisteredError(f"no gate registered for gateId={gate_id!r}") from None
+
+
+_MULTI_GATE_STEP = WorkflowStep(id="quality-gate-checks", type=StepType.QUALITY_GATE)
+
+
+class TestConcurrentMultiGateEvaluation:
+    async def test_three_checks_genuinely_resolve_concurrently_not_sequentially(self) -> None:
+        # The core proof, mirroring test_parallel_step_executor.py's own
+        # technique exactly: three checks, each genuinely resolving in
+        # 0.2s, take much less than 3 x 0.2s = 0.6s in total.
+        repository = _FakeRepository(
+            [
+                _step_record(step_name="lint", outputs={"passed": True}),
+                _step_record(step_name="test", outputs={"passed": True}),
+                _step_record(step_name="scan", outputs={"passed": True}),
+            ]
+        )
+        registry = _SleepingGateRegistry(
+            definitions={
+                "se.a": _real_gate_definition(gate_id="se.a"),
+                "se.b": _real_gate_definition(gate_id="se.b"),
+                "se.c": _real_gate_definition(gate_id="se.c"),
+            },
+            duration=0.2,
+        )
+        executor = QualityGateStepExecutor(
+            repository,
+            gate_sources={},
+            gate_registry=registry,
+            gate_checks={
+                "quality-gate-checks": [
+                    GateCheck(gate_id="se.a", source_step_id="lint"),
+                    GateCheck(gate_id="se.b", source_step_id="test"),
+                    GateCheck(gate_id="se.c", source_step_id="scan"),
+                ]
+            },
+        )
+
+        started = time.monotonic()
+        outputs = await executor.execute(_MULTI_GATE_STEP, workflow_id="wf_fake")
+        elapsed = time.monotonic() - started
+
+        assert elapsed < 0.4  # well under the 0.6s a sequential run would take
+        assert elapsed >= 0.2  # sanity: real work genuinely happened
+        assert outputs["passed"] is True
+        assert {g["gateId"] for g in outputs["gates"]} == {"se.a", "se.b", "se.c"}
+        assert all(g["passed"] is True for g in outputs["gates"])
+
+    async def test_any_blocking_failure_blocks_but_every_check_still_ran(self) -> None:
+        repository = _FakeRepository(
+            [
+                _step_record(step_name="lint", outputs={"passed": True}),
+                _step_record(step_name="test", outputs={"passed": False, "exitCode": 1}),
+            ]
+        )
+        registry = _SleepingGateRegistry(
+            definitions={
+                "se.a": _real_gate_definition(gate_id="se.a"),
+                "se.b": _real_gate_definition(gate_id="se.b"),
+            },
+            duration=0.05,
+        )
+        executor = QualityGateStepExecutor(
+            repository,
+            gate_sources={},
+            gate_registry=registry,
+            gate_checks={
+                "quality-gate-checks": [
+                    GateCheck(gate_id="se.a", source_step_id="lint"),
+                    GateCheck(gate_id="se.b", source_step_id="test"),
+                ]
+            },
+        )
+
+        with pytest.raises(QualityGateFailedError) as exc_info:
+            await executor.execute(_MULTI_GATE_STEP, workflow_id="wf_fake")
+
+        # Both checks genuinely ran to completion -- a blocking failure
+        # never short-circuits the others, the identical "all" policy
+        # ParallelStepExecutor already establishes.
+        assert sorted(registry.resolved_gate_ids) == ["se.a", "se.b"]
+        assert exc_info.value.gate_step_id == "quality-gate-checks"
+        assert exc_info.value.results is not None
+        by_gate_id = {r["gateId"]: r for r in exc_info.value.results}
+        assert by_gate_id["se.a"]["passed"] is True
+        assert by_gate_id["se.b"]["passed"] is False
+
+    async def test_a_failing_warning_check_never_blocks_alongside_a_passing_blocking_one(
+        self,
+    ) -> None:
+        repository = _FakeRepository(
+            [
+                _step_record(step_name="lint", outputs={"passed": True}),
+                _step_record(step_name="test", outputs={"passed": False}),
+            ]
+        )
+        registry = _SleepingGateRegistry(
+            definitions={
+                "se.a": _real_gate_definition(gate_id="se.a", severity="blocking"),
+                "se.b": _real_gate_definition(gate_id="se.b", severity="warning"),
+            },
+            duration=0.01,
+        )
+        executor = QualityGateStepExecutor(
+            repository,
+            gate_sources={},
+            gate_registry=registry,
+            gate_checks={
+                "quality-gate-checks": [
+                    GateCheck(gate_id="se.a", source_step_id="lint"),
+                    GateCheck(gate_id="se.b", source_step_id="test"),
+                ]
+            },
+        )
+
+        outputs = await executor.execute(_MULTI_GATE_STEP, workflow_id="wf_fake")
+
+        assert outputs["passed"] is True
+        by_gate_id = {g["gateId"]: g for g in outputs["gates"]}
+        assert by_gate_id["se.a"]["passed"] is True
+        assert by_gate_id["se.b"]["passed"] is False
+        assert by_gate_id["se.b"]["severity"] == "warning"
+
+    async def test_a_step_with_no_workflow_id_is_rejected(self) -> None:
+        registry = _SleepingGateRegistry(definitions={}, duration=0.0)
+        executor = QualityGateStepExecutor(
+            _FakeRepository([]),
+            gate_sources={},
+            gate_registry=registry,
+            gate_checks={"quality-gate-checks": [GateCheck(gate_id="se.a", source_step_id="lint")]},
+        )
+
+        with pytest.raises(ValueError, match="requires a real workflow_id"):
+            await executor.execute(_MULTI_GATE_STEP)
+
+    async def test_gate_checks_declared_with_no_registry_is_rejected(self) -> None:
+        executor = QualityGateStepExecutor(
+            _FakeRepository([]),
+            gate_sources={},
+            gate_checks={"quality-gate-checks": [GateCheck(gate_id="se.a", source_step_id="lint")]},
+        )
+
+        with pytest.raises(ValueError, match="no gate_registry"):
+            await executor.execute(_MULTI_GATE_STEP, workflow_id="wf_fake")

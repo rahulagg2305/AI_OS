@@ -310,12 +310,22 @@ class QualityGateFailedError(Exception):
     default, every caller except ``se.delivery_pipeline``), this still
     halts the run with ``WorkflowRunOutcome.FAILED`` exactly as before
     — carrying these attributes is additive, not a behavior change on
-    its own."""
+    its own.
 
-    def __init__(self, message: str, *, gate_step_id: str) -> None:
+    ``results`` (added ``P02-S06-M15-T08``, concurrent multi-gate
+    evaluation) optionally carries each declared gate's own real,
+    structured outcome — the identical "structured, not re-parsed from
+    the message" shape :class:`ParallelStepFailedError.results` already
+    establishes. ``None`` (the default) for every single-gate failure
+    from before this step — genuinely unaffected."""
+
+    def __init__(
+        self, message: str, *, gate_step_id: str, results: list[dict[str, Any]] | None = None
+    ) -> None:
         super().__init__(message)
         self.gate_step_id = gate_step_id
         self.retriable = True
+        self.results = results
 
 
 class WorkflowLeaseUnavailableError(Exception):

@@ -88,8 +88,9 @@ the Gate Registry itself was built under, `P02-S06-M15-T05`).
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 from ai_os_kernel.quality_gate_engine.registry import GateRegistry
 from ai_os_kernel.workflow_engine.errors import QualityGateFailedError
@@ -99,6 +100,18 @@ from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
 
 _SEVERITY_BLOCKING = "blocking"
 _SEVERITY_WARNING = "warning"
+
+
+class GateCheck(NamedTuple):
+    """One declared ``(real gateId, source stepId)`` pair for a
+    concurrent multi-gate ``quality_gate`` step (``P02-S06-M15-T08``) —
+    the same composition-level, no-``WorkflowStep``-field-change shape
+    ``gate_sources``/``gate_ids`` already establish for the single-gate
+    case, just carrying both halves together since a multi-gate step
+    needs one *pair* per check, not two separately-keyed mappings."""
+
+    gate_id: str
+    source_step_id: str
 
 
 def _latest_completed_output(
@@ -152,6 +165,36 @@ class QualityGateStepExecutor:
     non-passing evaluation instead returns normally, with
     ``severity: "warning"`` in the output — genuinely recorded, never
     blocking (``P02-S06-M15-T07``'s own Policy Enforcer distinction).
+
+    **Several independent gates for one step, evaluated concurrently
+    (``P02-S06-M15-T08``).** A step id present in ``gate_checks`` takes
+    that path instead of the single-gate one above — real
+    ``asyncio.gather`` concurrency over each declared
+    :class:`GateCheck`'s own registry resolution, never a sequential
+    loop dressed up as parallel (proven by real wall-clock timing in
+    this module's own unit tests, the identical technique
+    :class:`~ai_os_kernel.workflow_engine.step_executor.
+    ParallelStepExecutor`'s own tests already established). ``list_steps``
+    is read once, before the gather, and every check reads from that one
+    shared snapshot — cheaper than one read per check, and free of a
+    subtler hazard a per-check read would risk: two checks disagreeing
+    about "the latest state" because it changed between their own,
+    separately-timed reads. Requires a real ``gate_registry`` (raising
+    ``ValueError`` otherwise) — a multi-gate step with no registry to
+    resolve real ``gateId``/``severity`` from has no real gate to
+    concurrently evaluate at all, unlike the single-gate path's own
+    honest, raw-step-id fallback. Joined under the identical all-must-
+    pass consequence policy `quality_gate_engine.md` §5 documents ("if
+    any blocking gate failed, the Workflow Engine stops progression"):
+    every check runs to real completion before any consequence is
+    decided (mirroring ``ParallelStepExecutor``'s own ``all`` policy,
+    never ``any``'s early-cancellation shape — a *quality* gate that
+    stops checking the moment one thing looks fine would defeat the
+    point), then :class:`~ai_os_kernel.workflow_engine.errors.
+    QualityGateFailedError` raises (carrying every check's own real
+    ``results``) only if at least one blocking check's own evaluation
+    failed; a failing ``"warning"`` check never contributes to that
+    decision, exactly as the single-gate path already established.
     """
 
     def __init__(
@@ -162,12 +205,14 @@ class QualityGateStepExecutor:
         success_field: str = "passed",
         gate_registry: GateRegistry | None = None,
         gate_ids: Mapping[str, str] | None = None,
+        gate_checks: Mapping[str, Sequence[GateCheck]] | None = None,
     ) -> None:
         self._repository = repository
         self._gate_sources = dict(gate_sources)
         self._success_field = success_field
         self._gate_registry = gate_registry
         self._gate_ids = dict(gate_ids or {})
+        self._gate_checks = dict(gate_checks or {})
 
     async def execute(
         self,
@@ -182,6 +227,16 @@ class QualityGateStepExecutor:
                 f"QualityGateStepExecutor cannot execute step '{step.id}' of type "
                 f"'{step.type.value}' — it only handles quality_gate steps"
             )
+
+        checks = self._gate_checks.get(step.id)
+        if checks is not None:
+            if workflow_id is None:
+                raise ValueError(
+                    f"quality gate step '{step.id}' requires a real workflow_id to read "
+                    "its declared checks' own source steps' persisted output"
+                )
+            return await self._execute_concurrent_checks(step, checks, workflow_id)
+
         source_step_id = self._gate_sources.get(step.id)
         if source_step_id is None:
             return {}
@@ -233,3 +288,52 @@ class QualityGateStepExecutor:
             # progression. See this class's own docstring.
             outputs["severity"] = _SEVERITY_WARNING
         return outputs
+
+    async def _execute_concurrent_checks(
+        self, step: WorkflowStep, checks: Sequence[GateCheck], workflow_id: str
+    ) -> dict[str, Any]:
+        # execute() already refused a None gate_registry before this is
+        # ever called -- narrowed to a local so each concurrent check
+        # below doesn't need its own None-check.
+        gate_registry = self._gate_registry
+        if gate_registry is None:
+            raise ValueError(
+                f"quality gate step '{step.id}' declares gate_checks but this executor "
+                "has no gate_registry to resolve them through"
+            )
+
+        steps = await self._repository.list_steps(workflow_id)
+        results = await asyncio.gather(
+            *(self._evaluate_one_check(check, steps, gate_registry) for check in checks)
+        )
+
+        blocking_failures = [
+            r for r in results if r[self._success_field] is not True and "severity" not in r
+        ]
+        if blocking_failures:
+            raise QualityGateFailedError(
+                f"quality gate step '{step.id}' blocked progression: "
+                f"{len(blocking_failures)} of {len(results)} declared gates failed",
+                gate_step_id=step.id,
+                results=list(results),
+            )
+
+        return {"gates": list(results), self._success_field: True}
+
+    async def _evaluate_one_check(
+        self, check: GateCheck, steps: Sequence[WorkflowStepRecord], gate_registry: GateRegistry
+    ) -> dict[str, Any]:
+        definition = await gate_registry.resolve_gate(check.gate_id)
+
+        source_output = _latest_completed_output(steps, check.source_step_id)
+        passed = source_output is not None and source_output.get(self._success_field) is True
+
+        result: dict[str, Any] = {
+            "gateId": definition.id,
+            "gateVersion": definition.version,
+            "sourceStepId": check.source_step_id,
+            self._success_field: passed,
+        }
+        if not passed and definition.severity == _SEVERITY_WARNING:
+            result["severity"] = _SEVERITY_WARNING
+        return result

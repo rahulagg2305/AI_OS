@@ -26,7 +26,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M12 | Evaluation Engine | P04 | 11 | 7 | 64% |
 | M13 | Capability Manager | P02 | 8 | 8 | 100% |
 | M14 | Security Manager | P03+P07 | 12 | 10 | 83% |
-| M15 | Quality Gate Engine | P02 | 9 | 8 | 89% |
+| M15 | Quality Gate Engine | P02 | 9 | 9 | 100% |
 | M16 | Traceability Engine | P04 | 3 | 0 | 0% |
 | M17 | Event Bus | P02 | 3 | 3 | 100% |
 | M18 | Tool Invoker (SDK interface) | P02 | 3 | 3 | 100% |
