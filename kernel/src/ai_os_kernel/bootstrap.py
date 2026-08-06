@@ -474,6 +474,7 @@ from ai_os_kernel.routes.approvals import router as approvals_router
 from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
 from ai_os_kernel.routes.health import router as health_router
 from ai_os_kernel.routes.packs import router as packs_router
+from ai_os_kernel.routes.problem_details import register_problem_detail_handlers
 from ai_os_kernel.routes.role_administration import router as role_administration_router
 from ai_os_kernel.routes.workflows import router as workflows_router
 from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
@@ -2023,6 +2024,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     # _lifespan, once a real database engine exists.
     app.state.health_service = _build_health_service(config, manifest_loader, app)
     app.add_middleware(TraceIdMiddleware)
+    register_problem_detail_handlers(app)
     app.include_router(health_router)
     app.include_router(workflows_router)
     app.include_router(delivery_pipeline_router)

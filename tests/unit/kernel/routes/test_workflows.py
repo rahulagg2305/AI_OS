@@ -136,7 +136,17 @@ def test_an_authorized_principal_reaches_the_route_and_gets_a_clear_engine_unava
     # the Workflow Engine itself being unavailable (no real database
     # configured in this unit test), not from the security boundary.
     assert response.status_code == 503
-    assert response.json()["detail"] == "workflow engine is not available"
+    body = response.json()
+    assert body["detail"] == "workflow engine is not available"
+    # P06-S01-M36-T02's own real proof: every error is now a real,
+    # consistent RFC 9457 body, not just FastAPI's bare {"detail": ...}.
+    assert response.headers["content-type"] == "application/problem+json"
+    assert body["type"] == "https://ai-os.dev/problems/unavailable"
+    assert body["title"] == "Not ready or shutting down"
+    assert body["status"] == 503
+    assert body["instance"] == "/api/v1/workflows"
+    assert body["error_code"] == "http.unavailable"
+    assert isinstance(body["trace_id"], str) and body["trace_id"]
 
 
 @pytest.mark.parametrize("path", _READ_ROUTE_PATHS)
@@ -206,3 +216,13 @@ def test_list_workflows_rejects_a_limit_outside_the_allowed_range(
         )
 
     assert response.status_code == 422
+    # P06-S01-M36-T02's own real proof: a genuine FastAPI
+    # RequestValidationError now also gets the real RFC 9457 shape,
+    # with a real violations array naming the actual invalid field.
+    body = response.json()
+    assert response.headers["content-type"] == "application/problem+json"
+    assert body["status"] == 422
+    assert body["error_code"] == "http.invalid"
+    violations = body["violations"]
+    assert len(violations) == 1
+    assert violations[0]["field"] == "query.limit"
