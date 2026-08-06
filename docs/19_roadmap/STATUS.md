@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 75%** (184.5 of 246 Task-equivalents complete)
+**Overall: 75%** (185.5 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -33,7 +33,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S03 Software Engineering Pack Workflows | 6 | 4 | 0 | 2 | 67% |
 | P03 (C) | S04 Pack Tools and Declared Quality Gates | 4 | 2 | 0 | 2 | 50% |
 | P03 (C) | S05 Security and Human Approval | 10 | 10 | 0 | 0 | 100% |
-| P03 (C) | S06 Threat Controls | 2 | 1 | 0 | 1 | 50% |
+| P03 (C) | S06 Threat Controls | 2 | 2 | 0 | 0 | 100% |
 | P04 (D) | S01 Evaluation Engine | 11 | 7 | 0 | 4 | 64% |
 | P04 (D) | S02 Traceability Engine | 3 | 0 | 0 | 3 | 0% |
 | P04 (D) | S03 Benchmarking Pack | 4 | 0 | 0 | 4 | 0% |
@@ -58,7 +58,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
 | P02 (Stage B) - Minimum Viable Kernel | 100 | 97 | 98% |
-| P03 (Stage C) - First Real Capability Pack | 38 | 30 | 79% |
+| P03 (Stage C) - First Real Capability Pack | 38 | 31 | 82% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 7 | 39% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 0 | 0% |
@@ -68,7 +68,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-29 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+28 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P03-S02-M29-T07` code-reviewer agent
@@ -76,7 +76,6 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P03-S03-M30-T02` Structured Markdown specification input
 - `P03-S04-M31-T02` Manifest-declared file and build tools
 - `P03-S04-M31-T03` Pack-declared gate definitions
-- `P03-S06-M41-T02` Remaining T2-T12 controls
 - `P04-S01-M12-T04` Metrics collector
 - `P04-S02-M16-T01` trace.links writer
 - `P04-S03-M34-T01` Experiment definition with pinned conditions
@@ -95,7 +94,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P07-S03-M42-T01` Chaos tests
 - `P08-S01-M29-T02` database agent
 - `P08-S01-M29-T03` api-designer agent
-- ... and 4 more
+- `P08-S01-M29-T04` security-analysis agent
+- ... and 3 more
 
 ## Dependency review signal
 

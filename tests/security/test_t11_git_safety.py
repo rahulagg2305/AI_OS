@@ -1,9 +1,24 @@
 """T11 — Git history/branch destruction (security_architecture.md
-§4/§14). §14's own real controls (a Git Integration Service holding
-credentials, per-operation audit, protected-branch policy) do not exist
-anywhere in this codebase yet — confirmed by grep: no git push/force-push
-tool implementation exists at all, in the Kernel or in any Capability
-Pack.
+§4/§14).
+
+**Stale by `P03-S01-M24-T02` (2026-08-02), corrected here rather than
+silently left wrong (`P03-S06-M41-T02`, 2026-08-06): this docstring
+used to claim §14's own real controls (a Git Integration Service
+holding credentials, per-operation audit, protected-branch policy) "do
+not exist anywhere in this codebase yet."** They do now —
+:class:`~ai_os_kernel.git_integration.service.GitIntegrationService`,
+real `platform.git.commit`/`platform.git.push` tools, a real
+`git-push` agent chaining them as `se.delivery_pipeline`'s final step,
+and a real, structural protected-branch refusal
+(:class:`~ai_os_kernel.git_integration.models.GitPushPolicy`) —
+`test_delivery_pipeline_git_push.py` proves a real commit and push end
+to end. **This file still only tests the manifest-schema layer below,
+not a positive-control proof that a live, configured
+`GitIntegrationService` genuinely refuses a real force-push/branch-
+delete attempt against its own `protected_branches` policy** — a real,
+disclosed, still-open gap in this file's own coverage, named here so it
+is not mistaken for "T11 fully proven," and a real candidate for its
+own, correctly-scoped future ticket rather than attempted inline here.
 
 **The real, structural control that does exist today**: the manifest's
 own closed permission vocabulary (platform_sdk/schemas/manifest.schema.json,
