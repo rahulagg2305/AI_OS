@@ -55,6 +55,8 @@ from ai_os_kernel.security_manager.errors import InvalidTokenError, SecurityErro
 from ai_os_kernel.security_manager.models import Principal, PrincipalType, SecurityContext
 from ai_os_kernel.security_manager.narrowing import is_permitted, narrow_permissions
 from ai_os_kernel.security_manager.permissions import (
+    CONFIG_MANAGE,
+    CONFIG_READ,
     PACK_MANAGE,
     PACK_READ,
     SECRET_ACCESS,
@@ -69,6 +71,8 @@ from ai_os_kernel.security_manager.token_verifier import (
 )
 
 __all__ = [
+    "CONFIG_MANAGE",
+    "CONFIG_READ",
     "PACK_MANAGE",
     "PACK_READ",
     "SECRET_ACCESS",

@@ -9,6 +9,8 @@ from __future__ import annotations
 from ai_os_kernel.security_manager.models import Principal, PrincipalType, SecurityContext
 from ai_os_kernel.security_manager.narrowing import is_permitted, narrow_permissions
 from ai_os_kernel.security_manager.permissions import (
+    CONFIG_MANAGE,
+    CONFIG_READ,
     PACK_MANAGE,
     PACK_READ,
     SECRET_ACCESS,
@@ -30,7 +32,8 @@ def _admin_context() -> SecurityContext:
 def test_a_broad_principal_is_genuinely_narrowed_by_a_restrictive_workflow_agent_and_tool() -> None:
     """The real property FR-018/ADR-0023 exist for: an `admin` principal
     can, in principle, do everything (`workflow:read`, `workflow:start`,
-    `pack:read`, `pack:manage`, `secret:access`) — but a workflow
+    `pack:read`, `pack:manage`, `secret:access`, `config:read`,
+    `config:manage`) — but a workflow
     declaring only `workflow:start`, whose agent declares only
     `workflow:start`, invoking a tool that declares only
     `workflow:start`, must genuinely end up with *only* `workflow:start`
@@ -38,7 +41,15 @@ def test_a_broad_principal_is_genuinely_narrowed_by_a_restrictive_workflow_agent
     full grant."""
     context = _admin_context()
     assert context.permissions == frozenset(
-        {WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE, SECRET_ACCESS}
+        {
+            WORKFLOW_READ,
+            WORKFLOW_START,
+            PACK_READ,
+            PACK_MANAGE,
+            SECRET_ACCESS,
+            CONFIG_READ,
+            CONFIG_MANAGE,
+        }
     )
 
     effective = narrow_permissions(

@@ -78,16 +78,38 @@ WORKFLOW_START = "workflow:start"
 PACK_READ = "pack:read"
 PACK_MANAGE = "pack:manage"
 SECRET_ACCESS = "secret:access"  # noqa: S105 -- a permission string, not a credential
+CONFIG_READ = "config:read"
+CONFIG_MANAGE = "config:manage"
 
 # authentication_authorization.md §4.2's role table, reduced to the
-# five permissions modelled above. Unknown roles grant nothing (deny by
+# seven permissions modelled above. Unknown roles grant nothing (deny by
 # default) — see permissions_for_roles.
+#
+# CONFIG_READ/CONFIG_MANAGE (P06-S01-M36-T04) follow the identical
+# "nothing documented for viewer/operator/approver, no grant" discipline
+# PACK_READ/PACK_MANAGE already established: §4.2 mentions configuration
+# only for `maintainer` ("edit non-security configuration") and
+# implicitly `admin` ("All") — neither viewer, operator, nor approver's
+# own documented grants say anything about configuration, the identical
+# reasoning already applied to packs.
 _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "viewer": frozenset({WORKFLOW_READ}),
     "operator": frozenset({WORKFLOW_READ, WORKFLOW_START}),
     "approver": frozenset({WORKFLOW_READ}),
-    "maintainer": frozenset({WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE}),
-    "admin": frozenset({WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE, SECRET_ACCESS}),
+    "maintainer": frozenset(
+        {WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE, CONFIG_READ, CONFIG_MANAGE}
+    ),
+    "admin": frozenset(
+        {
+            WORKFLOW_READ,
+            WORKFLOW_START,
+            PACK_READ,
+            PACK_MANAGE,
+            SECRET_ACCESS,
+            CONFIG_READ,
+            CONFIG_MANAGE,
+        }
+    ),
 }
 
 

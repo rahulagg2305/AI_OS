@@ -115,6 +115,25 @@
         "title": "DecideApprovalResponse",
         "type": "object"
       },
+      "FeatureFlagState": {
+        "description": "One real, resolved feature flag \u2014 declared by at least one\nactivated pack's own manifest, current value resolved through the\nidentical layered precedence every other real caller uses.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "enabled"
+        ],
+        "title": "FeatureFlagState",
+        "type": "object"
+      },
       "GrantRoleRequest": {
         "description": "Mirrors :meth:`RoleAdministrationService.grant`'s own keyword\narguments exactly \u2014 no parallel request shape.",
         "properties": {
@@ -258,6 +277,107 @@
         ],
         "title": "PackState",
         "type": "string"
+      },
+      "PlatformConfig": {
+        "description": "Immutable, fully resolved configuration for one Kernel process.\n\n``env`` and ``role`` are bootstrap identity \u2014 how this process was\nstarted \u2014 never values a configuration file may set. They are\nalways supplied explicitly by\n:class:`~ai_os_kernel.configuration_manager.loader.ConfigurationManager`,\nnot read from YAML (see\n``docs/03_architecture/services/configuration_management.md`` \u00a73.3).",
+        "properties": {
+          "audit_chain_verification_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Chain Verification Interval Seconds"
+          },
+          "capability_pack_dirs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capability Pack Dirs",
+            "type": "array"
+          },
+          "env": {
+            "title": "Env",
+            "type": "string"
+          },
+          "host": {
+            "default": "127.0.0.1",
+            "title": "Host",
+            "type": "string"
+          },
+          "lease_reap_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Reap Interval Seconds"
+          },
+          "log_level": {
+            "default": "INFO",
+            "title": "Log Level",
+            "type": "string"
+          },
+          "manifest_schema_path": {
+            "default": "platform_sdk/schemas/manifest.schema.json",
+            "title": "Manifest Schema Path",
+            "type": "string"
+          },
+          "pack_health_poll_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Health Poll Interval Seconds"
+          },
+          "port": {
+            "default": 8000,
+            "title": "Port",
+            "type": "integer"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "scheduler_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduler Interval Seconds"
+          },
+          "worker_poll_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Poll Interval Seconds"
+          }
+        },
+        "required": [
+          "env",
+          "role"
+        ],
+        "title": "PlatformConfig",
+        "type": "object"
       },
       "ReadinessReport": {
         "properties": {
@@ -546,6 +666,29 @@
           "documentation_path"
         ],
         "title": "TriggerDeliveryPipelineResponse",
+        "type": "object"
+      },
+      "UpdateConfigRequest": {
+        "description": "``PATCH /config``'s own body \u2014 deliberately just the fields\n:meth:`RuntimeOverrideStore.apply` already takes. ``changed_by`` is\nnot a client-supplied field: it is the authenticated principal's\nown id, the same \"who did this comes from authentication\" convention\n``PackLifecycleActionRequest`` already establishes.",
+        "properties": {
+          "config_key": {
+            "title": "Config Key",
+            "type": "string"
+          },
+          "new_value": {
+            "title": "New Value"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "config_key",
+          "new_value",
+          "reason"
+        ],
+        "title": "UpdateConfigRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -1072,6 +1215,106 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/config": {
+      "get": {
+        "operationId": "get_effective_config_api_v1_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformConfig"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Effective Config",
+        "tags": [
+          "configuration"
+        ]
+      },
+      "patch": {
+        "operationId": "update_config_api_v1_config_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformConfig"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Config",
+        "tags": [
+          "configuration"
+        ]
+      }
+    },
+    "/api/v1/config/flags": {
+      "get": {
+        "operationId": "get_feature_flags_api_v1_config_flags_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FeatureFlagState"
+                  },
+                  "title": "Response Get Feature Flags Api V1 Config Flags Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Feature Flags",
+        "tags": [
+          "configuration"
+        ]
+      }
+    },
     "/api/v1/health/live": {
       "get": {
         "description": "Liveness probe. Must never depend on an external service \u2014 a brief\ndependency blip must not cause a container restart (Deployment\nArchitecture \u00a76).",
@@ -1121,6 +1364,34 @@
       }
     },
     "/api/v1/packs": {
+      "get": {
+        "operationId": "list_packs_api_v1_packs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PackRecord"
+                  },
+                  "title": "Response List Packs Api V1 Packs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Packs",
+        "tags": [
+          "packs"
+        ]
+      },
       "post": {
         "operationId": "register_pack_api_v1_packs_post",
         "requestBody": {

@@ -3,6 +3,8 @@
 this step models — see ai_os_kernel.security_manager.permissions)."""
 
 from ai_os_kernel.security_manager.permissions import (
+    CONFIG_MANAGE,
+    CONFIG_READ,
     PACK_MANAGE,
     PACK_READ,
     SECRET_ACCESS,
@@ -32,10 +34,18 @@ def test_approver_can_read_but_not_start_workflows() -> None:
 
 def test_maintainer_and_admin_can_read_and_start_workflows() -> None:
     assert permissions_for_roles(["maintainer"]) == frozenset(
-        {WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE}
+        {WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE, CONFIG_READ, CONFIG_MANAGE}
     )
     assert permissions_for_roles(["admin"]) == frozenset(
-        {WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE, SECRET_ACCESS}
+        {
+            WORKFLOW_READ,
+            WORKFLOW_START,
+            PACK_READ,
+            PACK_MANAGE,
+            SECRET_ACCESS,
+            CONFIG_READ,
+            CONFIG_MANAGE,
+        }
     )
 
 
@@ -49,6 +59,18 @@ def test_only_maintainer_and_admin_can_read_or_manage_packs() -> None:
         permissions = permissions_for_roles([role])
         assert PACK_READ in permissions
         assert PACK_MANAGE in permissions
+
+
+def test_only_maintainer_and_admin_can_read_or_manage_config() -> None:
+    for role in ("viewer", "operator", "approver"):
+        permissions = permissions_for_roles([role])
+        assert CONFIG_READ not in permissions
+        assert CONFIG_MANAGE not in permissions
+
+    for role in ("maintainer", "admin"):
+        permissions = permissions_for_roles([role])
+        assert CONFIG_READ in permissions
+        assert CONFIG_MANAGE in permissions
 
 
 def test_only_admin_can_access_secrets() -> None:

@@ -1,15 +1,16 @@
-"""Unit tests for the Capability Manager's pack lifecycle HTTP routes
-(ai_os_kernel.routes.packs): register/install, activate, deactivate,
-and get one pack.
+"""Unit tests for the configuration HTTP routes
+(ai_os_kernel.routes.config): GET /config, PATCH /config, GET
+/config/flags.
 
 No real database and no real network: ``AIOS_DATABASE_URL`` is
 deliberately left unset in every test here, so ``_lifespan`` never
-attaches a real ``pack_lifecycle_repository`` — these tests exercise
-only the authentication/authorization boundary in front of it, plus the
-honest 503 it returns when the Capability Manager itself is
-unavailable. The real end-to-end path (real Postgres, a real
-register/activate/deactivate/get sequence) is covered by
-``tests/integration/test_packs_route.py``.
+attaches a real ``configuration_manager``/``runtime_override_store``/
+``config_change_writer`` — these tests exercise only the
+authentication/authorization boundary in front of them, plus the
+honest 503 each returns when unavailable, the identical shape
+``tests/unit/kernel/routes/test_packs.py`` already establishes. The
+real end-to-end path (real Postgres, a real GET/PATCH/flags sequence)
+is covered by ``tests/integration/test_config_route.py``.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -23,26 +24,15 @@ from ai_os_kernel.bootstrap import build_app
 from ai_os_kernel.configuration_manager import PlatformConfig
 
 SCHEMA_PATH = "platform_sdk/schemas/manifest.schema.json"
-_SIGNING_KEY = "unit-test-signing-key-at-least-32-bytes-long"
+_SIGNING_KEY = "unit-test-config-signing-key-at-least-32-bytes"
 
-_REGISTER_BODY = {
-    "pack_id": "test.pack",
-    "version": "1.0.0",
-    "manifest": {},
-    "sdk_version": "1.0.0",
-    "min_kernel_version": "1.0.0",
-    "reason": "initial install",
-}
-_ACTION_BODY = {"reason": "because"}
+_PATCH_BODY = {"config_key": "log_level", "new_value": "DEBUG", "reason": "debugging"}
 
-# (method, path, json body or None) for every pack route this step adds.
+# (method, path, json body or None) for every config route this step adds.
 _ROUTES = [
-    ("POST", "/api/v1/packs", _REGISTER_BODY),
-    ("POST", "/api/v1/packs/test.pack/activate", _ACTION_BODY),
-    ("POST", "/api/v1/packs/test.pack/deactivate", _ACTION_BODY),
-    ("GET", "/api/v1/packs/test.pack", None),
-    # GET /api/v1/packs (list) — added P06-S01-M36-T04.
-    ("GET", "/api/v1/packs", None),
+    ("GET", "/api/v1/config", None),
+    ("PATCH", "/api/v1/config", _PATCH_BODY),
+    ("GET", "/api/v1/config/flags", None),
 ]
 
 
@@ -74,11 +64,11 @@ def _call(
 ) -> Any:
     if method == "GET":
         return client.get(path, headers=headers)
-    return client.post(path, json=body, headers=headers)
+    return client.patch(path, json=body, headers=headers)
 
 
 @pytest.mark.parametrize("method,path,body", _ROUTES)
-def test_a_pack_route_without_a_bearer_token_is_rejected(
+def test_a_config_route_without_a_bearer_token_is_rejected(
     method: str, path: str, body: dict[str, object] | None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
@@ -91,15 +81,15 @@ def test_a_pack_route_without_a_bearer_token_is_rejected(
 
 
 @pytest.mark.parametrize("method,path,body", _ROUTES)
-def test_a_pack_route_for_a_principal_lacking_pack_permissions_is_denied(
+def test_a_config_route_for_a_principal_lacking_config_permissions_is_denied(
     method: str, path: str, body: dict[str, object] | None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
     app = build_app(_config())
 
     with TestClient(app) as client:
-        # viewer's documented grants never mention packs at all (see
-        # permissions.py) — neither pack:read nor pack:manage.
+        # viewer's documented grants never mention configuration at all
+        # (see permissions.py) — neither config:read nor config:manage.
         response = _call(
             client, method, path, body, headers={"Authorization": f"Bearer {_token(['viewer'])}"}
         )
@@ -108,7 +98,7 @@ def test_a_pack_route_for_a_principal_lacking_pack_permissions_is_denied(
 
 
 @pytest.mark.parametrize("method,path,body", _ROUTES)
-def test_a_pack_route_reports_the_capability_manager_as_unavailable_without_a_real_database(
+def test_a_config_route_reports_itself_unavailable_without_a_real_database(
     method: str, path: str, body: dict[str, object] | None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
@@ -116,9 +106,9 @@ def test_a_pack_route_reports_the_capability_manager_as_unavailable_without_a_re
     app = build_app(_config())
 
     with TestClient(app) as client:
-        # maintainer holds both pack:read and pack:manage — authorization
-        # passes for every route in _ROUTES regardless of which
-        # permission it individually requires.
+        # maintainer holds both config:read and config:manage —
+        # authorization passes for every route in _ROUTES regardless of
+        # which permission it individually requires.
         response = _call(
             client,
             method,
@@ -128,13 +118,12 @@ def test_a_pack_route_reports_the_capability_manager_as_unavailable_without_a_re
         )
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "capability manager is not available"
 
 
-def test_bare_test_client_never_configures_the_pack_routes_security() -> None:
+def test_bare_test_client_never_configures_the_config_routes_security() -> None:
     app = build_app(_config())
     client = TestClient(app)
 
-    response = client.get("/api/v1/packs/test.pack")
+    response = client.get("/api/v1/config")
 
     assert response.status_code == 503

@@ -414,6 +414,7 @@ from ai_os_kernel.configuration_manager import (
     ConfigurationManager,
     PlatformConfig,
     RuntimeOverrideStore,
+    SqlConfigChangeWriter,
 )
 from ai_os_kernel.context_manager.manager import ContextManager, DefaultContextManager
 from ai_os_kernel.context_manager.resolvers import (
@@ -471,6 +472,7 @@ from ai_os_kernel.prompted_completion import build_anthropic_prompted_completion
 from ai_os_kernel.retrieval.retrieval_service import RetrievalService
 from ai_os_kernel.retrieval.vector_search import SqlVectorSearcher
 from ai_os_kernel.routes.approvals import router as approvals_router
+from ai_os_kernel.routes.config import router as config_router
 from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
 from ai_os_kernel.routes.health import router as health_router
 from ai_os_kernel.routes.idempotency import IdempotencyKeyMiddleware, SqlIdempotencyKeyStore
@@ -1743,6 +1745,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         except ConfigurationError as exc:
             logger.warning("kernel.bootstrap.runtime_config_resolver_unavailable", error=str(exc))
+        # Independent of whether configuration_manager above built
+        # successfully — this writer only needs the real database
+        # engine, which always exists at this point in _lifespan, the
+        # identical "each dependency degrades independently" pattern
+        # PATCH /api/v1/config's own route dependencies already apply.
+        app.state.config_change_writer = SqlConfigChangeWriter(engine)
         app.state.context_manager = DefaultContextManager(
             resolvers=context_resolvers,
             default_token_budget=_CONTEXT_TOKEN_BUDGET,
@@ -2040,6 +2048,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.include_router(approvals_router)
     app.include_router(packs_router)
     app.include_router(role_administration_router)
+    app.include_router(config_router)
 
     logger.info("kernel.bootstrap.complete")
     return app

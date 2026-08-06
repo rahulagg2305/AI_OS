@@ -193,6 +193,40 @@ def test_getting_an_unregistered_pack_returns_404(
     assert response.status_code == 404
 
 
+def test_listing_packs_genuinely_includes_a_freshly_registered_one(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`GET /api/v1/packs` (added `P06-S01-M36-T04`) — a real row for a
+    pack registered moments earlier in this same real database, proving
+    the list route reads the real table, not a stand-in. Asserts
+    membership, not an exact count: this module-scoped database
+    accumulates rows from every other test above."""
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    headers = {"Authorization": f"Bearer {_token(['maintainer'])}"}
+
+    with TestClient(app) as client:
+        register_response = client.post(
+            "/api/v1/packs",
+            json={
+                "pack_id": "test.list_route",
+                "version": "1.0.0",
+                "manifest": {},
+                "sdk_version": "1.0.0",
+                "min_kernel_version": "1.0.0",
+                "reason": "prove the list route",
+            },
+            headers=headers,
+        )
+        assert register_response.status_code == 201
+
+        list_response = client.get("/api/v1/packs", headers=headers)
+
+    assert list_response.status_code == 200
+    pack_ids = {pack["pack_id"] for pack in list_response.json()}
+    assert "test.list_route" in pack_ids
+
+
 def test_a_viewer_cannot_manage_or_read_packs(
     database_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

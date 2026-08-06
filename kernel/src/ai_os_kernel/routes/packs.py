@@ -17,9 +17,12 @@ convention already used for ``POST /api/v1/workflows``/
 ``POST /api/v1/experiments`` (§6.1/§6.3), returning ``201`` for a newly
 created resource — not an invented business rule, just a route shape
 the docs never specified for this specific action. ``GET /api/v1/packs``
-(the list endpoint §6.5 *does* document) is deliberately not built here
-either — out of scope, this step covers exactly the four operations its
-own framing named (register, activate, deactivate, get one pack).
+(the list endpoint §6.5 documents) was deliberately out of scope for
+this step's original framing (register, activate, deactivate, get one
+pack) — closed by `P06-S01-M36-T04` (2026-08-06): a plain, unfiltered
+list ordered by ``pack_id``, no pagination (§6.5 documents none for
+this endpoint, unlike the cursor-paginated resources §9 names
+explicitly).
 
 **Activate/deactivate return ``200`` with the real, complete
 ``PackRecord``, not §6.5's documented ``202``.** ``202`` implies
@@ -161,6 +164,14 @@ async def deactivate_pack(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidPackTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/packs", response_model=list[PackRecord])
+async def list_packs(
+    _security_context: SecurityContext = Depends(require_permission(PACK_READ)),  # noqa: B008
+    repository: PackLifecycleRepository = Depends(_get_repository),  # noqa: B008
+) -> list[PackRecord]:
+    return await repository.list_packs()
 
 
 @router.get("/packs/{pack_id}", response_model=PackRecord)

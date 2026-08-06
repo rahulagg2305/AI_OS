@@ -198,6 +198,8 @@ class PackLifecycleRepository(Protocol):
 
     async def get_pack(self, pack_id: str) -> PackRecord | None: ...
 
+    async def list_packs(self) -> list[PackRecord]: ...
+
 
 class SqlPackLifecycleRepository:
     """The only implementation of :class:`PackLifecycleRepository` at
@@ -584,6 +586,19 @@ class SqlPackLifecycleRepository:
             result = await connection.execute(sa.select(packs).where(packs.c.pack_id == pack_id))
             row = result.mappings().one_or_none()
         return PackRecord.model_validate(dict(row)) if row is not None else None
+
+    async def list_packs(self) -> list[PackRecord]:
+        """Every real, registered pack (api_architecture.md §6.5:
+        "Installed packs + state" — no state filter documented, so none
+        is applied here), ordered by ``pack_id`` for a stable,
+        deterministic response."""
+        async with self._engine.connect() as connection:
+            rows = (
+                (await connection.execute(sa.select(packs).order_by(packs.c.pack_id)))
+                .mappings()
+                .all()
+            )
+        return [PackRecord.model_validate(dict(row)) for row in rows]
 
     @staticmethod
     async def _lock_current_state(connection: AsyncConnection, pack_id: str) -> PackState:
