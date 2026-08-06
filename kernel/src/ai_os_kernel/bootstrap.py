@@ -473,6 +473,7 @@ from ai_os_kernel.retrieval.vector_search import SqlVectorSearcher
 from ai_os_kernel.routes.approvals import router as approvals_router
 from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
 from ai_os_kernel.routes.health import router as health_router
+from ai_os_kernel.routes.idempotency import IdempotencyKeyMiddleware, SqlIdempotencyKeyStore
 from ai_os_kernel.routes.packs import router as packs_router
 from ai_os_kernel.routes.problem_details import register_problem_detail_handlers
 from ai_os_kernel.routes.role_administration import router as role_administration_router
@@ -1817,6 +1818,13 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # WorkflowInstanceService instance _build_workflow_trigger builds
         # internally for writes.
         app.state.workflow_instance_repository = SqlWorkflowInstanceRepository(engine)
+        # IdempotencyKeyMiddleware's own real store — set the moment a
+        # real engine exists, the identical lazy-population pattern
+        # every other app.state collaborator here already follows; see
+        # that middleware's own docstring for why it takes no engine at
+        # construction time (registered in build_app(), before this
+        # engine exists).
+        app.state.idempotency_key_store = SqlIdempotencyKeyStore(engine)
         # The Capability Manager's pack lifecycle writer (register/
         # install, activate, deactivate — see ai_os_kernel.capability_manager),
         # constructed the identical "plain, stateless wrapper over the
@@ -2024,6 +2032,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     # _lifespan, once a real database engine exists.
     app.state.health_service = _build_health_service(config, manifest_loader, app)
     app.add_middleware(TraceIdMiddleware)
+    app.add_middleware(IdempotencyKeyMiddleware)
     register_problem_detail_handlers(app)
     app.include_router(health_router)
     app.include_router(workflows_router)

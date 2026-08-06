@@ -19,13 +19,21 @@ this whole persistence layer has held since the very first migration:
 every table here mirrors a documented column list exactly. Add it once
 data_model.md names its columns.
 
-Schema and migration only — no writer, for either table. ``event_outbox``
-is ADR-0012's transactional outbox ("written in the same transaction as
-the state change that produced the event"); nothing in this codebase
-writes to an outbox yet — `workflow_events` remains the only durable
-event log, and the Event Bus itself (in-process pub/sub plus the outbox
-relay) does not exist yet. ``idempotency_keys`` has no writer either —
-no HTTP route yet needs idempotent-replay of a mutating request.
+Schema and migration only for ``event_outbox`` — it is ADR-0012's
+transactional outbox ("written in the same transaction as the state
+change that produced the event"); nothing in this codebase writes to
+an outbox yet — `workflow_events` remains the only durable event log,
+and the Event Bus itself (in-process pub/sub plus the outbox relay)
+does not exist yet.
+
+``idempotency_keys`` now has a real reader/writer (``P06-S01-M36-T03``,
+2026-08-06): :class:`~ai_os_kernel.routes.idempotency.
+SqlIdempotencyKeyStore`, backing
+:class:`~ai_os_kernel.routes.idempotency.IdempotencyKeyMiddleware` —
+a real ASGI middleware, generic across every mutating HTTP route, not
+a per-route mechanism. See that module's own docstring for the full
+design (replay/conflict semantics, the real, disclosed race window
+under genuine concurrency).
 
 ``event_outbox``:
 

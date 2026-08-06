@@ -100,6 +100,33 @@ def _build_problem_body(
     return body
 
 
+def build_problem_response(
+    *,
+    status_code: int,
+    detail: str,
+    instance: str,
+    violations: list[dict[str, str]] | None = None,
+) -> JSONResponse:
+    """The same real RFC 9457 body :func:`register_problem_detail_handlers`'s
+    own three handlers build, exposed for the one other real caller
+    that cannot go through FastAPI's own exception-handler dispatch:
+    :class:`~ai_os_kernel.routes.idempotency.IdempotencyKeyMiddleware`'s
+    own 409 conflict response. A `BaseHTTPMiddleware` wraps *outside*
+    FastAPI's own exception-handling middleware (a real, verified
+    Starlette/FastAPI limitation, not an assumption) — an
+    `HTTPException` raised directly inside a middleware's own
+    `dispatch()` never reaches `@app.exception_handler`. Reusing this
+    one real builder, rather than a second, parallel one, is what keeps
+    every problem+json body genuinely consistent regardless of which
+    layer produced it."""
+    body = _build_problem_body(
+        status_code=status_code, detail=detail, instance=instance, violations=violations
+    )
+    return JSONResponse(
+        status_code=status_code, content=body, media_type="application/problem+json"
+    )
+
+
 def register_problem_detail_handlers(app: FastAPI) -> None:
     """Registers the three real handlers on `app` — called once, from
     :func:`~ai_os_kernel.bootstrap.build_app`."""
@@ -125,13 +152,12 @@ def register_problem_detail_handlers(app: FastAPI) -> None:
             {"field": ".".join(str(part) for part in error["loc"]), "message": error["msg"]}
             for error in exc.errors()
         ]
-        body = _build_problem_body(
+        return build_problem_response(
             status_code=422,
             detail="Request validation failed.",
             instance=request.url.path,
             violations=violations,
         )
-        return JSONResponse(status_code=422, content=body, media_type="application/problem+json")
 
     @app.exception_handler(Exception)
     async def _handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
@@ -139,9 +165,6 @@ def register_problem_detail_handlers(app: FastAPI) -> None:
         # "never include secrets, stack traces, SQL, or internal
         # paths." A real, correlatable trace_id is how this gets
         # diagnosed instead.
-        body = _build_problem_body(
-            status_code=500,
-            detail="An internal error occurred.",
-            instance=request.url.path,
+        return build_problem_response(
+            status_code=500, detail="An internal error occurred.", instance=request.url.path
         )
-        return JSONResponse(status_code=500, content=body, media_type="application/problem+json")
