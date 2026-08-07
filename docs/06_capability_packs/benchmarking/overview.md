@@ -8,11 +8,11 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-08-07)
 
-**Built: nothing. This document is a design specification only.** `capability_packs/benchmarking/` has **no tracked content** and is absent from a fresh clone. No experiment can be defined, submitted, or reported today.
+**Built: four real, narrow modules — `capability_packs/benchmarking/` is now a real, buildable distribution (`P04-S03-M34-T01` through `T04`), no longer absent from a fresh clone.** `experiment_definition.py` validates a raw spec against §7's own rules (≥3 replicates, ≥2 variants, no duplicate keys, no sampling-parameter variables, an optional positive `cost_ceiling_usd`, a genuinely-existing pinned workflow). `replicate_management.py` expands a validated variant into its own numbered replicates. `cost_ceiling.py` refuses a projected-over-ceiling experiment before any call (enforcement only — computing a real, non-approximated projection remains real, disclosed, unbuilt work). `prompt_adaptation.py` records a genuine per-model prompt adaptation as a declared `variables` entry, closing §7's own "anything varying that was not declared... invalidates the experiment" rule for this one real case. Two real Kernel-side adapters (`ai_os_kernel.sdk_adapters.workflow_definition_existence_adapter`/`experiment_run_recorder_adapter`) implement this pack's own declared Protocols, since this pack's source may never import `ai_os_kernel`. **No experiment can yet be submitted, executed, or reported** — nothing above is wired into a real submission path (no `manifest.yaml` exists either; nothing here needs pack activation yet), matching this whole slice's own consistent "build real, wire later" precedent.
 
-The Evaluation Engine that this pack depends on for all metric collection, run-manifest recording, and comparison statistics is likewise **0% built** (`kernel/src/ai_os_kernel/evaluation_engine/` is a docstring-only stub) — though all six `evaluation.*` tables exist as schema. One Stage D prerequisite *has* landed early: a second real provider adapter (`LocalAdapter`), so multi-provider comparison is mechanically possible once the engine exists. Stage D deliverable.
+The Evaluation Engine that this pack depends on for all metric collection, run-manifest recording, and comparison statistics has its own first real code too (`ai_os_kernel.evaluation_engine.metrics_collector`, `P04-S01-M12-T04`) — though it likewise has no real production caller yet, for the identical reason (no real `experiment_runs` row exists in production). One Stage D prerequisite *has* landed early: a second real provider adapter (`LocalAdapter`), so multi-provider comparison is mechanically possible once submission/execution exist. Stage D deliverable.
 
 Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
