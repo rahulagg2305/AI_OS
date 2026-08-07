@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 80%** (198 of 246 Task-equivalents complete)
+**Overall: 81%** (199 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -34,7 +34,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S04 Pack Tools and Declared Quality Gates | 4 | 4 | 0 | 0 | 100% |
 | P03 (C) | S05 Security and Human Approval | 10 | 10 | 0 | 0 | 100% |
 | P03 (C) | S06 Threat Controls | 2 | 2 | 0 | 0 | 100% |
-| P04 (D) | S01 Evaluation Engine | 11 | 7 | 0 | 4 | 64% |
+| P04 (D) | S01 Evaluation Engine | 11 | 8 | 0 | 3 | 73% |
 | P04 (D) | S02 Traceability Engine | 3 | 0 | 0 | 3 | 0% |
 | P04 (D) | S03 Benchmarking Pack | 4 | 0 | 0 | 4 | 0% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 0 | 2 | 0% |
@@ -59,7 +59,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
 | P02 (Stage B) - Minimum Viable Kernel | 100 | 97 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 36 | 95% |
-| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 7 | 39% |
+| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 8 | 44% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 3 | 27% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 0 | 0% |
@@ -68,11 +68,10 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-18 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+17 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P03-S02-M29-T08` technical-planner agent
-- `P04-S01-M12-T04` Metrics collector
 - `P04-S02-M16-T01` trace.links writer
 - `P04-S03-M34-T01` Experiment definition with pinned conditions
 - `P05-S01-M26-T01` Parser adapters
