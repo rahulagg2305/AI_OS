@@ -16,9 +16,11 @@ the Human Approval decide route (:mod:`ai_os_kernel.routes.approvals`):
   ``pack:manage``, ``secret:access`` only; see
   :mod:`ai_os_kernel.security_manager.permissions`).
 - :class:`TokenVerifier` (``Protocol``) / :class:`JWTBearerTokenVerifier`
-  — bearer-token authentication via a pre-shared HS256 signing key, not
-  full OIDC (see :mod:`ai_os_kernel.security_manager.token_verifier` for
-  why, and for the documented OIDC upgrade path).
+  (pre-shared HS256 signing key, the safe zero-config default) /
+  :class:`OidcBearerTokenVerifier` (real, JWKS-based RS256 verification
+  with issuer/audience validation, ``P07-S02-M14-T01``) — see
+  :mod:`ai_os_kernel.security_manager.token_verifier` for the full
+  reasoning behind keeping both.
 - :func:`require_permission` — the FastAPI dependency chain routes use
   to authenticate and authorize in one call (see
   :mod:`ai_os_kernel.security_manager.dependencies`).
@@ -38,10 +40,14 @@ the Human Approval decide route (:mod:`ai_os_kernel.routes.approvals`):
   to narrow against end to end — Capability Manager territory, still
   not built.
 
-Not yet implemented: full OIDC (JWKS, issuer/audience validation),
-service-account API keys as a distinct mechanism, the full ADR-0023
-permission vocabulary, and manifest-sourced workflow/agent/tool
-declared permissions (see :func:`narrow_permissions`'s own docstring).
+Not yet implemented: service-account API keys as a distinct mechanism,
+the full ADR-0023 permission vocabulary, and manifest-sourced
+workflow/agent/tool declared permissions (see
+:func:`narrow_permissions`'s own docstring). OIDC verification is real
+(above); OIDC provider *administration* (registering/rotating a real
+provider's config) is not — `oidc_issuer`/`oidc_audience`/
+`oidc_jwks_uri` are plain `PlatformConfig` fields, not a managed
+resource.
 Role administration (grant/revoke ``approver:<class>``,
 ``P03-S05-M14-T07``/``T08``, HTTP-reachable) and its own audit trail
 now exist too — see :mod:`ai_os_kernel.security_manager.
@@ -66,8 +72,10 @@ from ai_os_kernel.security_manager.permissions import (
 )
 from ai_os_kernel.security_manager.token_verifier import (
     JWTBearerTokenVerifier,
+    OidcBearerTokenVerifier,
     TokenVerifier,
     build_jwt_bearer_token_verifier,
+    build_oidc_bearer_token_verifier,
 )
 
 __all__ = [
@@ -80,6 +88,7 @@ __all__ = [
     "WORKFLOW_START",
     "InvalidTokenError",
     "JWTBearerTokenVerifier",
+    "OidcBearerTokenVerifier",
     "Principal",
     "PrincipalType",
     "SecurityContext",
@@ -87,6 +96,7 @@ __all__ = [
     "TokenVerifier",
     "authenticate",
     "build_jwt_bearer_token_verifier",
+    "build_oidc_bearer_token_verifier",
     "is_permitted",
     "narrow_permissions",
     "permissions_for_roles",

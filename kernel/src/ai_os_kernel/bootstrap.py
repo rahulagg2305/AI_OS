@@ -484,7 +484,9 @@ from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 from ai_os_kernel.security_manager.token_verifier import (
     JWTBearerTokenVerifier,
+    OidcBearerTokenVerifier,
     build_jwt_bearer_token_verifier,
+    build_oidc_bearer_token_verifier,
 )
 from ai_os_kernel.workflow_engine.advance_runner import (
     WorkflowAdvanceRunner,
@@ -1470,12 +1472,19 @@ async def _build_se_delivery_pipeline_registry(engine: AsyncEngine) -> AgentRegi
     )
 
 
-async def _build_token_verifier() -> JWTBearerTokenVerifier | None:
-    """The minimal Security Manager's bearer-token authenticator (see
-    ``ai_os_kernel.security_manager.token_verifier`` for what this
-    deliberately is and is not).
+async def _build_token_verifier(
+    config: PlatformConfig,
+) -> JWTBearerTokenVerifier | OidcBearerTokenVerifier | None:
+    """The Security Manager's bearer-token authenticator (see
+    ``ai_os_kernel.security_manager.token_verifier`` for the full
+    reasoning behind both real implementations).
 
-    A missing/unresolvable signing secret degrades to ``None`` with a
+    **Chooses `OidcBearerTokenVerifier` only when all three real OIDC
+    fields are configured together** (``oidc_issuer``/``oidc_audience``/
+    ``oidc_jwks_uri`` — `P07-S02-M14-T01`); every current environment,
+    which configures none of them, keeps the pre-shared-secret
+    `JWTBearerTokenVerifier` exactly as before. A missing/unresolvable
+    signing secret (for either mechanism) degrades to ``None`` with a
     logged warning, the identical "catch, report, don't crash the
     process" shape ``_build_prompted_agent_registry`` already uses —
     but unlike an empty ``AgentRegistry`` (which safely resolves nothing
@@ -1486,6 +1495,17 @@ async def _build_token_verifier() -> JWTBearerTokenVerifier | None:
     it is built unconditionally in ``_lifespan``, not only when a real
     engine exists.
     """
+    if config.oidc_issuer and config.oidc_audience and config.oidc_jwks_uri:
+        try:
+            return build_oidc_bearer_token_verifier(
+                issuer=config.oidc_issuer,
+                audience=config.oidc_audience,
+                jwks_uri=config.oidc_jwks_uri,
+            )
+        except Exception as exc:
+            logger.warning("kernel.bootstrap.token_verifier_unavailable", error=str(exc))
+            return None
+
     try:
         return await build_jwt_bearer_token_verifier(
             secret_provider=EnvSecretProvider(),
@@ -1669,7 +1689,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     before ``engine.dispose()`` runs, so no query any of them makes can
     ever race a closed connection pool.
     """
-    app.state.token_verifier = await _build_token_verifier()
+    app.state.token_verifier = await _build_token_verifier(app.state.config)
     shutdown_coordinator = GracefulShutdownCoordinator()
     app.state.shutdown_coordinator = shutdown_coordinator
 

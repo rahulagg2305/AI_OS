@@ -85,3 +85,23 @@ class PlatformConfig(BaseModel):
     # directly (`ai_os_kernel.observability.settings.ObservabilitySettings`),
     # the identical reasoning `AIOS_DATABASE_URL`/`DatabaseSettings`
     # already establishes — never a `PlatformConfig`/YAML value.
+
+    oidc_issuer: str | None = None
+    """The real OIDC provider's issuer URL (ADR-0023: "user | OIDC
+    bearer token"; `P07-S02-M14-T01`). ``None`` (every current
+    environment, since no real provider has been configured anywhere
+    yet) means `ai_os_kernel.bootstrap._build_token_verifier` falls
+    back to the pre-shared-secret `JWTBearerTokenVerifier` unchanged —
+    all three OIDC fields must be present together for the real
+    `OidcBearerTokenVerifier` to be selected."""
+
+    oidc_audience: str | None = None
+    """The audience this Kernel process expects a real OIDC-issued
+    token to carry. See ``oidc_issuer`` for the "all three together"
+    selection rule."""
+
+    oidc_jwks_uri: str | None = None
+    """The real OIDC provider's JWKS endpoint — fetched (and cached) by
+    :class:`jwt.PyJWKClient` inside `OidcBearerTokenVerifier`, never
+    parsed by hand. See ``oidc_issuer`` for the "all three together"
+    selection rule."""

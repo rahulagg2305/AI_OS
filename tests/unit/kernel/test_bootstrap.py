@@ -34,6 +34,10 @@ from ai_os_kernel.llm_gateway.capability_negotiator import StaticCapabilityNegot
 from ai_os_kernel.llm_gateway.circuit_breaker import InMemoryCircuitBreaker
 from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway
 from ai_os_kernel.prompted_completion import PromptedCompletionService
+from ai_os_kernel.security_manager.token_verifier import (
+    JWTBearerTokenVerifier,
+    OidcBearerTokenVerifier,
+)
 from ai_os_kernel.workflow_engine.errors import AgentNotRegisteredError
 from ai_os_kernel.workflow_engine.prompted_agent import PromptedAgent
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
@@ -273,5 +277,40 @@ def test_pack_lifecycle_repository_is_a_real_repository_when_configured(
 
     with TestClient(app):
         repository = app.state.pack_lifecycle_repository
-
     assert isinstance(repository, SqlPackLifecycleRepository)
+
+
+def test_token_verifier_is_the_preshared_secret_verifier_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Zero regression, proven directly: a config naming no real OIDC
+    provider (every current environment) keeps the pre-shared-secret
+    `JWTBearerTokenVerifier` exactly as before `P07-S02-M14-T01`."""
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", "unit-test-signing-key")
+    app = build_app(_config())
+
+    with TestClient(app):
+        assert isinstance(app.state.token_verifier, JWTBearerTokenVerifier)
+
+
+def test_token_verifier_is_the_real_oidc_verifier_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real selection this ticket adds: all three OIDC fields
+    present together genuinely selects `OidcBearerTokenVerifier` —
+    never the pre-shared secret, even when one happens to be
+    configured too (OIDC takes precedence when both are present)."""
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", "unit-test-signing-key")
+    config = PlatformConfig(
+        env="test",
+        role="api",
+        capability_pack_dirs=[],
+        manifest_schema_path=SCHEMA_PATH,
+        oidc_issuer="https://issuer.example.test",
+        oidc_audience="aios-kernel",
+        oidc_jwks_uri="https://issuer.example.test/.well-known/jwks.json",
+    )
+    app = build_app(config)
+
+    with TestClient(app):
+        assert isinstance(app.state.token_verifier, OidcBearerTokenVerifier)

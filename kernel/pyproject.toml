@@ -35,7 +35,10 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.27,<2.0",
     "anthropic>=0.69,<1.0",
     "httpx>=0.27,<1.0",
-    "pyjwt>=2.9,<3.0",
+    # [crypto] extra pulls in `cryptography` for RS256 — needed by the
+    # real, JWKS-based OidcBearerTokenVerifier (P07-S02-M14-T01); the
+    # pre-shared-secret HS256 verifier needs no asymmetric crypto at all.
+    "pyjwt[crypto]>=2.9,<3.0",
     "pgvector>=0.3,<1.0",
     "docker>=7.1,<8.0",
     # Redis client (P02-S07-M23-T01) — `redis.asyncio` ships in this
