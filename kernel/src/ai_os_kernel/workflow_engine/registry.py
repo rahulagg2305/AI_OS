@@ -136,7 +136,7 @@ from ai_os_kernel.workflow_engine.errors import (
     ToolRegistryError,
 )
 from ai_os_kernel.workflow_engine.pack_state import PackState
-from ai_os_kernel.workflow_engine.tool import Tool, TrustTier
+from ai_os_kernel.workflow_engine.tool import SandboxBackedTool, Tool, TrustTier
 from ai_os_sdk.contracts.entrypoint_context import PackContextReceiver
 
 
@@ -682,7 +682,20 @@ class SqlToolRegistry:
             )
 
         declared_trust_tier = TrustTier(row.trust_tier)
-        if loaded.trust_tier is not declared_trust_tier:
+        # `!=` (value equality — `StrEnum` compares as `str`), not `is
+        # not` (object identity) — a real bug found and fixed here
+        # (`P03-S04-M31-T02`): every entrypoint this check had ever been
+        # exercised against before this ticket (`EchoTool`, and every
+        # test stub in `_entrypoint_stubs.py`) imports this exact Kernel
+        # `TrustTier` enum directly, so `is` happened to hold; a real
+        # Capability Pack's own entrypoint is categorically forbidden
+        # from importing `ai_os_kernel` at all (check 7,
+        # `platform_sdk.md` §9 item 7) and must instead use
+        # `ai_os_sdk.models.tool.TrustTier` — a separately defined
+        # `StrEnum` with the identical string values, equal but never
+        # identical to this one — so `is not` would have refused every
+        # real pack tool's own, genuinely correct, trust tier.
+        if loaded.trust_tier != declared_trust_tier:
             # Another structural, permanent cause (retriable=False, the
             # default) — a mismatch between the entrypoint's own code
             # and its catalog row; neither changes between attempts
@@ -709,5 +722,30 @@ class SqlToolRegistry:
             # SqlAgentRegistry.
             git_service=None,
         )
+
+        # A real bug found and fixed here (`P03-S04-M31-T02`): a real
+        # Capability Pack's own Tool entrypoint has no way to receive a
+        # genuine `SandboxExecutor` through `PackContext`
+        # (`ai_os_sdk.contracts.capability_pack.PackContext` carries
+        # only `llm`/`prompts`/`tools`, never a raw sandbox — `tools` is
+        # a `ToolInvoker`, a different, narrower capability). Without
+        # this, no manifest-declared, zero-argument-constructible,
+        # `PackContextReceiver`-based Tool could ever satisfy
+        # `SandboxBackedTool` (`tool.sandbox is not None`), which both
+        # real dispatch paths (`ToolStepExecutor`,
+        # `ToolInvokerAdapter._invoke_registered_tool`) require before
+        # running any `tier1_sandboxed` tool — refusing every one
+        # outright, regardless of what its own code actually does.
+        # Setting it here, directly, bypasses `PackContext` entirely for
+        # this one Kernel-side structural need — `SandboxBackedTool` is
+        # a Kernel Protocol, not part of the SDK's frozen `PackContext`
+        # model, so widening the latter is not required to close this.
+        # A no-op for any Tool that does not itself already structurally
+        # declare a `sandbox` attribute (`EchoTool`, every existing
+        # `tier2_trusted` tool) — the `isinstance` check below is
+        # `False` for those, exactly mirroring `ToolStepExecutor`'s own
+        # `SandboxBackedTool` check further down the same dispatch path.
+        if self._sandbox is not None and isinstance(loaded, SandboxBackedTool):
+            loaded.sandbox = self._sandbox
 
         return loaded

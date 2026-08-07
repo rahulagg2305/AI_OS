@@ -190,9 +190,8 @@ def derive_tool_rows(manifest: dict[str, Any], *, pack_id: str) -> list[dict[str
     """One row per ``manifest["tools"]`` entry, matching
     ``catalog.tools``'s own real columns
     (:data:`~ai_os_kernel.persistence.catalog_schema.tools`) exactly.
-    See this module's own docstring: the one real pack declares no
-    tools, so this is real, correct, currently-unexercised logic, not
-    an oversight."""
+    Genuinely exercised as of `P03-S04-M31-T02`: the real pack now
+    declares two tools (``fs.read``, ``build.run``), its first ever."""
     return [
         {
             "tool_id": tool["id"],

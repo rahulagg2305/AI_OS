@@ -341,6 +341,42 @@ agents:
       - sandbox:execute
       - git:write
 
+tools:
+  - id: fs.read
+    name: File Read Tool
+    version: 0.1.0
+    description: >-
+      Reads a real file's content through a real, directly-injected
+      sandbox (P03-S04-M31-T02) — the first real, manifest-declared,
+      registry-resolvable Tool this codebase has ever had. Invoked via
+      an agent's own context.tools.invoke("fs.read", inputs); not yet
+      adopted by any agent (deferred, matching this pack's own
+      established "prove standalone first" precedent).
+    entrypoint: ai_os_pack_software_engineering.tools.fs_read:FsReadToolEntrypoint
+    inputSchema: ai_os_pack_software_engineering.tools.fs_read:FsReadInput
+    outputSchema: ai_os_pack_software_engineering.tools.fs_read:FsReadOutput
+    trustTier: tier1_sandboxed
+    permissions:
+      - sandbox:execute
+
+  - id: build.run
+    name: Build Run Tool
+    version: 0.1.0
+    description: >-
+      Runs a real, per-invocation-parameterized command through a real,
+      directly-injected sandbox (P03-S04-M31-T02) — proves a second,
+      pack-owned, catalog-resolved tool_id reaches a real sandbox end to
+      end, genuinely reusable across arbitrarily many commands (unlike
+      SandboxedCommandTool's own fixed-at-construction shape). Not yet
+      adopted by any agent (deferred, matching this pack's own
+      established "prove standalone first" precedent).
+    entrypoint: ai_os_pack_software_engineering.tools.build_run:BuildRunToolEntrypoint
+    inputSchema: ai_os_pack_software_engineering.tools.build_run:BuildRunInput
+    outputSchema: ai_os_pack_software_engineering.tools.build_run:BuildRunOutput
+    trustTier: tier1_sandboxed
+    permissions:
+      - sandbox:execute
+
 workflows:
   - id: se.delivery_pipeline
     name: Software Delivery Pipeline

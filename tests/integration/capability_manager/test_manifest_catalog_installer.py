@@ -56,6 +56,8 @@ from ai_os_pack_software_engineering.agents.requirements_analyst import (
 )
 from ai_os_pack_software_engineering.agents.security_analysis import SecurityAnalysisOutput
 from ai_os_pack_software_engineering.agents.verification import TestAgentOutput
+from ai_os_pack_software_engineering.tools.build_run import BuildRunOutput
+from ai_os_pack_software_engineering.tools.fs_read import FsReadOutput
 from tests.integration._postgres_fixture import postgres_container
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -210,9 +212,25 @@ def test_registering_the_real_pack_derives_real_agent_prompt_and_tool_rows(
                 f"sha256:{hashlib.sha256(real_content.encode('utf-8')).hexdigest()}"
             )
 
-        # --- tools: the real pack declares none — genuinely zero rows,
-        # not silently skipped ---
-        assert tool_rows == []
+        # --- tools: real row for each of the 2 real, declared tools
+        # (P03-S04-M31-T02, this pack's first ever) ---
+        assert len(tool_rows) == 2
+        expected_tool_output_models: dict[str, type[BaseModel]] = {
+            "fs.read": FsReadOutput,
+            "build.run": BuildRunOutput,
+        }
+        by_tool_id = {row["tool_id"]: row for row in tool_rows}
+        for manifest_tool in manifest["tools"]:
+            row = by_tool_id[manifest_tool["id"]]
+            assert row["pack_id"] == PACK_ID
+            assert row["version"] == manifest_tool["version"]
+            assert row["entrypoint"] == manifest_tool["entrypoint"]
+            assert row["trust_tier"] == manifest_tool["trustTier"]
+            assert set(row["required_permissions"]) == set(manifest_tool["permissions"])
+            assert (
+                row["output_schema"]
+                == expected_tool_output_models[manifest_tool["id"]].model_json_schema()
+            )
 
         # --- workflow_definitions (P03-S05-M14-T10): the real pack
         # declares one, se.delivery_pipeline, with a real, non-empty

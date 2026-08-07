@@ -39,7 +39,7 @@ from ai_os_kernel.workflow_engine.errors import (
     ToolRegistryError,
 )
 from ai_os_kernel.workflow_engine.registry import SqlAgentRegistry, SqlToolRegistry
-from ai_os_kernel.workflow_engine.tool import EchoTool, TrustTier
+from ai_os_kernel.workflow_engine.tool import EchoTool, SandboxBackedTool, TrustTier
 from ai_os_sdk.models.tool import ToolStatus
 from tests.integration._postgres_fixture import postgres_container
 
@@ -966,6 +966,114 @@ def test_a_manifest_declared_tool_resolves_and_invokes_through_the_real_registry
 
             assert result.status is ToolStatus.SUCCESS
             assert result.outputs == {"result": "ok"}
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_a_real_pack_declared_tier1_sandboxed_tool_resolves_and_genuinely_reads_a_real_file(
+    database_url: str, tmp_path: Path
+) -> None:
+    """The real proof `P03-S04-M31-T02` exists for: the Software
+    Engineering pack's own real `fs.read` Tool — `tier1_sandboxed`,
+    zero-argument-constructible, no `PackContextReceiver` — resolves
+    through the real `SqlToolRegistry` (surviving both real bugs found
+    and fixed for this ticket: the `is not` trust-tier identity check,
+    and the missing sandbox-injection path) and genuinely reads a real
+    file back through a real `LocalSubprocessSandbox`, not a stub."""
+
+    async def _run() -> None:
+        real_file = tmp_path / "hello.py"
+        real_file.write_text('print("hello from a real file")', encoding="utf-8")
+
+        await _seed_pack(
+            database_url,
+            pack_id="se.real_fs_read_pack",
+            state="activated",
+            manifest={"permissions": ["sandbox:execute"]},
+        )
+        await _seed_tool(
+            database_url,
+            tool_id="se.fs_read",
+            entrypoint="ai_os_pack_software_engineering.tools.fs_read:FsReadToolEntrypoint",
+            trust_tier="tier1_sandboxed",
+            pack_id="se.real_fs_read_pack",
+            required_permissions=["sandbox:execute"],
+        )
+        engine = build_engine(database_url)
+        try:
+            sandbox = LocalSubprocessSandbox()
+            registry = SqlToolRegistry(engine, sandbox=sandbox)
+
+            resolved = await registry.resolve_tool("se.fs_read")
+
+            # The real, injected sandbox — not `PackContext` (which
+            # carries no such attribute at all), and not `None`.
+            assert isinstance(resolved, SandboxBackedTool)
+            assert resolved.sandbox is sandbox
+
+            adapter = ToolInvokerAdapter(sandbox, registry=registry)
+            result = await adapter.invoke(
+                "se.fs_read",
+                {"filePath": str(real_file), "workingDirectory": str(tmp_path)},
+            )
+
+            assert result.status is ToolStatus.SUCCESS
+            assert result.outputs == {"content": 'print("hello from a real file")'}
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_a_real_pack_declared_tier1_sandboxed_tool_resolves_and_genuinely_runs_a_real_command(
+    database_url: str, tmp_path: Path
+) -> None:
+    """The identical real proof, for the pack's own `build.run` Tool —
+    genuinely parameterized per invocation (unlike `SandboxedCommandTool`,
+    which cannot be a manifest-declared entrypoint at all — see that
+    Tool's own docstring)."""
+
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.real_build_run_pack",
+            state="activated",
+            manifest={"permissions": ["sandbox:execute"]},
+        )
+        await _seed_tool(
+            database_url,
+            tool_id="se.build_run",
+            entrypoint="ai_os_pack_software_engineering.tools.build_run:BuildRunToolEntrypoint",
+            trust_tier="tier1_sandboxed",
+            pack_id="se.real_build_run_pack",
+            required_permissions=["sandbox:execute"],
+        )
+        engine = build_engine(database_url)
+        try:
+            sandbox = LocalSubprocessSandbox()
+            registry = SqlToolRegistry(engine, sandbox=sandbox)
+
+            resolved = await registry.resolve_tool("se.build_run")
+            assert isinstance(resolved, SandboxBackedTool)
+            assert resolved.sandbox is sandbox
+
+            adapter = ToolInvokerAdapter(sandbox, registry=registry)
+            result = await adapter.invoke(
+                "se.build_run",
+                {
+                    "command": [*sandbox.python_command, "-c", "print('real command output')"],
+                    "workingDirectory": str(tmp_path),
+                    "timeoutSeconds": 10.0,
+                    "maxOutputBytes": 10_000,
+                },
+            )
+
+            assert result.status is ToolStatus.SUCCESS
+            assert result.outputs is not None
+            assert result.outputs["exitCode"] == 0
+            assert result.outputs["stdout"].strip() == "real command output"
         finally:
             await engine.dispose()
 
