@@ -481,7 +481,10 @@ from ai_os_kernel.routes.problem_details import register_problem_detail_handlers
 from ai_os_kernel.routes.role_administration import router as role_administration_router
 from ai_os_kernel.routes.workflows import router as workflows_router
 from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
-from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
+from ai_os_kernel.secrets_manager.backend_selection import (
+    build_secret_provider_from_env,
+    secret_reference_for,
+)
 from ai_os_kernel.security_manager.role_administration import SqlRoleGrantRepository
 from ai_os_kernel.security_manager.token_verifier import (
     JWTBearerTokenVerifier,
@@ -551,18 +554,22 @@ _DATABASE_CHECK_TIMEOUT_SECONDS = 2.0
 # from the truth than naming it honestly as a platform-level agent.
 _PROMPTED_AGENT_ID = "platform/prompted-agent"
 
-# ADR-0024's own local-development example reference, already the
+# ADR-0024's own local-development example name, already the
 # convention EnvSecretProvider's docstring and every prior step's tests
-# use — not invented here.
-_ANTHROPIC_API_KEY_SECRET_REFERENCE = "secret://env/llm/anthropic-api-key"  # noqa: S105 — a reference URI, not a credential
+# use — not invented here. The full "secret://<backend>/..." reference
+# is built at each real call site via secret_reference_for (P07-S02-M19-T01),
+# never a fixed module-level string — AIOS_SECRET_BACKEND is read at
+# call time, so this genuinely follows whichever backend is currently
+# selected instead of staying pinned to "env" underneath a provider
+# object that switched to something else.
+_ANTHROPIC_API_KEY_SECRET_NAME = "llm/anthropic-api-key"  # noqa: S105 — a reference name, not a credential
 
-# The minimal Security Manager's own pre-shared JWT signing secret — the
-# same "secret://env/..." local-development reference shape as
-# _ANTHROPIC_API_KEY_SECRET_REFERENCE above, resolved through the
-# identical EnvSecretProvider seam. See
+# The minimal Security Manager's own pre-shared JWT signing secret —
+# the same real, backend-following reference shape as
+# _ANTHROPIC_API_KEY_SECRET_NAME above. See
 # ai_os_kernel.security_manager.token_verifier for why this is a
 # pre-shared secret and not a real OIDC provider yet.
-_JWT_SIGNING_KEY_SECRET_REFERENCE = "secret://env/security/jwt-signing-key"  # noqa: S105 — a reference URI, not a credential
+_JWT_SIGNING_KEY_SECRET_NAME = "security/jwt-signing-key"  # noqa: S105 — a reference name, not a credential
 
 # Not part of workflow_architecture.md's Step Contract (only promptId/
 # promptVersion/modelAlias are), so there is no declared field to read
@@ -1074,8 +1081,8 @@ async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
 
         service = await build_anthropic_prompted_completion_service(
             engine=engine,
-            secret_provider=EnvSecretProvider(),
-            api_key_secret_reference=_ANTHROPIC_API_KEY_SECRET_REFERENCE,
+            secret_provider=build_secret_provider_from_env(),
+            api_key_secret_reference=secret_reference_for(_ANTHROPIC_API_KEY_SECRET_NAME),
             router=router,
             pricing=provider_config.pricing,
             additional_gateways=additional_gateways,
@@ -1445,8 +1452,8 @@ async def _build_se_delivery_pipeline_registry(engine: AsyncEngine) -> AgentRegi
             }
         )
         anthropic_gateway = await build_anthropic_adapter(
-            secret_provider=EnvSecretProvider(),
-            api_key_secret_reference=_ANTHROPIC_API_KEY_SECRET_REFERENCE,
+            secret_provider=build_secret_provider_from_env(),
+            api_key_secret_reference=secret_reference_for(_ANTHROPIC_API_KEY_SECRET_NAME),
             router=router,
             pricing=provider_config.pricing,
         )
@@ -1509,8 +1516,8 @@ async def _build_token_verifier(
 
     try:
         return await build_jwt_bearer_token_verifier(
-            secret_provider=EnvSecretProvider(),
-            signing_key_secret_reference=_JWT_SIGNING_KEY_SECRET_REFERENCE,
+            secret_provider=build_secret_provider_from_env(),
+            signing_key_secret_reference=secret_reference_for(_JWT_SIGNING_KEY_SECRET_NAME),
         )
     except Exception as exc:
         logger.warning("kernel.bootstrap.token_verifier_unavailable", error=str(exc))

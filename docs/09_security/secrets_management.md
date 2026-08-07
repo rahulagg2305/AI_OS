@@ -24,9 +24,9 @@ This document is subordinate to:
 
 ---
 
-## Implementation Status (2026-08-01)
+## Implementation Status (updated 2026-08-08, `P07-S02-M19-T01`)
 
-**Two of the four §5 backend adapters exist.** Verified against `kernel/src/ai_os_kernel/secrets_manager/`: `env_provider.py` (`EnvSecretProvider`, ADR-0024-scoped to local development only) and `file_provider.py` (`FileSecretProvider`, added `P01-S02-M19-T03` — a plaintext mounted file, not age/SOPS decryption; see that module's own docstring). Vault and cloud secret managers remain unimplemented. **There is no backend-selection factory that reads `AIOS_SECRET_BACKEND`** — the variable is referenced only as a naming analogy in an unrelated module's docstring (`sandbox/default_executor.py`), not implemented as a real switch anywhere.
+**Three of the four §5 backend adapters now exist.** Verified against `kernel/src/ai_os_kernel/secrets_manager/`: `env_provider.py` (`EnvSecretProvider`, ADR-0024-scoped to local development only), `file_provider.py` (`FileSecretProvider`, added `P01-S02-M19-T03` — a plaintext mounted file, not age/SOPS decryption; see that module's own docstring), and `vault_provider.py` (`VaultSecretProvider`, added `P07-S02-M19-T01` — real Vault KV v2, token auth only). Cloud secret managers remain unimplemented. **The backend-selection factory this section previously said did not exist is now real**: `backend_selection.py`'s `build_secret_provider_from_env()` reads `AIOS_SECRET_BACKEND` exactly as this document's own §5 always documented, and is the one thing `bootstrap.py`'s three real callers now go through — none of them hardcode `EnvSecretProvider()` anymore. `secret_reference_for()` (same module) keeps a reference's own backend segment in agreement with whichever backend the factory selected, closing a real gap the two hardcoded, pre-existing references (Anthropic API key, JWT signing key) would otherwise have hit silently.
 
 **Real:** the `secret://<provider>/<name>[#version]` reference format and its parser (`reference.py`, regex-validated); the `SecretValue` wrapper (`value.py`) — its `__str__`/`__repr__` do return `"***"` exactly as §5 and §6 describe; the Access Broker (`access_broker.py`, `P01-S02-M19-T04`) — authorization via `security_manager`'s `secret:access` permission (`admin` role only) plus a real, hash-chained `governance.audit_log` row for every attempt, allowed or denied; the TTL cache + rotation-invalidation layer (`cache.py`, `P01-S02-M19-T05`) — `CachingSecretProvider` wraps any backend with a per-reference cache (default 300 s per this document's own §6) plus an explicit `invalidate()` hook; the prompt-assembly leak scan (`leak_scan.py`, `P01-S02-M19-T06`) — rejects a rendered prompt containing a resolved secret value verbatim and audits the block. §8's "must record who/what requested a secret" is implemented at the Access Broker's gate specifically — a resolution that bypasses it (the Configuration Manager's own resolution path, noted below) is not yet audited at the point of access.
 
@@ -135,7 +135,7 @@ Never record the secret value itself.
 
 ## 9. Current Status
 
-This document defines the design baseline for Secrets Management. See the Implementation Status section near the top: the reference format and `SecretValue` wrapper are real; the `env` backend is the only one of four implemented; the Access Broker, TTL cache/rotation, and Audit Logger are all unbuilt.
+This document defines the design baseline for Secrets Management. See the Implementation Status section near the top: the reference format and `SecretValue` wrapper are real; three of four backends (`env`, `file`, `vault`) are implemented, cloud secret managers are not; the Access Broker, TTL cache/rotation, and the real `AIOS_SECRET_BACKEND` switch are all real too. Not yet wired into any specific consumer.
 
 ---
 
@@ -155,5 +155,5 @@ Order of precedence:
 
 - [`security_architecture.md`](security_architecture.md) §7 — the security-relevant invariants this document is the detail behind
 - [`authentication_authorization.md`](authentication_authorization.md) — the identity/permission system that governs who may request a secret
-- [ADR-0024](../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — the backend decision this document implements (currently `env` only)
+- [ADR-0024](../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — the backend decision this document implements (`env`, `file`, and `vault` real; cloud secret managers not yet built)
 - [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status

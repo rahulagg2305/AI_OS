@@ -20,6 +20,17 @@ class AccessDeniedError(Exception):
     """
 
 
+class SecretBackendConfigError(Exception):
+    """``AIOS_SECRET_BACKEND`` (secrets_management.md §5) names a real
+    backend whose own required configuration is missing — e.g.
+    ``vault`` without ``AIOS_VAULT_ADDR``/``AIOS_VAULT_TOKEN``. Raised
+    by :func:`~ai_os_kernel.secrets_manager.backend_selection.
+    build_secret_provider_from_env` rather than silently falling back
+    to the ``env`` backend, which would resolve secrets from the wrong
+    place without ever saying so.
+    """
+
+
 class SecretLeakDetectedError(Exception):
     """A resolved secret value appeared verbatim in an assembled prompt
     about to be sent to a model — secrets_management.md §6: "A secret

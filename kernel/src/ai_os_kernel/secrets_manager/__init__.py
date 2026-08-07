@@ -50,19 +50,35 @@ Implemented so far (Stage A):
   :class:`~ai_os_kernel.security_manager.models.SecurityContext` to
   gate with today, and every layer-1-6 merge already re-reads current
   values on every call.
+- :class:`VaultSecretProvider` (added 2026-08-08, ``P07-S02-M19-T01``) —
+  the ``vault`` backend, ADR-0024's own "reference production backend":
+  resolves ``secret://vault/<name>[#<version>]`` against a real
+  HashiCorp Vault KV v2 mount, token authentication only. See
+  :mod:`ai_os_kernel.secrets_manager.vault_provider`.
+- :func:`~ai_os_kernel.secrets_manager.backend_selection.build_secret_provider_from_env`
+  (added 2026-08-08, ``P07-S02-M19-T01``) — the real
+  ``AIOS_SECRET_BACKEND`` switch secrets_management.md §5 documents;
+  ``bootstrap.py``'s three real callers all read the provider through
+  this now, none of them hardcoding :class:`EnvSecretProvider` anymore.
+  See :mod:`ai_os_kernel.secrets_manager.backend_selection`.
 
-Not yet implemented: age/SOPS encrypted-file decryption, HashiCorp
-Vault, cloud secret managers, and wiring
+Not yet implemented: age/SOPS encrypted-file decryption, cloud secret
+managers, Vault AppRole/Kubernetes auth (token auth only), and wiring
 :class:`AccessBroker`/:class:`CachingSecretProvider`/the leak scan into
 any specific consumer (LLM Gateway, Git Integration Service, ...).
 None of those exist yet, so none of them use this module yet.
 """
 
 from ai_os_kernel.secrets_manager.access_broker import AccessBroker
+from ai_os_kernel.secrets_manager.backend_selection import (
+    build_secret_provider_from_env,
+    secret_reference_for,
+)
 from ai_os_kernel.secrets_manager.cache import CachingSecretProvider
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
 from ai_os_kernel.secrets_manager.errors import (
     AccessDeniedError,
+    SecretBackendConfigError,
     SecretLeakDetectedError,
     SecretResolutionError,
 )
@@ -71,6 +87,10 @@ from ai_os_kernel.secrets_manager.leak_scan import scan_rendered_prompt_for_secr
 from ai_os_kernel.secrets_manager.provider import SecretProvider
 from ai_os_kernel.secrets_manager.reference import SecretReference, parse_secret_reference
 from ai_os_kernel.secrets_manager.value import SecretValue
+from ai_os_kernel.secrets_manager.vault_provider import (
+    VaultSecretProvider,
+    build_vault_secret_provider,
+)
 
 __all__ = [
     "AccessBroker",
@@ -78,11 +98,16 @@ __all__ = [
     "CachingSecretProvider",
     "EnvSecretProvider",
     "FileSecretProvider",
+    "SecretBackendConfigError",
     "SecretLeakDetectedError",
     "SecretProvider",
     "SecretReference",
     "SecretResolutionError",
     "SecretValue",
+    "VaultSecretProvider",
+    "build_secret_provider_from_env",
+    "build_vault_secret_provider",
     "parse_secret_reference",
     "scan_rendered_prompt_for_secret_leak",
+    "secret_reference_for",
 ]
