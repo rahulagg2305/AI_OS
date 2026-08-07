@@ -641,11 +641,30 @@ async def test_all_six_agent_steps_and_both_gates_genuinely_chain_through_real_p
         assert tests_gate_outputs["gateId"] == "se.build_tests_pass"
         assert tests_gate_outputs["gateVersion"] == "0.1.0"
 
-        # The real proof this feature step exists for: both real,
+        # P03-S04-M31-T03's own real proof: the third real gate
+        # (`quality-gate-code-review-clean`, added `P03-S03-M30-T03`)
+        # genuinely resolves through the identical real Gate Registry
+        # too — closing the one real, concrete gap this ticket found:
+        # every prior test proved this gate's pass/fail/retry behavior,
+        # but never its own registry-resolved gateId/gateVersion, the
+        # exact proof the other two gates already had.
+        code_review_gate_outputs = next(
+            s.outputs for s in steps if s.step_name == "quality-gate-code-review-clean"
+        )
+        assert code_review_gate_outputs is not None
+        assert code_review_gate_outputs["passed"] is True
+        assert code_review_gate_outputs["gateId"] == "se.code_review_clean"
+        assert code_review_gate_outputs["gateVersion"] == "0.1.0"
+
+        # The real proof this feature step exists for: all three real,
         # passing gates each genuinely wrote their own
         # evaluation.gate_results row — the Evaluation Engine's first
         # real consumer, not merely a workflow_steps-level record.
-        for gate_step_id in ("quality-gate-lint-clean", "quality-gate-tests-pass"):
+        for gate_step_id in (
+            "quality-gate-lint-clean",
+            "quality-gate-code-review-clean",
+            "quality-gate-tests-pass",
+        ):
             rows = await _real_gate_results(
                 engine, workflow_id=result.last_instance.workflow_id, step_id=gate_step_id
             )

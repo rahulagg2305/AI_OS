@@ -104,6 +104,48 @@ class TestCheck2EntryPointsResolve:
         result = check_2_entry_points_resolve(broken, _SE_PACK_ROOT)
         assert not result.passed
 
+    def test_the_real_manifests_own_tool_entrypoints_resolve(
+        self, manifest: dict[str, Any]
+    ) -> None:
+        """P03-S04-M31-T02's own real fs.read/build.run tools, proven
+        here for the first time — no test exercised the tools[] loop
+        before this ticket added it, since the pack declared none."""
+        result = check_2_entry_points_resolve(manifest, _SE_PACK_ROOT)
+        assert any("tool 'fs.read'" in d and "resolves to a class" in d for d in result.details)
+        assert any("tool 'build.run'" in d and "resolves to a class" in d for d in result.details)
+
+    def test_a_nonexistent_tool_entrypoint_fails(self, manifest: dict[str, Any]) -> None:
+        broken_tool = {
+            **manifest["tools"][0],
+            "entrypoint": f"{_SE_PACK_PACKAGE}.pack:DoesNotExist",
+        }
+        broken = {**manifest, "tools": [broken_tool]}
+        result = check_2_entry_points_resolve(broken, _SE_PACK_ROOT)
+        assert not result.passed
+
+    def test_the_real_manifests_own_quality_gate_entrypoints_resolve(
+        self, manifest: dict[str, Any]
+    ) -> None:
+        """P03-S04-M31-T03's own real proof: all three of the pack's
+        own declared gates (se.build_lint_clean/se.code_review_clean/
+        se.build_tests_pass) name a genuinely resolvable entrypoint —
+        no test exercised the qualityGates[] loop before this ticket
+        added it."""
+        result = check_2_entry_points_resolve(manifest, _SE_PACK_ROOT)
+        for gate_id in ("se.build_lint_clean", "se.code_review_clean", "se.build_tests_pass"):
+            assert any(
+                f"gate {gate_id!r}" in d and "resolves to a class" in d for d in result.details
+            )
+
+    def test_a_nonexistent_gate_entrypoint_fails(self, manifest: dict[str, Any]) -> None:
+        broken_gate = {
+            **manifest["qualityGates"][0],
+            "entrypoint": f"{_SE_PACK_PACKAGE}.pack:DoesNotExist",
+        }
+        broken = {**manifest, "qualityGates": [broken_gate]}
+        result = check_2_entry_points_resolve(broken, _SE_PACK_ROOT)
+        assert not result.passed
+
 
 class TestCheck3IoModelsMatch:
     def test_every_real_agent_and_workflow_io_model_matches(self, manifest: dict[str, Any]) -> None:

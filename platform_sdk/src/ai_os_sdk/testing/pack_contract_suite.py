@@ -233,10 +233,23 @@ def check_2_entry_points_resolve(
 ) -> PackContractCheckResult:
     """Every dotted ``module:Attribute`` reference the manifest names as
     something Python must import — the top-level ``entryPoint``, every
-    ``agents[].entrypoint`` — genuinely resolves to a real object, and
-    every ``workflows[].definition`` file genuinely exists on disk
+    ``agents[].entrypoint``/``tools[].entrypoint``/
+    ``qualityGates[].entrypoint`` — genuinely resolves to a real object,
+    and every ``workflows[].definition`` file genuinely exists on disk
     relative to the pack root. Real ``importlib.import_module`` calls
-    against the real installed pack, not a static text check."""
+    against the real installed pack, not a static text check.
+
+    **``tools[]``/``qualityGates[]`` added `P03-S04-M31-T03`.** A real,
+    discovered gap: this docstring's own prose already claimed "every"
+    entrypoint-bearing section, but the two sections added after
+    ``agents[]`` first existed were never folded in — the Software
+    Engineering pack declared zero of either until this same ticket, so
+    the omission was never exercised. `qualityGates[].entrypoint` is
+    schema-only today (no Gate Executor resolves or invokes it at
+    runtime — `quality_gate_engine.md`'s own Implementation Status),
+    but this check still verifies it is at least a genuinely resolvable
+    class, the identical shallow guarantee already made for every other
+    entrypoint here."""
     details: list[str] = []
     failed = False
 
@@ -265,6 +278,34 @@ def check_2_entry_points_resolve(
             details.append(f"agent {agent['id']!r} entrypoint {entrypoint!r} is not a class")
             continue
         details.append(f"agent {agent['id']!r} entrypoint {entrypoint!r} resolves to a class")
+
+    for tool in manifest.get("tools", []):
+        entrypoint = tool["entrypoint"]
+        try:
+            resolved = _resolve_dotted_path(entrypoint)
+        except (ImportError, AttributeError, ValueError) as exc:
+            failed = True
+            details.append(f"tool {tool['id']!r} entrypoint {entrypoint!r} does not resolve: {exc}")
+            continue
+        if not inspect.isclass(resolved):
+            failed = True
+            details.append(f"tool {tool['id']!r} entrypoint {entrypoint!r} is not a class")
+            continue
+        details.append(f"tool {tool['id']!r} entrypoint {entrypoint!r} resolves to a class")
+
+    for gate in manifest.get("qualityGates", []):
+        entrypoint = gate["entrypoint"]
+        try:
+            resolved = _resolve_dotted_path(entrypoint)
+        except (ImportError, AttributeError, ValueError) as exc:
+            failed = True
+            details.append(f"gate {gate['id']!r} entrypoint {entrypoint!r} does not resolve: {exc}")
+            continue
+        if not inspect.isclass(resolved):
+            failed = True
+            details.append(f"gate {gate['id']!r} entrypoint {entrypoint!r} is not a class")
+            continue
+        details.append(f"gate {gate['id']!r} entrypoint {entrypoint!r} resolves to a class")
 
     for workflow in manifest.get("workflows", []):
         definition_path = pack_root / workflow["definition"]
