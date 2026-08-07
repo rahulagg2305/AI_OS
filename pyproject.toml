@@ -11,6 +11,7 @@ dependencies = [
     "ai-os-kernel",
     "ai-os-sdk",
     "ai-os-pack-software-engineering",
+    "ai-os-pack-benchmarking",
 ]
 
 # This root project is never built or installed as a package (ADR-0009,
@@ -49,17 +50,22 @@ dev = [
 # first pack scaffolded this way — see its own pyproject.toml for why it
 # depends on ai-os-kernel directly (a documented, temporary compromise:
 # platform_sdk_v1_scope.md steps 9–14 migrate it onto ai-os-sdk instead).
+# capability_packs/benchmarking was scaffolded `P04-S03-M34-T01` — its
+# own pyproject.toml has no ai-os-kernel dependency at all, real from
+# its very first commit (no such compromise ever existed for it).
 [tool.uv.workspace]
 members = [
     "kernel",
     "platform_sdk",
     "capability_packs/software-engineering",
+    "capability_packs/benchmarking",
 ]
 
 [tool.uv.sources]
 ai-os-kernel = { workspace = true }
 ai-os-sdk = { workspace = true }
 ai-os-pack-software-engineering = { workspace = true }
+ai-os-pack-benchmarking = { workspace = true }
 
 # --- Shared tooling ---------------------------------------------------------
 # ADR-0015: pytest + testcontainers, ruff, mypy --strict, GitHub Actions.
@@ -67,7 +73,7 @@ ai-os-pack-software-engineering = { workspace = true }
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["kernel/src", "platform_sdk/src", "capability_packs/software-engineering/src"]
+src = ["kernel/src", "platform_sdk/src", "capability_packs/software-engineering/src", "capability_packs/benchmarking/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "SIM"]
@@ -79,7 +85,7 @@ select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "SIM"]
 "platform_sdk/tests/**" = ["S101"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["ai_os_kernel", "ai_os_sdk", "ai_os_pack_software_engineering"]
+known-first-party = ["ai_os_kernel", "ai_os_sdk", "ai_os_pack_software_engineering", "ai_os_pack_benchmarking"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -89,7 +95,7 @@ plugins = ["pydantic.mypy"]
 # Only real code is checked. Empty component stubs (docstring-only
 # __init__.py files awaiting later Implementation Roadmap stages) still
 # type-check cleanly since they contain no statements.
-files = ["kernel/src", "kernel/alembic", "tests", "platform_sdk/src", "platform_sdk/tests", "capability_packs/software-engineering/src", "capability_packs/software-engineering/tests", "scripts"]
+files = ["kernel/src", "kernel/alembic", "tests", "platform_sdk/src", "platform_sdk/tests", "capability_packs/software-engineering/src", "capability_packs/software-engineering/tests", "capability_packs/benchmarking/src", "capability_packs/benchmarking/tests", "scripts"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"

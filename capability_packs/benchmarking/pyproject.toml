@@ -1,0 +1,19 @@
+[project]
+name = "ai-os-pack-benchmarking"
+version = "0.1.0"
+description = "AI_OS Benchmarking Capability Pack — experiment definition (first real increment)."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+# No ai-os-kernel dependency, ever — unlike software-engineering's own
+# pyproject.toml (a documented, temporary, now-closed compromise), this
+# pack's src/ never imported ai_os_kernel at any point in its history.
+dependencies = [
+    "pydantic>=2.7,<3.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_os_pack_benchmarking"]

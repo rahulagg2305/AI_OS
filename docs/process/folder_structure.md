@@ -1,6 +1,6 @@
 # Folder Structure (Actual, Not Aspirational) – AI_OS
 
-**Status:** Active | **Last Updated:** 2026-07-29 (Platform SDK v1.0.0 steps 1–8: `platform_sdk/` and `scripts/` both moved from Planned to real, tracked content)
+**Status:** Active | **Last Updated:** 2026-08-07 (`P04-S03-M34-T01`: `capability_packs/benchmarking/` moved from Planned to real, tracked content). Prior: 2026-07-29 (Platform SDK v1.0.0 steps 1–8: `platform_sdk/` and `scripts/` both moved from Planned to real, tracked content)
 
 `PROJECT_INDEX.md`'s own "Repository Structure" table lists the full, intended repository layout. This document records what actually has real content right now, so a fresh session doesn't waste time exploring an empty directory expecting to find something, or miss real content because a folder's name sounded aspirational.
 
@@ -18,7 +18,7 @@ Practical consequence: if you are working in a fresh clone and a document refere
 |---|---|---|
 | `docs/` | **Yes** | ~150 files — architecture, 25 ADRs, requirements, the roadmap/history, `process/` (this file's own home) |
 | `kernel/` | **Yes** | The real `ai-os-kernel` package: Workflow Engine, LLM Gateway (+2 adapters), Prompt Engine, Context Manager, Capability Manager, Security Manager (minimal slice), Secrets Manager (`env` only), Sandbox (`LocalSubprocessSandbox` + `DockerSandbox`), Git Integration Service (`git_integration/` — commit/branch/push, `P03-S01-M24-T01`; not a separate `platform_services/` package, see below), persistence (all schemas), Observability, Manifest Loader, Configuration Manager, HTTP routes, 29 Alembic migrations |
-| `capability_packs/` | **Yes** | `software-engineering/` — the real, reprioritized pack: **5 agents** (`requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`), 1 workflow (`se.delivery_pipeline`, chaining 4 of them), 4 prompts. Plus `_template/` (a documented scaffold: manifest + README + CHANGELOG, no code). |
+| `capability_packs/` | **Yes** | `software-engineering/` — the real, reprioritized pack (see `feature_inventory.md` modules 29–31 for its always-current agent/tool/gate count, which has grown well past this row's own original snapshot). `benchmarking/` — real as of `P04-S03-M34-T01`: a real, buildable distribution (`pyproject.toml` + `src/ai_os_pack_benchmarking`), one real module (`experiment_definition.py`), no `manifest.yaml` yet (nothing to activate — no agent/tool/workflow declared). Plus `_template/` (a documented scaffold: manifest + README + CHANGELOG, no code). |
 | `tests/` | **Yes** | `unit/` and `integration/` — real Postgres/Docker-backed tests (see `coding_standards.md` on the one recorded mock exception). 849 passing, 11 skipped. |
 | `config/` | Minimal | `llm.yaml`, `platform.yaml` — real, small, checked-in configuration |
 | `infra/` | Minimal | `docker-compose.yml` + `environments/{local,dev,staging,production}.yaml`. **`infra/kubernetes/`, `infra/terraform/`, `infra/docker/` have no tracked content, and there is no Dockerfile anywhere in the repository.** |
@@ -40,7 +40,7 @@ Practical consequence: if you are working in a fresh clone and a document refere
 | `experiments/` | `../06_capability_packs/benchmarking/overview.md` | No Evaluation Engine and no Benchmarking pack exist to produce artifacts |
 | `specs/`, `manifests/`, `governance/`, `projects/`, `assets/` | `PROJECT_INDEX.md` | Intended artifact areas, not yet started |
 | `tests/security/`, `tests/performance/`, `tests/regression/`, `tests/benchmarks/` | `../10_testing/test_strategy.md` | Named in the test strategy and referenced by CI's gated stages; no tests written. **There is no `tests/contract/` directory at all.** |
-| `capability_packs/{benchmarking,project_intelligence,voice_jarvis}/` | `../06_capability_packs/` | Three planned packs, all 0% built |
+| `capability_packs/{project_intelligence,voice_jarvis}/` | `../06_capability_packs/` | Two planned packs, both 0% built. `benchmarking/` moved to "What has real, tracked content" above (`P04-S03-M34-T01`). |
 | `docs/01_product_definition/`, `docs/04_design/`, `docs/15_benchmarking/`, `docs/17_governance/`, `docs/03_architecture/diagrams/`, `docs/03_architecture/integrations/` | — | Numbered doc slots reserved by the original documentation plan that were never filled. Their content lives elsewhere: product definition in `PROJECT_INDEX.md`/`README.md`, benchmarking in `../06_capability_packs/benchmarking/overview.md`, governance in `../00_constitution/ai_governance_framework.md` and `../03_architecture/governance/`. **Do not create documents in these slots without a reason** — prefer the existing homes. |
 
 ## What this means practically
