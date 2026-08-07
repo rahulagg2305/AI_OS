@@ -10,6 +10,8 @@ genuinely queries `catalog.workflow_definitions` lives in
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from ai_os_pack_benchmarking.experiment_definition import (
@@ -112,6 +114,30 @@ async def test_a_pinned_workflow_that_does_not_exist_is_rejected() -> None:
         await validate_experiment_spec(
             _spec(),
             existence_check=_FakeExistenceCheck(known=set()),
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_declared_positive_cost_ceiling_is_accepted_and_carried_through() -> None:
+    definition = await validate_experiment_spec(
+        _spec(cost_ceiling_usd=Decimal("25.00")), existence_check=_known_existence_check()
+    )
+
+    assert definition.cost_ceiling_usd == Decimal("25.00")
+
+
+@pytest.mark.asyncio
+async def test_omitting_a_cost_ceiling_is_accepted() -> None:
+    definition = await validate_experiment_spec(_spec(), existence_check=_known_existence_check())
+
+    assert definition.cost_ceiling_usd is None
+
+
+@pytest.mark.asyncio
+async def test_a_non_positive_cost_ceiling_is_rejected() -> None:
+    with pytest.raises(ExperimentValidationError, match="cost_ceiling_usd must be positive"):
+        await validate_experiment_spec(
+            _spec(cost_ceiling_usd=Decimal("0")), existence_check=_known_existence_check()
         )
 
 

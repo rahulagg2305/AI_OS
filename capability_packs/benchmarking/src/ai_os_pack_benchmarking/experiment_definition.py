@@ -44,6 +44,7 @@ deferred scope, not silently skipped.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
@@ -91,6 +92,12 @@ class ExperimentSpec(BaseModel):
     runs_per_variant: int
     variables: dict[str, Any] = Field(default_factory=dict)
     created_by: str
+    # Optional (`P04-S03-M34-T03`, FR-076) — `None` means "no ceiling
+    # declared," the identical "absent means unenforced" shape every
+    # other optional policy gate in this codebase already establishes
+    # (e.g. `PerScopeBudgetEnforcer`'s own per-workflow ceiling, never
+    # constructed for a caller that supplies no `workflow_id`).
+    cost_ceiling_usd: Decimal | None = None
 
 
 class ExperimentDefinition(BaseModel):
@@ -108,6 +115,7 @@ class ExperimentDefinition(BaseModel):
     runs_per_variant: int
     variables: dict[str, Any]
     created_by: str
+    cost_ceiling_usd: Decimal | None = None
 
 
 class WorkflowDefinitionExistenceCheck(Protocol):
@@ -166,6 +174,11 @@ async def validate_experiment_spec(
             "that does not exist"
         )
 
+    if spec.cost_ceiling_usd is not None and spec.cost_ceiling_usd <= 0:
+        errors.append(
+            f"cost_ceiling_usd must be positive when declared — got {spec.cost_ceiling_usd}"
+        )
+
     if errors:
         raise ExperimentValidationError(errors)
 
@@ -175,6 +188,7 @@ async def validate_experiment_spec(
         definition_id=spec.definition_id,
         definition_version=spec.definition_version,
         variants=spec.variants,
+        cost_ceiling_usd=spec.cost_ceiling_usd,
         runs_per_variant=spec.runs_per_variant,
         variables=spec.variables,
         created_by=spec.created_by,
