@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 85%** (208.5 of 246 Task-equivalents complete)
+**Overall: 85%** (209.5 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -48,7 +48,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P07 (G) | S01 Deployment and Infrastructure | 3 | 0 | 0 | 3 | 0% |
 | P07 (G) | S02 Security Hardening | 3 | 0 | 0 | 3 | 0% |
 | P07 (G) | S03 Performance, Chaos and Coverage | 2 | 0 | 0 | 2 | 0% |
-| P08 (H) | S01 Remaining Pack Agents | 7 | 5 | 0 | 2 | 71% |
+| P08 (H) | S01 Remaining Pack Agents | 7 | 6 | 0 | 1 | 86% |
 | P08 (H) | S02 Remaining Pack Workflows | 2 | 0 | 0 | 2 | 0% |
 | P09 (-) | S01 Roadmap System Restructuring (R1-R4) | 5 | 5 | 0 | 0 | 100% |
 
@@ -63,12 +63,12 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 3 | 27% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 0 | 0% |
-| P08 (Stage H) - Expansion | 9 | 5 | 56% |
+| P08 (Stage H) - Expansion | 9 | 6 | 67% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |
 
 ## Ready to start
 
-17 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+16 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P04-S02-M16-T01` trace.links writer
@@ -83,7 +83,6 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P07-S02-M14-T01` OIDC authentication
 - `P07-S02-M19-T01` Vault secrets backend
 - `P07-S03-M42-T01` Chaos tests
-- `P08-S01-M29-T06` refactoring agent
 - `P08-S01-M29-T07` performance agent
 - `P08-S02-M30-T01` se.product_creation workflow
 - `P08-S02-M30-T02` se.implement_task workflow

@@ -363,6 +363,28 @@ agents:
     requiredPrompts:
       - frontenddeveloper.write_component@0.1.0
 
+  - id: refactoring
+    name: Refactoring Agent
+    version: 0.1.0
+    purpose: >-
+      Given an existing file and its own real test command (FR-043),
+      refactor it without changing observable behaviour — the only
+      agent in this pack that runs a real before/after test comparison
+      for a single file, since FR-043's own criterion ("tests pass
+      before and after") has no other component that could enforce it.
+      Refuses before any LLM call or write if the baseline itself does
+      not pass; "behaviour assertions unchanged" holds structurally,
+      since this agent never touches a test file.
+    entrypoint: ai_os_pack_software_engineering.agents.refactoring:RefactoringAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.refactoring:RefactoringInput
+    outputSchema: ai_os_pack_software_engineering.agents.refactoring:RefactoringAgentOutput
+    modelAlias: coding-strong
+    permissions:
+      - llm:invoke
+      - sandbox:execute
+    requiredPrompts:
+      - refactoring.rewrite_file@0.1.0
+
   - id: git-push
     name: Git Push Agent
     version: 0.1.0
@@ -577,6 +599,15 @@ prompts:
       file (a real frontend file extension) implementing a given plan
       task/instruction, in a fixed, parseable format with no
       surrounding prose.
+
+  - id: refactoring.rewrite_file
+    version: 0.1.0
+    location: prompts/refactoring_rewrite_file.md
+    inputSchema: ai_os_pack_software_engineering.agents.refactoring:RefactoringInput
+    description: >-
+      Instructs the model to rewrite a given file's own real content to
+      satisfy a refactoring instruction without changing its observable
+      behaviour, in a fixed, parseable format with no surrounding prose.
 
   - id: documentation.record_artifact
     version: 0.1.0

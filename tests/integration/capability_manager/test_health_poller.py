@@ -71,6 +71,7 @@ _SE_REAL_AGENT_IDS = {
     f"{_SE_PACK_ID}/git-push",
     f"{_SE_PACK_ID}/technical-planner",
     f"{_SE_PACK_ID}/frontend-developer",
+    f"{_SE_PACK_ID}/refactoring",
 }
 
 _FLAKY_PACK_ID = "health-poller-flaky-pack"
