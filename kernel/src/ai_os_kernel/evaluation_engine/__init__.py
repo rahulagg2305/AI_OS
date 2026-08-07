@@ -8,5 +8,7 @@ Benchmarking Capability Pack, not here — see
 docs/03_architecture/kernel/evaluation_engine.md §5.1 for the boundary.
 
 See docs/03_architecture/kernel/evaluation_engine.md, ADR-0022.
-Not yet implemented — Implementation Roadmap Stage D.
+Metrics Collector, Comparison Computer, and Reporting Interface are
+real and tested; no real production caller yet (see the doc's own
+Implementation Status). Roadmap Stage D.
 """
