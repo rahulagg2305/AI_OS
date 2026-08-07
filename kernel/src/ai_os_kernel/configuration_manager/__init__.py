@@ -3,7 +3,20 @@
 Layered precedence: built-in defaults -> pack defaults -> platform
 config -> environment config -> runtime overrides -> experiment
 overrides -> secrets (docs/03_architecture/kernel/configuration_manager.md
-§4). All 7 layers are implemented at this stage.
+§4). All 7 layers are implemented at this stage — layer 6 in two real,
+deliberately separate halves (below), not one mechanism: boolean
+feature flags (``P01-S02-M01-T07``) and arbitrary-value experiment
+overrides (``P01-S02-M01-T05``). Investigated and kept separate, not
+unified, when building the second half: :class:`ExperimentOverrideStore`
+is structurally ``dict[str, dict[str, bool]]`` (booleans only, per
+``run_id``) with exactly one real caller (``GET /config/flags``, which
+always passes an empty, request-scoped store) — too narrow a type and
+too shallow a real integration to justify reopening its own,
+already-evidenced ticket just to widen it. ``pinned_conditions`` is
+instead a plain, per-call ``Mapping[str, Any]`` parameter on
+:meth:`ConfigurationManager.load`, achieving the identical §4 isolation
+("never leak into concurrent workflows") structurally — nothing is
+ever stored on ``self`` — without a live, run-keyed store at all.
 
 **Layer 2, pack-level defaults** (added 2026-07-31, ``P01-S02-M01-T03``):
 :func:`extract_pack_defaults` reads the ``default`` values declared in a
@@ -29,16 +42,32 @@ sibling to :meth:`ConfigurationManager.load` that wires it in — async
 because resolving is real I/O, unlike every other layer here. See
 :mod:`ai_os_kernel.configuration_manager.secrets`.
 
-**Layer 6, feature flags / experiment overrides** (added 2026-07-31,
-``P01-S02-M01-T07``): unlike every other layer, this one is never
-merged into the shared, process-wide dict — §4 requires it "isolated
-to that run... never leak into concurrent workflows."
-:class:`ExperimentOverrideStore` keys overrides by ``run_id``;
-:func:`resolve_feature_flag` resolves one flag through, in order, a
-run's isolated override, a live runtime override (layer 5, reused
-directly), the last pack manifest declaring it, then a caller default
-— "experiment overrides (6) beat runtime overrides (5)" (ADR-0022). See
+**Layer 6, half A — feature flags** (added 2026-07-31, ``P01-S02-M01-T07``):
+unlike every file-driven layer, this one is never merged into the
+shared, process-wide dict — §4 requires it "isolated to that run...
+never leak into concurrent workflows." :class:`ExperimentOverrideStore`
+keys boolean overrides by ``run_id``; :func:`resolve_feature_flag`
+resolves one flag through, in order, a run's isolated override, a live
+runtime override (layer 5, reused directly), the last pack manifest
+declaring it, then a caller default — "experiment overrides (6) beat
+runtime overrides (5)" (ADR-0022). See
 :mod:`ai_os_kernel.configuration_manager.feature_flags`.
+
+**Layer 6, half B — arbitrary-value experiment overrides** (added
+2026-08-07, ``P01-S02-M01-T05``): "an experiment definition" ->
+"overrides scoped to one run" for any config key, not only booleans —
+a real, distinct need :class:`ExperimentOverrideStore`'s own boolean
+type cannot hold. :meth:`ConfigurationManager.load`'s
+``pinned_conditions`` argument merges a plain, per-call snapshot in
+above ``runtime_overrides``, never stored on ``self`` — isolation is
+structural (nothing to leak), not policy. A caller (the eventual
+experiment-run composition) supplies whatever mapping it extracts from
+its own experiment definition; this module never reaches into a pack's
+model (no pack may import this Kernel package, and this package may
+not import a pack — ``platform_sdk.md`` §9 item 7). See
+:mod:`ai_os_kernel.configuration_manager.loader`'s own docstring for
+why this is a second, deliberately separate mechanism rather than a
+widened :class:`ExperimentOverrideStore`.
 
 No component should read a configuration file directly — everything
 goes through :class:`ConfigurationManager` and the resulting

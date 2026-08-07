@@ -8,11 +8,29 @@ config -> runtime overrides -> experiment overrides -> secrets.
 Layers 1 (built-in defaults, via the ``PlatformConfig`` model), 2
 (pack-level defaults, ``P01-S02-M01-T03``), 3 (platform config file), 4
 (environment config file), 5 (runtime overrides, ``P01-S02-M01-T04``),
-and 7 (secret resolution, ``P01-S02-M01-T06``) are implemented at this
-stage. Layer 6 (experiment overrides) is added when the Experiment
-Manager exists — callers depend on ``PlatformConfig``, not on how it
-was assembled, so none of that will require changes here at the call
-site.
+6 (experiment overrides, ``P01-S02-M01-T05``), and 7 (secret
+resolution, ``P01-S02-M01-T06``) are all implemented at this stage.
+Callers depend on ``PlatformConfig``, not on how it was assembled, so
+none of layer 6's addition required changes at any existing call site.
+
+**Layer 6, concretely** (§4: "Experiment overrides — Per-run, isolated
+to that run"; ``P01-S02-M01-T05``): unlike layers 1-5, which resolve
+one *process-wide* config, an experiment override applies only to the
+one run belonging to that experiment — the Benchmarking Pack's own
+``ExperimentDefinition``/``ExperimentSpec`` (``P04-S03-M34-T01``) never
+reaches this module at all (no pack may import this Kernel package,
+and this Kernel package may not import a pack — ``platform_sdk.md``
+§9 item 7). ``pinned_conditions`` is therefore a plain
+``Mapping[str, Any]`` parameter, the identical shape ``runtime_overrides``
+already establishes — a caller (the eventual experiment-run composition)
+is responsible for extracting whatever dict it needs from its own
+experiment definition; this module never reaches into one. Passed
+per-call, never stored on ``self``, so isolation is structural, not a
+policy this module has to enforce: two concurrent ``load()`` calls with
+different ``pinned_conditions`` can never observe each other's layer 6.
+§4's own "experiment overrides (6) beat runtime overrides (5)"
+ordering is enforced by merging it strictly after ``runtime_overrides``
+in ``_merge_layers``.
 
 **Layer 2, concretely** (§4: "Pack-level defaults — Capability Pack
 manifests and their ``configSchema`` defaults"): each activated pack's
@@ -111,8 +129,9 @@ class ConfigurationManager:
         role: str,
         pack_manifests: Sequence[Mapping[str, Any]] = (),
         runtime_overrides: Mapping[str, Any] | None = None,
+        pinned_conditions: Mapping[str, Any] | None = None,
     ) -> PlatformConfig:
-        """Merge layers 1-5 and return a validated, immutable ``PlatformConfig``.
+        """Merge layers 1-6 and return a validated, immutable ``PlatformConfig``.
 
         ``pack_manifests`` is every activated pack's raw manifest mapping
         (layer 2), in activation order — a pack listed later overrides an
@@ -125,15 +144,25 @@ class ConfigurationManager:
         runtime_overrides.RuntimeOverrideStore`) — this method never
         applies or audits an override itself, only merges an
         already-applied one in above every file layer.
+
+        ``pinned_conditions`` is layer 6 (§4: "Experiment overrides —
+        Per-run, isolated to that run") — a plain snapshot of one
+        experiment's own conditions to hold constant, merged in above
+        ``runtime_overrides``. ``None``-default: an existing caller that
+        passes none behaves exactly as before. See this module's own
+        docstring for why this is a plain mapping, not a pack model.
         """
         merged = self._merge_layers(
-            role=role, pack_manifests=pack_manifests, runtime_overrides=runtime_overrides
+            role=role,
+            pack_manifests=pack_manifests,
+            runtime_overrides=runtime_overrides,
+            pinned_conditions=pinned_conditions,
         )
         try:
             return PlatformConfig.model_validate(merged)
         except ValidationError as exc:
             raise ConfigurationError(
-                f"Invalid configuration after merging layers 1-5 for "
+                f"Invalid configuration after merging layers 1-6 for "
                 f"{self._platform_config_path}: {exc}"
             ) from exc
 
@@ -144,6 +173,7 @@ class ConfigurationManager:
         secret_provider: SecretProvider,
         pack_manifests: Sequence[Mapping[str, Any]] = (),
         runtime_overrides: Mapping[str, Any] | None = None,
+        pinned_conditions: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Merges layers 1-6 exactly as :meth:`load` does, then resolves
         layer 7: every ``secret://`` reference surviving that merge —
@@ -157,7 +187,10 @@ class ConfigurationManager:
         secrets` for why.
         """
         merged = self._merge_layers(
-            role=role, pack_manifests=pack_manifests, runtime_overrides=runtime_overrides
+            role=role,
+            pack_manifests=pack_manifests,
+            runtime_overrides=runtime_overrides,
+            pinned_conditions=pinned_conditions,
         )
         return await resolve_secret_references(merged, secret_provider)
 
@@ -167,8 +200,9 @@ class ConfigurationManager:
         role: str,
         pack_manifests: Sequence[Mapping[str, Any]],
         runtime_overrides: Mapping[str, Any] | None,
+        pinned_conditions: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Layers 1-5, deep-merged in precedence order — the one merge
+        """Layers 1-6, deep-merged in precedence order — the one merge
         both :meth:`load` and :meth:`load_with_secrets_resolved` share,
         so the two can never silently drift apart on ordering."""
         merged: dict[str, Any] = {}
@@ -178,6 +212,9 @@ class ConfigurationManager:
         env_file = self._environments_dir / f"{self._environment}.yaml"
         merged = _deep_merge(merged, self._read_section(env_file))
         merged = _deep_merge(merged, dict(runtime_overrides or {}))
+        # Layer 6, §4: "experiment overrides (6) beat runtime overrides
+        # (5)" — merged strictly after, never before.
+        merged = _deep_merge(merged, dict(pinned_conditions or {}))
 
         # env/role are bootstrap identity, never file-driven — always the
         # caller-supplied values, overwriting anything a file might set.

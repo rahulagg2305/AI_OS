@@ -1,4 +1,4 @@
-"""Unit tests for the Configuration Manager (layers 1, 2, 3, 4, 5, 7)."""
+"""Unit tests for the Configuration Manager (layers 1, 2, 3, 4, 5, 6, 7)."""
 
 import asyncio
 from pathlib import Path
@@ -307,6 +307,81 @@ def test_env_and_role_cannot_be_overridden_by_a_runtime_override(tmp_path: Path)
     assert config.role == "api"
 
 
+def test_a_pinned_condition_wins_over_pack_default_platform_environment_and_runtime_override(
+    tmp_path: Path,
+) -> None:
+    """The real proof this Task requires: layer 6 (experiment overrides)
+    outranks every lower layer, including layer 5 (runtime overrides) —
+    §4: "experiment overrides (6) beat runtime overrides (5)"."""
+    _write_yaml(tmp_path / "platform.yaml", {"kernel": {"log_level": "WARNING"}})
+    _write_yaml(tmp_path / "environments" / "local.yaml", {"kernel": {"log_level": "ERROR"}})
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+    pack = _pack_manifest(
+        config_schema_properties={"log_level": {"type": "string", "default": "DEBUG"}}
+    )
+
+    config = manager.load(
+        role="api",
+        pack_manifests=[pack],
+        runtime_overrides={"log_level": "CRITICAL"},
+        pinned_conditions={"log_level": "INFO"},
+    )
+
+    assert config.log_level == "INFO"
+
+
+def test_no_pinned_conditions_behaves_exactly_as_before(tmp_path: Path) -> None:
+    _write_yaml(tmp_path / "platform.yaml", {"kernel": {"log_level": "WARNING"}})
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+
+    config = manager.load(role="api", pinned_conditions=None)
+
+    assert config.log_level == "WARNING"
+
+
+def test_env_and_role_cannot_be_overridden_by_a_pinned_condition(tmp_path: Path) -> None:
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+
+    config = manager.load(role="api", pinned_conditions={"env": "production", "role": "worker"})
+
+    assert config.env == "local"
+    assert config.role == "api"
+
+
+def test_pinned_conditions_are_isolated_per_call_never_leaking_across_concurrent_loads(
+    tmp_path: Path,
+) -> None:
+    """§4: "Experiment overrides are isolated... never leak into
+    concurrent workflows." Proven structurally: two `load()` calls on
+    the *same* manager instance, with different `pinned_conditions`,
+    each see only their own — nothing is stored on `self`."""
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+
+    experiment_a = manager.load(role="api", pinned_conditions={"log_level": "DEBUG"})
+    experiment_b = manager.load(role="api", pinned_conditions={"log_level": "CRITICAL"})
+    unrelated_call = manager.load(role="api")
+
+    assert experiment_a.log_level == "DEBUG"
+    assert experiment_b.log_level == "CRITICAL"
+    assert unrelated_call.log_level == "INFO"  # the built-in default — no leakage
+
+
 def test_a_secret_reference_resolves_through_the_real_provider_at_the_correct_layer(
     tmp_path: Path,
 ) -> None:
@@ -342,3 +417,29 @@ def test_a_secret_reference_resolves_through_the_real_provider_at_the_correct_la
 
     assert resolved["some_key"].reveal() == "the-platform-secret"
     assert str(resolved["some_key"]) == "***"  # never logged, even by accident
+
+
+def test_a_pinned_condition_reaches_load_with_secrets_resolved_and_beats_a_runtime_override(
+    tmp_path: Path,
+) -> None:
+    """Layer 6 flows through the async path too, ahead of layer 7 (secret
+    resolution) and above layer 5 (runtime overrides) — the identical
+    ordering :meth:`load` already proves, exercised on the sibling
+    method that resolves layer 7 afterward."""
+    manager = ConfigurationManager(
+        environment="local",
+        platform_config_path=tmp_path / "platform.yaml",
+        environments_dir=tmp_path / "environments",
+    )
+    provider = EnvSecretProvider(env={"AIOS_SECRET_PINNED_VALUE": "the-pinned-secret"})
+
+    resolved = asyncio.run(
+        manager.load_with_secrets_resolved(
+            role="api",
+            secret_provider=provider,
+            runtime_overrides={"some_key": "not-a-secret-runtime-value"},
+            pinned_conditions={"some_key": "secret://env/pinned-value"},
+        )
+    )
+
+    assert resolved["some_key"].reveal() == "the-pinned-secret"
