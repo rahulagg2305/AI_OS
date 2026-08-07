@@ -93,6 +93,7 @@ _REAL_AGENT_IDS = {
     f"{_PACK_ID}/release",
     f"{_PACK_ID}/code-review",
     f"{_PACK_ID}/git-push",
+    f"{_PACK_ID}/technical-planner",
 }
 
 

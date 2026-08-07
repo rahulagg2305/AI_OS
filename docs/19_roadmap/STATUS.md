@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 84%** (205.5 of 246 Task-equivalents complete)
+**Overall: 84%** (206.5 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -29,7 +29,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (B) | S07 Platform Services and Error Model | 7 | 7 | 0 | 0 | 100% |
 | P02 (B) | S08 Kernel HTTP Surface | 4 | 4 | 0 | 0 | 100% |
 | P03 (C) | S01 Sandboxed Tool Execution | 8 | 7 | 0 | 1 | 88% |
-| P03 (C) | S02 Software Engineering Pack Agents | 8 | 7 | 0 | 1 | 88% |
+| P03 (C) | S02 Software Engineering Pack Agents | 8 | 8 | 0 | 0 | 100% |
 | P03 (C) | S03 Software Engineering Pack Workflows | 6 | 6 | 0 | 0 | 100% |
 | P03 (C) | S04 Pack Tools and Declared Quality Gates | 4 | 4 | 0 | 0 | 100% |
 | P03 (C) | S05 Security and Human Approval | 10 | 10 | 0 | 0 | 100% |
@@ -58,7 +58,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
 | P02 (Stage B) - Minimum Viable Kernel | 100 | 97 | 98% |
-| P03 (Stage C) - First Real Capability Pack | 38 | 36 | 95% |
+| P03 (Stage C) - First Real Capability Pack | 38 | 37 | 97% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 14 | 81% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 3 | 27% |
@@ -68,11 +68,10 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-17 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+19 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P01-S02-M01-T05` Experiment-overrides precedence layer
 - `P03-S01-M20-T05` Stronger isolation tier
-- `P03-S02-M29-T08` technical-planner agent
 - `P04-S02-M16-T01` trace.links writer
 - `P05-S01-M26-T01` Parser adapters
 - `P06-S02-M37-T01` WebSocket stream endpoint
@@ -85,8 +84,11 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P07-S02-M14-T01` OIDC authentication
 - `P07-S02-M19-T01` Vault secrets backend
 - `P07-S03-M42-T01` Chaos tests
+- `P08-S01-M29-T01` frontend-developer agent
 - `P08-S01-M29-T06` refactoring agent
 - `P08-S01-M29-T07` performance agent
+- `P08-S02-M30-T01` se.product_creation workflow
+- `P08-S02-M30-T02` se.implement_task workflow
 
 ## Dependency review signal
 

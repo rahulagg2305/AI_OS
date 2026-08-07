@@ -318,6 +318,29 @@ agents:
     requiredPrompts:
       - codereview.produce_findings@0.1.0
 
+  - id: technical-planner
+    name: Technical Planner Agent
+    version: 0.1.0
+    purpose: >-
+      Given a technical design (the Architecture Agent's own output),
+      decompose it into a real, schema-validated plan artifact — this
+      pack's first implementation of ADR-0021's own sanctioned
+      "dynamic decomposition without dynamic control flow" mechanism.
+      No `foreach` step exists anywhere in the Workflow Engine yet to
+      consume this artifact (`StepType` has seven members, not the
+      nine ADR-0021 describes) — a disclosed Workflow Engine gap, not
+      a defect in this agent; the identical "build real, wire later"
+      precedent this pack's own Evaluation Engine work already
+      established this session.
+    entrypoint: ai_os_pack_software_engineering.agents.technical_planner:TechnicalPlannerAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.technical_planner:TechnicalPlanInput
+    outputSchema: ai_os_pack_software_engineering.agents.technical_planner:TechnicalPlanOutput
+    modelAlias: coding-strong
+    permissions:
+      - llm:invoke
+    requiredPrompts:
+      - technicalplanning.produce_plan@0.1.0
+
   - id: git-push
     name: Git Push Agent
     version: 0.1.0
@@ -513,6 +536,15 @@ prompts:
       Instructs the model to review a given file's real content and
       produce a JSON array of structured findings (line, severity,
       confidence, message), with no surrounding prose.
+
+  - id: technicalplanning.produce_plan
+    version: 0.1.0
+    location: prompts/technical_planning.md
+    inputSchema: ai_os_pack_software_engineering.agents.technical_planner:TechnicalPlanInput
+    description: >-
+      Instructs the model to decompose a given technical design into a
+      JSON array of implementation tasks (title, description), with no
+      surrounding prose.
 
   - id: documentation.record_artifact
     version: 0.1.0
