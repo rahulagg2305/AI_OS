@@ -203,11 +203,16 @@ def test_compute_reports_mean_and_variance_excluding_cached_and_incomplete_runs(
             assert control_metric.replicate_count == 3
             assert control_metric.mean == Decimal("200")
             assert control_metric.variance == Decimal("10000")
+            # The real flag (P04-S01-M12-T07): exactly the one real,
+            # cache-served control run, never the incomplete one (a
+            # distinct, unflagged-by-this-ticket exclusion reason).
+            assert by_variant["control"].excluded_cache_served_count == 1
 
             treatment_metric = by_variant["treatment"].metrics[0]
             assert treatment_metric.replicate_count == 3
             assert treatment_metric.mean == Decimal("50")
             assert treatment_metric.variance == Decimal("0")
+            assert by_variant["treatment"].excluded_cache_served_count == 0
         finally:
             await engine.dispose()
 
@@ -255,6 +260,51 @@ def test_compute_returns_no_variants_for_an_experiment_with_no_real_runs(
             comparison = await computer.compute(experiment_id="exp_never_run")
 
             assert comparison.variants == []
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_compute_flags_a_variant_whose_every_real_replicate_was_cache_served(
+    database_url: str,
+) -> None:
+    """`P04-S01-M12-T07`'s own real proof: a variant with no included
+    metrics at all still appears, with a real, non-zero flag — not
+    silently omitted, which would look identical to "no runs
+    happened" rather than "every run was cache-served"."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            await _seed_workflow_definition_and_experiment(engine)
+            repository = SqlWorkflowInstanceRepository(engine)
+
+            await _seed_replicate(
+                engine,
+                repository,
+                run_id="run_all_cached_1",
+                variant_key="all_cached",
+                metric_value=Decimal("1"),
+                served_from_cache=True,
+            )
+            await _seed_replicate(
+                engine,
+                repository,
+                run_id="run_all_cached_2",
+                variant_key="all_cached",
+                metric_value=Decimal("2"),
+                served_from_cache=True,
+            )
+
+            computer = SqlComparisonComputer(engine)
+            comparison = await computer.compute(experiment_id=_EXPERIMENT_ID)
+
+            all_cached_variant = next(
+                v for v in comparison.variants if v.variant_key == "all_cached"
+            )
+            assert all_cached_variant.metrics == []
+            assert all_cached_variant.excluded_cache_served_count == 2
         finally:
             await engine.dispose()
 

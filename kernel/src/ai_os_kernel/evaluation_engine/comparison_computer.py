@@ -12,14 +12,23 @@ own point value (`docs/06_capability_packs/benchmarking/overview.md`
 §7: "A comparison reports mean and variance over replicates, never a
 single run").
 
-**A cache-served run is excluded from aggregates**
-(`overview.md` §7, ADR-0025) — `experiment_runs.served_from_cache=True`
-rows are filtered out before computing mean/variance, never silently
-averaged in. Only genuinely `status='completed'` runs are included —
-an incomplete run has no real, final metric values worth reporting,
-and `SqlMetricsCollector.collect()` has no real caller yet to guarantee
-it is only ever invoked for one (nothing in that class's own code
-checks completion status itself).
+**A cache-served run is excluded from aggregates *and flagged*
+(`P04-S01-M12-T07`, FR-075)** (`overview.md` §7, ADR-0025) —
+`experiment_runs.served_from_cache=True` rows are filtered out before
+computing mean/variance, never silently averaged in, and
+`VariantComparison.excluded_cache_served_count` reports exactly how
+many were excluded for that reason — a real, visible count, not a
+silent omission, present even for a variant whose every real replicate
+was cache-served (which would otherwise appear to have no data at
+all, rather than data that was genuinely excluded). Only genuinely
+`status='completed'` runs are included in the aggregate itself — an
+incomplete run has no real, final metric values worth reporting, and
+`SqlMetricsCollector.collect()` has no real caller yet to guarantee it
+is only ever invoked for one (nothing in that class's own code checks
+completion status itself); this is a distinct exclusion reason from
+cache-serving and is not separately flagged, since `P04-S01-M12-T07`'s
+own scope is specifically cache-served runs (FR-075), not incomplete
+ones.
 
 **Variance is `None`, not fabricated or a crash, when fewer than 2
 real data points contribute.** `statistics.variance` (sample variance,
@@ -70,10 +79,16 @@ class MetricComparison(BaseModel):
 
 class VariantComparison(BaseModel):
     """One variant's own real comparison — every metric name observed
-    across its own real replicates."""
+    across its own real, non-cache-served, completed replicates, plus
+    a real, visible flag (`P04-S01-M12-T07`, FR-075) for how many of
+    this variant's own real replicates were excluded specifically for
+    being cache-served — `overview.md` §7's own "excluded... **and
+    flagged**" rule, the second half T06's own exclusion-only logic
+    left silent."""
 
     variant_key: str
     metrics: list[MetricComparison]
+    excluded_cache_served_count: int
 
 
 class ExperimentComparison(BaseModel):
@@ -129,16 +144,42 @@ class SqlComparisonComputer:
                 .all()
             )
 
+            # The real "flagged" half of overview.md §7's own rule —
+            # a separate, deliberately un-joined count: a cache-served
+            # run may have no real metrics row at all (the Metrics
+            # Collector has no reason to ever run against one), so
+            # counting via the metrics join above would silently miss
+            # exactly the runs this flag exists to surface.
+            cache_served_count_rows = (
+                await connection.execute(
+                    sa.select(experiment_runs.c.variant_key, sa.func.count())
+                    .where(
+                        experiment_runs.c.experiment_id == experiment_id,
+                        experiment_runs.c.served_from_cache.is_(True),
+                    )
+                    .group_by(experiment_runs.c.variant_key)
+                )
+            ).all()
+            cache_served_counts: dict[str, int] = {
+                variant_key: count for variant_key, count in cache_served_count_rows
+            }
+
         by_variant: dict[str, dict[str, list[tuple[Decimal, str]]]] = {}
         for row in rows:
             variant_metrics = by_variant.setdefault(row["variant_key"], {})
             values = variant_metrics.setdefault(row["metric_name"], [])
             values.append((row["metric_value"], row["unit"]))
 
+        # The union, not just `by_variant`'s own keys — a variant
+        # whose every real replicate was cache-served has no metrics
+        # row to appear in `by_variant` at all, but the flag this
+        # ticket exists for must still report it, not silently omit it.
+        all_variant_keys = set(by_variant) | set(cache_served_counts)
+
         variant_comparisons: list[VariantComparison] = []
-        for variant_key in sorted(by_variant):
+        for variant_key in sorted(all_variant_keys):
             metric_comparisons: list[MetricComparison] = []
-            for metric_name in sorted(by_variant[variant_key]):
+            for metric_name in sorted(by_variant.get(variant_key, {})):
                 entries = by_variant[variant_key][metric_name]
                 metric_values = [value for value, _ in entries]
                 unit = entries[0][1]
@@ -154,7 +195,11 @@ class SqlComparisonComputer:
                     )
                 )
             variant_comparisons.append(
-                VariantComparison(variant_key=variant_key, metrics=metric_comparisons)
+                VariantComparison(
+                    variant_key=variant_key,
+                    metrics=metric_comparisons,
+                    excluded_cache_served_count=cache_served_counts.get(variant_key, 0),
+                )
             )
 
         return ExperimentComparison(experiment_id=experiment_id, variants=variant_comparisons)
