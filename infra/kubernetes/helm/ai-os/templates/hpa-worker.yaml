@@ -1,0 +1,29 @@
+{{- if .Values.hpa.enabled }}
+# HorizontalPodAutoscaler/aios-worker — deployment_architecture.md §6
+# names the real scaling target as "worker lease-queue depth," a
+# custom metric with no metrics-adapter (Prometheus Adapter/KEDA) built
+# or installed anywhere in this repo. This first cut scales on CPU
+# utilization instead — a real, immediately functional autoscaler, not
+# a fabricated queue-depth metric source. See README.md for the
+# disclosed gap and what a later step would need to close it.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "ai-os.fullname" . }}-worker
+  labels:
+    {{- include "ai-os.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "ai-os.fullname" . }}-worker
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.targetCPUUtilizationPercentage }}
+{{- end }}

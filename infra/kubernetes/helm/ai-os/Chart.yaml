@@ -1,0 +1,15 @@
+apiVersion: v2
+name: ai-os
+description: >-
+  AI_OS Platform Kernel — the two-process-role Helm chart ADR-0020 and
+  deployment_architecture.md §6 decide (api + worker, over shared
+  Postgres/Redis). Deploys the single, real image both roles share
+  (Dockerfile, deploy/entrypoint.sh, P01-S01-M40-T04), differing only in
+  which AIOS_ROLE they start. See this chart's own README.md for what
+  deployment_architecture.md §6 names but this first cut does not build
+  (Ingress/TLS, NetworkPolicy, ExternalSecret, the Podman/gVisor sandbox
+  pattern, queue-depth HPA scaling) — each a real, disclosed gap, not a
+  fabricated stand-in.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

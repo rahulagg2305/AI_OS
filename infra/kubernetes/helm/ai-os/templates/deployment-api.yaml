@@ -1,0 +1,68 @@
+# Deployment/aios-api — deployment_architecture.md §6 ("replicas >= 2
+# role=api"). Runs the real image's own `api` entry point
+# (deploy/entrypoint.sh: AIOS_ROLE unset defaults to "api" too, but set
+# explicitly here so the manifest is never ambiguous about which role
+# a pod runs).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ai-os.fullname" . }}-api
+  labels:
+    {{- include "ai-os.labels" . | nindent 4 }}
+    aios.role: api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      aios.role: api
+  template:
+    metadata:
+      labels:
+        {{- include "ai-os.labels" . | nindent 8 }}
+        aios.role: api
+    spec:
+      serviceAccountName: {{ include "ai-os.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: AIOS_ROLE
+              value: api
+            - name: AIOS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecretName }}
+                  key: AIOS_DATABASE_URL
+            - name: AIOS_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecretName }}
+                  key: AIOS_REDIS_URL
+          envFrom:
+            - configMapRef:
+                name: {{ include "ai-os.fullname" . }}-config
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.service.port }}
+          # deployment_architecture.md §6's own Probes table — verified,
+          # not copied blindly (see values.yaml's own probes comment).
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.livenessPath }}
+              port: http
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readinessPath }}
+              port: http
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.startupPath }}
+              port: http
+            periodSeconds: {{ .Values.probes.startupPeriodSeconds }}
+            failureThreshold: {{ .Values.probes.startupFailureThreshold }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}

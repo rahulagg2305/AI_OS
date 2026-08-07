@@ -1,0 +1,22 @@
+# Service/aios-api — deployment_architecture.md §6 ("ClusterIP ->
+# Ingress (TLS)"). ClusterIP only: this chart's own first cut does not
+# include an Ingress resource — no ingress controller, TLS cert-manager
+# issuer, or hostname has been decided anywhere in this repo, and
+# fabricating any of those would be inventing configuration, not
+# reading it — see README.md.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ai-os.fullname" . }}-api
+  labels:
+    {{- include "ai-os.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    aios.role: api
+  ports:
+    - name: http
+      port: {{ .Values.api.service.port }}
+      targetPort: http

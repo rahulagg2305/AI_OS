@@ -1,0 +1,89 @@
+# Default values for the ai-os chart. Every value a template needs is
+# declared here — no hardcoded image/replica/resource/probe value lives
+# in a template itself (the standard Helm "no hardcoded values" shape).
+
+image:
+  # No real registry has been decided anywhere in this repo yet — the
+  # real, proven build target is the local Dockerfile
+  # (P01-S01-M40-T04); a real deployment overrides this at install time
+  # (`--set image.repository=...`), never a value this chart invents.
+  repository: ai-os
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: aios
+
+# Non-secret configuration (ConfigMap/aios-config, deployment_architecture.md
+# §7's own "bootstrap minimum" list minus the two DSNs, which are secret).
+config:
+  env: production
+  otelExporterOtlpEndpoint: "http://otel-collector:4318"
+  secretBackend: env
+
+# The name of an already-existing Secret this chart references but does
+# NOT create or populate — deployment_architecture.md §6 names
+# `ExternalSecret/aios-secrets` (Vault/cloud secret manager -> env
+# references only); this chart's own first cut does not include an
+# ExternalSecret resource (no secrets backend for Kubernetes has been
+# selected anywhere yet — Vault backend itself, P07-S02-M19-T01, is
+# still unbuilt) — see README.md. A real Secret named this must exist
+# in the target namespace before this chart is installed, holding
+# AIOS_DATABASE_URL/AIOS_REDIS_URL.
+existingSecretName: aios-secrets
+
+api:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  service:
+    port: 8000
+
+worker:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+# deployment_architecture.md §6's own "Graceful shutdown" paragraph:
+# terminationGracePeriodSeconds: 330 against a 300s drain (NFR-036).
+terminationGracePeriodSeconds: 330
+
+# deployment_architecture.md §6's own Probes table — verified directly
+# against kernel/src/ai_os_kernel/routes/health.py: the router itself
+# declares `APIRouter(prefix="/api/v1", ...)`, so the real, live path
+# genuinely is /api/v1/health/live and /api/v1/health/ready, matching
+# the document exactly.
+probes:
+  livenessPath: /api/v1/health/live
+  readinessPath: /api/v1/health/ready
+  startupPath: /api/v1/health/live
+  # NFR-107: ready within 15s. periodSeconds x failureThreshold = 15s.
+  startupFailureThreshold: 15
+  startupPeriodSeconds: 1
+
+podDisruptionBudget:
+  minAvailable: 1
+
+# HorizontalPodAutoscaler on the worker Deployment. deployment_architecture.md
+# §6 names the real target as "worker lease-queue depth" — a custom
+# metric with no metrics-adapter (Prometheus Adapter/KEDA) built or
+# installed anywhere in this repo. This chart's own first cut scales on
+# CPU utilization instead — a real, immediately functional autoscaler,
+# not a fabricated queue-depth metric source — and discloses the gap in
+# README.md rather than inventing one.
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

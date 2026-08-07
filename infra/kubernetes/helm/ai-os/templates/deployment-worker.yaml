@@ -1,0 +1,61 @@
+# Deployment/aios-worker — deployment_architecture.md §6 ("replicas >= 3
+# role=worker"). Runs the real image's own `worker` entry point
+# (kernel/src/ai_os_kernel/entrypoints/worker.py) — a genuine,
+# continuously-running multi-instance worker loop (P01-S01-M40-T05),
+# not a stub.
+#
+# **No liveness/readiness/startup probes — a real, disclosed gap, not
+# an oversight.** deployment_architecture.md §6's own Probes table
+# names HTTP paths, but those paths are served only by the `api` role's
+# own FastAPI app (kernel/src/ai_os_kernel/entrypoints/api.py); the
+# `worker` entry point above runs no HTTP server at all — verified
+# directly in its own source, not assumed. Adding a probe against a
+# path that does not exist on this role would make every worker pod
+# fail its own health check permanently, which is worse than no probe.
+# A real worker-specific health signal (e.g. a heartbeat file, or a
+# small internal HTTP listener) is unbuilt, disclosed follow-up work —
+# see README.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ai-os.fullname" . }}-worker
+  labels:
+    {{- include "ai-os.labels" . | nindent 4 }}
+    aios.role: worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      aios.role: worker
+  template:
+    metadata:
+      labels:
+        {{- include "ai-os.labels" . | nindent 8 }}
+        aios.role: worker
+    spec:
+      serviceAccountName: {{ include "ai-os.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: AIOS_ROLE
+              value: worker
+            - name: AIOS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecretName }}
+                  key: AIOS_DATABASE_URL
+            - name: AIOS_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecretName }}
+                  key: AIOS_REDIS_URL
+          envFrom:
+            - configMapRef:
+                name: {{ include "ai-os.fullname" . }}-config
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}

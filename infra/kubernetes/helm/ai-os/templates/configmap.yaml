@@ -1,0 +1,15 @@
+# ConfigMap/aios-config — deployment_architecture.md §6. Non-secret
+# configuration only, matching §7's own "bootstrap minimum" env var
+# list minus AIOS_DATABASE_URL/AIOS_REDIS_URL (secret — see
+# existingSecretName in values.yaml) and AIOS_ROLE (per-Deployment, not
+# shared, since api and worker declare different values).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ai-os.fullname" . }}-config
+  labels:
+    {{- include "ai-os.labels" . | nindent 4 }}
+data:
+  AIOS_ENV: {{ .Values.config.env | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otelExporterOtlpEndpoint | quote }}
+  AIOS_SECRET_BACKEND: {{ .Values.config.secretBackend | quote }}

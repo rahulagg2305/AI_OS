@@ -74,10 +74,10 @@ Resolves the contradiction between `system_architecture.md` (modular monolith) a
 
 ---
 
-## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+## Implementation Status (appended 2026-07-28, updated 2026-08-07 — not part of the Accepted decision)
 
 **Status in code:** Partially implemented
 
-The two-process-role split is real in code: `ai_os_kernel.entrypoints.api` and `ai_os_kernel.entrypoints.worker` start from the same composition root, and the `SKIP LOCKED` leasing that makes worker scaling possible works (ADR-0011). Everything operational is missing: there is **no Dockerfile anywhere**, so no image exists; `infra/docker/`, `infra/kubernetes/`, and `infra/terraform/` are empty; `infra/docker-compose.yml` brings up only Postgres and Redis, not the Kernel; and no multi-instance worker loop exists — `run_to_completion`/`reap_once` handle one instance or one bounded pass, with nothing scheduling either across many instances.
+The two-process-role split is real in code: `ai_os_kernel.entrypoints.api` and `ai_os_kernel.entrypoints.worker` start from the same composition root, and the `SKIP LOCKED` leasing that makes worker scaling possible works (ADR-0011). **Updated 2026-08-07: two of this section's own original findings are stale — both closed.** A real, working, digest-pinned `Dockerfile` exists at the repo root (`P01-S01-M40-T04`), and `ai_os_kernel.entrypoints.worker` genuinely runs the same continuous, multi-instance worker loop the `api` role's own background task uses, standalone (`P01-S01-M40-T05`) — see `docs/11_deployment/deployment_architecture.md`'s own Implementation Status for the full, current detail on both. `infra/kubernetes/` now has a real, partial Helm chart (`infra/kubernetes/helm/ai-os/`, `P07-S01-M40-T01`) — `Deployment`/`Service`/`ConfigMap`/`ServiceAccount`/`PodDisruptionBudget`/`HorizontalPodAutoscaler`, validated via `helm lint`/`helm template` and a real, temporary `kind` cluster (`kubectl apply --dry-run=server` and a genuine, non-dry-run apply, both against a live Kubernetes API server) — with `Ingress`, `NetworkPolicy`, `ExternalSecret`, queue-depth HPA scaling, and the Podman/gVisor sandbox pattern all real, disclosed gaps (see that chart's own README.md), not fabricated. `infra/terraform/` remains empty. `infra/docker-compose.yml` still brings up only Postgres/Redis/observability, not the Kernel image itself.
 
 Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

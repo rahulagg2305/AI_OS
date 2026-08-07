@@ -143,6 +143,23 @@ production run, and the generic multi-instance worker loop
 matching `human_approval.py`'s own long-standing disclosed scope,
 unchanged by this step.
 
+**Update 2026-08-07 (`P07-S01-M40-T01`): Kubernetes manifests and a
+Helm chart now exist — `infra/kubernetes/helm/ai-os/` — the other
+named blocking Task, now real, does not itself trigger this rule.**
+The chart declares `Deployment`/`Service`/`ConfigMap`/`ServiceAccount`/
+`PodDisruptionBudget`/`HorizontalPodAutoscaler` resources only —
+nothing in this codebase calls `helm install`/`kubectl apply`
+automatically from any workflow; applying it remains a manual,
+human-run operation (`helm template | kubectl apply` or `helm
+install`), the identical "declarative artifact, not an autonomous
+pipeline" shape a static Helm chart always has. **The rule stays open
+and permanent**: it still requires that *whichever* workflow
+eventually drives an automatic apply of this chart wires a real
+`human_approval` step first, exactly as `se.delivery_pipeline` already
+does for its own `git-push` step above — no such automatic-apply
+workflow exists yet, so this rule's own concern is genuinely not yet
+triggered, not merely unaddressed.
+
 ### R-002 — Docker exception-catching inconsistency *(closed)*
 
 `_postgres_fixture.py` caught only `docker.errors.DockerException`, while

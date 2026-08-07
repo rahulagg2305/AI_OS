@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 85%** (209.5 of 246 Task-equivalents complete)
+**Overall: 85%** (210 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -45,7 +45,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P06 (F) | S04 Command Line Interface | 1 | 0 | 0 | 1 | 0% |
 | P06 (F) | S05 Notifications | 2 | 0 | 0 | 2 | 0% |
 | P06 (F) | S06 Voice | 2 | 0 | 0 | 2 | 0% |
-| P07 (G) | S01 Deployment and Infrastructure | 3 | 0 | 0 | 3 | 0% |
+| P07 (G) | S01 Deployment and Infrastructure | 3 | 0 | 1 | 2 | 17% |
 | P07 (G) | S02 Security Hardening | 3 | 0 | 0 | 3 | 0% |
 | P07 (G) | S03 Performance, Chaos and Coverage | 2 | 0 | 0 | 2 | 0% |
 | P08 (H) | S01 Remaining Pack Agents | 7 | 6 | 0 | 1 | 86% |
@@ -62,7 +62,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 14 | 81% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 3 | 27% |
-| P07 (Stage G) - Hardening and Production Readiness | 8 | 0 | 0% |
+| P07 (Stage G) - Hardening and Production Readiness | 8 | 0 | 6% |
 | P08 (Stage H) - Expansion | 9 | 6 | 67% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |
 
@@ -78,7 +78,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P06-S04-M38-T01` aios CLI
 - `P06-S05-M22-T01` Notification channels
 - `P06-S06-M25-T01` Speech Gateway
-- `P07-S01-M40-T01` Kubernetes manifests and Helm chart
+- `P07-S01-M40-T02` NetworkPolicy egress allowlist
 - `P07-S01-M40-T03` Backup and restore rehearsal
 - `P07-S02-M14-T01` OIDC authentication
 - `P07-S02-M19-T01` Vault secrets backend
