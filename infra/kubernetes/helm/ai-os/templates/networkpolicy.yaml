@@ -1,0 +1,58 @@
+# NetworkPolicy/aios-egress (P07-S01-M40-T02) — opt-in
+# (`.Values.networkPolicy.enabled`, default `false`; see values.yaml's
+# own comment for why). Applies to every pod this chart owns
+# (`aios-api` and `aios-worker` — matched by the same
+# `app.kubernetes.io/name`/`app.kubernetes.io/instance` pair every real
+# Deployment's own selector already uses, not a new label).
+#
+# **Two real, non-invented baseline rules, always present when
+# enabled — no literal IP or FQDN for anything this chart does not
+# itself own:**
+#
+# 1. DNS to `kube-dns` (label `k8s-app: kube-dns`, the standard
+#    CoreDNS/kube-dns convention across kubeadm, kind, GKE, and EKS) in
+#    any namespace — every one of the destinations below needs a real
+#    DNS lookup first, so allowing everything else while blocking DNS
+#    would make this policy self-defeating.
+# 2. Same-namespace traffic — covers `otel-collector`
+#    (`values.yaml`'s own `otelExporterOtlpEndpoint`, a bare
+#    same-namespace Service name, the one real egress destination this
+#    chart already knows about today).
+#
+# **Everything else is the operator's own responsibility to declare**
+# (`.Values.networkPolicy.egress.additionalRules`) — real Postgres,
+# Redis, and LLM-provider destinations are environment-specific
+# (managed services this chart does not deploy), so this chart cannot
+# know them without inventing a value, which "no hardcoded values"
+# forbids literally.
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "ai-os.fullname" . }}-egress
+  labels:
+    {{- include "ai-os.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+              matchLabels:
+                k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector: {}
+    {{- with .Values.networkPolicy.egress.additionalRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

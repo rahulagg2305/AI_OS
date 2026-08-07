@@ -115,6 +115,63 @@ def test_the_real_chart_renders_every_documented_resource(helm_binary: str) -> N
     assert ("HorizontalPodAutoscaler", f"{_RELEASE_NAME}-worker") in kinds_and_names
 
 
+def test_the_network_policy_is_absent_by_default(helm_binary: str) -> None:
+    """``P07-S01-M40-T02`` — opt-in, product-owner decision: a default
+    render (no ``--set``) must not create a ``NetworkPolicy`` at all,
+    the real proof that this ticket changed nothing about a default
+    install (zero regression)."""
+    rendered = _run([helm_binary, "template", _RELEASE_NAME, str(CHART_PATH)])
+    documents = [doc for doc in yaml.safe_load_all(rendered) if doc is not None]
+
+    assert not any(doc["kind"] == "NetworkPolicy" for doc in documents)
+
+
+def test_the_network_policy_when_enabled_has_the_real_baseline_and_operator_rules(
+    helm_binary: str,
+) -> None:
+    """When explicitly enabled, the real DNS + same-namespace baseline
+    is always present, and an operator-supplied
+    ``additionalRules`` entry (a real, literal
+    ``NetworkPolicyEgressRule`` — Postgres on a real CIDR, the exact
+    shape values.yaml's own comment documents) renders through
+    unchanged."""
+    rendered = _run(
+        [
+            helm_binary,
+            "template",
+            _RELEASE_NAME,
+            str(CHART_PATH),
+            "--set",
+            "networkPolicy.enabled=true",
+            "--set",
+            "networkPolicy.egress.additionalRules[0].to[0].ipBlock.cidr=10.0.0.0/24",
+            "--set",
+            "networkPolicy.egress.additionalRules[0].ports[0].protocol=TCP",
+            "--set",
+            "networkPolicy.egress.additionalRules[0].ports[0].port=5432",
+        ]
+    )
+    documents = [doc for doc in yaml.safe_load_all(rendered) if doc is not None]
+    policy = next(doc for doc in documents if doc["kind"] == "NetworkPolicy")
+
+    assert policy["spec"]["podSelector"]["matchLabels"] == {
+        "app.kubernetes.io/name": "ai-os",
+        "app.kubernetes.io/instance": _RELEASE_NAME,
+    }
+    egress_rules = policy["spec"]["egress"]
+
+    dns_rule = egress_rules[0]
+    assert dns_rule["to"][0]["podSelector"]["matchLabels"] == {"k8s-app": "kube-dns"}
+    assert {p["port"] for p in dns_rule["ports"]} == {53}
+
+    same_namespace_rule = egress_rules[1]
+    assert same_namespace_rule["to"] == [{"podSelector": {}}]
+
+    operator_rule = egress_rules[2]
+    assert operator_rule["to"][0]["ipBlock"]["cidr"] == "10.0.0.0/24"
+    assert operator_rule["ports"][0]["port"] == 5432
+
+
 def test_the_worker_deployment_declares_no_http_probes(helm_binary: str) -> None:
     """The chart's own disclosed, deliberate gap, proven rather than
     merely claimed in a comment: the worker Deployment's container spec
@@ -156,6 +213,30 @@ def test_the_api_deployment_probes_the_real_verified_health_paths(helm_binary: s
 def rendered_manifests_path(helm_binary: str, tmp_path_factory: pytest.TempPathFactory) -> Path:
     rendered = _run([helm_binary, "template", _RELEASE_NAME, str(CHART_PATH)])
     path = tmp_path_factory.mktemp("ai-os-helm") / "rendered.yaml"
+    path.write_text(rendered, encoding="utf-8")
+    return path
+
+
+@pytest.fixture(scope="module")
+def rendered_manifests_with_network_policy_path(
+    helm_binary: str, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """The identical render, with the opt-in NetworkPolicy switched on
+    — a real, non-dry-run apply of this against a genuine API server is
+    the strongest available proof that ``policy/v1`` egress rules this
+    codebase invented for the baseline (DNS, same-namespace) are
+    genuinely well-formed, not merely "renders without a YAML error"."""
+    rendered = _run(
+        [
+            helm_binary,
+            "template",
+            _RELEASE_NAME,
+            str(CHART_PATH),
+            "--set",
+            "networkPolicy.enabled=true",
+        ]
+    )
+    path = tmp_path_factory.mktemp("ai-os-helm-netpol") / "rendered.yaml"
     path.write_text(rendered, encoding="utf-8")
     return path
 
@@ -263,3 +344,44 @@ def test_the_rendered_manifests_are_genuinely_accepted_by_a_real_kubernetes_api_
         assert waiting.get("reason") in {"ErrImagePull", "ImagePullBackOff"}, (
             f"pod {pod['metadata']['name']} failed for an unexpected reason: {statuses[0]['state']}"
         )
+
+
+def test_the_network_policy_is_genuinely_accepted_by_a_real_kubernetes_api_server(
+    rendered_manifests_with_network_policy_path: Path,
+    real_kind_cluster: str,
+    kubectl_binary: str,
+) -> None:
+    """``P07-S01-M40-T02`` — the same real-cluster proof shape the base
+    chart already gets, for the opt-in ``NetworkPolicy`` specifically.
+    Reuses the shared ``real_kind_cluster`` (module-scoped) the base
+    chart's own test already applies to — a real, idempotent
+    ``apply`` of this superset (identical Deployments/Service/etc. plus
+    the new ``NetworkPolicy``) against the same live API server, not a
+    second, throwaway cluster."""
+    context = ["--context", real_kind_cluster]
+
+    _run(
+        [
+            kubectl_binary,
+            *context,
+            "apply",
+            "--dry-run=server",
+            "-f",
+            str(rendered_manifests_with_network_policy_path),
+        ]
+    )
+    _run(
+        [kubectl_binary, *context, "apply", "-f", str(rendered_manifests_with_network_policy_path)]
+    )
+
+    policies = yaml.safe_load(
+        _run([kubectl_binary, *context, "get", "networkpolicies", "-o", "yaml"])
+    )
+    names = {item["metadata"]["name"] for item in policies["items"]}
+    assert f"{_RELEASE_NAME}-egress" in names
+
+    policy = next(
+        item for item in policies["items"] if item["metadata"]["name"] == f"{_RELEASE_NAME}-egress"
+    )
+    assert policy["spec"]["policyTypes"] == ["Egress"]
+    assert len(policy["spec"]["egress"]) == 2  # the real DNS + same-namespace baseline only

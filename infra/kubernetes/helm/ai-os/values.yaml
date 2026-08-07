@@ -87,3 +87,31 @@ hpa:
   minReplicas: 3
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
+
+# Egress NetworkPolicy (P07-S01-M40-T02) — opt-in (product-owner
+# decision), disabled by default so a default `helm install` behaves
+# exactly as before this ticket: zero regression, since no real
+# environment's actual Postgres/Redis/provider destinations are known
+# here to restrict egress to safely by default.
+networkPolicy:
+  enabled: false
+  egress:
+    # Every rule here is a real, literal Kubernetes NetworkPolicyEgressRule
+    # (https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.29/#networkpolicyegressrule-v1-networking-k8s-io)
+    # — no intermediate schema invented. Empty by default: this chart
+    # does not own Postgres/Redis/any external provider (deployment_architecture.md
+    # names them "Managed Postgres"/external in every real environment
+    # this document describes), so their real address is only known to
+    # the operator installing this chart, never to the chart itself.
+    # The DNS and same-namespace baseline this policy always allows
+    # (see templates/networkpolicy.yaml) needs no entry here.
+    #
+    # Example (a real Postgres reachable at a specific CIDR on 5432):
+    #   additionalRules:
+    #     - to:
+    #         - ipBlock:
+    #             cidr: 10.0.0.0/24
+    #       ports:
+    #         - protocol: TCP
+    #           port: 5432
+    additionalRules: []

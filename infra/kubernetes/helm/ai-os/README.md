@@ -23,19 +23,24 @@ Deploys the real, two-process-role image (`Dockerfile`,
   own `APIRouter(prefix="/api/v1", ...)`, matching
   `deployment_architecture.md` §6's own table exactly).
 - `terminationGracePeriodSeconds: 330` on both roles (NFR-036).
-- Validated offline: `helm lint`, `helm template` (renders cleanly),
-  and `kubectl apply --dry-run=client` against the rendered manifests
-  (real schema validation against `kubectl`'s own bundled OpenAPI
-  types — see the pack's own test/proof for the exact command run).
+- `NetworkPolicy/aios-egress` (`P07-S01-M40-T02`) — **opt-in**
+  (`networkPolicy.enabled`, default `false`; zero regression for a
+  default install). When enabled: a real DNS (`kube-dns`) + same-namespace
+  baseline (covers `otel-collector`) always applies, plus any real,
+  literal Kubernetes `NetworkPolicyEgressRule` entries an operator
+  supplies via `networkPolicy.egress.additionalRules` for their own
+  real Postgres/Redis/provider destinations — see `values.yaml`'s own
+  comment for why this chart cannot know those destinations itself.
+- Validated both offline (`helm lint`, `helm template`) and against a
+  real, temporary `kind` cluster: genuine `kubectl apply --dry-run=server`
+  followed by a genuine, non-dry-run apply against a live Kubernetes
+  API server, confirmed via real `kubectl get` — see
+  `tests/integration/infra/test_ai_os_helm_chart.py`.
 
 ## Disclosed gaps — real, not fabricated
 
-No live Kubernetes cluster exists in this development environment
-(`kubectl config get-contexts` returns empty, no `kind`/`minikube`
-installed) — every check above is offline/dry-run; nothing here has
-been applied against a real, running cluster. The following items
-`deployment_architecture.md` §6 names are genuinely unbuilt, each for
-a real, specific reason, not oversight:
+The following items `deployment_architecture.md` §6 names are
+genuinely unbuilt, each for a real, specific reason, not oversight:
 
 - **`aios-worker` has no liveness/readiness/startup probes.** The
   `worker` entry point runs no HTTP server at all (verified directly
@@ -57,11 +62,6 @@ a real, specific reason, not oversight:
   (`values.yaml`'s own `existingSecretName`, default `aios-secrets`)
   by name only — it never creates, populates, or reads a secret value
   itself.
-- **No `NetworkPolicy`.** A real egress allowlist needs concrete
-  provider IP ranges or FQDNs (Postgres, Redis, LLM providers, the
-  OTLP collector) that are not decided anywhere with real values —
-  inventing them would violate "no hardcoded values" in the most
-  literal sense.
 - **No Podman-sidecar or gVisor sandbox pattern.** `deployment_architecture.md`
   §6's own text already calls this "deliberate node configuration" —
   a real, separate, larger piece of work, not a Helm-chart-shaped one.
