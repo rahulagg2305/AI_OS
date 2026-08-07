@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 81%** (200 of 246 Task-equivalents complete)
+**Overall: 82%** (201 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -36,7 +36,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S06 Threat Controls | 2 | 2 | 0 | 0 | 100% |
 | P04 (D) | S01 Evaluation Engine | 11 | 8 | 0 | 3 | 73% |
 | P04 (D) | S02 Traceability Engine | 3 | 0 | 0 | 3 | 0% |
-| P04 (D) | S03 Benchmarking Pack | 4 | 1 | 0 | 3 | 25% |
+| P04 (D) | S03 Benchmarking Pack | 4 | 2 | 0 | 2 | 50% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 0 | 2 | 0% |
 | P05 (E) | S02 Project Intelligence Pack | 6 | 0 | 0 | 6 | 0% |
 | P06 (F) | S01 API Completion and Published Contract | 4 | 3 | 1 | 0 | 88% |
@@ -59,7 +59,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (Stage A) - Platform Skeleton | 47 | 45 | 96% |
 | P02 (Stage B) - Minimum Viable Kernel | 100 | 97 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 36 | 95% |
-| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 9 | 50% |
+| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 10 | 56% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 3 | 27% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 0 | 0% |
@@ -73,8 +73,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P01-S02-M01-T05` Experiment-overrides precedence layer
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P03-S02-M29-T08` technical-planner agent
+- `P04-S01-M12-T06` Comparison computer with variance
 - `P04-S02-M16-T01` trace.links writer
-- `P04-S03-M34-T02` Replicate management
 - `P04-S03-M34-T03` Cost ceiling enforcement
 - `P04-S03-M34-T04` Prompt adaptation recording
 - `P05-S01-M26-T01` Parser adapters
