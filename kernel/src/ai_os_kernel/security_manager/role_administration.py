@@ -71,6 +71,7 @@ import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_os_kernel.observability import get_logger
 from ai_os_kernel.observability.audit import AuditLogWriter, AuditOutcome
 from ai_os_kernel.security_manager.approval_authorization import ADMIN_ROLE
 from ai_os_kernel.security_manager.errors import (
@@ -81,6 +82,8 @@ from ai_os_kernel.security_manager.errors import (
 from ai_os_kernel.security_manager.ids import new_role_grant_id
 from ai_os_kernel.security_manager.models import Principal
 from ai_os_kernel.security_manager.schema import role_grants
+
+logger = get_logger("ai_os_kernel.security_manager")
 
 
 class RoleGrant(BaseModel):
@@ -114,6 +117,61 @@ class RoleGrantRepository(Protocol):
     async def revoke(
         self, *, principal_id: str, role: str, revoked_by: str, reason: str
     ) -> RoleGrant: ...
+
+
+async def resolve_effective_roles(
+    principal: Principal, role_grant_repository: RoleGrantRepository | None
+) -> Principal:
+    """Unions ``principal``'s own token-claimed roles with real,
+    persisted grants — never replaces them, only augments (``P07-S02-M14-T02``).
+
+    **The one real union logic this codebase has — extracted here, not
+    duplicated.** Before this ticket, this exact logic lived inline in
+    :meth:`~ai_os_kernel.workflow_engine.human_approval.ApprovalService.decide`
+    only, so a persisted grant of one of the five documented roles
+    (``viewer``/``operator``/``approver``/``maintainer``/``admin``) took
+    effect for approval decisions but never for any other
+    permission-checked route — the "Full five-role model" gap this
+    ticket closes. ``role_grant_repository=None`` (every caller with no
+    real database) returns ``principal`` completely unchanged, the
+    identical "absent means unaffected" shape every other optional
+    capability in this codebase already establishes.
+
+    **A genuinely unreachable database degrades to ``principal``
+    unchanged, not a hard failure.** ``build_engine()`` is lazy —
+    :func:`~ai_os_kernel.bootstrap._lifespan` always constructs a real
+    ``AsyncEngine`` (and therefore a real ``role_grant_repository``)
+    whenever a database URL is configured *at all* (including the
+    zero-config default), whether or not that database is actually
+    reachable, the identical "object exists, may not actually work"
+    shape :func:`~ai_os_kernel.bootstrap._build_health_service`'s own
+    ``database_check`` already tolerates. Since a persisted grant only
+    ever *augments*, never replaces, a bearer token's own claimed
+    roles, failing to read one is safe to treat the same as no grant
+    existing — the caller keeps working with the roles its own token
+    already proves, rather than every authenticated request across
+    the whole system depending on real database connectivity that
+    most of them never otherwise needed (the real regression a first
+    version of this function caused: unit tests exercising only the
+    auth boundary, with no configured database at all, broke outright
+    once ``authenticate()`` — unlike ``decide()``'s own pre-existing
+    caller, which already needs its own database operations to
+    succeed regardless — started reaching this function too).
+    """
+    if role_grant_repository is None:
+        return principal
+    try:
+        granted_roles = await role_grant_repository.active_roles_for(principal.principal_id)
+    except Exception as exc:
+        logger.warning(
+            "security_manager.role_grant_lookup_failed",
+            principal_id=principal.principal_id,
+            error=str(exc),
+        )
+        return principal
+    if granted_roles - principal.roles:
+        return principal.model_copy(update={"roles": principal.roles | granted_roles})
+    return principal
 
 
 class SqlRoleGrantRepository:

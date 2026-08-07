@@ -19,6 +19,22 @@ flat, exact-string role grants (a class-scoped role like
 ``approver:release`` does not imply the unscoped ``approver``) — see
 :mod:`ai_os_kernel.security_manager.permissions`'s own docstring for
 the real, concrete case this was found against.
+
+**Real, persisted role grants now take effect here too (``P07-S02-M14-T02``,
+"Full five-role model") — closing a real gap, not adding a new
+mechanism.** Before this, a persisted grant of one of the five
+documented roles (``viewer``/``operator``/``approver``/``maintainer``/
+``admin``, via :class:`~ai_os_kernel.security_manager.role_administration.
+RoleAdministrationService`) only ever took effect for
+:meth:`~ai_os_kernel.workflow_engine.human_approval.ApprovalService.decide`'s
+own narrow ``approver:<class>`` check — every other permission-checked
+route (workflows, packs, config) read only a bearer token's own
+``roles`` claim, so an admin-granted role had no real effect anywhere
+else. :func:`~ai_os_kernel.security_manager.role_administration.resolve_effective_roles`
+(the identical union `ApprovalService.decide` already used, now
+shared, not duplicated) is applied here too, reading an optional
+``request.app.state.role_grant_repository`` — ``None`` (any caller
+with no real database) behaves exactly as before.
 """
 
 from __future__ import annotations
@@ -32,6 +48,10 @@ from ai_os_kernel.observability import get_logger
 from ai_os_kernel.security_manager.errors import InvalidTokenError
 from ai_os_kernel.security_manager.models import SecurityContext
 from ai_os_kernel.security_manager.permissions import permissions_for_roles
+from ai_os_kernel.security_manager.role_administration import (
+    RoleGrantRepository,
+    resolve_effective_roles,
+)
 from ai_os_kernel.security_manager.token_verifier import TokenVerifier
 
 logger = get_logger("ai_os_kernel.security_manager")
@@ -64,6 +84,11 @@ async def authenticate(
     except InvalidTokenError as exc:
         logger.warning("security_manager.authentication_failed", reason=str(exc))
         raise HTTPException(status_code=401, detail="invalid bearer token") from exc
+
+    role_grant_repository: RoleGrantRepository | None = getattr(
+        request.app.state, "role_grant_repository", None
+    )
+    principal = await resolve_effective_roles(principal, role_grant_repository)
 
     return SecurityContext(principal=principal, permissions=permissions_for_roles(principal.roles))
 

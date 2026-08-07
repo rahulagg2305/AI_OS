@@ -482,6 +482,7 @@ from ai_os_kernel.routes.role_administration import router as role_administratio
 from ai_os_kernel.routes.workflows import router as workflows_router
 from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
 from ai_os_kernel.secrets_manager.env_provider import EnvSecretProvider
+from ai_os_kernel.security_manager.role_administration import SqlRoleGrantRepository
 from ai_os_kernel.security_manager.token_verifier import (
     JWTBearerTokenVerifier,
     OidcBearerTokenVerifier,
@@ -1655,9 +1656,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     ``AgentRegistry`` and **no** ``database_engine``,
     ``trigger_prompted_agent_workflow``, ``workflow_instance_repository``,
     ``context_manager``, ``pack_lifecycle_repository``,
-    ``pack_health_polling_task``, ``lease_reap_task``, or
-    ``workflow_worker_task`` at all — there is nothing real for any of
-    them to run against without one, unlike a missing LLM secret alone
+    ``role_grant_repository``, ``pack_health_polling_task``,
+    ``lease_reap_task``, or ``workflow_worker_task`` at all — there is
+    nothing real for any of them to run against without one, unlike a
+    missing LLM secret alone
     (handled inside ``_build_prompted_agent_registry``), which still
     leaves a real database for the Workflow Engine components to use.
     The token verifier degrades independently of all seven, since
@@ -1863,6 +1865,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # through the real composition root instead of only through a
         # hand-built engine.
         app.state.pack_lifecycle_repository = SqlPackLifecycleRepository(engine)
+        # authenticate() (ai_os_kernel.security_manager.dependencies) reads
+        # this to union real, persisted role grants into a principal's
+        # token-claimed roles for every permission-checked route, not only
+        # ApprovalService.decide's own narrower check (P07-S02-M14-T02,
+        # "Full five-role model") — the same "plain, stateless wrapper over
+        # the engine, exposed on app.state the moment a real engine exists"
+        # shape as pack_lifecycle_repository directly above.
+        app.state.role_grant_repository = SqlRoleGrantRepository(engine)
         # Real pack discovery -> registration -> activation — see this
         # module's own docstring and _register_and_activate_discovered_packs'
         # for the full design (idempotency, per-pack degrade behaviour).
