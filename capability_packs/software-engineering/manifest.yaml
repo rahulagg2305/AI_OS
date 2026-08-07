@@ -341,6 +341,28 @@ agents:
     requiredPrompts:
       - technicalplanning.produce_plan@0.1.0
 
+  - id: frontend-developer
+    name: Frontend Developer Agent
+    version: 0.1.0
+    purpose: >-
+      Given a plan task or instruction (FR-035), produce one frontend
+      component file and genuinely write it through the sandbox — the
+      real, catalog-documented identity `se.implement_task`'s own
+      `task.kind`-routed graph names ("frontend-developer... by
+      task.kind"). Reuses build.py's/database.py's/api_designer.py's
+      own write mechanism verbatim; the one real addition is a
+      frontend-file-extension precondition, enforced before any
+      sandbox call.
+    entrypoint: ai_os_pack_software_engineering.agents.frontend_developer:FrontendDeveloperAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.frontend_developer:FrontendComponentInput
+    outputSchema: ai_os_pack_software_engineering.agents.frontend_developer:FrontendDeveloperAgentOutput
+    modelAlias: coding-strong
+    permissions:
+      - llm:invoke
+      - sandbox:execute
+    requiredPrompts:
+      - frontenddeveloper.write_component@0.1.0
+
   - id: git-push
     name: Git Push Agent
     version: 0.1.0
@@ -544,6 +566,16 @@ prompts:
     description: >-
       Instructs the model to decompose a given technical design into a
       JSON array of implementation tasks (title, description), with no
+      surrounding prose.
+
+  - id: frontenddeveloper.write_component
+    version: 0.1.0
+    location: prompts/frontend_developer_write_component.md
+    inputSchema: ai_os_pack_software_engineering.agents.frontend_developer:FrontendComponentInput
+    description: >-
+      Instructs the model to produce exactly one frontend component
+      file (a real frontend file extension) implementing a given plan
+      task/instruction, in a fixed, parseable format with no
       surrounding prose.
 
   - id: documentation.record_artifact
