@@ -329,6 +329,39 @@
             "title": "Manifest Schema Path",
             "type": "string"
           },
+          "oidc_audience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oidc Audience"
+          },
+          "oidc_issuer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oidc Issuer"
+          },
+          "oidc_jwks_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oidc Jwks Uri"
+          },
           "pack_health_poll_interval_seconds": {
             "anyOf": [
               {
