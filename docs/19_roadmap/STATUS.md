@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 88%** (216 of 246 Task-equivalents complete)
+**Overall: 88%** (217 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -35,7 +35,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S05 Security and Human Approval | 10 | 10 | 0 | 0 | 100% |
 | P03 (C) | S06 Threat Controls | 2 | 2 | 0 | 0 | 100% |
 | P04 (D) | S01 Evaluation Engine | 11 | 11 | 0 | 0 | 100% |
-| P04 (D) | S02 Traceability Engine | 3 | 1 | 0 | 2 | 33% |
+| P04 (D) | S02 Traceability Engine | 3 | 2 | 0 | 1 | 67% |
 | P04 (D) | S03 Benchmarking Pack | 4 | 3 | 1 | 0 | 88% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 0 | 2 | 0% |
 | P05 (E) | S02 Project Intelligence Pack | 6 | 0 | 0 | 6 | 0% |
@@ -59,7 +59,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (Stage A) - Platform Skeleton | 47 | 46 | 98% |
 | P02 (Stage B) - Minimum Viable Kernel | 100 | 97 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 97% |
-| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 15 | 86% |
+| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 16 | 92% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 3 | 27% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 69% |
@@ -68,10 +68,9 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-12 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+11 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P03-S01-M20-T05` Stronger isolation tier
-- `P04-S02-M16-T02` Impact query
 - `P04-S02-M16-T03` Coverage query
 - `P05-S01-M26-T01` Parser adapters
 - `P06-S02-M37-T01` WebSocket stream endpoint
