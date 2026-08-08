@@ -160,6 +160,29 @@ does for its own `git-push` step above — no such automatic-apply
 workflow exists yet, so this rule's own concern is genuinely not yet
 triggered, not merely unaddressed.
 
+**Correction (2026-08-08, found during a full pre-completion health
+audit): the 2026-08-03 update above's own closing sentence was stale —
+never resynced after it was closed.** It claimed "no HTTP route exists
+yet for a live Kernel process to receive a real decision against a
+paused production run." `P03-S03-M30-T06` closed exactly this, the same
+day range as later updates in this section: `ai_os_kernel.routes.approvals`
+(`POST /api/v1/workflows/{workflow_id}/approvals/{approval_id}/decisions`)
+is real, and `resume_pipeline_after_approval` (`delivery_pipeline.py`)
+genuinely re-drives a paused instance to completion through it — proven
+end to end over real HTTP against real Postgres (a real pause, a refused
+unauthorized attempt, an authorized decision resuming to a genuine commit
+and push). The second half of that sentence is still accurate, but for a
+different reason than originally stated: the generic multi-instance
+worker loop (`bootstrap.py`) still does not drive `se.delivery_pipeline`
+— not because nothing wires it, but because it is now a deliberate
+exclusion (`exclude_definition_ids`, `feature_inventory.md` module 5's
+own row): that loop's fixed executor composition cannot run this
+pipeline's `quality_gate`/`decision`/`human_approval` steps at all, so
+excluding it and resuming exclusively through the real HTTP route above
+is the safe path, not an unaddressed gap. **The rule itself remains open
+and permanent, unaffected by this correction** — this only fixes a
+factual claim, not the rule's own status.
+
 ### R-002 — Docker exception-catching inconsistency *(closed)*
 
 `_postgres_fixture.py` caught only `docker.errors.DockerException`, while

@@ -38,7 +38,7 @@ Entirely unbuilt as of 2026-07-28 — these documents are pure specification, wi
 
 - `03_architecture/platform/platform_sdk.md` — **`ai-os-sdk` exists as an installable package (as of `platform_sdk_v1_scope.md` step 1, 2026-07-28) but is packaging-only.** All 15 Protocols, the boundary models, the `AiOsError` hierarchy, and `pack_contract_suite` are still design only, built one step at a time per the scope document. This is why packs still import Kernel internals directly.
 - All 7 documents in `03_architecture/services/` (Storage, Search's vector half, Document Processing, Notification, Caching, Git Integration)
-- `03_architecture/quality/quality_gates_framework.md` and `03_architecture/kernel/quality_gate_engine.md` — **nothing enforces any quality gate in code today**
+- `03_architecture/quality/quality_gates_framework.md` — the general, pack-declared gate framework remains unbuilt. **`03_architecture/kernel/quality_gate_engine.md` no longer belongs on this "entirely unbuilt" list (corrected 2026-08-08, found during a full pre-completion health audit): three real, blocking, bounded-retry gate categories genuinely enforce ADR-0006's invariant in `se.delivery_pipeline` today — see that document's own Implementation Status.**
 - `03_architecture/kernel/{evaluation_engine,event_bus,knowledge_manager,memory_manager,traceability_engine}.md`
 - `03_architecture/traceability/traceability_model.md`
 - All of `13_dashboard/`, `14_voice_jarvis/`, `07_api/cli_design.md`

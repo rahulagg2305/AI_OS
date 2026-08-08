@@ -146,12 +146,12 @@ Grouped by area. Each group cites its governing document(s). This is what the *d
 - `CapabilityPack` entry-point contract; `pack_contract_suite` (9 automated compliance checks); SemVer compatibility/deprecation rules
 
 ### 2.20 Agents & Workflows (Cross-Pack) (`agent_architecture.md`, `agent_communication.md`, `agent_catalog.md`)
-- 16 documented v1 agents across packs (15 Software Engineering + 1 Project Intelligence)
+- 19 documented v1 agents across packs (18 Software Engineering + 1 Project Intelligence) — corrected 2026-08-08 (found during a full pre-completion health audit): this line was never updated as the SE pack's own catalog grew from 15 to 18; §5's own module-29 row already used the current, correct count
 - Mandatory agent contract (id/name/purpose/inputs/outputs/permissions/supportedWorkflows/entrypoint/version); 2 lifecycles (Registration, Invocation — 7 steps)
 - 5 allowed / 5 forbidden communication patterns; agents never communicate directly, coordination only via Workflow Engine
 
 ### 2.21 Capability Packs
-- **Software Engineering** (`software_engineering/*.md`): 15 agents, 6 named workflows (Full Product Creation, Feature Addition, Bug Fix/Maintenance, Refactoring, Code Review & Quality Improvement, Release), tool categories (source code, build/dependency, test, static analysis, git, documentation, container/deployment) each trust-tiered, 7 gate categories
+- **Software Engineering** (`software_engineering/*.md`): 18 agents (corrected 2026-08-08, matching `agents.md`'s own current catalog table), 6 named workflows (Full Product Creation, Feature Addition, Bug Fix/Maintenance, Refactoring, Code Review & Quality Improvement, Release), tool categories (source code, build/dependency, test, static analysis, git, documentation, container/deployment) each trust-tiered, 7 gate categories
 - **Project Intelligence** (`project_intelligence/*.md`): 1 agent (`existing-project-analyzer`), 5 named workflows (Existing System Analysis, Architecture Recovery, Legacy Documentation Generation, Modernization Opportunity Assessment, Safe Enhancement)
 - **Voice (Jarvis)** (`voice_jarvis/overview.md`, `14_voice_jarvis/*.md`): wake-word engine, STT/TTS via platform Speech Gateway, Intent Engine (6+ initial intent categories), Voice Session Manager, Response Generator, multi-modal hand-off with Dashboard/API/CLI
 - **Benchmarking** (`benchmarking/overview.md`): experiment definition/pinning, replicate management (≥3), cost ceiling enforcement, comparison report generation
