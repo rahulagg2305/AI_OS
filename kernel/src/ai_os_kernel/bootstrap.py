@@ -424,6 +424,7 @@ from ai_os_kernel.context_manager.resolvers import (
     RuntimeConfigResolver,
     WorkflowStateResolver,
 )
+from ai_os_kernel.event_bus.bus import InProcessEventBus
 from ai_os_kernel.git_integration.default_service import build_git_integration_service_from_env
 from ai_os_kernel.health import ComponentStatus, GracefulShutdownCoordinator, HealthService
 from ai_os_kernel.knowledge_manager.query_engine import QueryEngine
@@ -479,6 +480,7 @@ from ai_os_kernel.routes.idempotency import IdempotencyKeyMiddleware, SqlIdempot
 from ai_os_kernel.routes.packs import router as packs_router
 from ai_os_kernel.routes.problem_details import register_problem_detail_handlers
 from ai_os_kernel.routes.role_administration import router as role_administration_router
+from ai_os_kernel.routes.stream import router as stream_router
 from ai_os_kernel.routes.workflows import router as workflows_router
 from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
 from ai_os_kernel.secrets_manager.backend_selection import (
@@ -1699,6 +1701,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     ever race a closed connection pool.
     """
     app.state.token_verifier = await _build_token_verifier(app.state.config)
+    # Needs no database, no config, and no LLM secret -- built
+    # unconditionally, the identical reasoning `token_verifier` above
+    # already establishes, so `routes.stream` always has a real bus to
+    # subscribe against regardless of how much of the rest of _lifespan
+    # degrades below (P06-S02-M37-T01).
+    app.state.event_bus = InProcessEventBus()
     shutdown_coordinator = GracefulShutdownCoordinator()
     app.state.shutdown_coordinator = shutdown_coordinator
 
@@ -2035,6 +2043,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # that case (GracefulShutdownCoordinator.shutdown's own
         # docstring).
         await shutdown_coordinator.shutdown()
+        await app.state.event_bus.aclose()
         if engine is not None:
             await engine.dispose()
 
@@ -2086,6 +2095,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.include_router(packs_router)
     app.include_router(role_administration_router)
     app.include_router(config_router)
+    app.include_router(stream_router)
 
     logger.info("kernel.bootstrap.complete")
     return app
