@@ -6,7 +6,7 @@
 
 # AI_OS - Module Board
 
-**Generated:** 2026-08-07. Replaces `feature_inventory.md` §5's hand-maintained completion table.
+**Generated:** 2026-08-08. Replaces `feature_inventory.md` §5's hand-maintained completion table.
 
 Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retired and never reused.
 
@@ -52,7 +52,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M39 | Dashboard | P06 | 3 | 0 | 0% |
 | M40 | Deployment & Infrastructure | P01+P07 | 8 | 6 | 88% |
 | M41 | Threat Controls (T1-T12) | P03 | 2 | 2 | 100% |
-| M42 | Testing Infrastructure | P01+P07 | 7 | 5 | 71% |
+| M42 | Testing Infrastructure | P01+P07 | 7 | 5 | 79% |
 | M43 | CI Pipeline | P01 | 5 | 5 | 100% |
 | M44 | Platform-wide AiOsError hierarchy | P02 | 1 | 1 | 100% |
 | M45 | Roadmap & Process System | P09 | 5 | 5 | 100% |
