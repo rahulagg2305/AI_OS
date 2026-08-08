@@ -37,7 +37,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M23 | Caching (Redis) | P02 | 2 | 2 | 100% |
 | M24 | Git Integration Service | P03 | 3 | 3 | 100% |
 | M25 | Speech Gateway | P06 | 1 | 0 | 0% |
-| M26 | Document Processing | P05 | 2 | 0 | 0% |
+| M26 | Document Processing | P05 | 2 | 0 | 25% |
 | M27 | Platform SDK (ai-os-sdk package) | P02 | 8 | 8 | 100% |
 | M28 | Manifest Schema (JSON Schema) | P01 | 2 | 1 | 50% |
 | M29 | SE Pack - Agents | P03+P08 | 15 | 14 | 93% |
