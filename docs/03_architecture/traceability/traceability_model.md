@@ -8,11 +8,11 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (updated 2026-08-08, `P04-S02-M16-T01`)
 
-**Built: nothing. This document is a design specification only.** No Traceability Engine exists — `kernel/src/ai_os_kernel/traceability_engine/` contains a docstring-only `__init__.py`. The `trace.artifacts` and `trace.links` tables exist as schema only (migration `0007`), with no writer, no reader, and no impact-analysis query. Nothing creates a traceability link anywhere in the codebase, and the root `traceability/` directory has no content.
+**A real writer now exists** — see `../kernel/traceability_engine.md`'s own Implementation Status for the full detail. `SqlTraceLinkWriter` genuinely records/closes `trace.links` rows, upserting both endpoint `trace.artifacts` rows inline. No impact-analysis query, no coverage query, and no Agent/Workflow caller yet — nothing in this codebase invokes this writer as part of any real composition; the root `traceability/` directory still has no tracked content.
 
-Consequence: the "Traceability by Design" principle is currently maintained by hand in documentation, not by machinery. Stage D deliverable.
+Consequence: the "Traceability by Design" principle still has no automated enforcement anywhere in this codebase — a real recording mechanism exists, but nothing calls it. Stage D deliverable.
 
 Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 

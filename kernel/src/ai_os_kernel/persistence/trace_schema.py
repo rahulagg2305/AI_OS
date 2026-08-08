@@ -53,7 +53,7 @@ import sqlalchemy as sa
 
 metadata = sa.MetaData(schema="trace")
 
-_ARTIFACT_TYPES = (
+ARTIFACT_TYPES = (
     "requirement",
     "architecture_element",
     "adr",
@@ -76,7 +76,7 @@ artifacts = sa.Table(
     sa.Column("location", sa.Text, nullable=False),
     sa.Column("version", sa.Text, nullable=False),
     sa.CheckConstraint(
-        "artifact_type IN (" + ", ".join(f"'{t}'" for t in _ARTIFACT_TYPES) + ")",
+        "artifact_type IN (" + ", ".join(f"'{t}'" for t in ARTIFACT_TYPES) + ")",
         name="ck_artifacts_artifact_type",
     ),
 )
@@ -84,7 +84,7 @@ artifacts = sa.Table(
 sa.Index("ix_artifacts_artifact_type", artifacts.c.artifact_type)
 sa.Index("ix_artifacts_external_id", artifacts.c.external_id)
 
-_LINK_RELATIONSHIPS = (
+LINK_RELATIONSHIPS = (
     "implements",
     "verifies",
     "realizes",
@@ -94,13 +94,13 @@ _LINK_RELATIONSHIPS = (
     "applies_to",
 )
 
-_LINK_CONFIDENCES = (
+LINK_CONFIDENCES = (
     "confirmed",
     "inferred",
     "provisional",
 )
 
-_LINK_CREATED_BY_TYPES = (
+LINK_CREATED_BY_TYPES = (
     "agent",
     "user",
     "process",
@@ -129,15 +129,15 @@ links = sa.Table(
     sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column("closed_at", sa.TIMESTAMP(timezone=True), nullable=True),
     sa.CheckConstraint(
-        "relationship IN (" + ", ".join(f"'{r}'" for r in _LINK_RELATIONSHIPS) + ")",
+        "relationship IN (" + ", ".join(f"'{r}'" for r in LINK_RELATIONSHIPS) + ")",
         name="ck_links_relationship",
     ),
     sa.CheckConstraint(
-        "confidence IN (" + ", ".join(f"'{c}'" for c in _LINK_CONFIDENCES) + ")",
+        "confidence IN (" + ", ".join(f"'{c}'" for c in LINK_CONFIDENCES) + ")",
         name="ck_links_confidence",
     ),
     sa.CheckConstraint(
-        "created_by_type IN (" + ", ".join(f"'{t}'" for t in _LINK_CREATED_BY_TYPES) + ")",
+        "created_by_type IN (" + ", ".join(f"'{t}'" for t in LINK_CREATED_BY_TYPES) + ")",
         name="ck_links_created_by_type",
     ),
 )

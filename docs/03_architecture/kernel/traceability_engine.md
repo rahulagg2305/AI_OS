@@ -8,9 +8,9 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (updated 2026-08-08, `P04-S02-M16-T01`)
 
-**Built: nothing.** `kernel/src/ai_os_kernel/traceability_engine/` contains a docstring-only `__init__.py`. The `trace.artifacts` and `trace.links` tables exist as schema only (migration `0007`) with no writer, no reader, and no impact-analysis query. Nothing creates a link anywhere; the root `traceability/` directory has no tracked content. Stage D deliverable. Data model: `../traceability/traceability_model.md`.
+**The `trace.links` writer is now real — the first writer either table has ever had.** `traceability_engine.link_writer.SqlTraceLinkWriter.record_link()` upserts both endpoint `trace.artifacts` rows inline (keyed deterministically off their own real-world identity — `artifact_type`+`external_id`, not a random id, a real design fork resolved by the product owner: see that module's own docstring) and records the `trace.links` row, idempotently for an already-open identical `(source_key, relationship, target_key)` triple. `close_link()` is real too. Proven against real Postgres: two independent calls naming the same real artifact converge on one row; re-asserting an open link is a no-op, not a constraint violation; closing then re-asserting opens a genuinely new row; every closed-vocabulary field is validated before any real database call. **Still nothing**: no impact-analysis query (`P04-S02-M16-T02`), no coverage query (`P04-S02-M16-T03`), and no Agent/Workflow caller — nothing invokes this writer in a real composition yet; the root `traceability/` directory still has no tracked content. Data model: `../traceability/traceability_model.md`.
 
 Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
