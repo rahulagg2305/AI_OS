@@ -63,8 +63,8 @@ Complies with the Dashboard Architecture (client of the platform, no embedded bu
 
 ## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
 
-**Status in code:** Not yet implemented
+**Status in code:** Partially implemented
 
-`dashboard/` is an empty directory. No TypeScript, React, Vite, or generated OpenAPI client exists anywhere in the repository, and the WebSocket endpoint the Dashboard would consume is itself unbuilt (see ADR-0014). This decision is scheduled for Stage F.
+**Updated 2026-08-08 (`P06-S02-M39-T01`): `dashboard/` is no longer an empty directory.** A real React 19 + TypeScript (`strict: true`) + Vite project exists, consuming only a real, generated API client (`openapi-typescript`/`openapi-fetch`, generated from the published `docs/07_api/openapi.json`; `npm run check:api-client` is the real, CI-enforced drift gate this decision's own table row requires). `App.tsx` makes one real call through that client and renders the result. Real production build, proven to genuinely run (served via `vite preview`, curled for a real 200). Not yet built: TanStack Router, TanStack Query, the WebSocket-into-cache pattern (the WebSocket endpoint it would consume is real as of `P06-S02-M37-T01`, but nothing in the Dashboard consumes it yet), Tailwind CSS, shadcn/ui, Recharts, and Playwright e2e tests — this step's own scope was deliberately the narrower "stand up the shell" goal, not this ADR's full target stack.
 
 Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

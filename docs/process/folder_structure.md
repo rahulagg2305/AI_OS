@@ -32,7 +32,7 @@ Practical consequence: if you are working in a fresh clone and a document refere
 | Folder | Corresponding specification | Why it's empty |
 |---|---|---|
 | `platform_services/` | `../03_architecture/services/` (7 documents) | Storage, Notification, Caching, Document Processing, Speech Gateway — still 0% built. **Git Integration is real (`P03-S01-M24-T01`) but deliberately lives at `kernel/src/ai_os_kernel/git_integration/`, not here** — a disclosed packaging decision (module_path stays a board label; whether Platform Services become a genuinely separate uv workspace tier is real, deferred, later architecture work), so this directory itself is still absent from a fresh clone. Redis is provisioned in Compose but **no Kernel code uses it**. |
-| `dashboard/` | `../13_dashboard/` (3 documents) | No frontend project scaffolded at all |
+| `dashboard/` | `../13_dashboard/` (3 documents) | Real as of `P06-S02-M39-T01` (2026-08-08): a running React/TS/Vite shell consuming a generated API client — see `feature_inventory.md` module 39's own row. Not built: everything else ADR-0018 names (TanStack Router/Query, Tailwind/shadcn/ui, Recharts, Playwright e2e) |
 | `tools/` | `../07_api/cli_design.md` | No `aios` CLI package, no entry-point script declared |
 | `ai_context/` | `../ai_context/context_pack_structure.md` | Structure fully specified; zero packs written |
 | `knowledge/` | `../knowledge/knowledge_base_structure.md` | Structure fully specified; zero content |
