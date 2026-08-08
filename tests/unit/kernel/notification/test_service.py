@@ -16,8 +16,24 @@ from collections.abc import Callable, Generator
 
 from ai_os_kernel.event_bus.bus import InProcessEventBus
 from ai_os_kernel.event_bus.models import Event
+from ai_os_kernel.notification.models import Notification
 from ai_os_kernel.notification.service import NotificationService
 from ai_os_kernel.notification.webhook import WebhookChannel
+
+
+class _FakeNotificationDeliveryRecorder:
+    """A real, deterministic fake (ADR-0004: interface-driven,
+    configuration over code) — this file proves the service's own
+    real event-classification and delivery logic, not the real
+    Postgres-backed recorder, which has its own dedicated,
+    real-database test (`test_recorder.py`)."""
+
+    def __init__(self) -> None:
+        self.recorded: list[Notification] = []
+
+    async def record(self, notification: Notification) -> None:
+        self.recorded.append(notification)
+
 
 # Real per-consumer-task delivery is genuinely asynchronous (the bus's
 # own per-subscriber queue + consumer task, `event_bus/bus.py`'s own
@@ -70,7 +86,8 @@ async def test_a_real_approval_event_genuinely_reaches_the_real_webhook() -> Non
     with _webhook_server() as handler:
         bus = InProcessEventBus()
         channel = WebhookChannel(webhook_url=handler.base_url)  # type: ignore[attr-defined]
-        service = NotificationService(event_bus=bus, channel=channel)
+        recorder = _FakeNotificationDeliveryRecorder()
+        service = NotificationService(event_bus=bus, channel=channel, recorder=recorder)
         try:
             await bus.publish(
                 Event(
@@ -90,6 +107,14 @@ async def test_a_real_approval_event_genuinely_reaches_the_real_webhook() -> Non
             assert body["notification_type"] == "approval"
             assert body["workflow_id"] == "wf-real-1"
             assert body["payload"] == {"approvalId": "appr-1"}
+
+            assert await _wait_until(
+                lambda: len(recorder.recorded) == 1,
+                timeout_seconds=_POLL_TIMEOUT_SECONDS,
+                interval=_POLL_INTERVAL_SECONDS,
+            )
+            assert recorder.recorded[0].status == "sent"
+            assert recorder.recorded[0].notification_type == "approval"
         finally:
             service.close()
             await bus.aclose()
@@ -99,7 +124,9 @@ async def test_real_failure_and_completion_events_both_genuinely_notify() -> Non
     with _webhook_server() as handler:
         bus = InProcessEventBus()
         channel = WebhookChannel(webhook_url=handler.base_url)  # type: ignore[attr-defined]
-        service = NotificationService(event_bus=bus, channel=channel)
+        service = NotificationService(
+            event_bus=bus, channel=channel, recorder=_FakeNotificationDeliveryRecorder()
+        )
         try:
             await bus.publish(
                 Event(event_type="workflow.failed", source="test", workflow_id="wf-a")
@@ -124,7 +151,9 @@ async def test_an_unrelated_event_type_is_genuinely_not_notified() -> None:
     with _webhook_server() as handler:
         bus = InProcessEventBus()
         channel = WebhookChannel(webhook_url=handler.base_url)  # type: ignore[attr-defined]
-        service = NotificationService(event_bus=bus, channel=channel)
+        service = NotificationService(
+            event_bus=bus, channel=channel, recorder=_FakeNotificationDeliveryRecorder()
+        )
         try:
             await bus.publish(Event(event_type="system.pack_activated", source="test"))
             # A real, bounded wait proving *absence* — the same "genuinely
@@ -142,7 +171,9 @@ async def test_close_genuinely_unsubscribes() -> None:
     with _webhook_server() as handler:
         bus = InProcessEventBus()
         channel = WebhookChannel(webhook_url=handler.base_url)  # type: ignore[attr-defined]
-        service = NotificationService(event_bus=bus, channel=channel)
+        service = NotificationService(
+            event_bus=bus, channel=channel, recorder=_FakeNotificationDeliveryRecorder()
+        )
         service.close()
 
         await bus.publish(

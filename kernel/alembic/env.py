@@ -14,6 +14,7 @@ from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config
 
 from ai_os_kernel.context_manager.schema import metadata as context_metadata
+from ai_os_kernel.notification.schema import metadata as notification_metadata
 from ai_os_kernel.persistence.catalog_schema import metadata as catalog_metadata
 from ai_os_kernel.persistence.cross_schema_foreign_keys import (
     register_workflow_run_manifest_foreign_key,
@@ -52,6 +53,7 @@ target_metadata = [
     knowledge_metadata,
     security_metadata,
     context_metadata,
+    notification_metadata,
 ]
 
 

@@ -32,6 +32,17 @@ docstring already names for the WebSocket endpoint). This service
 subscribes for real and delivers for real; wiring a real publisher
 into the Human Approval Manager or Quality Gate Engine is separate,
 unbuilt work.
+
+**Delivery status is now durably recorded** (`P06-S05-M22-T02`) —
+:class:`~ai_os_kernel.notification.recorder.NotificationDeliveryRecorder`
+is a required collaborator, the identical "no silent no-op default"
+convention :class:`~ai_os_kernel.workflow_engine.quality_gate.
+QualityGateStepExecutor`'s own required `gate_sources` already
+establishes; a fake, in-memory implementation (ADR-0004) is the real
+seam this service's own pure-logic unit tests substitute, since
+proving *this* module correctly classifies and delivers does not need
+a real database — the real recorder's own correctness is proven
+separately, against real Postgres, in `test_recorder.py`.
 """
 
 from __future__ import annotations
@@ -41,6 +52,7 @@ from typing import Protocol
 from ai_os_kernel.event_bus.bus import EventBus, Subscription
 from ai_os_kernel.event_bus.models import Event
 from ai_os_kernel.notification.models import Notification
+from ai_os_kernel.notification.recorder import NotificationDeliveryRecorder
 from ai_os_kernel.observability.logging import get_logger
 
 logger = get_logger(__name__)
@@ -88,8 +100,15 @@ class NotificationService:
     — real cleanup, the identical shape `InProcessEventBus.aclose()`
     itself already establishes for its own subscribers."""
 
-    def __init__(self, *, event_bus: EventBus, channel: DeliveryChannel) -> None:
+    def __init__(
+        self,
+        *,
+        event_bus: EventBus,
+        channel: DeliveryChannel,
+        recorder: NotificationDeliveryRecorder,
+    ) -> None:
         self._channel = channel
+        self._recorder = recorder
         self._subscription: Subscription = event_bus.subscribe(None, self._on_event)
         self._event_bus = event_bus
 
@@ -101,8 +120,8 @@ class NotificationService:
         # `status="pending"` is real and honest here — the outcome is
         # not yet known. `WebhookChannel.deliver` never sends this
         # field over the wire (the receiver has no use for the
-        # sender's own not-yet-final delivery bookkeeping); only this
-        # method's own log line below records the real, final outcome.
+        # sender's own not-yet-final delivery bookkeeping); the
+        # recorder below persists the real, final outcome instead.
         pending = Notification(
             notification_type=notification_type,
             channel=self._channel.name,
@@ -112,11 +131,13 @@ class NotificationService:
             payload=event.payload,
         )
         delivered = await self._channel.deliver(pending)
+        final = pending.model_copy(update={"status": "sent" if delivered else "failed"})
+        await self._recorder.record(final)
         logger.info(
             "notification.delivery_attempted",
             notification_type=notification_type,
             channel=self._channel.name,
-            status="sent" if delivered else "failed",
+            status=final.status,
             event_id=event.event_id,
         )
 
