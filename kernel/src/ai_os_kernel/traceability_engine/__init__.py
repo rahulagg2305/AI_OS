@@ -16,13 +16,21 @@ and coverage queries (e.g. "which requirements have no verifying test").
   traversed bidirectionally (a real, product-owner-decided design
   choice — see that module's own docstring), with a real cycle guard.
   See :mod:`ai_os_kernel.traceability_engine.impact_query`.
+- :func:`~ai_os_kernel.traceability_engine.coverage_query.find_uncovered_requirements`
+  (added 2026-08-08, ``P04-S02-M16-T03``, FR-115) — every real
+  requirement artifact with no real, open, ``confirmed``-confidence
+  ``verifies`` link pointing at it (a real, product-owner-decided
+  design choice: a merely ``inferred``/``provisional`` link does not
+  discharge the coverage obligation). See
+  :mod:`ai_os_kernel.traceability_engine.coverage_query`.
 
-Not yet implemented: coverage analysis (``P04-S02-M16-T03``) and any
-Agent/Workflow wiring — nothing calls this writer or query yet.
+Not yet implemented: any Agent/Workflow wiring — nothing calls this
+writer or either query yet.
 
 See docs/03_architecture/kernel/traceability_engine.md.
 """
 
+from ai_os_kernel.traceability_engine.coverage_query import find_uncovered_requirements
 from ai_os_kernel.traceability_engine.errors import (
     TraceabilityError,
     TraceabilityValidationError,
@@ -44,5 +52,6 @@ __all__ = [
     "TraceabilityValidationError",
     "compute_artifact_key",
     "find_affected_artifacts",
+    "find_uncovered_requirements",
     "new_link_id",
 ]

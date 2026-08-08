@@ -8,9 +8,9 @@
 
 ---
 
-## Implementation Status (updated 2026-08-08, `P04-S02-M16-T02`)
+## Implementation Status (updated 2026-08-08, `P04-S02-M16-T03`)
 
-**A real writer and a real impact query now exist** — see `../kernel/traceability_engine.md`'s own Implementation Status for the full detail. `SqlTraceLinkWriter` genuinely records/closes `trace.links` rows, upserting both endpoint `trace.artifacts` rows inline; `find_affected_artifacts()` genuinely answers §7's own "what is affected if I change this module?" query via a real, bidirectional, cycle-safe recursive CTE. No coverage query, and no Agent/Workflow caller yet — nothing in this codebase invokes this writer or query as part of any real composition; the root `traceability/` directory still has no tracked content.
+**A real writer and both real queries now exist** — see `../kernel/traceability_engine.md`'s own Implementation Status for the full detail. `SqlTraceLinkWriter` genuinely records/closes `trace.links` rows, upserting both endpoint `trace.artifacts` rows inline; `find_affected_artifacts()` genuinely answers §7's own "what is affected if I change this module?" query via a real, bidirectional, cycle-safe recursive CTE; `find_uncovered_requirements()` genuinely answers §7's own "which requirements are not covered by tests?" query. No Agent/Workflow caller yet — nothing in this codebase invokes this writer or either query as part of any real composition; the root `traceability/` directory still has no tracked content.
 
 Consequence: the "Traceability by Design" principle still has no automated enforcement anywhere in this codebase — a real recording mechanism exists, but nothing calls it. Stage D deliverable.
 
