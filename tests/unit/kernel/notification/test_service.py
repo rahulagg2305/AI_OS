@@ -1,0 +1,154 @@
+"""Real, end-to-end tests for :mod:`ai_os_kernel.notification.service`
+— a real `InProcessEventBus`, a real `WebhookChannel`, and a real local
+HTTP server, exactly the way a real Kernel process would compose them
+(no fakes, no mocks): publishing a real `Event` to the real bus must
+genuinely reach the real server as a real HTTP POST.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import http.server
+import json
+import threading
+from collections.abc import Callable, Generator
+
+from ai_os_kernel.event_bus.bus import InProcessEventBus
+from ai_os_kernel.event_bus.models import Event
+from ai_os_kernel.notification.service import NotificationService
+from ai_os_kernel.notification.webhook import WebhookChannel
+
+# Real per-consumer-task delivery is genuinely asynchronous (the bus's
+# own per-subscriber queue + consumer task, `event_bus/bus.py`'s own
+# docstring) — a short, bounded real wait for the real HTTP POST to
+# land, not a fixed sleep guessing at timing.
+_POLL_TIMEOUT_SECONDS = 2.0
+_POLL_INTERVAL_SECONDS = 0.02
+
+
+class _RecordingHandler(http.server.BaseHTTPRequestHandler):
+    received_bodies: list[bytes] = []
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        type(self).received_bodies.append(self.rfile.read(length))
+        self.send_response(200)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        pass
+
+
+@contextlib.contextmanager
+def _webhook_server() -> Generator[type[_RecordingHandler], None, None]:
+    handler = type("_Handler", (_RecordingHandler,), {"received_bodies": []})
+    server = http.server.HTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        handler.base_url = f"http://127.0.0.1:{server.server_port}"  # type: ignore[attr-defined]
+        yield handler
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+async def _wait_until(
+    predicate: Callable[[], bool], *, timeout_seconds: float, interval: float
+) -> bool:
+    deadline = asyncio.get_event_loop().time() + timeout_seconds
+    while asyncio.get_event_loop().time() < deadline:
+        if predicate():
+            return True
+        await asyncio.sleep(interval)
+    return predicate()
+
+
+async def test_a_real_approval_event_genuinely_reaches_the_real_webhook() -> None:
+    with _webhook_server() as handler:
+        bus = InProcessEventBus()
+        channel = WebhookChannel(webhook_url=handler.base_url)  # type: ignore[attr-defined]
+        service = NotificationService(event_bus=bus, channel=channel)
+        try:
+            await bus.publish(
+                Event(
+                    event_type="approval.requested",
+                    source="test",
+                    workflow_id="wf-real-1",
+                    payload={"approvalId": "appr-1"},
+                )
+            )
+
+            assert await _wait_until(
+                lambda: len(handler.received_bodies) == 1,
+                timeout_seconds=_POLL_TIMEOUT_SECONDS,
+                interval=_POLL_INTERVAL_SECONDS,
+            )
+            body = json.loads(handler.received_bodies[0])
+            assert body["notification_type"] == "approval"
+            assert body["workflow_id"] == "wf-real-1"
+            assert body["payload"] == {"approvalId": "appr-1"}
+        finally:
+            service.close()
+            await bus.aclose()
+
+
+async def test_real_failure_and_completion_events_both_genuinely_notify() -> None:
+    with _webhook_server() as handler:
+        bus = InProcessEventBus()
+        channel = WebhookChannel(webhook_url=handler.base_url)  # type: ignore[attr-defined]
+        service = NotificationService(event_bus=bus, channel=channel)
+        try:
+            await bus.publish(
+                Event(event_type="workflow.failed", source="test", workflow_id="wf-a")
+            )
+            await bus.publish(
+                Event(event_type="workflow.completed", source="test", workflow_id="wf-b")
+            )
+
+            assert await _wait_until(
+                lambda: len(handler.received_bodies) == 2,
+                timeout_seconds=_POLL_TIMEOUT_SECONDS,
+                interval=_POLL_INTERVAL_SECONDS,
+            )
+            types = {json.loads(b)["notification_type"] for b in handler.received_bodies}
+            assert types == {"failure", "completion"}
+        finally:
+            service.close()
+            await bus.aclose()
+
+
+async def test_an_unrelated_event_type_is_genuinely_not_notified() -> None:
+    with _webhook_server() as handler:
+        bus = InProcessEventBus()
+        channel = WebhookChannel(webhook_url=handler.base_url)  # type: ignore[attr-defined]
+        service = NotificationService(event_bus=bus, channel=channel)
+        try:
+            await bus.publish(Event(event_type="system.pack_activated", source="test"))
+            # A real, bounded wait proving *absence* — the same "genuinely
+            # did not happen, not merely not-yet-observed" discipline
+            # every other negative-outcome test in this codebase uses.
+            await asyncio.sleep(0.1)
+
+            assert handler.received_bodies == []
+        finally:
+            service.close()
+            await bus.aclose()
+
+
+async def test_close_genuinely_unsubscribes() -> None:
+    with _webhook_server() as handler:
+        bus = InProcessEventBus()
+        channel = WebhookChannel(webhook_url=handler.base_url)  # type: ignore[attr-defined]
+        service = NotificationService(event_bus=bus, channel=channel)
+        service.close()
+
+        await bus.publish(
+            Event(event_type="approval.requested", source="test", workflow_id="wf-real-1")
+        )
+        await asyncio.sleep(0.1)
+
+        assert handler.received_bodies == []
+        await bus.aclose()

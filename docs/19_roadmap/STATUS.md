@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 90%** (222 of 246 Task-equivalents complete)
+**Overall: 90%** (222.5 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -43,7 +43,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P06 (F) | S02 Realtime Stream | 1 | 1 | 0 | 0 | 100% |
 | P06 (F) | S03 Dashboard | 3 | 1 | 1 | 1 | 50% |
 | P06 (F) | S04 Command Line Interface | 1 | 0 | 0 | 1 | 0% |
-| P06 (F) | S05 Notifications | 2 | 0 | 0 | 2 | 0% |
+| P06 (F) | S05 Notifications | 2 | 0 | 1 | 1 | 25% |
 | P06 (F) | S06 Voice | 2 | 0 | 0 | 2 | 0% |
 | P07 (G) | S01 Deployment and Infrastructure | 3 | 1 | 2 | 0 | 67% |
 | P07 (G) | S02 Security Hardening | 3 | 3 | 0 | 0 | 100% |
@@ -61,21 +61,22 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 97% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 17 | 97% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
-| P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 5 | 46% |
+| P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 5 | 50% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 69% |
 | P08 (Stage H) - Expansion | 9 | 7 | 83% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |
 
 ## Ready to start
 
-7 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+8 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P05-S01-M26-T01` Parser adapters
 - `P06-S03-M39-T03` Cost and quality views
 - `P06-S04-M38-T01` aios CLI
-- `P06-S05-M22-T01` Notification channels
+- `P06-S05-M22-T02` Delivery status recording
 - `P06-S06-M25-T01` Speech Gateway
+- `P07-S03-M42-T02` Cost anomaly alerting
 - `P08-S01-M29-T07` performance agent
 
 ## Dependency review signal

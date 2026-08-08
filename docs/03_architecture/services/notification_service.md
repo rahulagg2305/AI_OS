@@ -8,9 +8,15 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (updated 2026-08-08, `P06-S05-M22-T01`)
 
-**Built: nothing. This document is a design specification only.** No Platform Service exists in code — the `platform_services/` directory has **no tracked content at all**, so it is absent from a fresh clone (git does not track empty directories). No Kernel component consumes this service. No channel adapter (Dashboard, Voice, Email, Webhook) exists, and the two systems that would be its primary producers — the Human Approval Manager and the Quality Gate Engine — are themselves 0% built. Stage F deliverable.
+**Built: a real, minimal first increment — one real channel, no framework.** `ai_os_kernel.notification.service.NotificationService` genuinely subscribes to the real `InProcessEventBus` and delivers a real, typed `Notification` (§8's own fields: type, channel, status, workflow_id, trace_id, timestamp) for this ticket's own three literal categories ("approval, failure and completion notices") via one real channel, `ai_os_kernel.notification.webhook.WebhookChannel` (a real HTTP POST to a configurable URL — §4's "Webhook / external system callbacks" entry). Proven end to end against a real local HTTP server: a real published `Event` genuinely reaches it as a real POST, an unrelated event type is genuinely not notified, and closing the service genuinely unsubscribes.
+
+**Two real, deliberate departures from this document's own full design, both design forks resolved via `AskUserQuestion` before writing code:**
+1. **Built inside the Kernel** (`ai_os_kernel.notification`), not as the separate `platform_services/notification` package this document's own `module_path` names. `platform_services/` remains undocumented as a real `uv` workspace member (still no tracked content), and the real `EventBus` this service needs has no `ai-os-sdk` Protocol yet — only the Kernel-local one (see `event_bus.md`'s own Implementation Status). A brand-new package importing `ai_os_kernel.event_bus` directly would start a new instance of the "pack imports Kernel internals" pattern CLAUDE.md says not to copy in new work. Extracting a real, separate package is later work, once the SDK's own `EventBus` Protocol exists or a second real consumer justifies the split.
+2. **One channel, no framework**: no Notification API, Preference Manager, Channel Router, Delivery Manager, retry policy, or Dashboard/Voice/Email adapters — this ticket's own literal Goal/Input/Output ("Deliver approval, failure and completion notices" / "A platform event" / "A delivered notification") does not ask for the full §5 structure.
+
+**Still genuinely 0% wired to a real producer**: the identical, already-disclosed gap `routes/stream.py`'s own module docstring names for the WebSocket endpoint — no real Kernel component (the Human Approval Manager, the Quality Gate Engine) calls `InProcessEventBus.publish()` in production yet, confirmed again while investigating this ticket. This service is a real, proven consumer with nothing real upstream of it yet.
 
 Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
