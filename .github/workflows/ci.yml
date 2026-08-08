@@ -180,6 +180,17 @@ jobs:
       - name: pytest tests/workflow
         if: hashFiles('tests/workflow/**') != ''
         run: uv run pytest tests/workflow -v
+      # Real chaos tests (P07-S03-M42-T01) — a sibling of tests/unit/
+      # tests/integration, not nested inside either, so the coverage-gated
+      # step above never discovers it; needs its own step, the identical
+      # `hashFiles` guard shape tests/workflow already establishes. Real
+      # Postgres via testcontainers (test_worker_crash_recovery.py) and a
+      # real local HTTP server (test_provider_outage_recovery.py) — no
+      # Docker-daemon-only dependency, so this runs unconditionally once
+      # the directory exists, unlike tests/security's Docker-gated subset.
+      - name: pytest tests/chaos
+        if: hashFiles('tests/chaos/**') != ''
+        run: uv run pytest tests/chaos -v
 
   security:
     name: Security checks
