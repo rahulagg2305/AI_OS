@@ -2,9 +2,9 @@
 
 **Project:** AI_OS (AI Operating System)
 **Document:** Software Engineering Pack – Workflows
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Approved
-**Last Updated:** 2026-08-06 (`se.delivery_pipeline` gained a real `code-review` agent step and its own `quality-gate-code-review-clean` gate, between `quality-gate-lint-clean` and `test` — `P03-S03-M30-T03`, FR-045's own bounded review-revise loop, reusing the existing `retryPolicy`/gate-retry mechanism unchanged, zero new Kernel code — corrected the "no ... code-reviewer" claim in the Currently Implemented Subset section below. Prior: 2026-08-03, `se.delivery_pipeline` gained a real `human_approval` point, `approve-git-push`, between `documentation` and `git-push` — `P03-S03-M30-T05` — corrected the "none of which this pipeline declares" claim in the Currently Implemented Subset section below for `human_approval` specifically (still accurate for `tool`/`parallel`/`foreach`/`sub_workflow`); also corrected §12's own permissions table row, which was missing `git:write` (declared in the real manifest since `P03-S04-M31-T04`, not itself a change this step made). Prior: 2026-08-02, `se.delivery_pipeline` gained a real `route-after-build` decision step, `P02-S01-M05-T15` — corrected the "no decisions" claim in the Currently Implemented Subset section below; the section's own graph diagram remains a known-stale pre-Lint/pre-gate snapshot, disclosed rather than silently left wrong. Prior: 2026-07-30, `se.delivery_pipeline` gained Requirements Analyst as its own first step — the graph is now 5 real agent steps, not 4; the raw `requirement` input now reaches Requirements Analyst first, not Architecture directly. Prior: 2026-07-28, added a "Currently Implemented Subset" section documenting the real `se.delivery_pipeline` workflow, and a row for it in §12's own permissions table)
+**Last Updated:** 2026-08-08 (`P08-S02-M30-T01`: `se.product_creation` gained a real, buildable 7-of-14-step prefix — requirements-analyst through technical-planner, both real Human Approval Points included — proven end to end against real Postgres; genuinely blocked at step 8, `foreach` still not a real `StepType`; see the new "Currently Implemented Subset" subsection and §3's own updated note. Prior: 2026-08-06, `se.delivery_pipeline` gained a real `code-review` agent step and its own `quality-gate-code-review-clean` gate, between `quality-gate-lint-clean` and `test` — `P03-S03-M30-T03`, FR-045's own bounded review-revise loop, reusing the existing `retryPolicy`/gate-retry mechanism unchanged, zero new Kernel code — corrected the "no ... code-reviewer" claim in the Currently Implemented Subset section below. Prior: 2026-08-03, `se.delivery_pipeline` gained a real `human_approval` point, `approve-git-push`, between `documentation` and `git-push` — `P03-S03-M30-T05` — corrected the "none of which this pipeline declares" claim in the Currently Implemented Subset section below for `human_approval` specifically (still accurate for `tool`/`parallel`/`foreach`/`sub_workflow`); also corrected §12's own permissions table row, which was missing `git:write` (declared in the real manifest since `P03-S04-M31-T04`, not itself a change this step made). Prior: 2026-08-02, `se.delivery_pipeline` gained a real `route-after-build` decision step, `P02-S01-M05-T15` — corrected the "no decisions" claim in the Currently Implemented Subset section below; the section's own graph diagram remains a known-stale pre-Lint/pre-gate snapshot, disclosed rather than silently left wrong. Prior: 2026-07-30, `se.delivery_pipeline` gained Requirements Analyst as its own first step — the graph is now 5 real agent steps, not 4; the raw `requirement` input now reaches Requirements Analyst first, not Architecture directly. Prior: 2026-07-28, added a "Currently Implemented Subset" section documenting the real `se.delivery_pipeline` workflow, and a row for it in §12's own permissions table)
 
 ---
 
@@ -45,7 +45,7 @@ Step type vocabulary: `agent`, `tool`, `decision`, `parallel`, `foreach`, `sub_w
 
 *(This is this document's `## Implementation Status` section — kept under its established name rather than renamed, because the exact phrase "Currently Implemented Subset" is a cross-reference target from several other live documents. Formally recorded as a permitted variant in `docs/process/standing_rules.md`.)*
 
-§§3–9 below describe this pack's full, intended workflow design. As of this date, exactly **one** real, declared workflow exists — `se.delivery_pipeline` — built under a separate product-owner reprioritization toward "the shortest real path to a working multi-agent software-engineering pipeline" (see `docs/19_roadmap/implementation_status.md`'s own header). It is **not** an implementation of `se.implement_task` (§4) — that document was checked directly against the real, shipped shape below during this reconciliation, and the two diverge on purpose, structure, and even which agents participate. This section records the real shape here, rather than force-renaming it into a fork of `se.implement_task` or leaving it undocumented.
+§§3–9 below describe this pack's full, intended workflow design. As of this date, exactly **two** real, declared workflows exist — `se.delivery_pipeline`, built under a separate product-owner reprioritization toward "the shortest real path to a working multi-agent software-engineering pipeline" (see `docs/19_roadmap/implementation_status.md`'s own header); and, as of `P08-S02-M30-T01`, a real, buildable **7-of-14-step prefix** of §3's own `se.product_creation` below. `se.delivery_pipeline` is **not** an implementation of `se.implement_task` (§4) — that document was checked directly against the real, shipped shape below during this reconciliation, and the two diverge on purpose, structure, and even which agents participate. This section records the real shape here, rather than force-renaming it into a fork of `se.implement_task` or leaving it undocumented.
 
 ### `se.delivery_pipeline` — Reprioritization Proof-of-Concept Pipeline
 
@@ -74,6 +74,14 @@ Both are real, intentional, differently-shaped things — `se.delivery_pipeline`
 **Step-output hand-off:** each step's genuine, persisted output reaches the next step's genuine input through `ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver` (a Context Manager resolver, not a new orchestration mechanism — see `context_manager.md` §4 and `workflow_architecture.md`'s own Context Management section, both updated alongside this document to record it).
 
 **No Quality Gates, Human Approval Points, or declared Tools** — deliberately out of scope for this proof-of-concept slice; see `implementation_status.md` for the recommended next steps that would add them.
+
+### `se.product_creation` — Real, Buildable Prefix (7 of 14 steps, `P08-S02-M30-T01`)
+
+**Real today, genuinely partial.** Declared in `capability_packs/software-engineering/workflows/product_creation.yaml`, composed in `ai_os_kernel.workflow_engine.product_creation`. Covers exactly steps 1–7 of §3's own documented graph below — requirements-analyst -> `quality-gate-requirements-complete` -> `approve-requirements` -> architecture -> `quality-gate-architecture-compliance` -> `approve-architecture` -> technical-planner — proven end to end against real Postgres, through both real Human Approval Points, to genuine completion.
+
+**Genuinely, structurally blocked at step 8** (`foreach implementation_plan.tasks -> sub_workflow se.implement_task`): `foreach` is not a real `StepType` (exactly seven members, confirmed directly, not assumed — the identical gap `P03-S02-M29-T07`/`T08` already found for `technical-planner`'s own plan-artifact output). Steps 8–14 (the dynamic fan-out itself, the nine parallel quality gates, documentation, release, and the final pull request) are therefore genuinely unbuilt — a real, disclosed scope limit, not an oversight, resolved with the product owner before writing code.
+
+**Both quality gates in this prefix are real `quality_gate` steps, deliberately unconfigured.** Neither `requirements-analyst` nor `architecture`'s own real output schema has a pass/fail-shaped field to read (both are free-text `analysis`/`content` strings); `QualityGateStepExecutor`'s own documented behaviour for a gate id absent from its `gate_sources` — a real, honest pass with empty outputs — is used as-is, a disclosed no-op today, not a fabricated signal.
 
 ---
 
@@ -106,6 +114,8 @@ Both are real, intentional, differently-shaped things — `se.delivery_pipeline`
 13  human_approval approval:decide:release
 14  tool           git.create_pull_request
 ```
+
+**Steps 1–7 are real today** — see the "Currently Implemented Subset" section above for the genuine, proven prefix and exactly why step 8 stops it there.
 
 Notes that matter:
 - Steps 3 and 6 are the governance line: no implementation begins until requirements and architecture are human-approved (FR-111).
