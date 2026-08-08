@@ -67,8 +67,7 @@ def test_record_writes_a_real_row_with_the_given_values(database_url: str) -> No
                     (
                         await connection.execute(
                             sa.select(notification_deliveries).where(
-                                notification_deliveries.c.workflow_id
-                                == "wf_real_notification_1"
+                                notification_deliveries.c.workflow_id == "wf_real_notification_1"
                             )
                         )
                     )
@@ -151,8 +150,7 @@ def test_repeated_calls_each_insert_their_own_distinct_row(database_url: str) ->
                         sa.select(sa.func.count())
                         .select_from(notification_deliveries)
                         .where(
-                            notification_deliveries.c.workflow_id
-                            == "wf_real_notification_repeat"
+                            notification_deliveries.c.workflow_id == "wf_real_notification_repeat"
                         )
                     )
                 ).scalar_one()
