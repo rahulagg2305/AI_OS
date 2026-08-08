@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 89%** (218.5 of 246 Task-equivalents complete)
+**Overall: 89%** (219.5 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -49,7 +49,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P07 (G) | S02 Security Hardening | 3 | 3 | 0 | 0 | 100% |
 | P07 (G) | S03 Performance, Chaos and Coverage | 2 | 0 | 1 | 1 | 25% |
 | P08 (H) | S01 Remaining Pack Agents | 7 | 6 | 0 | 1 | 86% |
-| P08 (H) | S02 Remaining Pack Workflows | 2 | 0 | 1 | 1 | 25% |
+| P08 (H) | S02 Remaining Pack Workflows | 2 | 1 | 1 | 0 | 75% |
 | P09 (-) | S01 Roadmap System Restructuring (R1-R4) | 5 | 5 | 0 | 0 | 100% |
 
 ## Phase totals
@@ -63,12 +63,12 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 3 | 27% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 69% |
-| P08 (Stage H) - Expansion | 9 | 6 | 72% |
+| P08 (Stage H) - Expansion | 9 | 7 | 83% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |
 
 ## Ready to start
 
-9 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+8 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P03-S01-M20-T05` Stronger isolation tier
 - `P05-S01-M26-T01` Parser adapters
@@ -78,7 +78,6 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 - `P06-S05-M22-T01` Notification channels
 - `P06-S06-M25-T01` Speech Gateway
 - `P08-S01-M29-T07` performance agent
-- `P08-S02-M30-T02` se.implement_task workflow
 
 ## Dependency review signal
 

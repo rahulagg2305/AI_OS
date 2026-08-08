@@ -1,0 +1,145 @@
+# se.implement_task (P08-S02-M30-T02) — a real, buildable version of
+# workflows.md §4's own documented "Single Task Implementation
+# (sub-workflow)" graph, built from real, already-existing components
+# only — a disclosed departure from that document's own eight-step
+# sketch, not a hidden one. Design fork resolved with the product owner
+# before writing code (stop-and-ask, `AskUserQuestion`); this file
+# records the chosen shape and exactly why.
+#
+# **Three real gaps §4's own graph assumes but this codebase does not
+# yet have, each resolved by reusing something real instead of
+# inventing it:**
+#
+# 1. No `backend-developer` agent exists (only `build`/`frontend-developer`/
+#    `database` are real — `agents.md`'s own catalog confirms this, and
+#    `feature_inventory.md`'s own module-29 row already flagged
+#    `backend-developer` as "a real, disclosed roadmap gap ... has no
+#    ticket anywhere in this roadmap"). `WorkflowStep.agentId` is also
+#    static per step — there is no real, data-driven "route by
+#    task.kind" mechanism today (a `decision` step's own condition can
+#    only read a *prior step's* persisted output field, never the
+#    workflow's own raw top-level input, without an extra echo step).
+#    `build` — already documented as "deliberately generic and
+#    stack-agnostic" (`agents.md`) — stands in as this workflow's one,
+#    fixed implementer, the identical role it already plays standing in
+#    for "backend-developer" in `se.product_creation`'s own closest
+#    real analogue note (`workflows.md` §2).
+# 2. No `fs.apply_patch`/`test.run` Tool steps exist. Every real agent
+#    in this pack that needs to write or run something already does so
+#    *directly*, through its own `sandbox:execute` permission (`build`
+#    writes; `qa-test` runs) — not via a separate, caller-visible `tool`
+#    step. This workflow follows that same, already-proven shape:
+#    `implement` (an agent step) writes; `qa-test` (an agent step) runs
+#    — no `tool`-type step declared at all.
+# 3. No per-loop attempt-counting mechanism exists for a `decision`
+#    step's own condition (`DecisionCondition` reads one named prior
+#    step's one field — it cannot count how many times a step has
+#    already run). The two real `decision` steps below (`tests-passed`,
+#    `no-blocking-findings`) branch backward to `implement` exactly as
+#    §4's own iteration loops describe — genuinely supported: a
+#    decision step's own branch target may legally reference an
+#    *earlier* step (`WorkflowDefinition`'s own forward-reference
+#    validator only restricts `condition.sourceStepId`, confirmed by
+#    direct inspection). But there is no labelled "escalate after 3
+#    attempts" branch — the only real bound on how many times these
+#    loops may cycle is this workflow's own composition-level, whole-run
+#    `max_iterations` (`ai_os_kernel.workflow_engine.implement_task`), a
+#    coarser, honestly-disclosed safety net, not §4's own finer-grained
+#    "combined iteration budget."
+#
+# `quality-gate-tests-pass` at the end is a real, configured gate (not
+# a disclosed no-op like `se.product_creation`'s own two gates): it
+# reads `qa-test`'s own real, persisted `passed` field — genuinely
+# meaningful, since both decision steps already only let a run reach
+# this point once `qa-test`/`code-review` both reported real success.
+
+id: se.implement_task
+name: Single Task Implementation
+description: >-
+  Implements one task to a passing, reviewed state: write the file,
+  run its tests, review it, looping back to a fresh write attempt
+  whenever tests fail or the review finds a blocking issue — the real,
+  buildable version of workflows.md §4's own documented graph, built
+  entirely from real, already-existing agents and step types. See this
+  file's own header comment for exactly which three documented
+  components (`backend-developer`, `fs.apply_patch`/`test.run` tool
+  steps, a per-loop attempt counter) are not real yet, and what stands
+  in for each.
+version: 0.1.0
+trigger: manual
+
+inputs:
+  type: object
+  properties:
+    task:
+      type: string
+      description: >-
+        The task instruction to implement — Requirements Analyst-style
+        free text, read via the Context Manager's `WorkflowStateResolver`
+        exactly as `product_creation.yaml`'s own `specification` input
+        already is.
+  required: [task]
+  additionalProperties: false
+
+outputs:
+  type: object
+  properties:
+    filePath:
+      type: string
+    testsPassed:
+      type: boolean
+  required: [filePath, testsPassed]
+  additionalProperties: false
+
+agents:
+  - software-engineering/build
+  - software-engineering/qa-test
+  - software-engineering/code-review
+
+qualityGates:
+  - se.unit_tests
+
+failureHandling:
+  onError: halt
+
+steps:
+  - id: implement
+    type: agent
+    agentId: software-engineering/build
+    promptId: build.write_file
+    promptVersion: 0.1.0
+    modelAlias: coding-strong
+
+  - id: qa-test
+    type: agent
+    agentId: software-engineering/qa-test
+
+  - id: tests-passed
+    type: decision
+    condition:
+      sourceStepId: qa-test
+      field: passed
+      equals: true
+    branches:
+      "true": code-review
+      "false": implement
+
+  - id: code-review
+    type: agent
+    agentId: software-engineering/code-review
+    promptId: codereview.produce_findings
+    promptVersion: 0.1.0
+    modelAlias: coding-strong
+
+  - id: no-blocking-findings
+    type: decision
+    condition:
+      sourceStepId: code-review
+      field: passed
+      equals: true
+    branches:
+      "true": quality-gate-tests-pass
+      "false": implement
+
+  - id: quality-gate-tests-pass
+    type: quality_gate
