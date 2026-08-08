@@ -286,7 +286,14 @@ jobs:
       - run: npm ci
         if: hashFiles('dashboard/package.json') != ''
         working-directory: dashboard
-      - run: npx tsc --noEmit
+      # `tsc --noEmit` alone is a real, silent no-op here (found
+      # `P06-S03-M39-T02`): the root tsconfig.json is a bare
+      # project-references pointer (`"files": []`), so a plain
+      # invocation with no `-b` checks zero source files and always
+      # exits 0 regardless of any real type error — confirmed directly
+      # via `tsc --noEmit --listFiles`. `-b` (build/project-reference
+      # mode) is the invocation that actually type-checks `src/`.
+      - run: npx tsc -b
         if: hashFiles('dashboard/package.json') != ''
         working-directory: dashboard
       - run: npm run lint
