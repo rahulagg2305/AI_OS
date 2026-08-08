@@ -31,7 +31,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M17 | Event Bus | P02 | 3 | 3 | 100% |
 | M18 | Tool Invoker (SDK interface) | P02 | 3 | 3 | 100% |
 | M19 | Secrets Manager | P01+P07 | 7 | 7 | 100% |
-| M20 | Sandbox / SandboxExecutor | P03 | 5 | 4 | 80% |
+| M20 | Sandbox / SandboxExecutor | P03 | 5 | 4 | 90% |
 | M21 | Storage Service | P02 | 1 | 1 | 100% |
 | M22 | Notification Service | P06 | 2 | 0 | 50% |
 | M23 | Caching (Redis) | P02 | 2 | 2 | 100% |

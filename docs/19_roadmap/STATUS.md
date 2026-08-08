@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 91%** (223 of 246 Task-equivalents complete)
+**Overall: 91%** (223.5 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -28,7 +28,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (B) | S06 Quality Gate Engine | 9 | 9 | 0 | 0 | 100% |
 | P02 (B) | S07 Platform Services and Error Model | 7 | 7 | 0 | 0 | 100% |
 | P02 (B) | S08 Kernel HTTP Surface | 4 | 4 | 0 | 0 | 100% |
-| P03 (C) | S01 Sandboxed Tool Execution | 8 | 7 | 0 | 1 | 88% |
+| P03 (C) | S01 Sandboxed Tool Execution | 8 | 7 | 1 | 0 | 94% |
 | P03 (C) | S02 Software Engineering Pack Agents | 8 | 8 | 0 | 0 | 100% |
 | P03 (C) | S03 Software Engineering Pack Workflows | 6 | 6 | 0 | 0 | 100% |
 | P03 (C) | S04 Pack Tools and Declared Quality Gates | 4 | 4 | 0 | 0 | 100% |
@@ -58,7 +58,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 46 | 98% |
 | P02 (Stage B) - Minimum Viable Kernel | 100 | 97 | 98% |
-| P03 (Stage C) - First Real Capability Pack | 38 | 37 | 97% |
+| P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 17 | 97% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 0% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 5 | 54% |
@@ -68,9 +68,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-7 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+6 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
-- `P03-S01-M20-T05` Stronger isolation tier
 - `P05-S01-M26-T01` Parser adapters
 - `P06-S03-M39-T03` Cost and quality views
 - `P06-S04-M38-T01` aios CLI

@@ -259,6 +259,61 @@ async def test_execute_removes_the_container_even_when_the_command_itself_errors
     container.remove.assert_called_once()
 
 
+def test_docker_sandbox_runtime_is_none_by_default() -> None:
+    assert DockerSandbox().runtime is None
+
+
+def test_docker_sandbox_runtime_is_introspectable_when_configured() -> None:
+    assert DockerSandbox(runtime="runsc").runtime == "runsc"
+
+
+@pytest.mark.asyncio
+async def test_execute_omits_the_runtime_key_entirely_when_unconfigured(
+    tmp_path: Path,
+) -> None:
+    """Zero-regression proof: an unconfigured `DockerSandbox` must send
+    the Docker Engine exactly the call it always has — not `runtime=None`,
+    which is a different (if likely harmless) wire shape than never
+    having sent the key at all."""
+    container = _mock_container(exit_code=0, stdout=b"ok\n")
+    client = _mock_client(container)
+
+    with patch("docker.from_env", return_value=client):
+        await DockerSandbox().execute(
+            command=["echo", "ok"],
+            working_directory=tmp_path,
+            timeout_seconds=_GENEROUS_TIMEOUT,
+            max_output_bytes=_GENEROUS_OUTPUT_CAP,
+        )
+
+    _, kwargs = client.containers.create.call_args
+    assert "runtime" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_execute_passes_the_configured_runtime_to_the_docker_api(
+    tmp_path: Path,
+) -> None:
+    """The ADR-0016 hardening-path configuration line this step adds —
+    proves the Python-level plumbing genuinely reaches the Docker API
+    call; the real Docker Engine's own acceptance/rejection of a given
+    runtime name is proven separately, against a real daemon, in
+    `tests/integration/sandbox/test_docker_sandbox_live.py`."""
+    container = _mock_container(exit_code=0, stdout=b"ok\n")
+    client = _mock_client(container)
+
+    with patch("docker.from_env", return_value=client):
+        await DockerSandbox(runtime="runsc").execute(
+            command=["echo", "ok"],
+            working_directory=tmp_path,
+            timeout_seconds=_GENEROUS_TIMEOUT,
+            max_output_bytes=_GENEROUS_OUTPUT_CAP,
+        )
+
+    _, kwargs = client.containers.create.call_args
+    assert kwargs["runtime"] == "runsc"
+
+
 def test_docker_sandbox_client_is_built_lazily_not_at_construction() -> None:
     """Construction does zero I/O — the identical "synchronous, no I/O
     constructor" discipline every lazily-built component in this

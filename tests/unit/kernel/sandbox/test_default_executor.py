@@ -13,6 +13,7 @@ import pytest
 
 from ai_os_kernel.sandbox.default_executor import (
     ENV_VAR,
+    RUNTIME_ENV_VAR,
     UnknownSandboxBackendError,
     build_default_sandbox_executor,
     default_python_command,
@@ -76,3 +77,51 @@ def test_default_python_command_matches_local_backend_when_selected(
     monkeypatch.setenv(ENV_VAR, "local")
 
     assert default_python_command() == (sys.executable,)
+
+
+def test_docker_sandbox_has_no_runtime_override_when_the_env_var_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    monkeypatch.delenv(RUNTIME_ENV_VAR, raising=False)
+
+    sandbox = build_default_sandbox_executor()
+
+    assert isinstance(sandbox, DockerSandbox)
+    assert sandbox.runtime is None
+
+
+def test_docker_sandbox_carries_the_configured_runtime_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    monkeypatch.setenv(RUNTIME_ENV_VAR, "runsc")
+
+    sandbox = build_default_sandbox_executor()
+
+    assert isinstance(sandbox, DockerSandbox)
+    assert sandbox.runtime == "runsc"
+
+
+def test_a_blank_runtime_override_is_treated_as_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    monkeypatch.setenv(RUNTIME_ENV_VAR, "   ")
+
+    sandbox = build_default_sandbox_executor()
+
+    assert isinstance(sandbox, DockerSandbox)
+    assert sandbox.runtime is None
+
+
+def test_the_runtime_override_is_ignored_entirely_for_the_local_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`AIOS_SANDBOX_RUNTIME` is a Docker-only concept —
+    `LocalSubprocessSandbox` has no runtime parameter to carry it, and
+    this must not raise just because the variable happens to be set."""
+    monkeypatch.setenv(ENV_VAR, "local")
+    monkeypatch.setenv(RUNTIME_ENV_VAR, "runsc")
+
+    assert isinstance(build_default_sandbox_executor(), LocalSubprocessSandbox)

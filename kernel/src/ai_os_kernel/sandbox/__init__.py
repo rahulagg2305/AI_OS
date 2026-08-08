@@ -45,4 +45,20 @@ backend actually runs commands in* — closing the real gap that
 previously blocked `DockerSandbox` from being usable by the Software
 Engineering pack's own agents, which had hardcoded the host's own
 `sys.executable`.
+
+**The ADR-0016 hardening path is now a real configuration line
+(`P03-S01-M20-T05`), not just documented intent.** `DockerSandbox`
+accepts a `runtime` parameter (`AIOS_SANDBOX_RUNTIME`, unset by
+default) passed straight through to the Docker Engine's own
+`containers.create(..., runtime=...)` — exactly the "drop-in
+`SandboxRuntime` configuration ... a configuration change, not a
+redesign" ADR-0016 itself names for gVisor. **Disclosed, not silently
+assumed:** this environment's own Docker installs no gVisor/Firecracker
+runtime (`docker info` here registers only
+`io.containerd.runc.v2`/`nvidia`/`runc`), so what is actually proven
+end to end is the configuration plumbing itself — a valid runtime name
+reaches the real Docker Engine and executes correctly, and a
+genuinely-unknown one is refused by the real Engine — not observed
+hardened isolation. See `docker_executor.py`'s own docstring for the
+full reasoning.
 """

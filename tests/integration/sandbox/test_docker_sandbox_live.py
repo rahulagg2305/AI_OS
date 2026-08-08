@@ -27,6 +27,7 @@ import docker.errors
 import pytest
 
 from ai_os_kernel.sandbox.docker_executor import DockerSandbox
+from ai_os_kernel.sandbox.errors import SandboxExecutionError
 
 _GENEROUS_TIMEOUT = 30.0
 _GENEROUS_OUTPUT_CAP = 65536
@@ -155,6 +156,52 @@ async def test_a_real_container_is_genuinely_removed_after_execution(
 
     after = {c.id for c in client.containers.list(all=True)}
     assert after - before == set()
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_valid_runtime_executes_identically_to_the_default(
+    docker_available: None, tmp_path: Path
+) -> None:
+    """The ADR-0016 hardening-path configuration line (`P03-S01-M20-T05`)
+    proven against the one OCI runtime genuinely available in this
+    project's own dev/CI environment (`docker info` here registers only
+    `io.containerd.runc.v2`/`nvidia`/`runc` — no gVisor/Firecracker
+    install step exists anywhere in this repository yet, see
+    `docker_executor.py`'s own docstring). An explicit, valid runtime
+    must reach the real Docker Engine and execute exactly as the
+    unconfigured default does — zero regression when this parameter is
+    used with a value the daemon actually has."""
+    sandbox = DockerSandbox(runtime="runc")
+
+    result = await sandbox.execute(
+        command=["echo", "hello-with-explicit-runtime"],
+        working_directory=tmp_path,
+        timeout_seconds=_GENEROUS_TIMEOUT,
+        max_output_bytes=_GENEROUS_OUTPUT_CAP,
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "hello-with-explicit-runtime"
+
+
+@pytest.mark.asyncio
+async def test_a_genuinely_unknown_runtime_is_refused_by_the_real_docker_engine(
+    docker_available: None, tmp_path: Path
+) -> None:
+    """Proves the `runtime` value genuinely reaches the Docker Engine's
+    own container-create call, rather than being silently accepted and
+    ignored: a name no real runtime plugin registers must be refused by
+    the daemon itself, surfaced as this backend's own typed
+    `SandboxExecutionError`, never an unhandled `docker.errors.APIError`."""
+    sandbox = DockerSandbox(runtime="not-a-real-runtime-plugin")
+
+    with pytest.raises(SandboxExecutionError):
+        await sandbox.execute(
+            command=["echo", "should-not-run"],
+            working_directory=tmp_path,
+            timeout_seconds=_GENEROUS_TIMEOUT,
+            max_output_bytes=_GENEROUS_OUTPUT_CAP,
+        )
 
 
 @pytest.mark.asyncio

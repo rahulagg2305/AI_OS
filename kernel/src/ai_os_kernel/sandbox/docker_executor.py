@@ -121,6 +121,36 @@ pinning (security_architecture.md §10: "Minimal, pinned by digest") is
 recorded as a real, later hardening step once a specific image is
 chosen for production use, the identical "documented hardening path,
 not a redesign" treatment ADR-0016 itself already gives gVisor.
+
+**The ADR-0016/`technology_stack.md` hardening path, made real
+(`P03-S01-M20-T05`): ``runtime``.** ADR-0016's own "Alternatives
+Considered" names gVisor (``runsc``) as "a drop-in ``SandboxRuntime``
+configuration ... a configuration change, not a redesign" — this
+constructor parameter is exactly that configuration line, passed
+through unchanged to the Docker Engine's own ``containers.create(...,
+runtime=...)``. ``None`` (the default) omits the key entirely, so
+every existing caller's behaviour is byte-for-byte unchanged (the
+daemon's own configured default runtime applies, exactly as before
+this parameter existed).
+
+**Disclosed, not silently assumed: gVisor/Firecracker are not
+installed in this project's own dev or CI environment.** `docker info`
+here registers only ``io.containerd.runc.v2``/``nvidia``/``runc`` —
+``docker run --runtime=runsc`` genuinely fails
+(``unknown or invalid runtime name``), and the CI workflow
+(`.github/workflows/ci.yml`) has no gVisor install step. This class's
+own real, unmocked proof (`tests/integration/sandbox/
+test_docker_sandbox_live.py`) is therefore necessarily scoped to what
+*is* real here: an explicit, valid ``runtime`` (the real, available
+``runc``) reaches the Docker Engine and executes identically to the
+unconfigured default (zero regression), and a genuinely-unknown
+runtime name is refused by the real Docker Engine itself — proving the
+value is truly threaded through, not merely accepted and ignored.
+Actually exercising a hardened runtime (gVisor/Firecracker) once one is
+installed on a real host remains real, disclosed, unbuilt verification
+work — this parameter is the "configuration change" ADR-0016 promises
+would be sufficient, not a claim that hardened isolation has been
+observed.
 """
 
 from __future__ import annotations
@@ -214,6 +244,7 @@ class DockerSandbox:
         pids_limit: int = _DEFAULT_PIDS_LIMIT,
         user: str = _DEFAULT_USER,
         tmpfs_size: str = _DEFAULT_TMPFS_SIZE,
+        runtime: str | None = None,
     ) -> None:
         self._image = image
         self._mem_limit = mem_limit
@@ -221,12 +252,22 @@ class DockerSandbox:
         self._pids_limit = pids_limit
         self._user = user
         self._tmpfs_size = tmpfs_size
+        self._runtime = runtime
         self._client: docker.DockerClient | None = None
         self._client_lock = asyncio.Lock()
 
     @property
     def guarantees(self) -> SandboxGuarantees:
         return _DOCKER_SANDBOX_GUARANTEES
+
+    @property
+    def runtime(self) -> str | None:
+        """The configured OCI runtime override (``None`` — the Docker
+        daemon's own default — unless the ADR-0016 hardening
+        configuration this class's own docstring describes was
+        requested). Read-only, introspection-only: there is no setter,
+        matching every other constructor-time-only field on this class."""
+        return self._runtime
 
     @property
     def python_command(self) -> tuple[str, ...]:
@@ -402,6 +443,11 @@ class DockerSandbox:
             },
             "tmpfs": {_CONTAINER_TMPDIR: f"size={self._tmpfs_size}"},
             "stdin_open": stdin is not None,
+            # Omitted entirely (not passed as `runtime=None`) when
+            # unconfigured, so an unconfigured `DockerSandbox` sends the
+            # Docker Engine exactly the same call it always has —
+            # zero-regression by construction, not by coincidence.
+            **({"runtime": self._runtime} if self._runtime is not None else {}),
             # Deliberately `detach=False` here, even though this class
             # always manages the container asynchronously itself (create
             # -> attach -> start -> wait -> logs -> remove) regardless of

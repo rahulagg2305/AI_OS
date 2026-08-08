@@ -37,6 +37,21 @@ resolution (`sandbox or build_default_sandbox_executor()`), which is
 exactly where the Software Engineering pack's own
 ``BuildAgentEntrypoint``/``TestAgentEntrypoint``/``DocumentationAgentEntrypoint``
 now call this function.
+
+**A second, independent knob (`P03-S01-M20-T05`): `AIOS_SANDBOX_RUNTIME`.**
+Only meaningful when the resolved backend is `DockerSandbox` — it sets
+that class's own `runtime` constructor parameter (see
+`docker_executor.py`'s own docstring for the full ADR-0016 hardening-path
+reasoning and this environment's disclosed lack of an installed
+gVisor/Firecracker runtime). Unset (the default) omits the parameter
+entirely, identical to this variable never having existed. Deliberately
+*not* validated against a known-runtime allowlist the way `AIOS_
+SANDBOX_BACKEND` is: valid OCI runtime names are whatever the deploying
+host's own Docker daemon has registered (`docker info`), which this
+module has no way to enumerate portably — an invalid value is instead
+refused by the real Docker Engine itself, at the same
+`DockerSandboxUnavailableError`/`SandboxExecutionError` boundary every
+other Docker-level failure already surfaces through.
 """
 
 from __future__ import annotations
@@ -48,6 +63,7 @@ from ai_os_kernel.sandbox.errors import SandboxExecutionError
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox, SandboxExecutor
 
 ENV_VAR = "AIOS_SANDBOX_BACKEND"
+RUNTIME_ENV_VAR = "AIOS_SANDBOX_RUNTIME"
 _DEFAULT_BACKEND = "docker"
 _KNOWN_BACKENDS = ("docker", "local")
 
@@ -68,13 +84,22 @@ def _resolve_backend_name() -> str:
     return value
 
 
+def _resolve_runtime_name() -> str | None:
+    value = os.environ.get(RUNTIME_ENV_VAR, "").strip()
+    return value or None
+
+
 def build_default_sandbox_executor() -> SandboxExecutor:
     """Returns a real `DockerSandbox()` unless `AIOS_SANDBOX_BACKEND=local`
     is set, in which case a real `LocalSubprocessSandbox()` is returned
-    instead. See this module's own docstring for the full reasoning."""
+    instead. See this module's own docstring for the full reasoning.
+
+    When the Docker backend is selected, `AIOS_SANDBOX_RUNTIME` (unset by
+    default) is threaded through as `DockerSandbox`'s own `runtime`
+    parameter — the real ADR-0016 hardening-path configuration knob."""
     if _resolve_backend_name() == "local":
         return LocalSubprocessSandbox()
-    return DockerSandbox()
+    return DockerSandbox(runtime=_resolve_runtime_name())
 
 
 def default_python_command() -> tuple[str, ...]:
@@ -92,6 +117,7 @@ def default_python_command() -> tuple[str, ...]:
 
 __all__ = [
     "ENV_VAR",
+    "RUNTIME_ENV_VAR",
     "UnknownSandboxBackendError",
     "build_default_sandbox_executor",
     "default_python_command",
