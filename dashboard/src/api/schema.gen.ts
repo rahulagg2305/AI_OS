@@ -39,6 +39,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/evaluation/cost-and-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Cost And Quality Report */
+        get: operations["get_cost_and_quality_report_api_v1_evaluation_cost_and_quality_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health/live": {
         parameters: {
             query?: never;
@@ -316,6 +333,42 @@ export interface components {
             status: string;
         };
         /**
+         * CostAndQualityReport
+         * @description The real, queryable artifact this ticket's own Output names:
+         *     "Reconciling breakdowns" — every real cost dimension FR-095 names,
+         *     plus FR-094's own real gate-failure frequency.
+         */
+        CostAndQualityReport: {
+            /** By Agent */
+            by_agent: components["schemas"]["CostBreakdownEntry"][];
+            /** By Model */
+            by_model: components["schemas"]["CostBreakdownEntry"][];
+            /** By Pack */
+            by_pack: components["schemas"]["CostBreakdownEntry"][];
+            /** By Workflow */
+            by_workflow: components["schemas"]["CostBreakdownEntry"][];
+            /** Gate Failures */
+            gate_failures: components["schemas"]["GateFailureSummaryEntry"][];
+        };
+        /**
+         * CostBreakdownEntry
+         * @description One real dimension value's own aggregated cost — e.g. one real
+         *     `model_id`, or one real `pack_id`, together with every real call
+         *     this project has ever recorded against it.
+         */
+        CostBreakdownEntry: {
+            /** Call Count */
+            call_count: number;
+            /** Dimension Value */
+            dimension_value: string;
+            /** Total Cost Usd */
+            total_cost_usd: string;
+            /** Total Input Tokens */
+            total_input_tokens: number;
+            /** Total Output Tokens */
+            total_output_tokens: number;
+        };
+        /**
          * DecideApprovalRequest
          * @description Mirrors :class:`~ai_os_kernel.workflow_engine.human_approval.
          *     Decision` — only ``approved``/``rejected`` are real decisions today
@@ -365,6 +418,19 @@ export interface components {
             enabled: boolean;
             /** Name */
             name: string;
+        };
+        /**
+         * GateFailureSummaryEntry
+         * @description One real gate's own real failure count — FR-094's "most
+         *     frequent failures," ordered by the caller (descending count).
+         */
+        GateFailureSummaryEntry: {
+            /** Count */
+            count: number;
+            /** Gate Id */
+            gate_id: string;
+            /** Status */
+            status: string;
         };
         /**
          * GrantRoleRequest
@@ -923,6 +989,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeatureFlagState"][];
+                };
+            };
+        };
+    };
+    get_cost_and_quality_report_api_v1_evaluation_cost_and_quality_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostAndQualityReport"];
                 };
             };
         };

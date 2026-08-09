@@ -29,6 +29,90 @@
         "title": "ComponentStatus",
         "type": "object"
       },
+      "CostAndQualityReport": {
+        "description": "The real, queryable artifact this ticket's own Output names:\n\"Reconciling breakdowns\" \u2014 every real cost dimension FR-095 names,\nplus FR-094's own real gate-failure frequency.",
+        "properties": {
+          "by_agent": {
+            "items": {
+              "$ref": "#/components/schemas/CostBreakdownEntry"
+            },
+            "title": "By Agent",
+            "type": "array"
+          },
+          "by_model": {
+            "items": {
+              "$ref": "#/components/schemas/CostBreakdownEntry"
+            },
+            "title": "By Model",
+            "type": "array"
+          },
+          "by_pack": {
+            "items": {
+              "$ref": "#/components/schemas/CostBreakdownEntry"
+            },
+            "title": "By Pack",
+            "type": "array"
+          },
+          "by_workflow": {
+            "items": {
+              "$ref": "#/components/schemas/CostBreakdownEntry"
+            },
+            "title": "By Workflow",
+            "type": "array"
+          },
+          "gate_failures": {
+            "items": {
+              "$ref": "#/components/schemas/GateFailureSummaryEntry"
+            },
+            "title": "Gate Failures",
+            "type": "array"
+          }
+        },
+        "required": [
+          "by_model",
+          "by_workflow",
+          "by_agent",
+          "by_pack",
+          "gate_failures"
+        ],
+        "title": "CostAndQualityReport",
+        "type": "object"
+      },
+      "CostBreakdownEntry": {
+        "description": "One real dimension value's own aggregated cost \u2014 e.g. one real\n`model_id`, or one real `pack_id`, together with every real call\nthis project has ever recorded against it.",
+        "properties": {
+          "call_count": {
+            "title": "Call Count",
+            "type": "integer"
+          },
+          "dimension_value": {
+            "title": "Dimension Value",
+            "type": "string"
+          },
+          "total_cost_usd": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total Cost Usd",
+            "type": "string"
+          },
+          "total_input_tokens": {
+            "title": "Total Input Tokens",
+            "type": "integer"
+          },
+          "total_output_tokens": {
+            "title": "Total Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dimension_value",
+          "call_count",
+          "total_input_tokens",
+          "total_output_tokens",
+          "total_cost_usd"
+        ],
+        "title": "CostBreakdownEntry",
+        "type": "object"
+      },
       "DecideApprovalRequest": {
         "description": "Mirrors :class:`~ai_os_kernel.workflow_engine.human_approval.\nDecision` \u2014 only ``approved``/``rejected`` are real decisions today\n(``human_approval.py``'s own disclosed scope: no ``changes_requested``\nhandling exists).",
         "properties": {
@@ -132,6 +216,30 @@
           "enabled"
         ],
         "title": "FeatureFlagState",
+        "type": "object"
+      },
+      "GateFailureSummaryEntry": {
+        "description": "One real gate's own real failure count \u2014 FR-094's \"most\nfrequent failures,\" ordered by the caller (descending count).",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "gate_id": {
+            "title": "Gate Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gate_id",
+          "status",
+          "count"
+        ],
+        "title": "GateFailureSummaryEntry",
         "type": "object"
       },
       "GrantRoleRequest": {
@@ -1357,6 +1465,32 @@
         "summary": "Get Feature Flags",
         "tags": [
           "configuration"
+        ]
+      }
+    },
+    "/api/v1/evaluation/cost-and-quality": {
+      "get": {
+        "operationId": "get_cost_and_quality_report_api_v1_evaluation_cost_and_quality_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CostAndQualityReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Cost And Quality Report",
+        "tags": [
+          "evaluation"
         ]
       }
     },

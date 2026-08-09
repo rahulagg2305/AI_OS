@@ -11,6 +11,7 @@ from ai_os_kernel.security_manager.narrowing import is_permitted, narrow_permiss
 from ai_os_kernel.security_manager.permissions import (
     CONFIG_MANAGE,
     CONFIG_READ,
+    EVALUATION_READ,
     PACK_MANAGE,
     PACK_READ,
     SECRET_ACCESS,
@@ -49,6 +50,7 @@ def test_a_broad_principal_is_genuinely_narrowed_by_a_restrictive_workflow_agent
             SECRET_ACCESS,
             CONFIG_READ,
             CONFIG_MANAGE,
+            EVALUATION_READ,
         }
     )
 
@@ -99,7 +101,7 @@ def test_a_workflow_agent_or_tool_can_never_grant_a_permission_the_principal_lac
         ),
         permissions=permissions_for_roles(["viewer"]),
     )
-    assert low_privilege_context.permissions == frozenset({WORKFLOW_READ})
+    assert low_privilege_context.permissions == frozenset({WORKFLOW_READ, EVALUATION_READ})
 
     effective = narrow_permissions(
         low_privilege_context,

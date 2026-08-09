@@ -63,6 +63,7 @@ from ai_os_kernel.security_manager.narrowing import is_permitted, narrow_permiss
 from ai_os_kernel.security_manager.permissions import (
     CONFIG_MANAGE,
     CONFIG_READ,
+    EVALUATION_READ,
     PACK_MANAGE,
     PACK_READ,
     SECRET_ACCESS,
@@ -81,6 +82,7 @@ from ai_os_kernel.security_manager.token_verifier import (
 __all__ = [
     "CONFIG_MANAGE",
     "CONFIG_READ",
+    "EVALUATION_READ",
     "PACK_MANAGE",
     "PACK_READ",
     "SECRET_ACCESS",

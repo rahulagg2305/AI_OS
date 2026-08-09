@@ -424,6 +424,7 @@ from ai_os_kernel.context_manager.resolvers import (
     RuntimeConfigResolver,
     WorkflowStateResolver,
 )
+from ai_os_kernel.evaluation_engine.cost_and_quality_views import SqlCostAndQualityViews
 from ai_os_kernel.event_bus.bus import InProcessEventBus
 from ai_os_kernel.git_integration.default_service import build_git_integration_service_from_env
 from ai_os_kernel.health import ComponentStatus, GracefulShutdownCoordinator, HealthService
@@ -475,6 +476,7 @@ from ai_os_kernel.retrieval.vector_search import SqlVectorSearcher
 from ai_os_kernel.routes.approvals import router as approvals_router
 from ai_os_kernel.routes.config import router as config_router
 from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
+from ai_os_kernel.routes.evaluation import router as evaluation_router
 from ai_os_kernel.routes.health import router as health_router
 from ai_os_kernel.routes.idempotency import IdempotencyKeyMiddleware, SqlIdempotencyKeyStore
 from ai_os_kernel.routes.packs import router as packs_router
@@ -1880,6 +1882,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # through the real composition root instead of only through a
         # hand-built engine.
         app.state.pack_lifecycle_repository = SqlPackLifecycleRepository(engine)
+        # P06-S03-M39-T03: the real GET /api/v1/evaluation/cost-and-quality
+        # route (ai_os_kernel.routes.evaluation) reads this — the
+        # identical "plain, stateless wrapper over the engine" shape
+        # every other real query collaborator here already follows.
+        app.state.cost_and_quality_views = SqlCostAndQualityViews(engine)
         # authenticate() (ai_os_kernel.security_manager.dependencies) reads
         # this to union real, persisted role grants into a principal's
         # token-claimed roles for every permission-checked route, not only
@@ -2096,6 +2103,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.include_router(role_administration_router)
     app.include_router(config_router)
     app.include_router(stream_router)
+    app.include_router(evaluation_router)
 
     logger.info("kernel.bootstrap.complete")
     return app

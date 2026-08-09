@@ -80,6 +80,11 @@ PACK_MANAGE = "pack:manage"
 SECRET_ACCESS = "secret:access"  # noqa: S105 -- a permission string, not a credential
 CONFIG_READ = "config:read"
 CONFIG_MANAGE = "config:manage"
+# authentication_authorization.md §4.2's own `viewer` grant explicitly
+# names "experiments, gate results" alongside "workflows" — this
+# permission is that real, already-documented grant, added
+# (P06-S03-M39-T03) the moment a real route first needs to enforce it.
+EVALUATION_READ = "evaluation:read"
 
 # authentication_authorization.md §4.2's role table, reduced to the
 # seven permissions modelled above. Unknown roles grant nothing (deny by
@@ -93,11 +98,19 @@ CONFIG_MANAGE = "config:manage"
 # own documented grants say anything about configuration, the identical
 # reasoning already applied to packs.
 _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
-    "viewer": frozenset({WORKFLOW_READ}),
-    "operator": frozenset({WORKFLOW_READ, WORKFLOW_START}),
-    "approver": frozenset({WORKFLOW_READ}),
+    "viewer": frozenset({WORKFLOW_READ, EVALUATION_READ}),
+    "operator": frozenset({WORKFLOW_READ, WORKFLOW_START, EVALUATION_READ}),
+    "approver": frozenset({WORKFLOW_READ, EVALUATION_READ}),
     "maintainer": frozenset(
-        {WORKFLOW_READ, WORKFLOW_START, PACK_READ, PACK_MANAGE, CONFIG_READ, CONFIG_MANAGE}
+        {
+            WORKFLOW_READ,
+            WORKFLOW_START,
+            PACK_READ,
+            PACK_MANAGE,
+            CONFIG_READ,
+            CONFIG_MANAGE,
+            EVALUATION_READ,
+        }
     ),
     "admin": frozenset(
         {
@@ -108,6 +121,7 @@ _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             SECRET_ACCESS,
             CONFIG_READ,
             CONFIG_MANAGE,
+            EVALUATION_READ,
         }
     ),
 }
