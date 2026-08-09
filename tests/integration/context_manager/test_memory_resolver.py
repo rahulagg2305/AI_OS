@@ -105,6 +105,7 @@ def embeddings_server_url() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.fixture

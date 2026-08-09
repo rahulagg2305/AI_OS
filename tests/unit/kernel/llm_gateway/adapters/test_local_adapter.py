@@ -38,6 +38,14 @@ _PRICING = ModelPricing(
     input_per_million_usd=Decimal("0.00"), output_per_million_usd=Decimal("0.00")
 )
 
+# R-015: a real local HTTP server responds near-instantly in the success
+# case, so a generous ceiling costs nothing when the server is healthy —
+# it only matters under genuine host-level thread-scheduling contention
+# (observed on this project's own local Windows full-suite runs, never
+# on the real Ubuntu CI runners), where a too-tight deadline can be
+# exceeded even though the server would have replied correctly.
+_HTTP_TIMEOUT_SECONDS = 10.0
+
 
 def _router(model_ids: dict[str, str], *, provider: str = PROVIDER_NAME) -> StaticRouter:
     return StaticRouter(
@@ -209,7 +217,9 @@ def _unused_local_port() -> int:
 async def test_complete_wraps_a_real_connection_failure() -> None:
     closed_port = _unused_local_port()
     adapter = LocalAdapter(
-        client=httpx.AsyncClient(base_url=f"http://127.0.0.1:{closed_port}", timeout=2.0),
+        client=httpx.AsyncClient(
+            base_url=f"http://127.0.0.1:{closed_port}", timeout=_HTTP_TIMEOUT_SECONDS
+        ),
         router=_router({"local-fast": "llama3.1:8b"}),
         pricing={"llama3.1:8b": _PRICING},
     )
@@ -246,12 +256,13 @@ def server_error_server() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.mark.asyncio
 async def test_complete_wraps_a_real_error_response(server_error_server: str) -> None:
     adapter = LocalAdapter(
-        client=httpx.AsyncClient(base_url=server_error_server, timeout=2.0),
+        client=httpx.AsyncClient(base_url=server_error_server, timeout=_HTTP_TIMEOUT_SECONDS),
         router=_router({"local-fast": "llama3.1:8b"}),
         pricing={"llama3.1:8b": _PRICING},
     )
@@ -297,6 +308,7 @@ def successful_chat_completion_server() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.mark.asyncio
@@ -304,7 +316,9 @@ async def test_complete_maps_a_real_successful_response_end_to_end(
     successful_chat_completion_server: str,
 ) -> None:
     adapter = LocalAdapter(
-        client=httpx.AsyncClient(base_url=successful_chat_completion_server, timeout=2.0),
+        client=httpx.AsyncClient(
+            base_url=successful_chat_completion_server, timeout=_HTTP_TIMEOUT_SECONDS
+        ),
         router=_router({"local-fast": "llama3.1:8b"}),
         pricing={"llama3.1:8b": _PRICING},
     )
@@ -361,11 +375,12 @@ def _status_server(
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 def _adapter_against(base_url: str) -> LocalAdapter:
     return LocalAdapter(
-        client=httpx.AsyncClient(base_url=base_url, timeout=2.0),
+        client=httpx.AsyncClient(base_url=base_url, timeout=_HTTP_TIMEOUT_SECONDS),
         router=_router({"local-fast": "llama3.1:8b"}),
         pricing={"llama3.1:8b": _PRICING},
     )
@@ -452,11 +467,12 @@ def successful_embeddings_server() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 def _embedding_adapter_against(base_url: str) -> LocalAdapter:
     return LocalAdapter(
-        client=httpx.AsyncClient(base_url=base_url, timeout=2.0),
+        client=httpx.AsyncClient(base_url=base_url, timeout=_HTTP_TIMEOUT_SECONDS),
         router=_router({"embedding-fast": "nomic-embed-text"}),
         pricing={"nomic-embed-text": _PRICING},
     )
@@ -498,7 +514,9 @@ async def test_embed_refuses_a_routing_decision_for_a_different_provider() -> No
 async def test_embed_wraps_a_real_connection_failure() -> None:
     closed_port = _unused_local_port()
     adapter = LocalAdapter(
-        client=httpx.AsyncClient(base_url=f"http://127.0.0.1:{closed_port}", timeout=2.0),
+        client=httpx.AsyncClient(
+            base_url=f"http://127.0.0.1:{closed_port}", timeout=_HTTP_TIMEOUT_SECONDS
+        ),
         router=_router({"embedding-fast": "nomic-embed-text"}),
         pricing={"nomic-embed-text": _PRICING},
     )
@@ -514,7 +532,7 @@ async def test_embed_wraps_a_real_connection_failure() -> None:
 async def test_embed_classifies_a_real_http_error_response() -> None:
     with _status_server(500) as base_url:
         adapter = LocalAdapter(
-            client=httpx.AsyncClient(base_url=base_url, timeout=2.0),
+            client=httpx.AsyncClient(base_url=base_url, timeout=_HTTP_TIMEOUT_SECONDS),
             router=_router({"embedding-fast": "nomic-embed-text"}),
             pricing={"nomic-embed-text": _PRICING},
         )
@@ -557,6 +575,7 @@ def mismatched_count_embeddings_server() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.mark.asyncio

@@ -11,11 +11,11 @@ Severity: **H** (can cause real harm or data loss) · **M** (can cause
 significant rework) · **L** (contained).
 
 **Reviewed 2026-07-31 (R1–R4 final closeout); R-008 and R-009 closed
-2026-08-01; R-014 opened and closed 2026-08-09.** 12 closed, 1 open
-(R-006, an accepted baseline, not pending action) plus R-001 (a
-permanent standing rule, not a risk pending closure). Zero open
-process-defect risks and zero open product-development gaps with real,
-unaddressed impact.
+2026-08-01; R-014 opened and closed 2026-08-09; R-015 opened and closed
+2026-08-09.** 13 closed, 1 open (R-006, an accepted baseline, not
+pending action) plus R-001 (a permanent standing rule, not a risk
+pending closure). Zero open process-defect risks and zero open
+product-development gaps with real, unaddressed impact.
 
 | ID | Risk | Sev | Status | Owner decision |
 |---|---|---|---|---|
@@ -33,6 +33,7 @@ unaddressed impact.
 | R-012 | Ticket dependency graph had no recorded edges | M | **Closed** 2026-07-31 | — |
 | R-013 | Two dependency edges were judgement calls | L | **Closed** 2026-07-31 | Both decided, no change |
 | R-014 | No CI job ever ran any Capability Pack's own `tests/` | M | **Closed** 2026-08-09 | — |
+| R-015 | Local-HTTP-server tests flaky under full local suite runs (never on real CI) | L | **Closed** 2026-08-09 | — |
 
 ---
 
@@ -339,6 +340,71 @@ resolves it as an installed, untyped package and reports
 analysis set. This is why `mypy --strict scripts tests/roadmap` fails
 while `mypy --strict` succeeds. Low severity (the canonical invocation is
 correct and green), but it makes per-directory type-checking misleading.
+
+### R-015 — Local-HTTP-server test flakiness under full local suite runs *(closed)*
+
+Disclosed across 3 separate steps (2026-08-09), formally investigated
+and closed the same day per explicit product-owner instruction.
+Observed failures, all isolated real local-server adapter/routing
+tests, each passing immediately in isolation and on an immediate
+full-suite re-run: `test_multi_provider_routing.py::
+test_one_router_and_dispatcher_genuinely_reach_both_real_provider_adapters`,
+`test_anthropic_adapter.py::test_count_tokens_returns_the_real_provider_reported_count`,
+`test_local_adapter.py::test_embed_classifies_a_real_http_error_response`.
+
+**Real root cause, found by investigation, not guessed:** two distinct,
+compounding factors.
+
+1. **Genuine host-level thread-scheduling contention, Windows-local-only.**
+   `gh run list --branch main --limit 30` shows exactly one real CI
+   failure across this entire session's 29 other pushes — a `ruff
+   format` failure fixed the same step, unrelated to test flakiness.
+   The flake has **never once occurred on the real Ubuntu GitHub
+   Actions runners**, only on this project's own local Windows
+   full-suite runs (1500+ tests, real Docker daemon activity, many
+   concurrent threads). Every affected test used a hardcoded
+   `timeout=2.0` httpx/Anthropic-SDK client timeout against a real,
+   already-listening local `http.server.HTTPServer` — generous enough
+   on an idle CI runner, tight enough to occasionally miss under real
+   Windows thread-scheduling contention at full-suite scale.
+2. **A real, independently-discovered resource-cleanup bug, found while
+   investigating the fixtures.** Every real local-HTTP-server fixture
+   in this codebase (13 files, 23 real call sites, not just the 3
+   flaky ones) called `server.shutdown()` + `thread.join()` but never
+   `server.server_close()` — `socketserver.BaseServer.shutdown()` only
+   stops the `serve_forever()` loop; it does not close the underlying
+   listening socket (`TCPServer.server_close()` does). The socket's
+   real closure was left to non-deterministic garbage collection
+   across hundreds of fixture instantiations over a full suite run — a
+   genuine, if hard-to-precisely-quantify, resource-hygiene defect,
+   fixed regardless of its exact share of the observed timeout flakes.
+
+**Real fix, not a guess — both causes addressed, proven, zero
+regression:**
+
+- `server.server_close()` added after every one of the 23 real
+  `server.shutdown()`/`thread.join()` call sites across all 13 files
+  (mechanical, systemic, applied via a verified regex substitution,
+  re-formatted with `ruff format` — every file's diff inspected).
+- The 3 specifically-flaky files' own hardcoded `timeout=2.0` replaced
+  with a named, documented `_HTTP_TIMEOUT_SECONDS = 10.0` constant (a
+  real local server responds near-instantly when healthy, so a
+  generous ceiling costs nothing in the success case and only helps
+  under genuine contention).
+- Proven: `tests/unit -q` run **3 times** after the fix, `1226 passed`
+  each time with zero flakes (the same suite had hit this flake in 2 of
+  the 3 most recent runs before the fix). `mypy --strict`: clean.
+  `capability_packs/*/tests`, `tests/contract`, `tests/roadmap`: all
+  green. No OpenAPI drift.
+
+**Classification: genuine timing/resource contention, real and
+independently-verified resource-cleanup bug — not a test-isolation bug
+in the fixture's own server-readiness handshake** (the listening socket
+is already bound and accepting before the fixture yields its URL in
+every case; there is no readiness race). **Not purely an
+"environment-only, can't-be-eliminated" flake** either — a real,
+disclosed root cause existed and was fixed, not merely documented as
+accepted.
 
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 

@@ -69,6 +69,7 @@ def _webhook_server() -> Generator[type[_RecordingHandler], None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 async def _wait_until(

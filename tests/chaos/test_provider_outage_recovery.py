@@ -97,6 +97,7 @@ def _outage_server() -> Generator[type[_TogglableOutageHandler], None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 def _gateway_against(

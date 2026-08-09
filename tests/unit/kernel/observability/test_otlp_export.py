@@ -96,6 +96,7 @@ def otlp_receiver() -> Generator[_RecordingOtlpServer, None, None]:
     finally:
         server.shutdown()
         thread.join(timeout=5)
+        server.server_close()
 
 
 def test_a_real_span_genuinely_reaches_a_real_otlp_receiver(

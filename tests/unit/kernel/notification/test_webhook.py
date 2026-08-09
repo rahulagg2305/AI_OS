@@ -53,6 +53,7 @@ def _webhook_server(
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 def _notification() -> Notification:

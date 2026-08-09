@@ -81,6 +81,7 @@ def jwks_uri() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join(timeout=5.0)
+        server.server_close()
 
 
 def _token(

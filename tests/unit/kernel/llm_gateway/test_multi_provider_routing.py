@@ -35,6 +35,14 @@ _PRICING = ModelPricing(
     input_per_million_usd=Decimal("1.00"), output_per_million_usd=Decimal("1.00")
 )
 
+# R-015: a real local HTTP server responds near-instantly in the success
+# case, so a generous ceiling costs nothing when the server is healthy —
+# it only matters under genuine host-level thread-scheduling contention
+# (observed on this project's own local Windows full-suite runs, never
+# on the real Ubuntu CI runners), where a too-tight deadline can be
+# exceeded even though the server would have replied correctly.
+_HTTP_TIMEOUT_SECONDS = 10.0
+
 
 class _AnthropicShapedHandler(http.server.BaseHTTPRequestHandler):
     _body = (
@@ -83,6 +91,7 @@ def _run_server(handler: type[http.server.BaseHTTPRequestHandler]) -> Generator[
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.fixture
@@ -115,13 +124,16 @@ async def test_one_router_and_dispatcher_genuinely_reach_both_real_provider_adap
     )
     anthropic_adapter = AnthropicAdapter(
         client=anthropic.AsyncAnthropic(
-            api_key="unused", base_url=anthropic_shaped_server, timeout=2.0, max_retries=0
+            api_key="unused",
+            base_url=anthropic_shaped_server,
+            timeout=_HTTP_TIMEOUT_SECONDS,
+            max_retries=0,
         ),
         router=router,
         pricing={"claude-sonnet-5": _PRICING},
     )
     local_adapter = LocalAdapter(
-        client=httpx.AsyncClient(base_url=local_shaped_server, timeout=2.0),
+        client=httpx.AsyncClient(base_url=local_shaped_server, timeout=_HTTP_TIMEOUT_SECONDS),
         router=router,
         pricing={"llama3.1:8b": _PRICING},
     )

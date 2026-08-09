@@ -56,6 +56,14 @@ _PRICING = ModelPricing(
     input_per_million_usd=Decimal("5.00"), output_per_million_usd=Decimal("25.00")
 )
 
+# R-015: a real local HTTP server responds near-instantly in the success
+# case, so a generous ceiling costs nothing when the server is healthy —
+# it only matters under genuine host-level thread-scheduling contention
+# (observed on this project's own local Windows full-suite runs, never
+# on the real Ubuntu CI runners), where a too-tight deadline can be
+# exceeded even though the server would have replied correctly.
+_HTTP_TIMEOUT_SECONDS = 10.0
+
 
 def _router(model_ids: dict[str, str], *, provider: str = PROVIDER_NAME) -> StaticRouter:
     return StaticRouter(
@@ -215,7 +223,7 @@ async def test_complete_wraps_a_real_connection_failure() -> None:
         client=anthropic.AsyncAnthropic(
             api_key="unused",
             base_url=f"http://127.0.0.1:{closed_port}",
-            timeout=2.0,
+            timeout=_HTTP_TIMEOUT_SECONDS,
             max_retries=0,
         ),
         router=_router({"coding-balanced": "claude-sonnet-5"}),
@@ -257,6 +265,7 @@ def authentication_error_server() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.mark.asyncio
@@ -265,7 +274,7 @@ async def test_complete_wraps_a_real_401_response(authentication_error_server: s
         client=anthropic.AsyncAnthropic(
             api_key="unused",
             base_url=authentication_error_server,
-            timeout=2.0,
+            timeout=_HTTP_TIMEOUT_SECONDS,
             max_retries=0,
         ),
         router=_router({"coding-balanced": "claude-sonnet-5"}),
@@ -315,6 +324,7 @@ def successful_message_server() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.mark.asyncio
@@ -325,7 +335,7 @@ async def test_complete_maps_a_real_successful_response_end_to_end(
         client=anthropic.AsyncAnthropic(
             api_key="unused",
             base_url=successful_message_server,
-            timeout=2.0,
+            timeout=_HTTP_TIMEOUT_SECONDS,
             max_retries=0,
         ),
         router=_router({"coding-balanced": "claude-sonnet-5"}),
@@ -385,12 +395,13 @@ def _status_server(
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 def _adapter_against(base_url: str) -> AnthropicAdapter:
     return AnthropicAdapter(
         client=anthropic.AsyncAnthropic(
-            api_key="unused", base_url=base_url, timeout=2.0, max_retries=0
+            api_key="unused", base_url=base_url, timeout=_HTTP_TIMEOUT_SECONDS, max_retries=0
         ),
         router=_router({"coding-balanced": "claude-sonnet-5"}),
         pricing={"claude-sonnet-5": _PRICING},
@@ -469,6 +480,7 @@ def successful_count_tokens_server() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.mark.asyncio
@@ -505,7 +517,7 @@ async def test_count_tokens_wraps_a_real_connection_failure() -> None:
         client=anthropic.AsyncAnthropic(
             api_key="unused",
             base_url=f"http://127.0.0.1:{closed_port}",
-            timeout=2.0,
+            timeout=_HTTP_TIMEOUT_SECONDS,
             max_retries=0,
         ),
         router=_router({"coding-balanced": "claude-sonnet-5"}),
@@ -599,6 +611,7 @@ def streaming_server() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.mark.asyncio
@@ -674,7 +687,7 @@ async def test_stream_wraps_a_real_connection_failure() -> None:
         client=anthropic.AsyncAnthropic(
             api_key="unused",
             base_url=f"http://127.0.0.1:{closed_port}",
-            timeout=2.0,
+            timeout=_HTTP_TIMEOUT_SECONDS,
             max_retries=0,
         ),
         router=_router({"coding-balanced": "claude-sonnet-5"}),
@@ -731,6 +744,7 @@ def unsupported_content_block_server() -> Generator[str, None, None]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.mark.asyncio
@@ -786,6 +800,7 @@ def capturing_message_server() -> Generator[tuple[str, list[dict[str, object]]],
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 @pytest.mark.asyncio
@@ -795,7 +810,7 @@ async def test_complete_sends_a_real_cache_breakpoint_in_the_real_wire_format(
     base_url, captured_bodies = capturing_message_server
     adapter = AnthropicAdapter(
         client=anthropic.AsyncAnthropic(
-            api_key="unused", base_url=base_url, timeout=2.0, max_retries=0
+            api_key="unused", base_url=base_url, timeout=_HTTP_TIMEOUT_SECONDS, max_retries=0
         ),
         router=_router({"coding-balanced": "claude-sonnet-5"}),
         pricing={"claude-sonnet-5": _PRICING},
@@ -837,7 +852,7 @@ async def test_complete_sends_a_plain_system_string_when_no_boundary_is_set(
     base_url, captured_bodies = capturing_message_server
     adapter = AnthropicAdapter(
         client=anthropic.AsyncAnthropic(
-            api_key="unused", base_url=base_url, timeout=2.0, max_retries=0
+            api_key="unused", base_url=base_url, timeout=_HTTP_TIMEOUT_SECONDS, max_retries=0
         ),
         router=_router({"coding-balanced": "claude-sonnet-5"}),
         pricing={"claude-sonnet-5": _PRICING},
