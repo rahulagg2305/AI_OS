@@ -1,0 +1,26 @@
+[project]
+name = "ai-os-cli"
+version = "0.1.0"
+description = "aios — the AI_OS scriptable command-line client (docs/07_api/cli_design.md)."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+# A pure client of the platform API (ADR-0014) — no Kernel import, no
+# database credential, ever. httpx/pyjwt versions match kernel's own
+# pins so the shared venv resolves one version for both.
+dependencies = [
+    "typer>=0.12,<1.0",
+    "rich>=13.7,<14.0",
+    "httpx>=0.27,<1.0",
+    "pyjwt>=2.9,<3.0",
+    "tomli-w>=1.0,<2.0",
+]
+
+[project.scripts]
+aios = "ai_os_cli.main:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_os_cli"]

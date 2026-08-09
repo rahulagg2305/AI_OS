@@ -48,7 +48,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M34 | Benchmarking Pack | P04 | 4 | 3 | 88% |
 | M36 | API (HTTP surface) | P02+P06 | 8 | 7 | 94% |
 | M37 | WebSocket stream | P06 | 1 | 1 | 100% |
-| M38 | CLI (aios) | P06 | 1 | 0 | 0% |
+| M38 | CLI (aios) | P06 | 1 | 0 | 50% |
 | M39 | Dashboard | P06 | 3 | 2 | 83% |
 | M40 | Deployment & Infrastructure | P01+P07 | 8 | 6 | 88% |
 | M41 | Threat Controls (T1-T12) | P03 | 2 | 2 | 100% |

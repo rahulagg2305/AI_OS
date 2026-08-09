@@ -10,6 +10,7 @@ requires-python = ">=3.12,<3.14"
 dependencies = [
     "ai-os-kernel",
     "ai-os-sdk",
+    "ai-os-cli",
     "ai-os-pack-software-engineering",
     "ai-os-pack-benchmarking",
     "ai-os-pack-project-intelligence",
@@ -46,10 +47,10 @@ dev = [
 # (platform_sdk_v1_scope.md step 1) — packaging only, no Protocols or
 # models yet; see platform_sdk/README.md for what each future step adds.
 #
-# Still planned, not yet scaffolded: platform_services (ai-os-services),
-# tools/cli (ai-os-cli). capability_packs/software-engineering is the
-# first pack scaffolded this way — see its own pyproject.toml for why it
-# depends on ai-os-kernel directly (a documented, temporary compromise:
+# Still planned, not yet scaffolded: platform_services (ai-os-services).
+# capability_packs/software-engineering is the first pack scaffolded
+# this way — see its own pyproject.toml for why it depends on
+# ai-os-kernel directly (a documented, temporary compromise:
 # platform_sdk_v1_scope.md steps 9–14 migrate it onto ai-os-sdk instead).
 # capability_packs/benchmarking was scaffolded `P04-S03-M34-T01` — its
 # own pyproject.toml has no ai-os-kernel dependency at all, real from
@@ -57,10 +58,14 @@ dev = [
 # capability_packs/project_intelligence was scaffolded `P05-S02-M32-T01`
 # — the same real-from-first-commit rule as benchmarking; depends on
 # ai-os-sdk (for TrustTier) plus pydantic, never ai-os-kernel.
+# tools/aios (ai-os-cli) was scaffolded `P06-S04-M38-T01` — a pure
+# client of the platform API (ADR-0014); no ai-os-kernel or ai-os-sdk
+# dependency at all, real from its first commit.
 [tool.uv.workspace]
 members = [
     "kernel",
     "platform_sdk",
+    "tools/aios",
     "capability_packs/software-engineering",
     "capability_packs/benchmarking",
     "capability_packs/project_intelligence",
@@ -69,6 +74,7 @@ members = [
 [tool.uv.sources]
 ai-os-kernel = { workspace = true }
 ai-os-sdk = { workspace = true }
+ai-os-cli = { workspace = true }
 ai-os-pack-software-engineering = { workspace = true }
 ai-os-pack-benchmarking = { workspace = true }
 ai-os-pack-project-intelligence = { workspace = true }
@@ -79,7 +85,7 @@ ai-os-pack-project-intelligence = { workspace = true }
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["kernel/src", "platform_sdk/src", "capability_packs/software-engineering/src", "capability_packs/benchmarking/src", "capability_packs/project_intelligence/src"]
+src = ["kernel/src", "platform_sdk/src", "tools/aios/src", "capability_packs/software-engineering/src", "capability_packs/benchmarking/src", "capability_packs/project_intelligence/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "SIM"]
@@ -89,9 +95,10 @@ select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "SIM"]
 "tests/**" = ["S101"]
 "capability_packs/*/tests/**" = ["S101"]
 "platform_sdk/tests/**" = ["S101"]
+"tools/aios/tests/**" = ["S101"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["ai_os_kernel", "ai_os_sdk", "ai_os_pack_software_engineering", "ai_os_pack_benchmarking", "ai_os_pack_project_intelligence"]
+known-first-party = ["ai_os_kernel", "ai_os_sdk", "ai_os_cli", "ai_os_pack_software_engineering", "ai_os_pack_benchmarking", "ai_os_pack_project_intelligence"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -101,7 +108,7 @@ plugins = ["pydantic.mypy"]
 # Only real code is checked. Empty component stubs (docstring-only
 # __init__.py files awaiting later Implementation Roadmap stages) still
 # type-check cleanly since they contain no statements.
-files = ["kernel/src", "kernel/alembic", "tests", "platform_sdk/src", "platform_sdk/tests", "capability_packs/software-engineering/src", "capability_packs/software-engineering/tests", "capability_packs/benchmarking/src", "capability_packs/benchmarking/tests", "capability_packs/project_intelligence/src", "capability_packs/project_intelligence/tests", "scripts"]
+files = ["kernel/src", "kernel/alembic", "tests", "platform_sdk/src", "platform_sdk/tests", "tools/aios/src", "tools/aios/tests", "capability_packs/software-engineering/src", "capability_packs/software-engineering/tests", "capability_packs/benchmarking/src", "capability_packs/benchmarking/tests", "capability_packs/project_intelligence/src", "capability_packs/project_intelligence/tests", "scripts"]
 
 [[tool.mypy.overrides]]
 module = "tests.*"

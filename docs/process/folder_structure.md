@@ -1,6 +1,6 @@
 # Folder Structure (Actual, Not Aspirational) – AI_OS
 
-**Status:** Active | **Last Updated:** 2026-08-07 (`P04-S03-M34-T01`: `capability_packs/benchmarking/` moved from Planned to real, tracked content). Prior: 2026-07-29 (Platform SDK v1.0.0 steps 1–8: `platform_sdk/` and `scripts/` both moved from Planned to real, tracked content)
+**Status:** Active | **Last Updated:** 2026-08-09 (`P06-S04-M38-T01`: `tools/` moved from Planned to real, tracked content). Prior: 2026-08-07 (`P04-S03-M34-T01`: `capability_packs/benchmarking/` moved from Planned to real, tracked content). Prior: 2026-07-29 (Platform SDK v1.0.0 steps 1–8: `platform_sdk/` and `scripts/` both moved from Planned to real, tracked content)
 
 `PROJECT_INDEX.md`'s own "Repository Structure" table lists the full, intended repository layout. This document records what actually has real content right now, so a fresh session doesn't waste time exploring an empty directory expecting to find something, or miss real content because a folder's name sounded aspirational.
 
@@ -24,6 +24,7 @@ Practical consequence: if you are working in a fresh clone and a document refere
 | `infra/` | Minimal | `docker-compose.yml` + `environments/{local,dev,staging,production}.yaml`. **`infra/kubernetes/`, `infra/terraform/`, `infra/docker/` have no tracked content, and there is no Dockerfile anywhere in the repository.** |
 | `platform_sdk/` | **Yes, as of Platform SDK v1.0.0 steps 1–8** | The real, installable `ai-os-sdk` package: `schemas/manifest.schema.json`; `errors/` (the `AiOsError` hierarchy); `models/` (`common`, `llm`, `prompt`, `tool`, `context` boundary models); `contracts/` (`Agent`, `Tool`, `LLMGateway`, `PromptRegistry`, `ToolInvoker`, `PackContextReceiver`, `ContextService`, `CapabilityPack`/`PackContext`/`PackRegistration`/`HealthReport`); `testing/` (`forbidden_imports`, `waiver` — `pack_contract_suite` check 7). Capability Packs still import Kernel internals directly today (a documented, dated, now-waived exception; see `../03_architecture/capability_framework/capability_pack_contract.md` and the pack's own `pack_contract_waiver.yaml`) — migrating onto these real types is `platform_sdk_v1_scope.md` steps 9–14. `sdk/`, `utilities/`, `prompts/` still have no tracked content. |
 | `scripts/` | **Yes, as of Platform SDK v1.0.0 step 8** | `check_import_boundaries.py` — the CI entry point for `pack_contract_suite` check 7, discovering every real Capability Pack and applying its own waiver file if one exists. |
+| `tools/` | **Yes, as of `P06-S04-M38-T01`** | `aios/` — the real, installable `ai-os-cli` distribution (`cli_design.md`), 5 of 8 documented command groups real. See `feature_inventory.md` module 38's own row. |
 | `workspace/` | Placeholder | `scratch/`/`temp/` with `.gitkeep` only — prototype scratch space, exempt from documentation-first (ADR-0003) |
 | `.github/` | **Yes** | `workflows/ci.yml` — real CI (lint/types/unit/integration run for real; the `contract` job's import-boundary-check step is real as of step 8; the pack-contract-suite-pytest/security/image/frontend stages remain deliberately gated to no-ops pending prerequisites) |
 
@@ -33,7 +34,6 @@ Practical consequence: if you are working in a fresh clone and a document refere
 |---|---|---|
 | `platform_services/` | `../03_architecture/services/` (7 documents) | Storage, Notification, Caching, Document Processing, Speech Gateway — still 0% built. **Git Integration is real (`P03-S01-M24-T01`) but deliberately lives at `kernel/src/ai_os_kernel/git_integration/`, not here** — a disclosed packaging decision (module_path stays a board label; whether Platform Services become a genuinely separate uv workspace tier is real, deferred, later architecture work), so this directory itself is still absent from a fresh clone. Redis is provisioned in Compose but **no Kernel code uses it**. |
 | `dashboard/` | `../13_dashboard/` (3 documents) | Real as of `P06-S02-M39-T01` (2026-08-08): a running React/TS/Vite shell consuming a generated API client — see `feature_inventory.md` module 39's own row. Not built: everything else ADR-0018 names (TanStack Router/Query, Tailwind/shadcn/ui, Recharts, Playwright e2e) |
-| `tools/` | `../07_api/cli_design.md` | No `aios` CLI package, no entry-point script declared |
 | `ai_context/` | `../ai_context/context_pack_structure.md` | Structure fully specified; zero packs written |
 | `knowledge/` | `../knowledge/knowledge_base_structure.md` | Structure fully specified; zero content |
 | `traceability/` | `../03_architecture/traceability/traceability_model.md` | No Traceability Engine exists to produce mappings |
