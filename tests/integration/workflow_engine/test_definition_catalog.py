@@ -113,10 +113,10 @@ def test_register_writes_the_documented_columns(database_url: str) -> None:
             # every None default (joinPolicy, toolId/promptId/
             # promptVersion/modelAlias, condition/branches added by
             # P02-S01-M05-T09, parallelSteps added by P02-S01-M05-T10,
-            # and now subWorkflowId, added by P02-S01-M05-T11, for this
-            # agent step) — the graph column faithfully mirrors the
-            # complete validated definition, not a hand-picked subset of
-            # it.
+            # subWorkflowId added by P02-S01-M05-T11, and now foreach,
+            # added by P08-S02-M30-T01, for this agent step) — the graph
+            # column faithfully mirrors the complete validated
+            # definition, not a hand-picked subset of it.
             assert row["graph"]["steps"] == [
                 {
                     "id": "analyze_requirements",
@@ -131,6 +131,7 @@ def test_register_writes_the_documented_columns(database_url: str) -> None:
                     "branches": None,
                     "parallelSteps": None,
                     "subWorkflowId": None,
+                    "foreach": None,
                 }
             ]
             assert "id" not in row["graph"]

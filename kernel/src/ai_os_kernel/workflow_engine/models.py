@@ -94,7 +94,12 @@ class _CamelModel(BaseModel):
 
 
 class StepType(StrEnum):
-    """The seven Supported Step Types (workflow_architecture.md)."""
+    """The eight Supported Step Types (workflow_architecture.md).
+    ``FOREACH`` added `P08-S02-M30-T01` — ADR-0021's own "dynamic
+    decomposition without dynamic control flow" pattern: a
+    ``technical-planner`` plan artifact drives a bounded fan-out of a
+    declared sub-workflow, one child instance per item, never an
+    unbounded or model-chosen loop."""
 
     AGENT = "agent"
     TOOL = "tool"
@@ -103,6 +108,7 @@ class StepType(StrEnum):
     SUB_WORKFLOW = "sub_workflow"
     QUALITY_GATE = "quality_gate"
     HUMAN_APPROVAL = "human_approval"
+    FOREACH = "foreach"
 
 
 class JoinPolicy(StrEnum):
@@ -132,6 +138,25 @@ class DecisionCondition(_CamelModel):
     equals: str | int | float | bool | None
 
 
+class ForeachSpec(_CamelModel):
+    """A ``foreach`` step's real, statically-declared fan-out
+    contract (`P08-S02-M30-T01`, ADR-0021: "A `foreach` step consumes
+    that artifact and executes a declared sub-workflow per item ...
+    `foreach` declares a maximum fan-out"). Mirrors
+    :class:`DecisionCondition`'s own "one named source step, one field
+    of its output" shape — ``sourceStepId``/``itemsField`` name which
+    prior step's output holds the real plan-artifact list and which
+    field of it is the list itself; ``maxFanOut`` is the real,
+    mandatory bound ADR-0021 requires ("no unbounded agent-driven
+    loop"), enforced by :class:`~ai_os_kernel.workflow_engine.
+    step_executor.ForeachStepExecutor` before any child instance is
+    created."""
+
+    source_step_id: str
+    items_field: str
+    max_fan_out: int = Field(gt=0)
+
+
 class WorkflowStep(_CamelModel):
     """One entry in the workflow's declared step sequence."""
 
@@ -147,6 +172,7 @@ class WorkflowStep(_CamelModel):
     branches: dict[str, str] | None = None
     parallel_steps: list[WorkflowStep] | None = None
     sub_workflow_id: str | None = None
+    foreach: ForeachSpec | None = None
 
     @field_validator(
         "agent_id", "tool_id", "prompt_id", "prompt_version", "model_alias", "sub_workflow_id"
@@ -168,16 +194,35 @@ class WorkflowStep(_CamelModel):
         SubWorkflowStepExecutor`'s own composition-level ``definitions``
         mapping — not read back from ``catalog.workflow_definitions``
         (write-only today; see that executor's own docstring for the
-        full reasoning and the product-owner decision behind it)."""
-        if self.type is StepType.SUB_WORKFLOW and self.sub_workflow_id is None:
+        full reasoning and the product-owner decision behind it).
+        ``foreach`` also declares ``subWorkflowId`` — the identical
+        reference shape, reused verbatim rather than inventing a second
+        one (`P08-S02-M30-T01`)."""
+        real_users = (StepType.SUB_WORKFLOW, StepType.FOREACH)
+        if self.type in real_users and self.sub_workflow_id is None:
             raise ValueError(
-                f"step '{self.id}': a sub_workflow step must declare subWorkflowId "
+                f"step '{self.id}': a {self.type.value} step must declare subWorkflowId "
                 "— it fails validation rather than defaulting silently"
             )
-        if self.type is not StepType.SUB_WORKFLOW and self.sub_workflow_id is not None:
+        if self.type not in real_users and self.sub_workflow_id is not None:
             raise ValueError(
-                f"step '{self.id}': only a sub_workflow step may declare subWorkflowId"
+                f"step '{self.id}': only a sub_workflow or foreach step may declare subWorkflowId"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _foreach_step_requires_foreach_spec(self) -> WorkflowStep:
+        """`P08-S02-M30-T01`: a ``foreach`` step must declare
+        ``foreach`` (:class:`ForeachSpec`) — the identical "fails
+        validation rather than defaulting silently" shape every other
+        step-type-specific field on this model already establishes."""
+        if self.type is StepType.FOREACH and self.foreach is None:
+            raise ValueError(
+                f"step '{self.id}': a foreach step must declare a foreach spec "
+                "(sourceStepId, itemsField, maxFanOut)"
+            )
+        if self.type is not StepType.FOREACH and self.foreach is not None:
+            raise ValueError(f"step '{self.id}': only a foreach step may declare foreach")
         return self
 
     @model_validator(mode="after")

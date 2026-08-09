@@ -114,6 +114,23 @@ class SubWorkflowFailedError(Exception):
     distinct real causes, one class, a clear message per site."""
 
 
+class ForeachFailedError(Exception):
+    """A ``foreach`` step (:class:`~ai_os_kernel.workflow_engine.
+    step_executor.ForeachStepExecutor`) could not genuinely be
+    satisfied — its declared ``sourceStepId``/``itemsField`` did not
+    resolve to a real list on a named prior step's own output, its
+    declared ``subWorkflowId`` has no matching entry in the executor's
+    own composition-level ``definitions`` mapping (the identical
+    configuration-problem shape :class:`SubWorkflowFailedError` already
+    covers), the real item count exceeded the declared ``maxFanOut``
+    (ADR-0021's own bounded-iteration rule), or one real child
+    :class:`~ai_os_kernel.workflow_engine.instance.WorkflowInstance` did
+    not reach :attr:`~ai_os_kernel.workflow_engine.advance_runner.
+    WorkflowRunOutcome.COMPLETED`. No type split for the same reason
+    :class:`SubWorkflowFailedError` already documents: several distinct
+    real causes, one class, a clear message per site."""
+
+
 class HumanApprovalPendingError(Exception):
     """A ``human_approval`` step
     (:class:`~ai_os_kernel.workflow_engine.human_approval.

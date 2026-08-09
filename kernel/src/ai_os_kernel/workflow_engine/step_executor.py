@@ -84,6 +84,7 @@ from ai_os_kernel.workflow_engine.agent import Agent
 from ai_os_kernel.workflow_engine.errors import (
     AgentOutputValidationError,
     DecisionConditionError,
+    ForeachFailedError,
     ParallelStepFailedError,
     SubWorkflowFailedError,
     ToolOutputValidationError,
@@ -775,31 +776,209 @@ class SubWorkflowStepExecutor:
         }
 
 
+class ForeachStepExecutor:
+    """Executes a ``foreach``-type step (`P08-S02-M30-T01`, ADR-0021)
+    by genuinely creating, starting, and running one real, separate
+    child :class:`~ai_os_kernel.workflow_engine.instance.WorkflowInstance`
+    per real item in a named prior step's own persisted output —
+    closing the last of ADR-0021's two named-but-undesigned step types
+    (``compensate`` remains open, separate work).
+
+    **Composes two already-proven mechanisms, invents neither.**
+    Reading "which prior step, which field" is
+    :class:`DecisionStepExecutor`'s own real pattern
+    (:func:`~ai_os_kernel.workflow_engine.quality_gate.
+    _latest_completed_output`); creating and running one real child
+    instance to completion and joining on its own last real output is
+    :class:`SubWorkflowStepExecutor`'s own real pattern, reused
+    unchanged per item. ``subWorkflowId`` resolution uses the identical
+    composition-level ``definitions`` mapping ``SubWorkflowStepExecutor``
+    already established — not a second resolution mechanism.
+
+    **Sequential, not concurrent — a real, disclosed, narrower scope
+    than :class:`ParallelStepExecutor`.** ADR-0021 names ``foreach`` as
+    a bounded fan-out over a plan artifact, not a concurrency primitive
+    (that is ``parallel``'s own, separate, already-real job); running
+    each child one at a time is the smallest real slice that honestly
+    satisfies "executes a declared sub-workflow per item." Real,
+    unclaimed follow-up work if concurrent fan-out is ever needed.
+
+    **Bounded, per ADR-0021's own "no unbounded agent-driven loop"
+    rule**: the real item count is checked against the step's own
+    declared ``maxFanOut`` *before* any child instance is created —
+    exceeding it refuses the whole step, never silently truncates the
+    list.
+    """
+
+    def __init__(
+        self,
+        *,
+        definitions: Mapping[str, WorkflowDefinition],
+        instance_service: WorkflowInstanceService,
+        advance_runner: WorkflowAdvanceRunner,
+        repository: WorkflowInstanceRepository,
+        pack_id: str,
+        principal_id: str,
+        lease_duration_seconds: int,
+        max_iterations: int,
+    ) -> None:
+        self._definitions = definitions
+        self._instance_service = instance_service
+        self._advance_runner = advance_runner
+        self._repository = repository
+        self._pack_id = pack_id
+        self._principal_id = principal_id
+        self._lease_duration_seconds = lease_duration_seconds
+        self._max_iterations = max_iterations
+
+    async def execute(
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
+    ) -> dict[str, Any]:
+        if step.type is not StepType.FOREACH:
+            raise ValueError(
+                f"ForeachStepExecutor cannot execute step '{step.id}' of type "
+                f"'{step.type.value}' — it only handles foreach steps"
+            )
+        # Model validation (`_foreach_step_requires_foreach_spec`,
+        # `_sub_workflow_step_requires_sub_workflow_id`) already
+        # guarantees both are set for a well-formed foreach step;
+        # narrowed here only so mypy sees it, never a real runtime gap.
+        foreach_spec = step.foreach
+        sub_workflow_id = step.sub_workflow_id
+        if foreach_spec is None or sub_workflow_id is None:
+            raise ValueError(
+                f"step '{step.id}' declares no foreach spec / subWorkflowId — "
+                "WorkflowStep validation should already have required both for a "
+                "foreach step"
+            )
+        if workflow_id is None:
+            raise ValueError(
+                f"foreach step '{step.id}' requires a real workflow_id to read its "
+                "foreach spec's source step output"
+            )
+
+        definition = self._definitions.get(sub_workflow_id)
+        if definition is None:
+            raise ForeachFailedError(
+                f"foreach step '{step.id}' declares subWorkflowId "
+                f"'{sub_workflow_id}', which has no entry in this executor's own "
+                f"composition-level definitions mapping (real ids: "
+                f"{sorted(self._definitions)!r})"
+            )
+
+        steps = await self._repository.list_steps(workflow_id)
+        source_output = _latest_completed_output(steps, foreach_spec.source_step_id)
+        if source_output is None:
+            raise ForeachFailedError(
+                f"foreach step '{step.id}' could not resolve its items: source step "
+                f"'{foreach_spec.source_step_id}' has no persisted output yet"
+            )
+        if foreach_spec.items_field not in source_output:
+            raise ForeachFailedError(
+                f"foreach step '{step.id}' could not resolve its items: source step "
+                f"'{foreach_spec.source_step_id}''s output has no field "
+                f"'{foreach_spec.items_field}' (real keys: {sorted(source_output)!r})"
+            )
+
+        items = source_output[foreach_spec.items_field]
+        if not isinstance(items, list):
+            raise ForeachFailedError(
+                f"foreach step '{step.id}': source step '{foreach_spec.source_step_id}' "
+                f"field '{foreach_spec.items_field}' is not a real list "
+                f"(got {type(items).__name__})"
+            )
+        if len(items) > foreach_spec.max_fan_out:
+            raise ForeachFailedError(
+                f"foreach step '{step.id}': {len(items)} real items exceeds the "
+                f"declared maxFanOut of {foreach_spec.max_fan_out}"
+            )
+
+        results: list[dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                raise ForeachFailedError(
+                    f"foreach step '{step.id}': one real item is not a real JSON object "
+                    f"(got {type(item).__name__}) — a child instance's inputs must "
+                    "be a mapping"
+                )
+
+            child_instance = await self._instance_service.create_instance(
+                definition=definition,
+                inputs=item,
+                principal_id=self._principal_id,
+                pack_id=self._pack_id,
+                # Inherits the parent instance's own real, captured
+                # permission term (P03-S05-M14-T09), the identical
+                # monotonic-narrowing shape SubWorkflowStepExecutor
+                # already establishes.
+                principal_permissions=principal_permissions,
+            )
+            await self._instance_service.start(
+                workflow_id=child_instance.workflow_id,
+                reason=(
+                    f"started by foreach step '{step.id}' of workflow "
+                    f"'{workflow_id}' (item {len(results)})"
+                ),
+            )
+            result = await self._advance_runner.run_to_completion(
+                workflow_id=child_instance.workflow_id,
+                definition=definition,
+                worker_id=f"foreach:{step.id}:{len(results)}",
+                lease_duration_seconds=self._lease_duration_seconds,
+                max_iterations=self._max_iterations,
+            )
+            if result.outcome != "completed":
+                raise ForeachFailedError(
+                    f"foreach step '{step.id}' invoking '{sub_workflow_id}' for item "
+                    f"{len(results)} (child workflow '{child_instance.workflow_id}') "
+                    f"did not complete: outcome={result.outcome}"
+                )
+
+            completed_child = await self._repository.get_instance(child_instance.workflow_id)
+            child_output: dict[str, Any] = {}
+            if completed_child is not None and completed_child.current_step_id is not None:
+                child_steps = await self._repository.list_steps(child_instance.workflow_id)
+                child_output = (
+                    _latest_completed_output(child_steps, completed_child.current_step_id) or {}
+                )
+            results.append({"childWorkflowId": child_instance.workflow_id, "outputs": child_output})
+
+        return {"subWorkflowId": sub_workflow_id, "itemCount": len(items), "results": results}
+
+
 class DispatchingStepExecutor:
     """Routes an Agent-type step to ``agent_executor``, a Tool-type step
     to ``tool_executor``, a Quality-Gate-type step to
     ``quality_gate_executor`` (when supplied), a Decision-type step to
     ``decision_executor`` (when supplied), a Parallel-type step to
     ``parallel_executor`` (when supplied), a Human-Approval-type step to
-    ``human_approval_executor`` (when supplied), and every other step
-    type to ``default_executor``.
+    ``human_approval_executor`` (when supplied), a Foreach-type step to
+    ``foreach_executor`` (when supplied), and every other step type to
+    ``default_executor``.
 
-    The only place that knows all seven executors exist; none of them
+    The only place that knows all eight executors exist; none of them
     needs to know about the others or about step types it does not
     handle. ``quality_gate_executor``/``decision_executor``/
     ``parallel_executor``/``sub_workflow_executor``/
-    ``human_approval_executor`` all default to ``None`` — every existing
-    caller that does not supply one keeps routing that step type to
-    ``default_executor`` exactly as before (:class:`NoOpStepExecutor`,
-    unchanged); only a caller that genuinely wants real, blocking gate
-    evaluation (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`),
-    real decision-step branching, real concurrent parallel execution,
-    real child-workflow invocation, or a real, durable human-approval
-    pause supplies :class:`~ai_os_kernel.workflow_engine.quality_gate.
+    ``human_approval_executor``/``foreach_executor`` all default to
+    ``None`` — every existing caller that does not supply one keeps
+    routing that step type to ``default_executor`` exactly as before
+    (:class:`NoOpStepExecutor`, unchanged); only a caller that
+    genuinely wants real, blocking gate evaluation
+    (:mod:`ai_os_kernel.workflow_engine.delivery_pipeline`), real
+    decision-step branching, real concurrent parallel execution, real
+    child-workflow invocation, a real, durable human-approval pause, or
+    a real, bounded plan-artifact fan-out supplies
+    :class:`~ai_os_kernel.workflow_engine.quality_gate.
     QualityGateStepExecutor`/:class:`DecisionStepExecutor`/
     :class:`ParallelStepExecutor`/:class:`SubWorkflowStepExecutor`/
     :class:`~ai_os_kernel.workflow_engine.human_approval.
-    HumanApprovalStepExecutor` here.
+    HumanApprovalStepExecutor`/:class:`ForeachStepExecutor` here.
     """
 
     def __init__(
@@ -812,6 +991,7 @@ class DispatchingStepExecutor:
         parallel_executor: StepExecutor | None = None,
         sub_workflow_executor: StepExecutor | None = None,
         human_approval_executor: StepExecutor | None = None,
+        foreach_executor: StepExecutor | None = None,
     ) -> None:
         self._agent_executor = agent_executor
         self._tool_executor = tool_executor
@@ -821,6 +1001,7 @@ class DispatchingStepExecutor:
         self._parallel_executor = parallel_executor
         self._sub_workflow_executor = sub_workflow_executor
         self._human_approval_executor = human_approval_executor
+        self._foreach_executor = foreach_executor
 
     async def execute(
         self,
@@ -849,4 +1030,6 @@ class DispatchingStepExecutor:
             return await self._sub_workflow_executor.execute(step, **kwargs)
         if step.type is StepType.HUMAN_APPROVAL and self._human_approval_executor is not None:
             return await self._human_approval_executor.execute(step, **kwargs)
+        if step.type is StepType.FOREACH and self._foreach_executor is not None:
+            return await self._foreach_executor.execute(step, **kwargs)
         return await self._default_executor.execute(step, **kwargs)

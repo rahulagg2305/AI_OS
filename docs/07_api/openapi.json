@@ -756,7 +756,7 @@
         "type": "object"
       },
       "StepType": {
-        "description": "The seven Supported Step Types (workflow_architecture.md).",
+        "description": "The eight Supported Step Types (workflow_architecture.md).\n``FOREACH`` added `P08-S02-M30-T01` \u2014 ADR-0021's own \"dynamic\ndecomposition without dynamic control flow\" pattern: a\n``technical-planner`` plan artifact drives a bounded fan-out of a\ndeclared sub-workflow, one child instance per item, never an\nunbounded or model-chosen loop.",
         "enum": [
           "agent",
           "tool",
@@ -764,7 +764,8 @@
           "parallel",
           "sub_workflow",
           "quality_gate",
-          "human_approval"
+          "human_approval",
+          "foreach"
         ],
         "title": "StepType",
         "type": "string"

@@ -254,6 +254,7 @@ _STEP_TYPES = (
     "sub_workflow",
     "quality_gate",
     "human_approval",
+    "foreach",
 )
 
 workflow_steps = sa.Table(

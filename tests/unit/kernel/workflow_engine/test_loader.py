@@ -469,7 +469,9 @@ def test_sub_workflow_id_on_a_non_sub_workflow_step_fails_clearly(tmp_path: Path
     path = _write_definition(tmp_path / "sub_workflow_id_misplaced.yaml", content)
     loader = WorkflowDefinitionLoader()
 
-    with pytest.raises(WorkflowDefinitionError, match="only a sub_workflow step may declare"):
+    with pytest.raises(
+        WorkflowDefinitionError, match="only a sub_workflow or foreach step may declare"
+    ):
         loader.load(path)
 
 
