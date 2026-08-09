@@ -1,0 +1,20 @@
+[project]
+name = "ai-os-pack-project-intelligence"
+version = "0.1.0"
+description = "AI_OS Project Intelligence Capability Pack — repository ingestion and structural model (first real increment)."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+# No ai-os-kernel dependency, ever — the same real-from-first-commit
+# rule capability_packs/benchmarking's own pyproject.toml already
+# states; only ai-os-sdk plus pydantic.
+dependencies = [
+    "ai-os-sdk",
+    "pydantic>=2.7,<3.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_os_pack_project_intelligence"]

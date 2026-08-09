@@ -91,6 +91,24 @@ jobs:
       # means it — only unit+integration together do.
       - name: pytest tests/unit
         run: uv run pytest tests/unit -v
+      # Real, previously-undiscovered gap (found `P05-S02-M32-T01`): no
+      # CI job ever ran any Capability Pack's own tests/ directory —
+      # confirmed by reading this file directly, not merely by test
+      # count. `capability_packs/*/tests/**` is outside root pyproject's
+      # `testpaths = ["tests"]`, so `pytest tests/unit` above never
+      # collected it either. **Scoped to this pack alone, not a
+      # repo-wide glob**: attempting the generic form surfaced a
+      # second, separate, pre-existing bug in
+      # `capability_packs/software-engineering/tests/test_database_agent.py`
+      # (a collection-time `ModuleNotFoundError` — that file has
+      # apparently never been successfully collected standalone before,
+      # since nothing ever ran it) — a real, disclosed, deferred fix for
+      # a future step, not this one's scope. Widening this step to
+      # cover every pack generically is real, separate follow-up work
+      # once that pre-existing bug is fixed.
+      - name: pytest capability_packs/project_intelligence (pack-local tests)
+        if: hashFiles('capability_packs/project_intelligence/tests/**') != ''
+        run: uv run pytest capability_packs/project_intelligence/tests -v
 
   contract:
     name: Contract tests
