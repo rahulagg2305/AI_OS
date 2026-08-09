@@ -55,10 +55,10 @@ Complies with the Capability Pack Contract (no provider integrations or secrets 
 
 ---
 
-## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+## Implementation Status (updated 2026-08-09, `P06-S06-M25-T01` — not part of the Accepted decision)
 
-**Status in code:** Not yet implemented
+**Status in code: a real first increment.** `ai_os_kernel.speech_gateway` (built inside the Kernel, not a separate `platform_services` package — no real `uv` workspace member exists for `platform_services` yet, the identical, already-established Notification Service/Git Integration packaging precedent) has real `SpeechToTextProvider`/`TextToSpeechProvider`/`WakeWordProvider` Protocols, a real `SpeechGateway` composed entry point, real alias-based routing (`DispatchingSpeechGateway` — genuinely distinct STT/TTS/wake-word alias namespaces), and one real, deterministic reference implementation (`echo_adapter.py`) proving the request/response contract end to end — mirroring `EchoLLMGateway`'s own identical role before any real LLM provider adapter existed.
 
-`platform_services/` contains no files at all, so there is no Speech Gateway, no STT, TTS, or wake-word adapter, and no Voice Capability Pack. This decision is scheduled for Stage F and nothing about it has been started.
+**A real, disclosed gap found by direct investigation before writing any code, resolved via `AskUserQuestion`:** every one of this ADR's own named reference adapters (local Whisper/`faster-whisper`, a cloud STT adapter, local Piper, a cloud TTS adapter, `openWakeWord`) needs infrastructure this repository has none of yet — no audio/ML runtime dependency installed, and no speech-provider credential configured anywhere (unlike the Anthropic key already wired for the LLM Gateway). Wiring any real provider is real, separate, credential/dependency-gated follow-up work. Also not built: retry/fallback/circuit-breaker routing (real, later sophistication, mirroring how `DispatchingLLMGateway` itself only grew this across several separate tickets), the `local_only` privacy policy, and the Voice Capability Pack itself (still 0% built) — nothing here is wired into `bootstrap.py`, since no real caller exists yet to justify a real composition.
 
 Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

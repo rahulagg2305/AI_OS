@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 93%** (229.5 of 246 Task-equivalents complete)
+**Overall: 93%** (230 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -44,7 +44,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P06 (F) | S03 Dashboard | 3 | 2 | 1 | 0 | 83% |
 | P06 (F) | S04 Command Line Interface | 1 | 0 | 1 | 0 | 50% |
 | P06 (F) | S05 Notifications | 2 | 0 | 2 | 0 | 50% |
-| P06 (F) | S06 Voice | 2 | 0 | 0 | 2 | 0% |
+| P06 (F) | S06 Voice | 2 | 0 | 1 | 1 | 25% |
 | P07 (G) | S01 Deployment and Infrastructure | 3 | 1 | 2 | 0 | 67% |
 | P07 (G) | S02 Security Hardening | 3 | 3 | 0 | 0 | 100% |
 | P07 (G) | S03 Performance, Chaos and Coverage | 2 | 0 | 2 | 0 | 50% |
@@ -61,7 +61,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 17 | 97% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 50% |
-| P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 6 | 65% |
+| P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 6 | 69% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 75% |
 | P08 (Stage H) - Expansion | 9 | 7 | 83% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |
@@ -70,7 +70,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 2 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
-- `P06-S06-M25-T01` Speech Gateway
+- `P06-S06-M33-T01` Voice pack MVP
 - `P08-S01-M29-T07` performance agent
 
 ## Dependency review signal
