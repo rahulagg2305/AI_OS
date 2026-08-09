@@ -168,6 +168,31 @@ already flowed this far before this step; only the last hop, into
 and is completely unaffected — this step's own "preserve existing
 behaviour for callers that do not use the new metadata" requirement.
 
+**Two more, per-step ceilings now exist too (`P02-S02-M06-T07`,
+2026-08-10) — tokens and wall-time.** Both real composition sites
+(``_build_prompted_agent_registry`` and, for the first time,
+``_build_se_delivery_pipeline_registry`` — see below) construct a
+:class:`~ai_os_kernel.llm_gateway.budget_enforcer.PerScopeCountBudgetEnforcer`
+each (``_STEP_TOKEN_BUDGET_CEILING``/``_STEP_WALL_TIME_BUDGET_CEILING_MS``,
+the identical named-constant carve-out), keyed by ``request.metadata``'s
+own ``(workflow_id, step_id)`` composite — real, honest per-response
+numbers (``usage.input_tokens + usage.output_tokens``; ``usage.latency_ms``)
+already produced by every real adapter, accumulated the identical way
+the two cost ceilings already are. `StepBudget`'s fourth dimension,
+``max_tool_calls``, remains genuinely unbuilt and disclosed — no
+``tools`` field exists on ``LLMRequest`` yet to count.
+
+**The real SE pack pipeline gateway (`_build_se_delivery_pipeline_registry`)
+now carries all four ceilings too — a real, previously-undisclosed gap
+this step found and closed.** Every real, running workflow this project
+actually exercises (`se.delivery_pipeline`, `se.product_creation`,
+`se.implement_task`) goes through that function's own
+``DispatchingLLMGateway``, not the platform-demo one
+``_build_prompted_agent_registry`` builds — which had carried the two
+cost ceilings since they were first built, while the pipeline gateway
+carried none at all. Reuses the identical four named ceiling constants,
+not a second, drifting set of values.
+
 Still deliberately minimal: one deterministic Router implementation,
 no provider health beyond the breaker's own binary signal, no
 experiment pinning, no agent/principal metadata, no capability
@@ -444,7 +469,10 @@ from ai_os_kernel.llm_gateway.adapters.local_adapter import (
 from ai_os_kernel.llm_gateway.adapters.local_adapter import build_local_adapter
 from ai_os_kernel.llm_gateway.adapters.model_config import LLMProviderConfig, load_provider_config
 from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
-from ai_os_kernel.llm_gateway.budget_enforcer import PerScopeBudgetEnforcer
+from ai_os_kernel.llm_gateway.budget_enforcer import (
+    PerScopeBudgetEnforcer,
+    PerScopeCountBudgetEnforcer,
+)
 from ai_os_kernel.llm_gateway.call_recorder import SqlLLMCallRecorder
 from ai_os_kernel.llm_gateway.capability_negotiator import StaticCapabilityNegotiator
 from ai_os_kernel.llm_gateway.circuit_breaker import InMemoryCircuitBreaker
@@ -666,6 +694,17 @@ _BACKOFF_MAX_TOTAL_SECONDS = 15.0
 # Both are placeholder safety ceilings, not tuned production values.
 _ALIAS_BUDGET_CEILING_USD = Decimal("10.00")
 _WORKFLOW_BUDGET_CEILING_USD = Decimal("25.00")
+
+# The Policy & Budget Enforcer's two per-step ceilings (`P02-S02-M06-T07`,
+# 2026-08-10) — StepBudget's own `max_tokens`/`max_wall_seconds`
+# dimensions (`ai_os_sdk.models.common`), keyed by the composite
+# `(workflow_id, step_id)` `budget_enforcer.step_scope` builds. The
+# identical "placeholder safety ceiling, not tuned" carve-out as the two
+# cost ceilings above — not derived from any measured baseline, chosen
+# generously so no real, honest single-step call sequence should
+# legitimately hit either one.
+_STEP_TOKEN_BUDGET_CEILING = 100_000
+_STEP_WALL_TIME_BUDGET_CEILING_MS = 120_000
 
 # The smallest possible real workflow: one agent step naming
 # _PROMPTED_AGENT_ID. Identifiers below follow the identical "no real
@@ -1112,6 +1151,12 @@ async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
             workflow_budget_enforcer=PerScopeBudgetEnforcer(
                 ceiling_usd=_WORKFLOW_BUDGET_CEILING_USD
             ),
+            step_token_budget_enforcer=PerScopeCountBudgetEnforcer(
+                ceiling=_STEP_TOKEN_BUDGET_CEILING
+            ),
+            step_wall_time_budget_enforcer=PerScopeCountBudgetEnforcer(
+                ceiling=_STEP_WALL_TIME_BUDGET_CEILING_MS
+            ),
             capability_negotiator=StaticCapabilityNegotiator(
                 router=router, capabilities_by_model_id=provider_config.capabilities
             ),
@@ -1386,14 +1431,35 @@ async def _build_se_delivery_pipeline_registry(engine: AsyncEngine) -> AgentRegi
 
     **A deliberately simpler LLM Gateway composition than
     ``_build_prompted_agent_registry``'s own** — no circuit breaker,
-    backoff policy, budget enforcer, or capability negotiator. This
-    pipeline's own three LLM-calling agents need a real, working
-    completion path to genuinely run; the platform demo's full
-    resilience stack is real, useful infrastructure this pipeline does
-    not yet have a documented need for. Adding it is a distinct, later
-    step once real usage justifies it, not speculative infrastructure
-    built ahead of that need (coding_standards.md: "no
-    placeholder/speculative architecture").
+    backoff policy, or capability negotiator. This pipeline's own
+    LLM-calling agents need a real, working completion path to
+    genuinely run; that part of the platform demo's own resilience
+    stack is real, useful infrastructure this pipeline does not yet
+    have a documented need for. Adding it is a distinct, later step
+    once real usage justifies it, not speculative infrastructure built
+    ahead of that need (coding_standards.md: "no placeholder/speculative
+    architecture").
+
+    **Budget enforcement is the one exception, added `P02-S02-M06-T07`
+    (2026-08-10) — a real, previously-disclosed scope limit this step
+    reverses, with real justification, not silently.** This function's
+    own docstring used to list "budget enforcer" alongside circuit
+    breaker/backoff/capability negotiator as deferred; that framing
+    predates this pack's own workflows (`se.delivery_pipeline`,
+    `se.product_creation`, `se.implement_task`) becoming genuinely real,
+    running pipelines — the *only* real production gateway path this
+    codebase's own real workloads exercise today, while
+    ``_build_prompted_agent_registry``'s own gateway (which has carried
+    budget enforcement since it was first built) backs no real pipeline
+    at all. FR-022 ("Enforce per-step and per-workflow budgets") is a
+    documented MUST requirement; a Gateway with zero budget protection
+    on its one real, running path is a materially different, larger gap
+    than the resilience features still deliberately deferred here. All
+    four real ceilings — alias, workflow, step-tokens, step-wall-time —
+    are wired below, reusing the identical named constants
+    ``_build_prompted_agent_registry`` uses, not a second, drifting set
+    of values. Circuit breaker/backoff/capability negotiator remain
+    genuinely deferred, unchanged.
 
     **Always returns a real, usable registry — never ``None``, even
     when no real Anthropic secret is configured.** A first version of
@@ -1470,7 +1536,18 @@ async def _build_se_delivery_pipeline_registry(engine: AsyncEngine) -> AgentRegi
             pricing=provider_config.pricing,
         )
         llm_gateway = DispatchingLLMGateway(
-            router=router, gateways={PROVIDER_NAME: anthropic_gateway}
+            router=router,
+            gateways={PROVIDER_NAME: anthropic_gateway},
+            budget_enforcer=PerScopeBudgetEnforcer(ceiling_usd=_ALIAS_BUDGET_CEILING_USD),
+            workflow_budget_enforcer=PerScopeBudgetEnforcer(
+                ceiling_usd=_WORKFLOW_BUDGET_CEILING_USD
+            ),
+            step_token_budget_enforcer=PerScopeCountBudgetEnforcer(
+                ceiling=_STEP_TOKEN_BUDGET_CEILING
+            ),
+            step_wall_time_budget_enforcer=PerScopeCountBudgetEnforcer(
+                ceiling=_STEP_WALL_TIME_BUDGET_CEILING_MS
+            ),
         )
     except Exception as exc:
         logger.warning(

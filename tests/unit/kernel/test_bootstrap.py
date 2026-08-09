@@ -29,7 +29,10 @@ from ai_os_kernel.context_manager.resolvers import (
     WorkflowStateResolver,
 )
 from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
-from ai_os_kernel.llm_gateway.budget_enforcer import PerScopeBudgetEnforcer
+from ai_os_kernel.llm_gateway.budget_enforcer import (
+    PerScopeBudgetEnforcer,
+    PerScopeCountBudgetEnforcer,
+)
 from ai_os_kernel.llm_gateway.capability_negotiator import StaticCapabilityNegotiator
 from ai_os_kernel.llm_gateway.circuit_breaker import InMemoryCircuitBreaker
 from ai_os_kernel.llm_gateway.gateway import DispatchingLLMGateway
@@ -183,6 +186,52 @@ def test_the_real_composition_root_wires_a_real_workflow_budget_enforcer(
     # The two ceilings are independent instances with independent scope
     # spaces, not one enforcer reused for both purposes.
     assert gateway._workflow_budget_enforcer is not gateway._budget_enforcer
+
+
+def test_the_real_composition_root_wires_real_per_step_budget_enforcers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AIOS_DATABASE_URL", "postgresql+asyncpg://fake:fake@127.0.0.1:1/fake")
+    monkeypatch.setenv("AIOS_SECRET_LLM_ANTHROPIC_API_KEY", "test-key-value")
+    app = build_app(_config())
+
+    with TestClient(app):
+        agent = asyncio.run(app.state.agent_registry.resolve_agent("platform/prompted-agent"))
+
+    assert isinstance(agent, PromptedAgent)
+    gateway = agent._service._llm_gateway
+    assert isinstance(gateway, DispatchingLLMGateway)
+    assert isinstance(gateway._step_token_budget_enforcer, PerScopeCountBudgetEnforcer)
+    assert isinstance(gateway._step_wall_time_budget_enforcer, PerScopeCountBudgetEnforcer)
+    # Two independent instances, two independent scope spaces — never
+    # one enforcer reused across ceilings (the other two ceilings are a
+    # different, unrelated Protocol entirely — BudgetEnforcer, not
+    # CountBudgetEnforcer — so the isinstance checks above already
+    # prove all four are genuinely distinct).
+    assert gateway._step_token_budget_enforcer is not gateway._step_wall_time_budget_enforcer
+
+
+def test_the_real_se_delivery_pipeline_registry_wires_all_four_real_budget_enforcers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AIOS_DATABASE_URL", "postgresql+asyncpg://fake:fake@127.0.0.1:1/fake")
+    monkeypatch.setenv("AIOS_SECRET_LLM_ANTHROPIC_API_KEY", "test-key-value")
+    app = build_app(_config())
+
+    with TestClient(app):
+        registry = app.state.se_delivery_pipeline_agent_registry
+
+    gateway = registry._llm_gateway
+    assert isinstance(gateway, DispatchingLLMGateway)
+    assert isinstance(gateway._budget_enforcer, PerScopeBudgetEnforcer)
+    assert isinstance(gateway._workflow_budget_enforcer, PerScopeBudgetEnforcer)
+    assert isinstance(gateway._step_token_budget_enforcer, PerScopeCountBudgetEnforcer)
+    assert isinstance(gateway._step_wall_time_budget_enforcer, PerScopeCountBudgetEnforcer)
+    # Real, previously-disclosed, deliberate scope limit unchanged: no
+    # circuit breaker/backoff/capability negotiator here yet.
+    assert gateway._circuit_breaker is None
+    assert gateway._backoff_policy is None
+    assert gateway._capability_negotiator is None
 
 
 def test_the_real_composition_root_wires_a_real_capability_negotiator(

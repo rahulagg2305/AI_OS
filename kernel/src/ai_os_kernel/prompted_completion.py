@@ -96,7 +96,7 @@ from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
 )
 from ai_os_kernel.llm_gateway.adapters.model_config import ModelPricing
 from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
-from ai_os_kernel.llm_gateway.budget_enforcer import BudgetEnforcer
+from ai_os_kernel.llm_gateway.budget_enforcer import BudgetEnforcer, CountBudgetEnforcer
 from ai_os_kernel.llm_gateway.call_recorder import LLMCallRecorder, SqlLLMCallRecorder
 from ai_os_kernel.llm_gateway.capability_negotiator import CapabilityNegotiator
 from ai_os_kernel.llm_gateway.circuit_breaker import CircuitBreaker
@@ -199,6 +199,8 @@ async def build_anthropic_prompted_completion_service(
     backoff_policy: BackoffPolicy | None = None,
     budget_enforcer: BudgetEnforcer | None = None,
     workflow_budget_enforcer: BudgetEnforcer | None = None,
+    step_token_budget_enforcer: CountBudgetEnforcer | None = None,
+    step_wall_time_budget_enforcer: CountBudgetEnforcer | None = None,
     capability_negotiator: CapabilityNegotiator | None = None,
 ) -> PromptedCompletionService:
     """Assembles the one real composition this step approves: a real
@@ -235,9 +237,10 @@ async def build_anthropic_prompted_completion_service(
     function's required parameters or any existing caller changing.
 
     ``circuit_breaker``/``backoff_policy``/``budget_enforcer``/
-    ``workflow_budget_enforcer``/``capability_negotiator`` are all
+    ``workflow_budget_enforcer``/``step_token_budget_enforcer``/
+    ``step_wall_time_budget_enforcer``/``capability_negotiator`` are all
     passed straight through to :class:`DispatchingLLMGateway` unchanged
-    — all five defaulted to ``None`` ("disabled"/"not triggered," in
+    — all seven defaulted to ``None`` ("disabled"/"not triggered," in
     that class's own terms) for the identical "existing callers see no
     behaviour change" reason ``additional_gateways`` already
     established.
@@ -258,6 +261,8 @@ async def build_anthropic_prompted_completion_service(
         backoff_policy=backoff_policy,
         budget_enforcer=budget_enforcer,
         workflow_budget_enforcer=workflow_budget_enforcer,
+        step_token_budget_enforcer=step_token_budget_enforcer,
+        step_wall_time_budget_enforcer=step_wall_time_budget_enforcer,
         capability_negotiator=capability_negotiator,
     )
     return PromptedCompletionService(

@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 94%** (232 of 246 Task-equivalents complete)
+**Overall: 95%** (233 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -21,7 +21,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S05 Observability and Audit | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S06 CI and Test Infrastructure | 10 | 10 | 0 | 0 | 100% |
 | P02 (B) | S01 Workflow Execution Core | 15 | 15 | 0 | 0 | 100% |
-| P02 (B) | S02 LLM Gateway | 12 | 11 | 1 | 0 | 96% |
+| P02 (B) | S02 LLM Gateway | 12 | 12 | 0 | 0 | 100% |
 | P02 (B) | S03 Prompt and Context Assembly | 20 | 19 | 0 | 1 | 95% |
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 13 | 0 | 1 | 93% |
 | P02 (B) | S05 Capability Manager and Platform SDK | 19 | 19 | 0 | 0 | 100% |
@@ -36,7 +36,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S06 Threat Controls | 2 | 2 | 0 | 0 | 100% |
 | P04 (D) | S01 Evaluation Engine | 11 | 11 | 0 | 0 | 100% |
 | P04 (D) | S02 Traceability Engine | 3 | 3 | 0 | 0 | 100% |
-| P04 (D) | S03 Benchmarking Pack | 4 | 3 | 1 | 0 | 88% |
+| P04 (D) | S03 Benchmarking Pack | 4 | 4 | 0 | 0 | 100% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 2 | 0 | 50% |
 | P05 (E) | S02 Project Intelligence Pack | 6 | 0 | 6 | 0 | 50% |
 | P06 (F) | S01 API Completion and Published Contract | 4 | 3 | 1 | 0 | 88% |
@@ -57,9 +57,9 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 46 | 98% |
-| P02 (Stage B) - Minimum Viable Kernel | 100 | 97 | 98% |
+| P02 (Stage B) - Minimum Viable Kernel | 100 | 98 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
-| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 17 | 97% |
+| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 18 | 100% |
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 50% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 6 | 73% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 75% |

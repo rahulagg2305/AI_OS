@@ -37,7 +37,16 @@ independent ceiling now also exists, per-``workflow_id``, read from the
 request's own :class:`~ai_os_kernel.llm_gateway.models.TraceContext`
 (``metadata``) when the caller supplies one; see
 :mod:`~ai_os_kernel.llm_gateway.budget_enforcer`'s own docstring for
-why this is two independent enforcer instances, not one.
+why this is two independent enforcer instances, not one. **Two more,
+per-step ceilings now exist too (`P02-S02-M06-T07`, 2026-08-10)**: an
+optional ``step_token_budget_enforcer``/``step_wall_time_budget_enforcer``
+(:class:`~ai_os_kernel.llm_gateway.budget_enforcer.CountBudgetEnforcer`),
+checked and recorded identically to the two cost ceilings but keyed by
+the composite ``(workflow_id, step_id)`` :func:`~ai_os_kernel.llm_gateway.
+budget_enforcer.step_scope` builds — see that module's own docstring for
+why bare ``step_id`` would double-count spend across separate workflow
+instances, and for the real, disclosed reason a ``max_tool_calls``
+ceiling remains unbuilt (no ``tools`` field on ``LLMRequest`` yet).
 
 No writer to ``evaluation.llm_calls`` either: Observability is one of
 §3's fourteen subsystems, and nothing here produces a real call to
@@ -64,7 +73,7 @@ from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
 from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
-from ai_os_kernel.llm_gateway.budget_enforcer import BudgetEnforcer
+from ai_os_kernel.llm_gateway.budget_enforcer import BudgetEnforcer, CountBudgetEnforcer, step_scope
 from ai_os_kernel.llm_gateway.capability_negotiator import (
     CapabilityNegotiator,
     ProviderCapabilities,
@@ -405,6 +414,8 @@ class DispatchingLLMGateway:
         backoff_policy: BackoffPolicy | None = None,
         budget_enforcer: BudgetEnforcer | None = None,
         workflow_budget_enforcer: BudgetEnforcer | None = None,
+        step_token_budget_enforcer: CountBudgetEnforcer | None = None,
+        step_wall_time_budget_enforcer: CountBudgetEnforcer | None = None,
         capability_negotiator: CapabilityNegotiator | None = None,
         rate_limiter: RateLimiter | None = None,
     ) -> None:
@@ -414,6 +425,8 @@ class DispatchingLLMGateway:
         self._backoff_policy = backoff_policy
         self._budget_enforcer = budget_enforcer
         self._workflow_budget_enforcer = workflow_budget_enforcer
+        self._step_token_budget_enforcer = step_token_budget_enforcer
+        self._step_wall_time_budget_enforcer = step_wall_time_budget_enforcer
         self._capability_negotiator = capability_negotiator
         self._rate_limiter = rate_limiter
 
@@ -672,6 +685,37 @@ class DispatchingLLMGateway:
                 retriable=False,
             )
 
+        step_id = request.metadata.step_id if request.metadata is not None else None
+        step_key = (
+            step_scope(workflow_id, step_id)
+            if workflow_id is not None and step_id is not None
+            else None
+        )
+        if (
+            self._step_token_budget_enforcer is not None
+            and step_key is not None
+            and not self._step_token_budget_enforcer.is_within_budget(step_key)
+        ):
+            raise LLMProviderError(
+                f"step {step_id!r} of workflow {workflow_id!r} has exceeded its configured "
+                "token budget ceiling — no further calls are permitted for this step",
+                category=ErrorCategory.BUDGET,
+                error_code="llm.budget_exceeded",
+                retriable=False,
+            )
+        if (
+            self._step_wall_time_budget_enforcer is not None
+            and step_key is not None
+            and not self._step_wall_time_budget_enforcer.is_within_budget(step_key)
+        ):
+            raise LLMProviderError(
+                f"step {step_id!r} of workflow {workflow_id!r} has exceeded its configured "
+                "wall-time budget ceiling — no further calls are permitted for this step",
+                category=ErrorCategory.BUDGET,
+                error_code="llm.budget_exceeded",
+                retriable=False,
+            )
+
         if self._rate_limiter is not None:
             rate_limit_result = await self._rate_limiter.check(decision.provider)
             if not rate_limit_result.allowed:
@@ -727,4 +771,10 @@ class DispatchingLLMGateway:
             self._budget_enforcer.record_spend(request.model_alias, response.usage.cost_usd)
         if self._workflow_budget_enforcer is not None and workflow_id is not None:
             self._workflow_budget_enforcer.record_spend(workflow_id, response.usage.cost_usd)
+        if self._step_token_budget_enforcer is not None and step_key is not None:
+            self._step_token_budget_enforcer.record_usage(
+                step_key, response.usage.input_tokens + response.usage.output_tokens
+            )
+        if self._step_wall_time_budget_enforcer is not None and step_key is not None:
+            self._step_wall_time_budget_enforcer.record_usage(step_key, response.usage.latency_ms)
         return response

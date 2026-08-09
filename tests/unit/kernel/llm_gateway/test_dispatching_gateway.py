@@ -16,7 +16,10 @@ from decimal import Decimal
 import pytest
 
 from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
-from ai_os_kernel.llm_gateway.budget_enforcer import PerScopeBudgetEnforcer
+from ai_os_kernel.llm_gateway.budget_enforcer import (
+    PerScopeBudgetEnforcer,
+    PerScopeCountBudgetEnforcer,
+)
 from ai_os_kernel.llm_gateway.capability_negotiator import (
     ProviderCapabilities,
     StaticCapabilityNegotiator,
@@ -40,12 +43,19 @@ from ai_os_kernel.llm_gateway.models import (
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter, build_routing_chain
 
 
-def _request(model_alias: str, workflow_id: str | None = None) -> LLMRequest:
+def _request(
+    model_alias: str, workflow_id: str | None = None, step_id: str | None = None
+) -> LLMRequest:
+    metadata = (
+        TraceContext(workflow_id=workflow_id, step_id=step_id)
+        if workflow_id is not None or step_id is not None
+        else None
+    )
     return LLMRequest(
         model_alias=model_alias,
         messages=[Message(role=MessageRole.USER, content="hello")],
         max_output_tokens=16,
-        metadata=TraceContext(workflow_id=workflow_id) if workflow_id is not None else None,
+        metadata=metadata,
     )
 
 
@@ -966,6 +976,207 @@ async def test_alias_and_workflow_budget_enforcers_operate_independently() -> No
 
     with pytest.raises(LLMProviderError) as exc_info:
         await dispatcher_2.complete(_request("fast-cheap", workflow_id="workflow-2"))
+    assert exc_info.value.category == ErrorCategory.BUDGET
+
+
+# --- Policy & Budget Enforcer: per-step token/wall-time ceilings --------
+# (`P02-S02-M06-T07`, 2026-08-10)
+
+
+class _TokenHeavyGateway:
+    """A real ``EchoLLMGateway`` response with ``usage.input_tokens``/
+    ``output_tokens`` overridden — lets a test control exactly how many
+    tokens one call "consumes" without needing a real provider."""
+
+    def __init__(self, total_tokens: int) -> None:
+        self._total_tokens = total_tokens
+
+    async def complete(self, request: LLMRequest) -> LLMResponse:
+        response = await EchoLLMGateway().complete(request)
+        return response.model_copy(
+            update={
+                "usage": response.usage.model_copy(
+                    update={"input_tokens": self._total_tokens, "output_tokens": 0}
+                )
+            }
+        )
+
+
+class _SlowGateway:
+    """A real ``EchoLLMGateway`` response with ``usage.latency_ms``
+    overridden — lets a test control exactly how much wall-time one
+    call "took" without a real, slow provider call."""
+
+    def __init__(self, latency_ms: int) -> None:
+        self._latency_ms = latency_ms
+
+    async def complete(self, request: LLMRequest) -> LLMResponse:
+        response = await EchoLLMGateway().complete(request)
+        return response.model_copy(
+            update={"usage": response.usage.model_copy(update={"latency_ms": self._latency_ms})}
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_request_with_no_step_id_is_unaffected_by_a_step_token_budget_enforcer() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    enforcer = PerScopeCountBudgetEnforcer(ceiling=1)
+    dispatcher = DispatchingLLMGateway(
+        router=router,
+        gateways={"provider-a": _TokenHeavyGateway(1_000_000)},
+        step_token_budget_enforcer=enforcer,
+    )
+
+    # workflow_id present but no step_id — still nothing to key the
+    # per-step ceiling by, so the call proceeds unaffected, the identical
+    # "cannot be checked" shape the per-workflow ceiling already has.
+    response = await dispatcher.complete(_request("fast-cheap", workflow_id="workflow-1"))
+
+    assert response.content == "hello"
+
+
+@pytest.mark.asyncio
+async def test_a_within_budget_step_token_call_succeeds_and_records_its_usage() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    enforcer = PerScopeCountBudgetEnforcer(ceiling=1000)
+    dispatcher = DispatchingLLMGateway(
+        router=router,
+        gateways={"provider-a": _TokenHeavyGateway(100)},
+        step_token_budget_enforcer=enforcer,
+    )
+
+    response = await dispatcher.complete(
+        _request("fast-cheap", workflow_id="workflow-1", step_id="build")
+    )
+
+    assert response.content == "hello"
+    assert enforcer.is_within_budget("workflow-1:build") is True
+
+
+@pytest.mark.asyncio
+async def test_a_step_token_call_that_pushes_usage_over_the_ceiling_blocks_the_next_one() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    enforcer = PerScopeCountBudgetEnforcer(ceiling=100)
+    dispatcher = DispatchingLLMGateway(
+        router=router,
+        gateways={"provider-a": _TokenHeavyGateway(150)},
+        step_token_budget_enforcer=enforcer,
+    )
+
+    await dispatcher.complete(_request("fast-cheap", workflow_id="workflow-1", step_id="build"))
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        await dispatcher.complete(_request("fast-cheap", workflow_id="workflow-1", step_id="build"))
+
+    assert exc_info.value.category == ErrorCategory.BUDGET
+    assert exc_info.value.error_code == "llm.budget_exceeded"
+    assert exc_info.value.retriable is False
+
+
+@pytest.mark.asyncio
+async def test_step_token_budgets_keep_the_same_step_id_apart_across_workflows() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    enforcer = PerScopeCountBudgetEnforcer(ceiling=100)
+    dispatcher = DispatchingLLMGateway(
+        router=router,
+        gateways={"provider-a": _TokenHeavyGateway(150)},
+        step_token_budget_enforcer=enforcer,
+    )
+
+    with pytest.raises(LLMProviderError):
+        await dispatcher.complete(_request("fast-cheap", workflow_id="workflow-1", step_id="build"))
+        await dispatcher.complete(_request("fast-cheap", workflow_id="workflow-1", step_id="build"))
+
+    # A different workflow's own "build" step is a genuinely separate
+    # scope — the real reason this ceiling is keyed by (workflow_id,
+    # step_id), never bare step_id.
+    response = await dispatcher.complete(
+        _request("fast-cheap", workflow_id="workflow-2", step_id="build")
+    )
+    assert response.content == "hello"
+
+
+@pytest.mark.asyncio
+async def test_a_within_budget_step_wall_time_call_succeeds_and_records_its_usage() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    enforcer = PerScopeCountBudgetEnforcer(ceiling=10_000)
+    dispatcher = DispatchingLLMGateway(
+        router=router,
+        gateways={"provider-a": _SlowGateway(1_000)},
+        step_wall_time_budget_enforcer=enforcer,
+    )
+
+    response = await dispatcher.complete(
+        _request("fast-cheap", workflow_id="workflow-1", step_id="build")
+    )
+
+    assert response.content == "hello"
+    assert enforcer.is_within_budget("workflow-1:build") is True
+
+
+@pytest.mark.asyncio
+async def test_a_step_wall_time_call_that_pushes_usage_over_the_ceiling_blocks_the_next_one() -> (
+    None
+):
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+    enforcer = PerScopeCountBudgetEnforcer(ceiling=1_000)
+    dispatcher = DispatchingLLMGateway(
+        router=router,
+        gateways={"provider-a": _SlowGateway(1_500)},
+        step_wall_time_budget_enforcer=enforcer,
+    )
+
+    await dispatcher.complete(_request("fast-cheap", workflow_id="workflow-1", step_id="build"))
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        await dispatcher.complete(_request("fast-cheap", workflow_id="workflow-1", step_id="build"))
+
+    assert exc_info.value.category == ErrorCategory.BUDGET
+    assert exc_info.value.error_code == "llm.budget_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_step_token_and_step_wall_time_enforcers_operate_independently() -> None:
+    router = StaticRouter(
+        routes={"fast-cheap": RoutingDecision(provider="provider-a", model_id="model-a")}
+    )
+
+    class _TokenHeavyAndSlowGateway:
+        async def complete(self, request: LLMRequest) -> LLMResponse:
+            response = await EchoLLMGateway().complete(request)
+            return response.model_copy(
+                update={
+                    "usage": response.usage.model_copy(
+                        update={"input_tokens": 5, "output_tokens": 0, "latency_ms": 1}
+                    )
+                }
+            )
+
+    # Over the token ceiling but within the wall-time ceiling still fails.
+    token_enforcer = PerScopeCountBudgetEnforcer(ceiling=1)
+    wall_time_enforcer = PerScopeCountBudgetEnforcer(ceiling=1_000_000)
+    dispatcher = DispatchingLLMGateway(
+        router=router,
+        gateways={"provider-a": _TokenHeavyAndSlowGateway()},
+        step_token_budget_enforcer=token_enforcer,
+        step_wall_time_budget_enforcer=wall_time_enforcer,
+    )
+    token_enforcer.record_usage("workflow-1:build", 5)
+
+    with pytest.raises(LLMProviderError) as exc_info:
+        await dispatcher.complete(_request("fast-cheap", workflow_id="workflow-1", step_id="build"))
     assert exc_info.value.category == ErrorCategory.BUDGET
 
 
