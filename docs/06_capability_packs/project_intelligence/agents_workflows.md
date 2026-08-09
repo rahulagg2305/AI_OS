@@ -8,9 +8,9 @@
 
 ---
 
-## Implementation Status (updated 2026-08-09, `P05-S02-M32-T01`)
+## Implementation Status (updated 2026-08-09, `P05-S02-M32-T02`)
 
-**Built: one real, non-agent Tool feeding this agent's own future scope.** `repository.ingest` (`ai_os_pack_project_intelligence.tools.repository_ingestion`) genuinely walks a real repository and returns a real structural model — the first, purely mechanical half of this document's own §2 "Typical activities: Ingest and structure a codebase." Deliberately built as a Tier-1-sandboxed Tool, not an Agent: no LLM call is needed for this specific mechanical operation (a design fork resolved via `AskUserQuestion`). Neither the `existing-project-analyzer` agent itself nor any of the five workflows below exists yet — this Tool is not yet wired into either.
+**Built: two real, non-agent Tools feeding this agent's own future scope.** `repository.ingest` (`tools.repository_ingestion`, `tier1_sandboxed`) genuinely walks a real repository and returns a real structural model, and `language.detect` (`tools.language_detection`, `tier2_trusted` — a real, disclosed lighter classification since it touches no filesystem at all) consumes that output to detect languages/build systems/frameworks with real confidence per finding — together, the first two, purely mechanical activities of this document's own §2 "Typical activities: Ingest and structure a codebase" / "Detect languages, frameworks, and platforms." Deliberately built as Tools, not an Agent: no LLM call is needed for either mechanical operation (a design fork resolved via `AskUserQuestion`). Neither the `existing-project-analyzer` agent itself nor any of the five workflows below exists yet — neither Tool is wired into either.
 
 Note also that most of the *supporting* agents these workflows invoke from the Software Engineering pack (`security`, `performance`, `refactoring`, `code-reviewer`) are themselves **not built** — see `../software_engineering/agents.md`'s "Currently Implemented Subset".
 

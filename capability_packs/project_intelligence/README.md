@@ -3,7 +3,7 @@
 Understand, analyse, and document existing or legacy codebases
 (`docs/06_capability_packs/project_intelligence/overview.md`).
 
-## Status: one real Tool — repository ingestion and structural model
+## Status: two real Tools — repository ingestion + language/framework detection
 
 **First real increment (`P05-S02-M32-T01`, 2026-08-09).** This pack
 declares no agents or workflows yet and has no `manifest.yaml` —
@@ -25,7 +25,18 @@ a real Docker daemon in `tests/integration/sandbox/
 test_repository_ingestion_live.py`, plus fast, mocked-Docker
 construction/validation tests in `tests/test_repository_ingestion.py`.
 
-Not yet wired into any real agent, workflow, or manifest — that is
-later, separate work (the documented `existing-project-analyzer`
+**Second real increment (`P05-S02-M32-T02`, 2026-08-09).**
+[`language_detection.py`](src/ai_os_pack_project_intelligence/tools/language_detection.py)
+consumes the first Tool's own `files` output and detects languages,
+build systems, and frameworks with real, disclosed confidence per
+finding (FR-051). **`tier2_trusted`, not `tier1_sandboxed`** — a real,
+disclosed classification distinct from `repository.ingest`: this Tool
+never touches a filesystem, network, or executes anything; its only
+operation is pattern-matching well-known basenames against an
+already-extracted path list. Proven by 12 deterministic tests (no
+sandbox/fake needed at all — pure computation).
+
+Neither Tool is yet wired into any real agent, workflow, or manifest —
+that is later, separate work (the documented `existing-project-analyzer`
 agent's own eventual scope), the identical "prove standalone first,
 wire in later" precedent every real Tool in this project has followed.

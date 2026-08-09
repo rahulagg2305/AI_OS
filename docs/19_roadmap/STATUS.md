@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 91%** (225 of 246 Task-equivalents complete)
+**Overall: 92%** (225.5 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -38,7 +38,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P04 (D) | S02 Traceability Engine | 3 | 3 | 0 | 0 | 100% |
 | P04 (D) | S03 Benchmarking Pack | 4 | 3 | 1 | 0 | 88% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 2 | 0 | 50% |
-| P05 (E) | S02 Project Intelligence Pack | 6 | 0 | 1 | 5 | 8% |
+| P05 (E) | S02 Project Intelligence Pack | 6 | 0 | 2 | 4 | 17% |
 | P06 (F) | S01 API Completion and Published Contract | 4 | 3 | 1 | 0 | 88% |
 | P06 (F) | S02 Realtime Stream | 1 | 1 | 0 | 0 | 100% |
 | P06 (F) | S03 Dashboard | 3 | 1 | 1 | 1 | 50% |
@@ -60,7 +60,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (Stage B) - Minimum Viable Kernel | 100 | 97 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 17 | 97% |
-| P05 (Stage E) - Project Intelligence | 8 | 0 | 19% |
+| P05 (Stage E) - Project Intelligence | 8 | 0 | 25% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 5 | 54% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 69% |
 | P08 (Stage H) - Expansion | 9 | 7 | 83% |
@@ -68,9 +68,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-8 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+7 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
-- `P05-S02-M32-T02` Language and framework detection
 - `P05-S02-M32-T03` Dependency graph
 - `P05-S02-M32-T06` Untrusted provenance end to end
 - `P06-S03-M39-T03` Cost and quality views
