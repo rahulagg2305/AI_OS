@@ -3,7 +3,7 @@
 Understand, analyse, and document existing or legacy codebases
 (`docs/06_capability_packs/project_intelligence/overview.md`).
 
-## Status: four real Tools, all with real, structural provenance tagging
+## Status: five real Tools, all with real, structural provenance tagging
 
 **First real increment (`P05-S02-M32-T01`, 2026-08-09).** This pack
 declares no agents or workflows yet and has no `manifest.yaml` —
@@ -76,7 +76,20 @@ resolved via `AskUserQuestion`): that remains real, disclosed, deferred
 work for the eventual `existing-project-analyzer` agent. Proven by 12
 deterministic tests, including real 2- and 3-module dependency cycles.
 
-None of the four Tools is yet wired into any real agent, workflow, or
+**Sixth real increment (`P05-S02-M32-T05`, 2026-08-09).**
+[`documentation_generation.py`](src/ai_os_pack_project_intelligence/tools/documentation_generation.py)
+consumes `architecture.recover`'s own `modules`/`moduleEdges`/
+`circularDependencies` and renders a real, deterministic Markdown
+documentation set (FR-056) — a module overview table, a dependency
+table, and an "Architectural Concerns" section flagging real cycles
+and modules past a named, disclosed coupling threshold. **`tier2_trusted`.**
+Deliberately not LLM-written semantic prose (design fork resolved via
+`AskUserQuestion`, the 5th time this module has made this exact
+choice) — describing what a module's code actually *does* remains
+real, disclosed, deferred work for the eventual
+`existing-project-analyzer` agent. Proven by 10 deterministic tests.
+
+None of the five Tools is yet wired into any real agent, workflow, or
 manifest — that is later, separate work (the documented
 `existing-project-analyzer` agent's own eventual scope), the identical
 "prove standalone first, wire in later" precedent every real Tool in
