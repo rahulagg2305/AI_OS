@@ -4,6 +4,13 @@
 # ai_os_kernel.manifest_loader.ManifestLoader — see this pack's own
 # tests (tests/test_pack.py) for a real, executed proof.
 #
+# `performance` added 2026-08-09 (`P08-S01-M29-T07`) — see its own
+# entry below for the real scope (static AST complexity, no LLM call).
+# The header comment below this point is pre-existing, dated staleness
+# ("now six agents") this step did not re-audit — 11 agents are real
+# and declared here as of this addition; see `agents.md`'s own
+# "Currently Implemented Subset" for the always-current count.
+#
 # This is the "Highest priority" pack capability_pack_contract.md's own
 # "Current Priority Packs" table names — now six agents: Requirements
 # Analyst (analyzes and refines a raw requirement, no design/code),
@@ -407,6 +414,26 @@ agents:
     permissions:
       - sandbox:execute
       - git:write
+
+  - id: performance
+    name: Performance Agent
+    version: 0.1.0
+    purpose: >-
+      Given one real source file, genuinely compute real McCabe
+      cyclomatic complexity per function from its own AST (stdlib
+      ast — no LLM call at all, the identical shape lint's/qa-test's
+      own entries above establish) and report real hotspots plus
+      mechanically-derived recommendations for any function crossing
+      the real, named threshold of 10. "A running system" (FR-044's
+      own Input) reduced honestly to one real static file — no real
+      APM/instrumentation infrastructure exists anywhere in this
+      codebase to attach to a genuinely running process.
+    entrypoint: ai_os_pack_software_engineering.agents.performance:PerformanceAgentEntrypoint
+    inputSchema: ai_os_pack_software_engineering.agents.performance:PerformanceAgentInput
+    outputSchema: ai_os_pack_software_engineering.agents.performance:PerformanceAgentOutput
+    # No modelAlias — this agent makes no LLM call at all.
+    permissions:
+      - sandbox:execute
 
 tools:
   - id: fs.read

@@ -96,6 +96,7 @@ _REAL_AGENT_IDS = {
     f"{_PACK_ID}/technical-planner",
     f"{_PACK_ID}/frontend-developer",
     f"{_PACK_ID}/refactoring",
+    f"{_PACK_ID}/performance",
 }
 
 
