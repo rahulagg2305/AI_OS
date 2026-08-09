@@ -449,6 +449,12 @@ llm_calls = sa.Table(
     sa.Column("retries", sa.Integer, nullable=False),
     sa.Column("fallback_used", sa.Boolean, nullable=False),
     sa.Column("degradations", JSONB, nullable=False),
+    sa.Column(
+        "created_at",
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=sa.func.now(),
+    ),
     sa.ForeignKeyConstraint(
         ["prompt_id", "prompt_version"],
         [prompts.c.prompt_id, prompts.c.version],
@@ -459,3 +465,4 @@ llm_calls = sa.Table(
 sa.Index("ix_llm_calls_workflow_id", llm_calls.c.workflow_id)
 sa.Index("ix_llm_calls_agent_id", llm_calls.c.agent_id)
 sa.Index("ix_llm_calls_prompt_id", llm_calls.c.prompt_id)
+sa.Index("ix_llm_calls_created_at", llm_calls.c.created_at)

@@ -8,7 +8,9 @@
 
 ---
 
-## Implementation Status (updated 2026-08-08, `P06-S05-M22-T02`)
+## Implementation Status (updated 2026-08-09, `P07-S03-M42-T02`)
+
+**Wired into a real Kernel process for the first time** (`P07-S03-M42-T02`): before this step, `NotificationService` was built and proven end to end against a real local HTTP server, but nothing in `ai_os_kernel.bootstrap._lifespan` ever constructed it — it never ran in a real deployment. Now conditionally constructed when `PlatformConfig.notification_webhook_url` is configured (`None`, every current environment, means genuinely not started, not a silent no-op channel). **A fourth real category, `cost_anomaly`, added alongside it** — Cost Anomaly Alerting (module 42, NFR-045) is this service's own first real production publisher, closing the previously disclosed "no real Kernel component publishes to `InProcessEventBus` in production yet" gap this document's own prior revision named. `approval`/`failure`/`completion` still have no real production publisher.
 
 **Built: a real, minimal first increment — one real channel, no framework — plus durable delivery-status recording.** `ai_os_kernel.notification.service.NotificationService` genuinely subscribes to the real `InProcessEventBus` and delivers a real, typed `Notification` (§8's own fields: type, channel, status, workflow_id, trace_id, timestamp) for this ticket's own three literal categories ("approval, failure and completion notices") via one real channel, `ai_os_kernel.notification.webhook.WebhookChannel` (a real HTTP POST to a configurable URL — §4's "Webhook / external system callbacks" entry). Proven end to end against a real local HTTP server: a real published `Event` genuinely reaches it as a real POST, an unrelated event type is genuinely not notified, and closing the service genuinely unsubscribes.
 

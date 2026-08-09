@@ -148,6 +148,35 @@ async def test_real_failure_and_completion_events_both_genuinely_notify() -> Non
             await bus.aclose()
 
 
+async def test_a_real_cost_anomaly_event_genuinely_reaches_the_real_webhook() -> None:
+    with _webhook_server() as handler:
+        bus = InProcessEventBus()
+        channel = WebhookChannel(webhook_url=handler.base_url)  # type: ignore[attr-defined]
+        service = NotificationService(
+            event_bus=bus, channel=channel, recorder=_FakeNotificationDeliveryRecorder()
+        )
+        try:
+            await bus.publish(
+                Event(
+                    event_type="cost.anomaly",
+                    source="evaluation_engine.cost_anomaly",
+                    payload={"current_hour_spend_usd": "10.000000"},
+                )
+            )
+
+            assert await _wait_until(
+                lambda: len(handler.received_bodies) == 1,
+                timeout_seconds=_POLL_TIMEOUT_SECONDS,
+                interval=_POLL_INTERVAL_SECONDS,
+            )
+            body = json.loads(handler.received_bodies[0])
+            assert body["notification_type"] == "cost_anomaly"
+            assert body["payload"] == {"current_hour_spend_usd": "10.000000"}
+        finally:
+            service.close()
+            await bus.aclose()
+
+
 async def test_an_unrelated_event_type_is_genuinely_not_notified() -> None:
     with _webhook_server() as handler:
         bus = InProcessEventBus()

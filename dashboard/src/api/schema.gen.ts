@@ -518,6 +518,8 @@ export interface components {
             audit_chain_verification_interval_seconds?: number | null;
             /** Capability Pack Dirs */
             capability_pack_dirs?: string[];
+            /** Cost Anomaly Check Interval Seconds */
+            cost_anomaly_check_interval_seconds?: number | null;
             /** Env */
             env: string;
             /**
@@ -537,6 +539,8 @@ export interface components {
              * @default platform_sdk/schemas/manifest.schema.json
              */
             manifest_schema_path: string;
+            /** Notification Webhook Url */
+            notification_webhook_url?: string | null;
             /** Oidc Audience */
             oidc_audience?: string | null;
             /** Oidc Issuer */

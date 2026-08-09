@@ -33,6 +33,13 @@ subscribes for real and delivers for real; wiring a real publisher
 into the Human Approval Manager or Quality Gate Engine is separate,
 unbuilt work.
 
+**A fourth real category, `cost_anomaly`, added by `P07-S03-M42-T02`**
+(NFR-045) — the first genuinely widened category since this service's
+own original three; its real, first production publisher is
+:func:`~ai_os_kernel.evaluation_engine.cost_anomaly.
+run_cost_anomaly_check_once`, closing this module's own previously
+disclosed "no real Kernel component publishes ... yet" gap (below).
+
 **Delivery status is now durably recorded** (`P06-S05-M22-T02`) —
 :class:`~ai_os_kernel.notification.recorder.NotificationDeliveryRecorder`
 is a required collaborator, the identical "no silent no-op default"
@@ -57,15 +64,18 @@ from ai_os_kernel.observability.logging import get_logger
 
 logger = get_logger(__name__)
 
-# This service's own real, closed vocabulary — this ticket's literal
-# three categories ("approval, failure and completion notices"), not
-# notification_service.md's full, open-ended event surface. `approval.`
-# mirrors the identical prefix convention `routes/stream.py` already
-# established for the same real reason: `Event.event_type` carries no
-# enum, and no real producer exists yet to have fixed one differently.
+# This service's own real, closed vocabulary — originally this
+# ticket's literal three categories ("approval, failure and completion
+# notices"), plus `cost_anomaly` (`P07-S03-M42-T02`, NFR-045) — still
+# not `notification_service.md`'s full, open-ended event surface.
+# `approval.` mirrors the identical prefix convention `routes/stream.py`
+# already established for the same real reason: `Event.event_type`
+# carries no enum, and no real producer existed yet to have fixed one
+# differently.
 _APPROVAL_EVENT_TYPE_PREFIX = "approval."
 _FAILURE_EVENT_TYPE = "workflow.failed"
 _COMPLETION_EVENT_TYPE = "workflow.completed"
+_COST_ANOMALY_EVENT_TYPE = "cost.anomaly"
 
 
 class DeliveryChannel(Protocol):
@@ -90,6 +100,8 @@ def _notification_type_for(event: Event) -> str | None:
         return "failure"
     if event.event_type == _COMPLETION_EVENT_TYPE:
         return "completion"
+    if event.event_type == _COST_ANOMALY_EVENT_TYPE:
+        return "cost_anomaly"
     return None
 
 

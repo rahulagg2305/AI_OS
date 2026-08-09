@@ -105,3 +105,22 @@ class PlatformConfig(BaseModel):
     :class:`jwt.PyJWKClient` inside `OidcBearerTokenVerifier`, never
     parsed by hand. See ``oidc_issuer`` for the "all three together"
     selection rule."""
+
+    notification_webhook_url: str | None = None
+    """The real webhook URL :class:`~ai_os_kernel.notification.webhook.
+    WebhookChannel` delivers to. ``None`` (every current environment,
+    since no real receiver has been configured anywhere yet) means
+    `ai_os_kernel.bootstrap._lifespan` does not construct a real
+    :class:`~ai_os_kernel.notification.service.NotificationService` at
+    all — the identical "unconfigured means the real feature does not
+    start" shape ``oidc_issuer`` already establishes, not a silent
+    no-op delivery channel."""
+
+    cost_anomaly_check_interval_seconds: float | None = None
+    """Overrides :data:`ai_os_kernel.evaluation_engine.cost_anomaly.
+    COST_ANOMALY_CHECK_INTERVAL_SECONDS` for the real background Cost
+    Anomaly Alerting loop (`ai_os_kernel.bootstrap._lifespan`,
+    `P07-S03-M42-T02`). The identical "test-only override, never a
+    second policy decision" shape ``lease_reap_interval_seconds``
+    already establishes — ``None`` (every real deployment) means "use
+    the real, decided 120-second policy constant"."""

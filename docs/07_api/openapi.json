@@ -407,6 +407,17 @@
             "title": "Capability Pack Dirs",
             "type": "array"
           },
+          "cost_anomaly_check_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Anomaly Check Interval Seconds"
+          },
           "env": {
             "title": "Env",
             "type": "string"
@@ -436,6 +447,17 @@
             "default": "platform_sdk/schemas/manifest.schema.json",
             "title": "Manifest Schema Path",
             "type": "string"
+          },
+          "notification_webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notification Webhook Url"
           },
           "oidc_audience": {
             "anyOf": [

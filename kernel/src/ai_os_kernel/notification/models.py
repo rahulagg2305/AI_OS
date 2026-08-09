@@ -16,9 +16,10 @@ class Notification(BaseModel):
     """One real notification delivery attempt.
 
     ``notification_type`` is one of this service's own real, closed
-    categories (``approval``/``failure``/``completion`` — this
-    ticket's own literal Goal, not the framework document's full,
-    open-ended vocabulary). ``status`` is the real outcome of the one
+    categories (``approval``/``failure``/``completion``, plus
+    ``cost_anomaly`` added by ``P07-S03-M42-T02`` — still not the
+    framework document's full, open-ended vocabulary). ``status`` is
+    the real outcome of the one
     delivery attempt this increment makes — no retry exists yet (see
     :mod:`ai_os_kernel.notification.service`'s own docstring).
     """

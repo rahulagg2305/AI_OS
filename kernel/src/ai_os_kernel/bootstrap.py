@@ -425,6 +425,11 @@ from ai_os_kernel.context_manager.resolvers import (
     WorkflowStateResolver,
 )
 from ai_os_kernel.evaluation_engine.cost_and_quality_views import SqlCostAndQualityViews
+from ai_os_kernel.evaluation_engine.cost_anomaly import (
+    COST_ANOMALY_CHECK_INTERVAL_SECONDS,
+    SqlCostAnomalyDetector,
+    run_periodic_cost_anomaly_check,
+)
 from ai_os_kernel.event_bus.bus import InProcessEventBus
 from ai_os_kernel.git_integration.default_service import build_git_integration_service_from_env
 from ai_os_kernel.health import ComponentStatus, GracefulShutdownCoordinator, HealthService
@@ -451,6 +456,9 @@ from ai_os_kernel.llm_gateway.router import (
     build_routing_chain,
 )
 from ai_os_kernel.manifest_loader import ManifestLoader
+from ai_os_kernel.notification.recorder import SqlNotificationDeliveryRecorder
+from ai_os_kernel.notification.service import NotificationService
+from ai_os_kernel.notification.webhook import WebhookChannel
 from ai_os_kernel.observability import (
     AUDIT_CHAIN_VERIFICATION_INTERVAL_SECONDS,
     SqlAuditLogWriter,
@@ -2000,6 +2008,45 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             audit_chain_verification_task,
             audit_chain_verification_stop_event,
         )
+        # Cost Anomaly Alerting (P07-S03-M42-T02, NFR-045) — the first
+        # real production publisher onto app.state.event_bus (built
+        # unconditionally above; this is the identical, previously
+        # disclosed "no real Kernel component publishes ... yet" gap
+        # notification/service.py's own docstring named). Always
+        # started once a real engine exists: publishing to an
+        # in-process bus with zero subscribers is cheap and harmless
+        # (event_bus/bus.py's own "loss-tolerable" design) — whether
+        # anyone actually *hears* the alert is the separate question
+        # notification_webhook_url below answers.
+        cost_anomaly_check_interval = app.state.config.cost_anomaly_check_interval_seconds
+        if cost_anomaly_check_interval is None:
+            cost_anomaly_check_interval = COST_ANOMALY_CHECK_INTERVAL_SECONDS
+        cost_anomaly_stop_event = asyncio.Event()
+        cost_anomaly_task = asyncio.create_task(
+            run_periodic_cost_anomaly_check(
+                SqlCostAnomalyDetector(engine),
+                app.state.event_bus,
+                interval_seconds=cost_anomaly_check_interval,
+                stop_event=cost_anomaly_stop_event,
+            )
+        )
+        app.state.cost_anomaly_task = cost_anomaly_task
+        shutdown_coordinator.register_stop_event_task(
+            "cost_anomaly_check", cost_anomaly_task, cost_anomaly_stop_event
+        )
+        # The Notification Service's own real, first production wiring
+        # (P06-S05-M22-T01 built it; nothing constructed it until this
+        # step). Unconfigured (`notification_webhook_url` unset, every
+        # current environment) means genuinely not started — the
+        # identical "unconfigured means the real feature does not
+        # start" shape `_build_token_verifier`'s own OIDC branch already
+        # establishes — not a silent no-op channel.
+        if app.state.config.notification_webhook_url is not None:
+            app.state.notification_service = NotificationService(
+                event_bus=app.state.event_bus,
+                channel=WebhookChannel(webhook_url=app.state.config.notification_webhook_url),
+                recorder=SqlNotificationDeliveryRecorder(engine),
+            )
         # se.delivery_pipeline's own registry — real and
         # credential-gated, built here (not for the health poll above,
         # which needs an always-answering one instead — see its own
