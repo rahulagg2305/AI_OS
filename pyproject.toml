@@ -61,6 +61,19 @@ dev = [
 # tools/aios (ai-os-cli) was scaffolded `P06-S04-M38-T01` — a pure
 # client of the platform API (ADR-0014); no ai-os-kernel or ai-os-sdk
 # dependency at all, real from its first commit.
+#
+# capability_packs/voice_jarvis was attempted `P06-S06-M33-T01` as a
+# pure HTTP-client pack (the identical shape tools/aios uses) and
+# rejected the same day: `pack_contract_suite` check 7
+# (`platform_sdk.md` §9/§10) forbids ANY direct HTTP client import in
+# pack code, full stop — including a call to the platform's own
+# Kernel API, not only a third-party provider (see
+# `ai_os_sdk.testing.forbidden_imports`'s own module docstring, "sixth
+# category"). The real, first increment instead lives at
+# `ai_os_kernel.voice_jarvis` — the identical "build inside the
+# Kernel, not a separate package" precedent Notification Service and
+# the Speech Gateway itself already establish, and moves onto real
+# SDK Protocols once one exists for this.
 [tool.uv.workspace]
 members = [
     "kernel",

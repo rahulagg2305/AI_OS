@@ -8,9 +8,11 @@
 
 ---
 
-## Implementation Status (2026-07-28)
+## Implementation Status (2026-08-09, `P06-S06-M33-T01`)
 
-**Built: nothing. This document is a design specification only.** No Voice/Jarvis code exists: `capability_packs/voice_jarvis/` has **no tracked content**, and the platform-level Speech Gateway it depends on (per [ADR-0019](../18_decision_log/adr/ADR-0019-speech-gateway.md)) is likewise 0% built. There is no wake-word engine, no STT/TTS adapter, no intent engine, and no voice session manager anywhere in the codebase. Stage F deliverable.
+**Built: the §4.5 Platform Integration Layer, real — but inside the Kernel, not `capability_packs/voice_jarvis`.** A first attempt built it as a pure external HTTP-client Capability Pack, mirroring `tools/aios`'s own proven shape; `pack_contract_suite` check 7 (`platform_sdk.md` §9/§10) caught it for real — any direct HTTP client import in pack code is forbidden, full stop, including a call to the platform's own Kernel API. No SDK Protocol for "read workflow status"/"decide an approval" exists yet, so `ai_os_kernel.voice_jarvis.intent_router.PlatformIntentRouter` lives inside the Kernel instead (the identical precedent Notification Service and the Speech Gateway itself already establish), calling the real `HealthService`/`WorkflowInstanceRepository`/`ApprovalService` directly — no HTTP, no serialization round trip. 4 real intents (`check_health`, `list_workflows`, `get_workflow_status`, `decide_approval`), a real `workflow:read` permission gate, `ApprovalService`'s own real class-scoped authorization reused unchanged. No `capability_packs/voice_jarvis` distribution exists.
+
+**Everything upstream of "an already-recognized intent" is still not built**: §4.1 Wake Word Engine, §4.2 Speech-to-Text (the platform Speech Gateway itself is real as of `P06-S06-M25-T01` but has no real provider — only a deterministic echo adapter, `ai_os_kernel.speech_gateway`'s own module docstring), §4.3 Intent Recognition (needs the LLM Gateway per §4.8 — not wired), §4.4 Voice Session Manager, and the §4.7 Text-to-Speech output half (`SpeechGateway.synthesize()` is reachable directly now that this also lives in the Kernel, but not wired this step). Stage F deliverable, partially real.
 
 Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 

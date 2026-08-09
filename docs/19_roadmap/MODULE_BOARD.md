@@ -44,7 +44,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M30 | SE Pack - Workflows | P03+P08 | 8 | 7 | 94% |
 | M31 | SE Pack - Tools & Quality Gates | P03 | 4 | 4 | 100% |
 | M32 | Project Intelligence Pack | P05 | 6 | 0 | 50% |
-| M33 | Voice (Jarvis) Pack | P06 | 1 | 0 | 0% |
+| M33 | Voice (Jarvis) Pack | P06 | 1 | 0 | 50% |
 | M34 | Benchmarking Pack | P04 | 4 | 3 | 88% |
 | M36 | API (HTTP surface) | P02+P06 | 8 | 7 | 94% |
 | M37 | WebSocket stream | P06 | 1 | 1 | 100% |
