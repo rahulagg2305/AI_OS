@@ -3,7 +3,7 @@
 Understand, analyse, and document existing or legacy codebases
 (`docs/06_capability_packs/project_intelligence/overview.md`).
 
-## Status: three real Tools, all with real, structural provenance tagging
+## Status: four real Tools, all with real, structural provenance tagging
 
 **First real increment (`P05-S02-M32-T01`, 2026-08-09).** This pack
 declares no agents or workflows yet and has no `manifest.yaml` —
@@ -63,7 +63,20 @@ path in this pack could ever honestly produce `"trusted"`. Proven by 3
 new tests (one per Tool), including a real, unmocked Docker test
 confirming the tag survives the real sandboxed round trip.
 
-None of the three Tools is yet wired into any real agent, workflow, or
+**Fifth real increment (`P05-S02-M32-T04`, 2026-08-09).**
+[`architecture_recovery.py`](src/ai_os_pack_project_intelligence/tools/architecture_recovery.py)
+consumes `dependency.graph`'s own `nodes`/`edges` and performs real
+deterministic graph analysis (FR-053) — module-level boundary
+aggregation, real DFS-based circular-dependency detection, and real
+fan-in/fan-out coupling metrics. **`tier2_trusted`** — the identical
+reasoning `language.detect` already establishes (no filesystem/
+execution, only traversal over already-derived structural data).
+Deliberately not LLM-driven narrative documentation (design fork
+resolved via `AskUserQuestion`): that remains real, disclosed, deferred
+work for the eventual `existing-project-analyzer` agent. Proven by 12
+deterministic tests, including real 2- and 3-module dependency cycles.
+
+None of the four Tools is yet wired into any real agent, workflow, or
 manifest — that is later, separate work (the documented
 `existing-project-analyzer` agent's own eventual scope), the identical
 "prove standalone first, wire in later" precedent every real Tool in
