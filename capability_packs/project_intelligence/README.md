@@ -3,7 +3,7 @@
 Understand, analyse, and document existing or legacy codebases
 (`docs/06_capability_packs/project_intelligence/overview.md`).
 
-## Status: two real Tools — repository ingestion + language/framework detection
+## Status: three real Tools — repository ingestion, language/framework detection, dependency graph
 
 **First real increment (`P05-S02-M32-T01`, 2026-08-09).** This pack
 declares no agents or workflows yet and has no `manifest.yaml` —
@@ -36,7 +36,22 @@ operation is pattern-matching well-known basenames against an
 already-extracted path list. Proven by 12 deterministic tests (no
 sandbox/fake needed at all — pure computation).
 
-Neither Tool is yet wired into any real agent, workflow, or manifest —
-that is later, separate work (the documented `existing-project-analyzer`
-agent's own eventual scope), the identical "prove standalone first,
-wire in later" precedent every real Tool in this project has followed.
+**Third real increment (`P05-S02-M32-T03`, 2026-08-09).**
+[`dependency_graph.py`](src/ai_os_pack_project_intelligence/tools/dependency_graph.py)
+consumes the first Tool's own `files` output (filtered to Python) and
+constructs a real, queryable module/dependency graph via the stdlib
+`ast` module (FR-052) — real import edges, not a heuristic or an
+edge-free artifact (design fork resolved via `AskUserQuestion`). Back
+to **`tier1_sandboxed`** — reading and parsing real file *content* is
+"processing untrusted repository content" per ADR-0016, unlike
+`language.detect`'s path-only pattern matching. Scoped to Python only;
+other languages are real, disclosed, deferred work. Proven by 11 tests
+including 2 real, unmocked Docker tests (a real relative-import
+package resolved correctly; a real syntax error reported without
+failing the whole graph).
+
+None of the three Tools is yet wired into any real agent, workflow, or
+manifest — that is later, separate work (the documented
+`existing-project-analyzer` agent's own eventual scope), the identical
+"prove standalone first, wire in later" precedent every real Tool in
+this project has followed.
