@@ -11,10 +11,11 @@ Severity: **H** (can cause real harm or data loss) · **M** (can cause
 significant rework) · **L** (contained).
 
 **Reviewed 2026-07-31 (R1–R4 final closeout); R-008 and R-009 closed
-2026-08-01.** 11 closed, 1 open (R-006, an accepted baseline, not
-pending action) plus R-001 (a permanent standing rule, not a risk
-pending closure). Zero open process-defect risks and zero open
-product-development gaps with real, unaddressed impact.
+2026-08-01; R-014 opened and closed 2026-08-09.** 12 closed, 1 open
+(R-006, an accepted baseline, not pending action) plus R-001 (a
+permanent standing rule, not a risk pending closure). Zero open
+process-defect risks and zero open product-development gaps with real,
+unaddressed impact.
 
 | ID | Risk | Sev | Status | Owner decision |
 |---|---|---|---|---|
@@ -31,6 +32,7 @@ product-development gaps with real, unaddressed impact.
 | R-011 | `ai_os_kernel` ships no `py.typed` marker | L | **Closed** 2026-07-31 | Superseded by R-010 |
 | R-012 | Ticket dependency graph had no recorded edges | M | **Closed** 2026-07-31 | — |
 | R-013 | Two dependency edges were judgement calls | L | **Closed** 2026-07-31 | Both decided, no change |
+| R-014 | No CI job ever ran any Capability Pack's own `tests/` | M | **Closed** 2026-08-09 | — |
 
 ---
 
@@ -337,6 +339,45 @@ resolves it as an installed, untyped package and reports
 analysis set. This is why `mypy --strict scripts tests/roadmap` fails
 while `mypy --strict` succeeds. Low severity (the canonical invocation is
 correct and green), but it makes per-directory type-checking misleading.
+
+### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
+
+Found `P05-S02-M32-T01`, closed `P05-S02-M32-T02` (2026-08-09).
+`capability_packs/*/tests/**` sits outside root `pyproject.toml`'s
+`testpaths = ["tests"]`, and no `.github/workflows/ci.yml` step ever
+named a `capability_packs/*/tests` path — confirmed by reading the
+workflow file directly, not inferred from a test count. Real,
+unaddressed impact: `benchmarking`'s 4 test files and
+`software-engineering`'s `fs_read`/`build_run`/agent tests (242 tests
+across all 3 real packs) had never once been verified in CI, for the
+entire history of this project.
+
+**Root cause, found while wiring the fix, not assumed:** a second, real
+bug this gap had been hiding. Running the installed `pytest`
+console-script entry point (what `uv run pytest` and every existing CI
+step already use) does not add the repo root to `sys.path` the way
+`python -m pytest` does. `capability_packs/software-engineering/tests/
+test_database_agent.py` imports `tests.integration._postgres_fixture`
+(a real, already-established cross-tree convention — that pack's own
+`pyproject.toml` comment names it explicitly) — reachable only when the
+repo root is on `sys.path`. The first attempt at a generic
+`capability_packs/*/tests` CI step therefore failed to even collect,
+invocation-style-dependent and invisible to whoever last happened to
+run that one file via `python -m pytest` locally instead.
+
+**Fixed at the root, not per-file or per-invocation:**
+`[tool.pytest.ini_options] pythonpath = ["."]` in `pyproject.toml` —
+pytest's own explicit, invocation-style-independent mechanism. A new
+CI step, `pytest capability_packs (pack-local tests)`, runs
+`capability_packs/*/tests` (generic glob, no hardcoded pack name — a
+fourth real pack is covered automatically) in the `unit` job. Proven:
+all 242 pack tests across all 3 real packs collect and pass via the
+exact `pytest` entry point CI uses; the full `tests/unit` suite (1226
+tests) passed on 2 of 3 repeated runs after the `pythonpath` addition —
+the one failure (`test_multi_provider_routing.py`, a real local HTTP
+server with a 2s timeout) passed immediately in isolation and on the
+next full-suite run, matching a real-local-server timing flake, not a
+deterministic regression from this change.
 
 ### R-009 — Audit log schema-only *(closed)*
 

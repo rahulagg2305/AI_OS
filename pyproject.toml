@@ -119,6 +119,20 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config"
 asyncio_mode = "auto"
+# R-014: the repo root is on `sys.path` when running `python -m pytest`
+# (which inserts cwd at sys.path[0]) but *not* when running the
+# installed `pytest` console-script entry point directly — the exact
+# invocation every CI step and this project's own tooling actually
+# uses. Without this, any capability-pack test importing the top-level
+# `tests` package (`tests.integration._postgres_fixture`, a real,
+# already-established convention — see that pack's own pyproject.toml
+# comment) fails to collect at all with `ModuleNotFoundError: No
+# module named 'tests'`, invocation-style-dependent and therefore
+# invisible locally to whoever last happened to run it correctly.
+# `pythonpath` is pytest's own explicit, invocation-style-independent
+# fix — it inserts the given path(s) regardless of which entry point
+# launched pytest.
+pythonpath = ["."]
 
 [tool.coverage.run]
 branch = true

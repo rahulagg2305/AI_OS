@@ -91,24 +91,31 @@ jobs:
       # means it — only unit+integration together do.
       - name: pytest tests/unit
         run: uv run pytest tests/unit -v
-      # Real, previously-undiscovered gap (found `P05-S02-M32-T01`): no
-      # CI job ever ran any Capability Pack's own tests/ directory —
-      # confirmed by reading this file directly, not merely by test
-      # count. `capability_packs/*/tests/**` is outside root pyproject's
+      # Real, previously-undiscovered gap (found `P05-S02-M32-T01`,
+      # widened to every pack `P05-S02-M32-T02` / R-014): no CI job ever
+      # ran any Capability Pack's own tests/ directory — confirmed by
+      # reading this file directly, not merely by test count.
+      # `capability_packs/*/tests/**` is outside root pyproject's
       # `testpaths = ["tests"]`, so `pytest tests/unit` above never
-      # collected it either. **Scoped to this pack alone, not a
-      # repo-wide glob**: attempting the generic form surfaced a
-      # second, separate, pre-existing bug in
-      # `capability_packs/software-engineering/tests/test_database_agent.py`
-      # (a collection-time `ModuleNotFoundError` — that file has
-      # apparently never been successfully collected standalone before,
-      # since nothing ever ran it) — a real, disclosed, deferred fix for
-      # a future step, not this one's scope. Widening this step to
-      # cover every pack generically is real, separate follow-up work
-      # once that pre-existing bug is fixed.
-      - name: pytest capability_packs/project_intelligence (pack-local tests)
-        if: hashFiles('capability_packs/project_intelligence/tests/**') != ''
-        run: uv run pytest capability_packs/project_intelligence/tests -v
+      # collected it either. **Root cause of the second bug that first
+      # blocked widening this to every pack, now fixed**: running the
+      # installed `pytest` console-script entry point (what `uv run
+      # pytest` and every other step in this file already does) does
+      # not add the repo root to `sys.path` the way `python -m pytest`
+      # does — so `test_database_agent.py`'s own `from tests.integration.
+      # _postgres_fixture import postgres_container` (a real,
+      # already-established cross-tree convention this pack's own
+      # pyproject.toml comment names) raised `ModuleNotFoundError`,
+      # invocation-style-dependent and therefore invisible to whoever
+      # last happened to run it via `python -m pytest` instead. Fixed at
+      # the root, not per-file: `[tool.pytest.ini_options] pythonpath =
+      # ["."]` in `pyproject.toml`, pytest's own invocation-style-
+      # independent mechanism — proven locally, all 242 pack tests
+      # across all 3 real packs now collect and pass via this exact
+      # entry point.
+      - name: pytest capability_packs (pack-local tests)
+        if: hashFiles('capability_packs/*/tests/**') != ''
+        run: uv run pytest capability_packs/*/tests -v
 
   contract:
     name: Contract tests
