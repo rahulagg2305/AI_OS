@@ -200,7 +200,9 @@ async def test_the_happy_path_completes_without_looping(tmp_path: Path, database
         )
         repository = SqlWorkflowInstanceRepository(engine)
 
-        result = await trigger({"task": "Write a script that prints ok"}, "test-principal")
+        result = await trigger(
+            {"title": "Print ok", "description": "Write a script that prints ok"}, "test-principal"
+        )
 
         assert result.outcome == WorkflowRunOutcome.COMPLETED, result.error
         assert result.last_instance is not None
@@ -253,7 +255,9 @@ async def test_a_failing_first_attempt_genuinely_loops_back_and_recovers(
         )
         repository = SqlWorkflowInstanceRepository(engine)
 
-        result = await trigger({"task": "Write a script that prints ok"}, "test-principal")
+        result = await trigger(
+            {"title": "Print ok", "description": "Write a script that prints ok"}, "test-principal"
+        )
 
         assert result.outcome == WorkflowRunOutcome.COMPLETED, result.error
         assert flaky_gateway.attempts == 2, "the second implement attempt must genuinely happen"

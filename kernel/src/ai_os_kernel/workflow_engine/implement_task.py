@@ -72,8 +72,12 @@ _LEASE_DURATION_SECONDS = 30
 # above the worst real cycle this graph can take — up to three steps per
 # `tests-passed` retry, up to five per `no-blocking-findings` retry
 # (which itself re-enters the `tests-passed` loop) — rather than tuned
-# to any single scenario.
-_MAX_ITERATIONS = 30
+# to any single scenario. Public (not `_`-prefixed): reused verbatim by
+# `product_creation.py`'s own `ForeachStepExecutor` composition
+# (`P08-S02-M30-T01`), which runs every child through this identical
+# composition and must not re-derive or duplicate the value it was
+# sized for.
+IMPLEMENT_TASK_MAX_ITERATIONS = 30
 
 _STEP_SOURCES: dict[str, str | list[str]] = {"qa-test": "implement", "code-review": "implement"}
 _IMPLEMENT_STEP_ID = "implement"
@@ -100,8 +104,8 @@ class _StepScopedResolver:
     """Identical to :mod:`ai_os_kernel.workflow_engine.product_creation`'s
     own private helper of the same name — restricts ``inner``'s
     contribution to one step (``implement``, which has no prior step to
-    read from and needs the workflow instance's own real ``task`` input
-    instead)."""
+    read from and needs the workflow instance's own real ``title``/
+    ``description`` inputs instead)."""
 
     def __init__(self, inner: ContextSourceResolver, step_ids: frozenset[str]) -> None:
         self.source_type: SourceType = inner.source_type
@@ -150,6 +154,40 @@ def build_implement_task_context_manager(
     return DefaultContextManager(resolvers)
 
 
+def build_implement_task_instance_service(
+    engine: AsyncEngine,
+    agent_registry: AgentRegistry,
+    *,
+    python_command: tuple[str, ...] | None = None,
+) -> WorkflowInstanceService:
+    """The real composition (repository, Context Manager, quality-gate/
+    decision wiring) any real caller of ``se.implement_task`` needs —
+    factored out (`P08-S02-M30-T01`) so :func:`build_implement_task_trigger`
+    and :mod:`ai_os_kernel.workflow_engine.product_creation`'s own
+    ``ForeachStepExecutor`` composition (step 8, ``foreach`` ->
+    ``se.implement_task``, one real child instance per fanned-out task)
+    share exactly one implementation of "how to run this workflow,"
+    rather than a second, drifting copy of ``gate_sources``/
+    ``decision_executor``/``quality_gate_executor`` wiring."""
+    repository = SqlWorkflowInstanceRepository(engine)
+    context_manager = build_implement_task_context_manager(
+        repository, python_command=python_command
+    )
+    definition_catalog = SqlWorkflowDefinitionCatalog(engine)
+    return WorkflowInstanceService(
+        repository=repository,
+        step_executor=DispatchingStepExecutor(
+            agent_executor=AgentStepExecutor(agent_registry, context_manager=context_manager),
+            tool_executor=NoOpStepExecutor(),
+            default_executor=NoOpStepExecutor(),
+            quality_gate_executor=QualityGateStepExecutor(repository, gate_sources=_GATE_SOURCES),
+            decision_executor=DecisionStepExecutor(repository),
+        ),
+        definition_catalog=definition_catalog,
+        run_manifest_recorder=SqlRunManifestRecorder(engine),
+    )
+
+
 def build_implement_task_trigger(
     engine: AsyncEngine,
     agent_registry: AgentRegistry,
@@ -164,22 +202,8 @@ def build_implement_task_trigger(
     none); ``decision_executor``/``quality_gate_executor`` are, this
     module's own first real use of a genuinely-looping ``decision`` step
     outside :mod:`ai_os_kernel.workflow_engine.delivery_pipeline`."""
-    repository = SqlWorkflowInstanceRepository(engine)
-    context_manager = build_implement_task_context_manager(
-        repository, python_command=python_command
-    )
-    definition_catalog = SqlWorkflowDefinitionCatalog(engine)
-    instance_service = WorkflowInstanceService(
-        repository=repository,
-        step_executor=DispatchingStepExecutor(
-            agent_executor=AgentStepExecutor(agent_registry, context_manager=context_manager),
-            tool_executor=NoOpStepExecutor(),
-            default_executor=NoOpStepExecutor(),
-            quality_gate_executor=QualityGateStepExecutor(repository, gate_sources=_GATE_SOURCES),
-            decision_executor=DecisionStepExecutor(repository),
-        ),
-        definition_catalog=definition_catalog,
-        run_manifest_recorder=SqlRunManifestRecorder(engine),
+    instance_service = build_implement_task_instance_service(
+        engine, agent_registry, python_command=python_command
     )
     advance_runner = WorkflowAdvanceRunner(
         instance_service=instance_service,
@@ -208,7 +232,7 @@ def build_implement_task_trigger(
             definition=definition,
             worker_id=_WORKER_ID,
             lease_duration_seconds=_LEASE_DURATION_SECONDS,
-            max_iterations=_MAX_ITERATIONS,
+            max_iterations=IMPLEMENT_TASK_MAX_ITERATIONS,
         )
 
     return trigger

@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 94%** (231.5 of 246 Task-equivalents complete)
+**Overall: 94%** (232 of 246 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -49,7 +49,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P07 (G) | S02 Security Hardening | 3 | 3 | 0 | 0 | 100% |
 | P07 (G) | S03 Performance, Chaos and Coverage | 2 | 0 | 2 | 0 | 50% |
 | P08 (H) | S01 Remaining Pack Agents | 7 | 7 | 0 | 0 | 100% |
-| P08 (H) | S02 Remaining Pack Workflows | 2 | 1 | 1 | 0 | 75% |
+| P08 (H) | S02 Remaining Pack Workflows | 2 | 2 | 0 | 0 | 100% |
 | P09 (-) | S01 Roadmap System Restructuring (R1-R4) | 5 | 5 | 0 | 0 | 100% |
 
 ## Phase totals
@@ -63,7 +63,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P05 (Stage E) - Project Intelligence | 8 | 0 | 50% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 6 | 73% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 75% |
-| P08 (Stage H) - Expansion | 9 | 8 | 94% |
+| P08 (Stage H) - Expansion | 9 | 9 | 100% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |
 
 ## Ready to start

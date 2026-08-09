@@ -1,24 +1,28 @@
 # se.product_creation (P08-S02-M30-T01) — workflows.md §3's own
-# documented "Full Product Creation" graph, steps 1-7 only.
+# documented "Full Product Creation" graph, steps 1-8 of 14.
 #
-# **Marked partial by design, not by omission: this is the real,
-# buildable prefix of a 14-step graph, not the full thing.** Step 8 of
-# §3's own documented graph is `foreach implementation_plan.tasks →
-# sub_workflow se.implement_task` — a *dynamic*, runtime-length fanout
-# over an LLM-produced plan. `foreach` is not a real `StepType`
-# anywhere in this codebase (exactly seven real members — confirmed
-# directly, not assumed, the identical finding `P03-S02-M29-T08`
-# (technical-planner) already made and this pack's own manifest.yaml
-# already discloses on that agent's own entry). None of the other six
-# step types substitute for it: `parallel`'s own branches are declared
-# statically, inline, in the workflow definition, never at a variable
-# runtime count; `sub_workflow` invokes exactly one named sub-workflow,
-# not a variable-length list of them. Steps 8-14 (the dynamic fanout
-# itself, the nine parallel quality gates, documentation, release, and
-# the final PR) are therefore genuinely unbuilt here — a real,
-# disclosed scope limit, the identical "build real, wire later"
-# precedent this session already established for technical-planner's
-# own agent half.
+# **Step 8 is real as of 2026-08-09 — `StepType.FOREACH`/
+# `ForeachStepExecutor` now exist** (this same ticket): `foreach`
+# genuinely reads `technical-planner`'s own real, persisted `tasks`
+# list and fans out one real child `se.implement_task` instance per
+# item, bounded by the real `maxFanOut` below. Steps 9-14 (nine
+# parallel quality gates, documentation, release, and the final PR)
+# remain genuinely unbuilt here — a real, disclosed scope limit, the
+# identical "build real, wire later" precedent this session already
+# established for technical-planner's own agent half; this step's own
+# scope is exactly "give the plan artifact its first real consumer,"
+# not the full documented graph.
+#
+# **`se.implement_task`'s own `inputs` schema was widened to make this
+# real** (`implement_task.yaml`'s own header comment has the full
+# reasoning): `technical-planner`'s own real plan-item shape
+# (`taskId`/`title`/`description`) did not satisfy that workflow's own
+# prior `{task: string}` contract, a genuine mismatch between two
+# independently-built, already-`done` tickets found only once a real
+# `foreach` step tried to connect them. Product-owner decision
+# (`AskUserQuestion`): widen the consumer's schema to match the real
+# producer, rather than inventing a per-item field-mapping mechanism in
+# the `foreach` contract itself for a need seen exactly once so far.
 #
 # Steps 1-7 need no such gap: `requirements-analyst`, `architecture`,
 # and `technical-planner` are all real, already-built, `done` agents
@@ -45,9 +49,10 @@
 # the agent catalog's own ids — the identical convention
 # `delivery_pipeline.yaml`'s own header comment already establishes.
 #
-# **`version: 0.1.0`, not `1.0.0`** — matches this pack's own initial
-# versioning convention (every prompt this workflow invokes is pinned
-# `@0.1.0` too), and also avoids a real, discovered collision:
+# **`version: 0.2.0`** (bumped from `0.1.0` for the new step 8) — still
+# not `1.0.0`, matching this pack's own initial versioning convention
+# (every prompt this workflow invokes is pinned `@0.1.0` too), and also
+# avoids a real, discovered collision:
 # `tests/integration/workflow_engine/conftest.py`'s own autouse fixture
 # seeds a placeholder `catalog.workflow_definitions` row pinned to the
 # exact composite key `("se.product_creation", "1.0.0")`, used across
@@ -66,13 +71,14 @@ description: >-
   Gate checkpoint and a real Human Approval Point gate progress before
   Architecture ever runs, Architecture proposes a design against the
   refined requirements, a second real Quality Gate checkpoint and
-  Human Approval Point gate progress before planning begins, and
-  Technical Planner decomposes the approved design into a real,
-  persisted plan artifact — the real, buildable prefix of
-  workflows.md §3's own documented graph (steps 1-7 of 14; see this
-  file's own header comment for exactly which real gap stops it there
-  and why nothing invented substitutes for it).
-version: 0.1.0
+  Human Approval Point gate progress before planning begins, Technical
+  Planner decomposes the approved design into a real, persisted plan
+  artifact, and a real `foreach` step fans that plan out into one real
+  `se.implement_task` run per task — the real, buildable prefix of
+  workflows.md §3's own documented graph (steps 1-8 of 14; see this
+  file's own header comment for exactly which real gap stopped it
+  short of that before, and how it was resolved).
+version: 0.2.0
 trigger: manual
 
 inputs:
@@ -163,3 +169,18 @@ steps:
     promptId: technicalplanning.produce_plan
     promptVersion: 0.1.0
     modelAlias: coding-strong
+
+  - id: implement-tasks
+    type: foreach
+    subWorkflowId: se.implement_task
+    foreach:
+      sourceStepId: technical-planner
+      itemsField: tasks
+      # A named, documented first-cut bound (ADR-0021: "foreach
+      # declares a maximum fan-out"), not tuned to any real observed
+      # plan size — no document names a real task-count ceiling for a
+      # single product-creation run, so this is a generous, disclosed
+      # placeholder headroom value, the identical "safety limit, not
+      # yet tuned" carve-out `technical_planner.py`'s own
+      # `_MAX_OUTPUT_TOKENS` already uses.
+      maxFanOut: 20

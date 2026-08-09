@@ -65,20 +65,46 @@ description: >-
   components (`backend-developer`, `fs.apply_patch`/`test.run` tool
   steps, a per-loop attempt counter) are not real yet, and what stands
   in for each.
-version: 0.1.0
+version: 0.2.0
 trigger: manual
 
+# **`inputs` widened 2026-08-09 (`P08-S02-M30-T01`), replacing the single
+# `task: string` field with `title`/`description` (+ optional `taskId`).**
+# This is the real, disclosed resolution of a genuine mismatch found
+# wiring `se.product_creation`'s own step 8: a `foreach` step's own
+# real, disclosed contract passes each fanned-out item straight through
+# as the child's own `inputs`, no transform — and `technical-planner`'s
+# own real plan-item shape (`ai_os_pack_software_engineering.agents.
+# technical_planner.PlanTask`) is `taskId`/`title`/`description`, not a
+# single free-text string. Product-owner decision (presented as a real
+# fork, `AskUserQuestion`): widen this schema to match the real producer,
+# rather than inventing a new per-item field-mapping mechanism in the
+# `foreach` contract for a need seen exactly once so far. `title`+
+# `description` together carry what the old single `task` field did —
+# `implement`'s own real, unchanged Context Manager wiring
+# (`WorkflowStateResolver`, `implement_task.py`) still just serialises
+# whichever `inputs` shape a caller passes, so this is a schema-only
+# change, no Context Manager/executor code needed to change.
 inputs:
   type: object
   properties:
-    task:
+    taskId:
       type: string
       description: >-
-        The task instruction to implement — Requirements Analyst-style
+        Optional identifier for this task, when the caller has one (e.g.
+        `technical-planner`'s own `PlanTask.taskId`) — not read by any
+        step, carried for traceability only.
+    title:
+      type: string
+      description: A short title for the task.
+    description:
+      type: string
+      description: >-
+        The task instruction to implement — Requirements-Analyst-style
         free text, read via the Context Manager's `WorkflowStateResolver`
-        exactly as `product_creation.yaml`'s own `specification` input
-        already is.
-  required: [task]
+        exactly as this input's own prior single `task` field already
+        was.
+  required: [title, description]
   additionalProperties: false
 
 outputs:

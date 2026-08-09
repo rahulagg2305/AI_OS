@@ -41,7 +41,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M27 | Platform SDK (ai-os-sdk package) | P02 | 8 | 8 | 100% |
 | M28 | Manifest Schema (JSON Schema) | P01 | 2 | 1 | 50% |
 | M29 | SE Pack - Agents | P03+P08 | 15 | 15 | 100% |
-| M30 | SE Pack - Workflows | P03+P08 | 8 | 7 | 94% |
+| M30 | SE Pack - Workflows | P03+P08 | 8 | 8 | 100% |
 | M31 | SE Pack - Tools & Quality Gates | P03 | 4 | 4 | 100% |
 | M32 | Project Intelligence Pack | P05 | 6 | 0 | 50% |
 | M33 | Voice (Jarvis) Pack | P06 | 1 | 0 | 50% |
