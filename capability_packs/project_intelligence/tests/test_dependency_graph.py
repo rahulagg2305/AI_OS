@@ -126,9 +126,28 @@ async def test_a_real_graph_is_returned_and_python_files_delivered_via_stdin() -
     outputs = await tool.execute(_valid_inputs(pythonFiles=["a.py", "b.py"]))
 
     DependencyGraphOutput.model_validate(outputs)
-    assert outputs == payload
+    assert outputs == {**payload, "trust": "untrusted"}
     assert sandbox.calls[0]["working_directory"] == Path("/repo")
     assert json.loads(sandbox.calls[0]["stdin"]) == ["a.py", "b.py"]
+
+
+@pytest.mark.asyncio
+async def test_every_real_output_is_genuinely_tagged_untrusted() -> None:
+    """FR-059: every derived item from ingested repository content is
+    tagged untrusted — a real, structural invariant, not a
+    caller-configurable parameter."""
+    tool = DependencyGraphToolEntrypoint()
+    payload: dict[str, Any] = {
+        "nodes": [],
+        "edges": [],
+        "unresolvedImports": [],
+        "parseErrors": [],
+    }
+    tool.sandbox = _FakeSandbox({("python3", "-c", _GRAPH_SCRIPT): _stdout_result(payload)})
+
+    outputs = await tool.execute(_valid_inputs())
+
+    assert outputs["trust"] == "untrusted"
 
 
 @pytest.mark.asyncio
@@ -203,4 +222,5 @@ def test_input_and_output_models_document_the_tool_contract() -> None:
         edges=[],
         unresolved_imports=[],
         parse_errors=[],
+        trust="untrusted",
     )

@@ -46,6 +46,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ai_os_pack_project_intelligence.provenance import DERIVED_CONTENT_TRUST, Trust
 from ai_os_sdk.models.tool import TrustTier
 
 # A real, dependency-free, stdlib-only script — it runs inside the
@@ -139,8 +140,9 @@ _OUTPUT_SCHEMA: dict[str, Any] = {
                 "required": ["path", "language"],
             },
         },
+        "trust": {"type": "string", "enum": ["trusted", "untrusted"]},
     },
-    "required": ["fileCount", "languageCounts", "modules", "files"],
+    "required": ["fileCount", "languageCounts", "modules", "files", "trust"],
     "additionalProperties": False,
 }
 
@@ -189,6 +191,7 @@ class RepositoryIngestionOutput(BaseModel):
     language_counts: dict[str, int] = Field(..., alias="languageCounts")
     modules: list[ModuleEntry]
     files: list[FileEntry]
+    trust: Trust
 
     model_config = {"populate_by_name": True}
 
@@ -260,9 +263,11 @@ class RepositoryIngestionToolEntrypoint:
                 "incomplete; raise maxOutputBytes and retry rather than trust a cut-off result"
             )
         try:
-            return dict(json.loads(result.stdout))
+            parsed = dict(json.loads(result.stdout))
         except json.JSONDecodeError as exc:
             raise RepositoryIngestionToolInputError(
                 f"RepositoryIngestionToolEntrypoint's sandboxed walk produced output that was "
                 f"not valid JSON: {exc}"
             ) from exc
+        parsed["trust"] = DERIVED_CONTENT_TRUST
+        return parsed

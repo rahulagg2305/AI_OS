@@ -89,4 +89,10 @@ async def test_an_empty_directory_is_genuinely_ingested_as_zero_files(
         }
     )
 
-    assert outputs == {"fileCount": 0, "languageCounts": {}, "modules": [], "files": []}
+    assert outputs == {
+        "fileCount": 0,
+        "languageCounts": {},
+        "modules": [],
+        "files": [],
+        "trust": "untrusted",
+    }

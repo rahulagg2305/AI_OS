@@ -3,7 +3,7 @@
 Understand, analyse, and document existing or legacy codebases
 (`docs/06_capability_packs/project_intelligence/overview.md`).
 
-## Status: three real Tools — repository ingestion, language/framework detection, dependency graph
+## Status: three real Tools, all with real, structural provenance tagging
 
 **First real increment (`P05-S02-M32-T01`, 2026-08-09).** This pack
 declares no agents or workflows yet and has no `manifest.yaml` —
@@ -49,6 +49,19 @@ other languages are real, disclosed, deferred work. Proven by 11 tests
 including 2 real, unmocked Docker tests (a real relative-import
 package resolved correctly; a real syntax error reported without
 failing the whole graph).
+
+**Fourth real increment (`P05-S02-M32-T06`, 2026-08-09).** Every one
+of the three Tools' outputs now carries a real, top-level
+`trust: "untrusted"` field
+([`provenance.py`](src/ai_os_pack_project_intelligence/provenance.py),
+FR-059) — mirrors ADR-0016's own control 1 and the Context Manager's
+already-real `ContextItem.trust`, independently defined here since
+this pack cannot import `ai_os_kernel` at all (the identical
+independent-mirroring precedent `ai_os_sdk.models.tool.TrustTier`
+already establishes). Structural, not caller-configurable: no code
+path in this pack could ever honestly produce `"trusted"`. Proven by 3
+new tests (one per Tool), including a real, unmocked Docker test
+confirming the tag survives the real sandboxed round trip.
 
 None of the three Tools is yet wired into any real agent, workflow, or
 manifest — that is later, separate work (the documented

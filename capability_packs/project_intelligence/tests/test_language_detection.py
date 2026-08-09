@@ -138,10 +138,23 @@ async def test_no_marker_present_means_no_finding_never_a_guess() -> None:
     assert outputs["frameworks"] == []
 
 
+@pytest.mark.asyncio
+async def test_every_real_output_is_genuinely_tagged_untrusted() -> None:
+    """FR-059: every derived item from ingested repository content is
+    tagged untrusted — a real, structural invariant, not a
+    caller-configurable parameter."""
+    tool = LanguageDetectionToolEntrypoint()
+
+    outputs = await tool.execute({"files": []})
+
+    assert outputs["trust"] == "untrusted"
+
+
 def test_input_and_output_models_document_the_tool_contract() -> None:
     LanguageDetectionInput(files=[{"path": "a.py", "language": "python"}])
     LanguageDetectionOutput(
         languages=[{"name": "python", "fileCount": 1, "confidence": "high"}],
         build_systems=[],
         frameworks=[],
+        trust="untrusted",
     )

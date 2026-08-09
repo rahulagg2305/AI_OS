@@ -51,6 +51,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ai_os_pack_project_intelligence.provenance import DERIVED_CONTENT_TRUST, Trust
 from ai_os_sdk.models.tool import TrustTier
 
 # A real, dependency-free, stdlib-only script — see
@@ -199,8 +200,9 @@ _OUTPUT_SCHEMA: dict[str, Any] = {
                 "required": ["path", "error"],
             },
         },
+        "trust": {"type": "string", "enum": ["trusted", "untrusted"]},
     },
-    "required": ["nodes", "edges", "unresolvedImports", "parseErrors"],
+    "required": ["nodes", "edges", "unresolvedImports", "parseErrors", "trust"],
     "additionalProperties": False,
 }
 
@@ -264,6 +266,7 @@ class DependencyGraphOutput(BaseModel):
     edges: list[GraphEdge]
     unresolved_imports: list[UnresolvedImport] = Field(..., alias="unresolvedImports")
     parse_errors: list[ParseError] = Field(..., alias="parseErrors")
+    trust: Trust
 
     model_config = {"populate_by_name": True}
 
@@ -341,9 +344,11 @@ class DependencyGraphToolEntrypoint:
                 "incomplete; raise maxOutputBytes and retry rather than trust a cut-off result"
             )
         try:
-            return dict(json.loads(result.stdout))
+            parsed = dict(json.loads(result.stdout))
         except json.JSONDecodeError as exc:
             raise DependencyGraphToolInputError(
                 f"DependencyGraphToolEntrypoint's sandboxed parse produced output that was "
                 f"not valid JSON: {exc}"
             ) from exc
+        parsed["trust"] = DERIVED_CONTENT_TRUST
+        return parsed

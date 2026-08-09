@@ -39,6 +39,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from ai_os_pack_project_intelligence.provenance import DERIVED_CONTENT_TRUST, Trust
 from ai_os_sdk.models.tool import TrustTier
 
 # Named, documented, extensible registries — not hardcoded magic
@@ -108,8 +109,9 @@ _OUTPUT_SCHEMA: dict[str, Any] = {
                 "required": ["name", "evidence", "confidence"],
             },
         },
+        "trust": {"type": "string", "enum": ["trusted", "untrusted"]},
     },
-    "required": ["languages", "buildSystems", "frameworks"],
+    "required": ["languages", "buildSystems", "frameworks", "trust"],
     "additionalProperties": False,
 }
 
@@ -201,6 +203,7 @@ class LanguageDetectionOutput(BaseModel):
     languages: list[LanguageFinding]
     build_systems: list[MarkerFinding] = Field(..., alias="buildSystems")
     frameworks: list[MarkerFinding]
+    trust: Trust
 
     model_config = {"populate_by_name": True}
 
@@ -237,4 +240,5 @@ class LanguageDetectionToolEntrypoint:
             "languages": _detect_languages(files),
             "buildSystems": _detect_markers(files, _BUILD_SYSTEM_MARKERS),
             "frameworks": _detect_markers(files, _FRAMEWORK_MARKERS),
+            "trust": DERIVED_CONTENT_TRUST,
         }

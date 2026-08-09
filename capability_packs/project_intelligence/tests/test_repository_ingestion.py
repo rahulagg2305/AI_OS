@@ -66,7 +66,13 @@ def test_entrypoint_constructs_with_zero_arguments_and_starts_with_no_sandbox() 
     tool = RepositoryIngestionToolEntrypoint()
 
     assert tool.sandbox is None
-    assert tool.output_schema["required"] == ["fileCount", "languageCounts", "modules", "files"]
+    assert tool.output_schema["required"] == [
+        "fileCount",
+        "languageCounts",
+        "modules",
+        "files",
+        "trust",
+    ]
 
 
 @pytest.mark.asyncio
@@ -108,8 +114,30 @@ async def test_a_real_ingestion_returns_the_structural_model() -> None:
     )
 
     RepositoryIngestionOutput.model_validate(outputs)
-    assert outputs == payload
+    assert outputs == {**payload, "trust": "untrusted"}
     assert sandbox.calls[0]["working_directory"] == Path("/repo")
+
+
+@pytest.mark.asyncio
+async def test_every_real_output_is_genuinely_tagged_untrusted() -> None:
+    """FR-059: every derived item from ingested repository content is
+    tagged untrusted — a real, structural invariant, not a
+    caller-configurable parameter (there is no input field that could
+    ever produce `"trusted"` here)."""
+    tool = RepositoryIngestionToolEntrypoint()
+    payload = {
+        "fileCount": 0,
+        "languageCounts": {},
+        "modules": [],
+        "files": [],
+    }
+    tool.sandbox = _FakeSandbox({("python3", "-c", _INGEST_SCRIPT): _stdout_result(payload)})
+
+    outputs = await tool.execute(
+        {"workingDirectory": "/repo", "timeoutSeconds": 30.0, "maxOutputBytes": 1_000_000}
+    )
+
+    assert outputs["trust"] == "untrusted"
 
 
 @pytest.mark.asyncio
@@ -187,4 +215,5 @@ def test_input_and_output_models_document_the_tool_contract() -> None:
         language_counts={"python": 1},
         modules=[{"name": ".", "fileCount": 1}],
         files=[{"path": "a.py", "language": "python"}],
+        trust="untrusted",
     )
