@@ -2805,6 +2805,7 @@ def test_evaluation_llm_calls_matches_the_documented_columns(
         "retries",
         "fallback_used",
         "degradations",
+        "created_at",
     }
     assert pk_columns == ["call_id"]
 
