@@ -114,6 +114,7 @@ from collections.abc import Collection, Mapping
 from typing import Any, Protocol
 
 import sqlalchemy as sa
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.git_integration.service import GitIntegrationService
@@ -362,6 +363,37 @@ def _bind_pack_context_if_receiver(
     loaded.bind_pack_context(context)
 
 
+class AgentRegistration(BaseModel):
+    """One real, registered ``catalog.agents`` row (data_model.md §5),
+    plus its owning pack's real, current ``state``/``version`` — the
+    identical `LEFT JOIN` :meth:`SqlAgentRegistry.resolve_agent` already
+    performs, reused here for a listing rather than a resolve-and-construct.
+    **Not part of the** :class:`AgentRegistry` **Protocol** — only
+    :class:`SqlAgentRegistry` has a real catalog to enumerate;
+    :class:`InMemoryAgentRegistry` has no listable backing store at all
+    (a caller-supplied mapping, no pack/version concept), so this stays
+    a concrete addition, not a seam every implementation must carry.
+
+    **Deliberately does not construct a real** :class:`Agent` **object,
+    unlike** :meth:`resolve_agent`: dynamically importing and
+    instantiating every registered agent's own entrypoint just to
+    enumerate them would be needless real work on every list call, and
+    would make the whole listing fail if any single agent's own
+    entrypoint happens to be broken — a risk :meth:`resolve_agent`'s own
+    per-agent narrowness never carries. Pure catalog metadata only."""
+
+    model_config = ConfigDict(frozen=True)
+
+    agent_id: str
+    pack_id: str
+    version: str
+    entrypoint: str
+    required_permissions: list[str]
+    required_tools: list[str]
+    pack_state: str | None
+    pack_version: str | None
+
+
 class AgentRegistry(Protocol):
     """Resolves a declared ``agentId`` to a real :class:`Agent` instance
     — the seam a Capability-Manager-backed registry substitutes once one
@@ -588,6 +620,66 @@ class SqlAgentRegistry:
         )
 
         return loaded
+
+    async def list_all(self) -> list[AgentRegistration]:
+        """api_architecture.md §6.4's own documented ``GET
+        /api/v1/agents`` — the "Registered agents" half only. **The
+        "+ stats" half is a real, disclosed, narrower slice this method
+        deliberately does not attempt**: per-agent usage/cost/quality
+        aggregation needs the Evaluation Engine (module 12), which has
+        no real reporting surface for this specific view yet — the
+        identical "ship the documented shape's own real half, disclose
+        the rest" precedent `hpa.targetCPUUtilizationPercentage`
+        (deployment_architecture.md, CPU not queue-depth) already
+        establishes.
+
+        See this class's own module-level :class:`AgentRegistration`
+        docstring for why this deliberately does not call
+        :meth:`resolve_agent` per row — a listing must not dynamically
+        import/instantiate every registered agent's own entrypoint."""
+        try:
+            async with self._engine.connect() as connection:
+                result = await connection.execute(
+                    sa.select(
+                        agents_table.c.agent_id,
+                        agents_table.c.pack_id,
+                        agents_table.c.version,
+                        agents_table.c.entrypoint,
+                        agents_table.c.required_permissions,
+                        agents_table.c.required_tools,
+                        packs_table.c.state,
+                        packs_table.c.version.label("pack_version"),
+                    )
+                    .select_from(
+                        agents_table.outerjoin(
+                            packs_table, agents_table.c.pack_id == packs_table.c.pack_id
+                        )
+                    )
+                    .order_by(agents_table.c.agent_id)
+                )
+                rows = result.mappings().all()
+        except (sa.exc.SQLAlchemyError, OSError) as exc:
+            # The identical broad, retriable catch `resolve_agent` above
+            # already uses, for the identical reason (a connection
+            # failure never wrapped by SQLAlchemy surfaces as a raw
+            # `OSError`).
+            raise AgentRegistryError(
+                f"failed to list registered agents: {exc}", retriable=True
+            ) from exc
+
+        return [
+            AgentRegistration(
+                agent_id=row["agent_id"],
+                pack_id=row["pack_id"],
+                version=row["version"],
+                entrypoint=row["entrypoint"],
+                required_permissions=list(row["required_permissions"]),
+                required_tools=list(row["required_tools"]),
+                pack_state=row["state"],
+                pack_version=row["pack_version"],
+            )
+            for row in rows
+        ]
 
 
 class SqlToolRegistry:

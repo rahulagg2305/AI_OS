@@ -1078,3 +1078,62 @@ def test_a_real_pack_declared_tier1_sandboxed_tool_resolves_and_genuinely_runs_a
             await engine.dispose()
 
     asyncio.run(_run())
+
+
+def test_list_all_returns_a_real_registered_agent_with_its_pack_state(database_url: str) -> None:
+    """Backs ``GET /api/v1/agents`` (added 2026-08-10, `P06-S01-M36-T04`)
+    — pure catalog metadata, no entrypoint loading, alongside the real,
+    activated pack's own state/version from the identical `LEFT JOIN`
+    :meth:`SqlAgentRegistry.resolve_agent` already performs."""
+
+    async def _run() -> None:
+        await _seed_agent(
+            database_url,
+            agent_id="se.list_all_test_agent",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            required_permissions=["llm:invoke"],
+        )
+        engine = build_engine(database_url)
+        try:
+            registrations = await SqlAgentRegistry(engine).list_all()
+            matching = next(r for r in registrations if r.agent_id == "se.list_all_test_agent")
+
+            assert matching.pack_id == _DEFAULT_PACK_ID
+            assert matching.version == "1.0.0"
+            assert matching.entrypoint == _ECHO_AGENT_ENTRYPOINT
+            assert matching.required_permissions == ["llm:invoke"]
+            assert matching.required_tools == []
+            assert matching.pack_state == "activated"
+            assert matching.pack_version == "1.0.0"
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_list_all_reports_a_real_missing_pack_honestly(database_url: str) -> None:
+    """An agent whose declared `pack_id` names no real `catalog.packs`
+    row at all (the identical `outerjoin` case `resolve_agent`'s own
+    ``PackNotActivatedError`` guard exists for) still lists — a listing
+    read must not fail just because one row's own pack is missing; it
+    honestly reports `None`, never a fabricated state."""
+
+    async def _run() -> None:
+        await _seed_agent(
+            database_url,
+            agent_id="se.list_all_orphan_agent",
+            entrypoint=_ECHO_AGENT_ENTRYPOINT,
+            pack_id="se.pack_that_does_not_exist",
+        )
+        engine = build_engine(database_url)
+        try:
+            registrations = await SqlAgentRegistry(engine).list_all()
+            matching = next(r for r in registrations if r.agent_id == "se.list_all_orphan_agent")
+
+            assert matching.pack_id == "se.pack_that_does_not_exist"
+            assert matching.pack_state is None
+            assert matching.pack_version is None
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())

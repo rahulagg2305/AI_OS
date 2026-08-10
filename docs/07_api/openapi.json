@@ -1,6 +1,75 @@
 {
   "components": {
     "schemas": {
+      "AgentRegistration": {
+        "description": "One real, registered ``catalog.agents`` row (data_model.md \u00a75),\nplus its owning pack's real, current ``state``/``version`` \u2014 the\nidentical `LEFT JOIN` :meth:`SqlAgentRegistry.resolve_agent` already\nperforms, reused here for a listing rather than a resolve-and-construct.\n**Not part of the** :class:`AgentRegistry` **Protocol** \u2014 only\n:class:`SqlAgentRegistry` has a real catalog to enumerate;\n:class:`InMemoryAgentRegistry` has no listable backing store at all\n(a caller-supplied mapping, no pack/version concept), so this stays\na concrete addition, not a seam every implementation must carry.\n\n**Deliberately does not construct a real** :class:`Agent` **object,\nunlike** :meth:`resolve_agent`: dynamically importing and\ninstantiating every registered agent's own entrypoint just to\nenumerate them would be needless real work on every list call, and\nwould make the whole listing fail if any single agent's own\nentrypoint happens to be broken \u2014 a risk :meth:`resolve_agent`'s own\nper-agent narrowness never carries. Pure catalog metadata only.",
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "entrypoint": {
+            "title": "Entrypoint",
+            "type": "string"
+          },
+          "pack_id": {
+            "title": "Pack Id",
+            "type": "string"
+          },
+          "pack_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack State"
+          },
+          "pack_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Version"
+          },
+          "required_permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Permissions",
+            "type": "array"
+          },
+          "required_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Tools",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "pack_id",
+          "version",
+          "entrypoint",
+          "required_permissions",
+          "required_tools",
+          "pack_state",
+          "pack_version"
+        ],
+        "title": "AgentRegistration",
+        "type": "object"
+      },
       "Approval": {
         "description": "One ``workflow.approvals`` row (data_model.md \u00a74.5).",
         "properties": {
@@ -2212,6 +2281,36 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/agents": {
+      "get": {
+        "operationId": "list_agents_api_v1_agents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentRegistration"
+                  },
+                  "title": "Response List Agents Api V1 Agents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Agents",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/v1/approvals": {
       "get": {
         "operationId": "list_pending_approvals_api_v1_approvals_get",

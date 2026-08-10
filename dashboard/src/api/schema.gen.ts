@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Agents */
+        get: operations["list_agents_api_v1_agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/approvals": {
         parameters: {
             query?: never;
@@ -472,6 +489,44 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AgentRegistration
+         * @description One real, registered ``catalog.agents`` row (data_model.md §5),
+         *     plus its owning pack's real, current ``state``/``version`` — the
+         *     identical `LEFT JOIN` :meth:`SqlAgentRegistry.resolve_agent` already
+         *     performs, reused here for a listing rather than a resolve-and-construct.
+         *     **Not part of the** :class:`AgentRegistry` **Protocol** — only
+         *     :class:`SqlAgentRegistry` has a real catalog to enumerate;
+         *     :class:`InMemoryAgentRegistry` has no listable backing store at all
+         *     (a caller-supplied mapping, no pack/version concept), so this stays
+         *     a concrete addition, not a seam every implementation must carry.
+         *
+         *     **Deliberately does not construct a real** :class:`Agent` **object,
+         *     unlike** :meth:`resolve_agent`: dynamically importing and
+         *     instantiating every registered agent's own entrypoint just to
+         *     enumerate them would be needless real work on every list call, and
+         *     would make the whole listing fail if any single agent's own
+         *     entrypoint happens to be broken — a risk :meth:`resolve_agent`'s own
+         *     per-agent narrowness never carries. Pure catalog metadata only.
+         */
+        AgentRegistration: {
+            /** Agent Id */
+            agent_id: string;
+            /** Entrypoint */
+            entrypoint: string;
+            /** Pack Id */
+            pack_id: string;
+            /** Pack State */
+            pack_state: string | null;
+            /** Pack Version */
+            pack_version: string | null;
+            /** Required Permissions */
+            required_permissions: string[];
+            /** Required Tools */
+            required_tools: string[];
+            /** Version */
+            version: string;
+        };
         /**
          * Approval
          * @description One ``workflow.approvals`` row (data_model.md §4.5).
@@ -1394,6 +1449,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_agents_api_v1_agents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRegistration"][];
+                };
+            };
+        };
+    };
     list_pending_approvals_api_v1_approvals_get: {
         parameters: {
             query?: never;

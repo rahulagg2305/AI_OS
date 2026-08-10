@@ -509,6 +509,7 @@ from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import build_anthropic_prompted_completion_service
 from ai_os_kernel.retrieval.retrieval_service import RetrievalService
 from ai_os_kernel.retrieval.vector_search import SqlVectorSearcher
+from ai_os_kernel.routes.agents import router as agents_router
 from ai_os_kernel.routes.approvals import router as approvals_router
 from ai_os_kernel.routes.config import router as config_router
 from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
@@ -2223,6 +2224,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.include_router(workflows_router)
     app.include_router(delivery_pipeline_router)
     app.include_router(approvals_router)
+    app.include_router(agents_router)
     app.include_router(packs_router)
     app.include_router(role_administration_router)
     app.include_router(config_router)
