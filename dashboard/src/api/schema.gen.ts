@@ -21,6 +21,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/approvals/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Approval History
+         * @description api_architecture.md §6.2's own documented ``GET
+         *     /api/v1/approvals/history`` ("Past decisions") — the last of the 4
+         *     named Approvals endpoints, now real.
+         */
+        get: operations["list_approval_history_api_v1_approvals_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/approvals/{approval_id}": {
         parameters: {
             query?: never;
@@ -30,10 +52,11 @@ export interface paths {
         };
         /**
          * Get Approval
-         * @description A single approval by id — not named in ``api_architecture.md``
-         *     §6.2, but a genuine, small addition closing a real gap ``aios
-         *     approve show`` (``P06-S04-M38-T01``) disclosed as blocked pending
-         *     "no get-approval-by-id route." The underlying read
+         * @description ``api_architecture.md`` §6.2's own documented ``GET
+         *     /api/v1/approvals/{id}`` ("Detail incl. decision context") — real
+         *     now, closing a real gap ``aios approve show``
+         *     (``P06-S04-M38-T01``) disclosed as blocked pending "no
+         *     get-approval-by-id route." The underlying read
          *     (``SqlApprovalRepository.get_by_id``) already existed — used
          *     internally by ``decide_approval`` above — this route only exposes
          *     it directly, over the same ``APPROVAL_READ`` permission the list
@@ -395,6 +418,21 @@ export interface components {
             title: string;
             /** Workflow Id */
             workflow_id: string;
+        };
+        /**
+         * ApprovalHistoryResponse
+         * @description api_architecture.md §9's documented collection envelope
+         *     (``{"items": [...], "next_cursor": "…" | null}``), the same real
+         *     shape ``GET /workflows`` already uses — see
+         *     :meth:`~ai_os_kernel.workflow_engine.human_approval.
+         *     SqlApprovalRepository.list_decided`'s own docstring for why this
+         *     route needs it and ``list_pending`` above deliberately does not.
+         */
+        ApprovalHistoryResponse: {
+            /** Items */
+            items: components["schemas"]["Approval"][];
+            /** Next Cursor */
+            next_cursor: string | null;
         };
         /** ComponentStatus */
         ComponentStatus: {
@@ -1041,6 +1079,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PendingApprovalsResponse"];
+                };
+            };
+        };
+    };
+    list_approval_history_api_v1_approvals_history_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

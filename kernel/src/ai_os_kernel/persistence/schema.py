@@ -336,3 +336,4 @@ approvals = sa.Table(
 
 sa.Index("ix_approvals_workflow_id", approvals.c.workflow_id)
 sa.Index("ix_approvals_status", approvals.c.status)
+sa.Index("ix_approvals_decided_at", approvals.c.decided_at, approvals.c.approval_id)

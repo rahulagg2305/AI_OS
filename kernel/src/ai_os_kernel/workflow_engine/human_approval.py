@@ -173,6 +173,23 @@ def _context_digest(point: HumanApprovalPoint) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+class ApprovalListCursor(BaseModel):
+    """A keyset position in :meth:`ApprovalRepository.list_decided`'s
+    ``decided_at`` DESC, ``approval_id`` DESC ordering — matches the
+    new ``ix_approvals_decided_at`` index (migration
+    ``0037_approvals_decided_at_index``), the identical
+    :class:`~ai_os_kernel.workflow_engine.repository.WorkflowListCursor`
+    shape ``list_instances`` already establishes, applied here since
+    decided approvals accumulate for the platform's whole life (unlike
+    the genuinely bounded pending queue), so this needs real pagination,
+    not a speculative unpaginated list."""
+
+    model_config = ConfigDict(frozen=True)
+
+    decided_at: datetime
+    approval_id: str
+
+
 class ApprovalRepository(Protocol):
     """Persistence boundary for ``workflow.approvals`` — the seam a
     fake implementation substitutes in unit tests (ADR-0004:
@@ -183,6 +200,10 @@ class ApprovalRepository(Protocol):
     async def get_by_id(self, *, approval_id: str) -> Approval | None: ...
 
     async def list_pending(self) -> list[Approval]: ...
+
+    async def list_decided(
+        self, *, limit: int, before: ApprovalListCursor | None = None
+    ) -> list[Approval]: ...
 
     async def create_pending(
         self, *, workflow_id: str, step_id: str, point: HumanApprovalPoint
@@ -259,6 +280,37 @@ class SqlApprovalRepository:
                 .where(approvals.c.status == "pending")
                 .order_by(approvals.c.requested_at.asc())
             )
+            rows = result.mappings().all()
+        return [Approval.model_validate(dict(row)) for row in rows]
+
+    async def list_decided(
+        self, *, limit: int, before: ApprovalListCursor | None = None
+    ) -> list[Approval]:
+        """api_architecture.md §6.2's own documented ``GET
+        /api/v1/approvals/history`` ("Past decisions") — every real row
+        no longer ``pending``, newest-decision-first (``decided_at``
+        DESC, ``approval_id`` DESC — matches the new
+        ``ix_approvals_decided_at`` index), keyset-paginated exactly
+        like :meth:`~ai_os_kernel.workflow_engine.repository.
+        SqlWorkflowInstanceRepository.list_instances` — the real,
+        disclosed, deliberate opposite of :meth:`list_pending`'s own
+        unpaginated shape: decided approvals accumulate for the
+        platform's whole life, a growing collection api_architecture.md
+        §9 rules offset pagination out for, not a genuinely small,
+        bounded one."""
+        query = (
+            sa.select(approvals)
+            .where(approvals.c.status != "pending")
+            .order_by(approvals.c.decided_at.desc(), approvals.c.approval_id.desc())
+            .limit(limit)
+        )
+        if before is not None:
+            query = query.where(
+                sa.tuple_(approvals.c.decided_at, approvals.c.approval_id)
+                < (before.decided_at, before.approval_id)
+            )
+        async with self._engine.connect() as connection:
+            result = await connection.execute(query)
             rows = result.mappings().all()
         return [Approval.model_validate(dict(row)) for row in rows]
 

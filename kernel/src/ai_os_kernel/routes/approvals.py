@@ -51,9 +51,12 @@ workflow exists yet to generalize this against.
 
 from __future__ import annotations
 
+import base64
+import json
+from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -74,6 +77,7 @@ from ai_os_kernel.workflow_engine.delivery_pipeline import resume_pipeline_after
 from ai_os_kernel.workflow_engine.errors import ApprovalNotPendingError
 from ai_os_kernel.workflow_engine.human_approval import (
     Approval,
+    ApprovalListCursor,
     ApprovalService,
     SqlApprovalRepository,
 )
@@ -81,6 +85,13 @@ from ai_os_kernel.workflow_engine.registry import AgentRegistry
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 
 router = APIRouter(prefix="/api/v1", tags=["approvals"])
+
+# api_architecture.md §9's own example (`?limit=50&cursor=…`) — the same
+# default/max `GET /workflows` already uses (`routes/workflows.py`),
+# reused verbatim rather than inventing a second real value for the
+# identical real shape.
+_DEFAULT_LIST_LIMIT = 50
+_MAX_LIST_LIMIT = 100
 
 
 class DecideApprovalRequest(BaseModel):
@@ -153,6 +164,74 @@ async def list_pending_approvals(
     return PendingApprovalsResponse(approvals=pending)
 
 
+def _encode_history_cursor(cursor: ApprovalListCursor) -> str:
+    payload = {"decided_at": cursor.decided_at.isoformat(), "approval_id": cursor.approval_id}
+    return base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+
+
+def _decode_history_cursor(raw: str) -> ApprovalListCursor:
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(raw.encode("ascii")))
+        return ApprovalListCursor(
+            decided_at=datetime.fromisoformat(payload["decided_at"]),
+            approval_id=payload["approval_id"],
+        )
+    except Exception as exc:
+        # Opaque, client-supplied input — the identical "any decode
+        # failure is the same malformed-request condition" reasoning
+        # `routes/workflows.py`'s own `_decode_cursor` already uses.
+        raise HTTPException(status_code=400, detail="invalid cursor") from exc
+
+
+class ApprovalHistoryResponse(BaseModel):
+    """api_architecture.md §9's documented collection envelope
+    (``{"items": [...], "next_cursor": "…" | null}``), the same real
+    shape ``GET /workflows`` already uses — see
+    :meth:`~ai_os_kernel.workflow_engine.human_approval.
+    SqlApprovalRepository.list_decided`'s own docstring for why this
+    route needs it and ``list_pending`` above deliberately does not."""
+
+    items: list[Approval]
+    next_cursor: str | None
+
+
+@router.get("/approvals/history", response_model=ApprovalHistoryResponse)
+async def list_approval_history(
+    request: Request,
+    limit: int = Query(default=_DEFAULT_LIST_LIMIT, gt=0, le=_MAX_LIST_LIMIT),
+    cursor: str | None = Query(default=None),
+    # Same ordering precedent as `list_pending_approvals` above.
+    _security_context: SecurityContext = Depends(require_permission(APPROVAL_READ)),  # noqa: B008
+) -> ApprovalHistoryResponse:
+    """api_architecture.md §6.2's own documented ``GET
+    /api/v1/approvals/history`` ("Past decisions") — the last of the 4
+    named Approvals endpoints, now real."""
+    engine = _get_engine(request)
+    approval_repository = SqlApprovalRepository(engine)
+    before = _decode_history_cursor(cursor) if cursor is not None else None
+
+    # One extra row requested, never returned — the same "presence
+    # alone signals a next page, no separate COUNT" trick
+    # `list_workflows` already uses.
+    decided = await approval_repository.list_decided(limit=limit + 1, before=before)
+    has_more = len(decided) > limit
+    page = decided[:limit]
+
+    next_cursor = None
+    if has_more and page:
+        last = page[-1]
+        if last.decided_at is None:
+            # Cannot happen: every row `list_decided` returns has
+            # `status != 'pending'`, and `decide()` always sets
+            # `decided_at` in the same transaction as `status`.
+            raise RuntimeError(f"decided approval '{last.approval_id}' has no decided_at")
+        next_cursor = _encode_history_cursor(
+            ApprovalListCursor(decided_at=last.decided_at, approval_id=last.approval_id)
+        )
+
+    return ApprovalHistoryResponse(items=page, next_cursor=next_cursor)
+
+
 @router.get("/approvals/{approval_id}", response_model=Approval)
 async def get_approval(
     request: Request,
@@ -160,10 +239,11 @@ async def get_approval(
     # Same ordering precedent as `list_pending_approvals` above.
     _security_context: SecurityContext = Depends(require_permission(APPROVAL_READ)),  # noqa: B008
 ) -> Approval:
-    """A single approval by id — not named in ``api_architecture.md``
-    §6.2, but a genuine, small addition closing a real gap ``aios
-    approve show`` (``P06-S04-M38-T01``) disclosed as blocked pending
-    "no get-approval-by-id route." The underlying read
+    """``api_architecture.md`` §6.2's own documented ``GET
+    /api/v1/approvals/{id}`` ("Detail incl. decision context") — real
+    now, closing a real gap ``aios approve show``
+    (``P06-S04-M38-T01``) disclosed as blocked pending "no
+    get-approval-by-id route." The underlying read
     (``SqlApprovalRepository.get_by_id``) already existed — used
     internally by ``decide_approval`` above — this route only exposes
     it directly, over the same ``APPROVAL_READ`` permission the list

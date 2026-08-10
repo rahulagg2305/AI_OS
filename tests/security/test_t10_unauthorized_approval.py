@@ -54,6 +54,7 @@ from ai_os_kernel.security_manager.models import Principal, PrincipalType
 from ai_os_kernel.workflow_engine.errors import HumanApprovalPendingError
 from ai_os_kernel.workflow_engine.human_approval import (
     Approval,
+    ApprovalListCursor,
     ApprovalService,
     HumanApprovalStepExecutor,
 )
@@ -188,6 +189,11 @@ class _FakeApprovalRepository:
     async def list_pending(self) -> list[Approval]:
         raise NotImplementedError("not exercised by this test")
 
+    async def list_decided(
+        self, *, limit: int, before: ApprovalListCursor | None = None
+    ) -> list[Approval]:
+        raise NotImplementedError("not exercised by this test")
+
     async def create_pending(
         self, *, workflow_id: str, step_id: str, point: HumanApprovalPoint
     ) -> Approval:
@@ -249,6 +255,11 @@ class _RefuseIfDecided:
         return self._approval
 
     async def list_pending(self) -> list[Approval]:
+        raise NotImplementedError("not exercised by this test")
+
+    async def list_decided(
+        self, *, limit: int, before: ApprovalListCursor | None = None
+    ) -> list[Approval]:
         raise NotImplementedError("not exercised by this test")
 
     async def create_pending(self, **kwargs: Any) -> Approval:

@@ -18,7 +18,11 @@ from ai_os_kernel.security_manager.models import Principal, PrincipalType
 from ai_os_kernel.voice_jarvis.errors import VoiceIntentError
 from ai_os_kernel.voice_jarvis.intent_router import PlatformIntentRouter
 from ai_os_kernel.voice_jarvis.models import VoiceIntent
-from ai_os_kernel.workflow_engine.human_approval import Approval, ApprovalService
+from ai_os_kernel.workflow_engine.human_approval import (
+    Approval,
+    ApprovalListCursor,
+    ApprovalService,
+)
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance, WorkflowInstanceStatus
 from ai_os_kernel.workflow_engine.repository import WorkflowListCursor
 
@@ -47,6 +51,11 @@ class _FakeApprovalRepository:
         return self._approval
 
     async def list_pending(self) -> list[Approval]:
+        raise NotImplementedError
+
+    async def list_decided(
+        self, *, limit: int, before: ApprovalListCursor | None = None
+    ) -> list[Approval]:
         raise NotImplementedError
 
     async def create_pending(self, **kwargs: object) -> Approval:

@@ -22,6 +22,15 @@ same real ``approval:read`` gate and the already-real
 indirectly, via the decide route), closing the CLI's own disclosed
 ``approve show`` gap.
 
+**Also covers ``GET /api/v1/approvals/history`` (added 2026-08-10,
+`P06-S04-M38-T01` revisited)** — the last of api_architecture.md
+§6.2's own 4 documented Approvals endpoints. Real, keyset-paginated
+(``SqlApprovalRepository.list_decided``, backed by the new
+``ix_approvals_decided_at`` index, migration
+``0037_approvals_decided_at_index``) — deliberately not the pending
+queue's unpaginated shape, since decided approvals accumulate for the
+platform's whole life.
+
 Real Postgres via testcontainers (ADR-0015) — no mocking the database.
 """
 
@@ -44,7 +53,10 @@ from ai_os_kernel.bootstrap import build_app
 from ai_os_kernel.configuration_manager import PlatformConfig
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
-from ai_os_kernel.workflow_engine.human_approval import SqlApprovalRepository
+from ai_os_kernel.workflow_engine.human_approval import (
+    ApprovalListCursor,
+    SqlApprovalRepository,
+)
 from ai_os_kernel.workflow_engine.models import HumanApprovalPoint, WorkflowDefinition
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.run_manifest_recorder import SqlRunManifestRecorder
@@ -351,3 +363,249 @@ def test_get_approval_by_id_route_serves_the_real_approval_to_an_authorized_prin
     assert body["approval_id"] == approval_id
     assert body["workflow_id"] == workflow_id
     assert body["status"] == "pending"
+
+
+def test_list_decided_excludes_pending_and_includes_decided(database_url: str) -> None:
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            approval_repository = SqlApprovalRepository(engine)
+
+            pending_workflow_id = await _create_real_instance(engine, version="1.1.0")
+            pending = await approval_repository.create_pending(
+                workflow_id=pending_workflow_id,
+                step_id="approve-it",
+                point=_point("approve-it"),
+            )
+
+            decided_workflow_id = await _create_real_instance(engine, version="1.1.1")
+            decided = await approval_repository.create_pending(
+                workflow_id=decided_workflow_id,
+                step_id="approve-it",
+                point=_point("approve-it"),
+            )
+            await approval_repository.decide(
+                approval_id=decided.approval_id,
+                principal_id="test-principal",
+                decision="approved",
+                comment=None,
+            )
+
+            history = await approval_repository.list_decided(limit=50)
+            history_ids = {approval.approval_id for approval in history}
+
+            assert decided.approval_id in history_ids
+            assert pending.approval_id not in history_ids
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_list_decided_orders_newest_decision_first(database_url: str) -> None:
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            approval_repository = SqlApprovalRepository(engine)
+
+            first_workflow_id = await _create_real_instance(engine, version="1.1.2")
+            first = await approval_repository.create_pending(
+                workflow_id=first_workflow_id, step_id="approve-it", point=_point("approve-it")
+            )
+            await approval_repository.decide(
+                approval_id=first.approval_id,
+                principal_id="test-principal",
+                decision="approved",
+                comment=None,
+            )
+
+            second_workflow_id = await _create_real_instance(engine, version="1.1.3")
+            second = await approval_repository.create_pending(
+                workflow_id=second_workflow_id, step_id="approve-it", point=_point("approve-it")
+            )
+            await approval_repository.decide(
+                approval_id=second.approval_id,
+                principal_id="test-principal",
+                decision="rejected",
+                comment=None,
+            )
+
+            history = await approval_repository.list_decided(limit=50)
+            ids_in_order = [a.approval_id for a in history]
+            # Newest decision first — the opposite fairness convention
+            # from `list_pending`'s own oldest-first queue (see
+            # `list_decided`'s own docstring for why).
+            assert ids_in_order.index(second.approval_id) < ids_in_order.index(first.approval_id)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_list_decided_paginates_with_a_real_keyset_cursor(database_url: str) -> None:
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            approval_repository = SqlApprovalRepository(engine)
+            decided_ids: list[str] = []
+            for i in range(3):
+                workflow_id = await _create_real_instance(engine, version=f"1.1.{4 + i}")
+                approval = await approval_repository.create_pending(
+                    workflow_id=workflow_id, step_id="approve-it", point=_point("approve-it")
+                )
+                decided = await approval_repository.decide(
+                    approval_id=approval.approval_id,
+                    principal_id="test-principal",
+                    decision="approved",
+                    comment=None,
+                )
+                decided_ids.append(decided.approval_id)
+
+            first_page = await approval_repository.list_decided(limit=2)
+            assert len(first_page) == 2
+            last = first_page[-1]
+            assert last.decided_at is not None
+            cursor = ApprovalListCursor(decided_at=last.decided_at, approval_id=last.approval_id)
+
+            second_page = await approval_repository.list_decided(limit=2, before=cursor)
+            # Real keyset pagination, not offset in disguise: the two
+            # pages share no row, and together cover every real,
+            # decided row created in this test (no skip, no duplicate).
+            first_page_ids = {a.approval_id for a in first_page}
+            second_page_ids = {a.approval_id for a in second_page}
+            assert first_page_ids.isdisjoint(second_page_ids)
+            assert set(decided_ids) <= (first_page_ids | second_page_ids)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_get_approval_history_route_requires_authentication(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.get("/api/v1/approvals/history")
+    assert response.status_code == 401
+
+
+def test_get_approval_history_route_refuses_a_principal_without_approval_read(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/approvals/history",
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+    assert response.status_code == 403
+
+
+def test_get_approval_history_route_serves_a_real_decided_approval(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _seed() -> str:
+        engine = build_engine(database_url)
+        try:
+            workflow_id = await _create_real_instance(engine, version="1.1.7")
+            approval_repository = SqlApprovalRepository(engine)
+            approval = await approval_repository.create_pending(
+                workflow_id=workflow_id, step_id="approve-it", point=_point("approve-it")
+            )
+            decided = await approval_repository.decide(
+                approval_id=approval.approval_id,
+                principal_id="test-principal",
+                decision="approved",
+                comment=None,
+            )
+            return decided.approval_id
+        finally:
+            await engine.dispose()
+
+    approval_id = asyncio.run(_seed())
+
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        # A generous limit: other tests in this module-scoped-database
+        # file also decide real approvals, so this asserts the real,
+        # specific row genuinely appears somewhere in a real response,
+        # not that it is the only one.
+        response = client.get(
+            "/api/v1/approvals/history",
+            params={"limit": 100},
+            headers={"Authorization": f"Bearer {_token(['approver'])}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    matching = next(item for item in body["items"] if item["approval_id"] == approval_id)
+    assert matching["status"] == "approved"
+
+
+def test_get_approval_history_route_next_cursor_genuinely_advances_the_page(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _seed_two_decided() -> None:
+        engine = build_engine(database_url)
+        try:
+            approval_repository = SqlApprovalRepository(engine)
+            for i in range(2):
+                workflow_id = await _create_real_instance(engine, version=f"1.1.{8 + i}")
+                approval = await approval_repository.create_pending(
+                    workflow_id=workflow_id, step_id="approve-it", point=_point("approve-it")
+                )
+                await approval_repository.decide(
+                    approval_id=approval.approval_id,
+                    principal_id="test-principal",
+                    decision="approved",
+                    comment=None,
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_seed_two_decided())
+
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        first_response = client.get(
+            "/api/v1/approvals/history",
+            params={"limit": 1},
+            headers={"Authorization": f"Bearer {_token(['approver'])}"},
+        )
+        assert first_response.status_code == 200
+        first_body = first_response.json()
+        assert len(first_body["items"]) == 1
+        next_cursor = first_body["next_cursor"]
+        assert next_cursor is not None
+
+        # A real cursor genuinely round-trips through the HTTP boundary,
+        # not just the repository layer's own direct test above — the
+        # second page's first item must differ from the first page's.
+        second_response = client.get(
+            "/api/v1/approvals/history",
+            params={"limit": 1, "cursor": next_cursor},
+            headers={"Authorization": f"Bearer {_token(['admin'])}"},
+        )
+    assert second_response.status_code == 200
+    second_body = second_response.json()
+    assert len(second_body["items"]) == 1
+    assert second_body["items"][0]["approval_id"] != first_body["items"][0]["approval_id"]
+
+
+def test_get_approval_history_route_rejects_a_malformed_cursor(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/approvals/history",
+            params={"cursor": "not-a-real-cursor"},
+            headers={"Authorization": f"Bearer {_token(['approver'])}"},
+        )
+    assert response.status_code == 400

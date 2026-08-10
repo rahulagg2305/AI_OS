@@ -114,6 +114,35 @@
         "title": "Approval",
         "type": "object"
       },
+      "ApprovalHistoryResponse": {
+        "description": "api_architecture.md \u00a79's documented collection envelope\n(``{\"items\": [...], \"next_cursor\": \"\u2026\" | null}``), the same real\nshape ``GET /workflows`` already uses \u2014 see\n:meth:`~ai_os_kernel.workflow_engine.human_approval.\nSqlApprovalRepository.list_decided`'s own docstring for why this\nroute needs it and ``list_pending`` above deliberately does not.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Approval"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ApprovalHistoryResponse",
+        "type": "object"
+      },
       "ComponentStatus": {
         "properties": {
           "critical": {
@@ -1547,9 +1576,76 @@
         ]
       }
     },
+    "/api/v1/approvals/history": {
+      "get": {
+        "description": "api_architecture.md \u00a76.2's own documented ``GET\n/api/v1/approvals/history`` (\"Past decisions\") \u2014 the last of the 4\nnamed Approvals endpoints, now real.",
+        "operationId": "list_approval_history_api_v1_approvals_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "exclusiveMinimum": 0,
+              "maximum": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Approval History",
+        "tags": [
+          "approvals"
+        ]
+      }
+    },
     "/api/v1/approvals/{approval_id}": {
       "get": {
-        "description": "A single approval by id \u2014 not named in ``api_architecture.md``\n\u00a76.2, but a genuine, small addition closing a real gap ``aios\napprove show`` (``P06-S04-M38-T01``) disclosed as blocked pending\n\"no get-approval-by-id route.\" The underlying read\n(``SqlApprovalRepository.get_by_id``) already existed \u2014 used\ninternally by ``decide_approval`` above \u2014 this route only exposes\nit directly, over the same ``APPROVAL_READ`` permission the list\nroute already gates on.",
+        "description": "``api_architecture.md`` \u00a76.2's own documented ``GET\n/api/v1/approvals/{id}`` (\"Detail incl. decision context\") \u2014 real\nnow, closing a real gap ``aios approve show``\n(``P06-S04-M38-T01``) disclosed as blocked pending \"no\nget-approval-by-id route.\" The underlying read\n(``SqlApprovalRepository.get_by_id``) already existed \u2014 used\ninternally by ``decide_approval`` above \u2014 this route only exposes\nit directly, over the same ``APPROVAL_READ`` permission the list\nroute already gates on.",
         "operationId": "get_approval_api_v1_approvals__approval_id__get",
         "parameters": [
           {
