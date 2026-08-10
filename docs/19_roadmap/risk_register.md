@@ -424,6 +424,27 @@ real CI" claim, not silently left standing as still fully accurate.
 If this recurs on CI, it warrants its own investigation, the identical
 discipline this entry's own root-cause analysis already modeled.
 
+**Second real occurrence (2026-08-10, `P06-S01-M36-T04`, same day, a
+later step)** — this has now recurred, meeting the bar the addendum
+above itself set for "warrants its own investigation." CI run
+`31390101661` (Integration tests job) failed on the real Ubuntu
+runner: `test_worker_loop_execution.py::
+test_a_single_tick_genuinely_advances_multiple_real_instances_concurrently`
+— `assert 0.448... < 0.4`, the identical tight (2x) timing-margin
+assertion this file's own local runs already showed failing/passing
+inconsistently across identical retries earlier the same day (not a
+deterministic regression from any real code change in either step —
+neither step's own diff touches this test's own timed window).
+`gh run rerun --failed`, no code change, resolved it again. **Real,
+disclosed, not yet root-caused**: two genuine CI occurrences in one
+day, both in the same test file, both a `< 0.4s` margin over real
+concurrent work whose true minimum is `0.2s`+ — a tight bound that a
+busier-than-usual Ubuntu runner can plausibly miss without any bug in
+the code under test. Worth a dedicated investigation (widen the
+margin, or make the assertion resistant to real scheduler jitter) if a
+third occurrence lands — not attempted here, out of this ticket's own
+scope (`GET /api/v1/agents`, unrelated to workflow-engine timing).
+
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 
 Found `P05-S02-M32-T01`, closed `P05-S02-M32-T02` (2026-08-09).
