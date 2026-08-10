@@ -38,6 +38,7 @@ from ai_os_kernel.bootstrap import (
     _DEMO_WORKFLOW_PROMPT_ID,
     _DEMO_WORKFLOW_PROMPT_VERSION,
     _PROMPTED_AGENT_ID,
+    _build_demo_workflow_definition,
     _build_workflow_trigger,
     build_app,
 )
@@ -178,6 +179,9 @@ def test_the_read_routes_return_a_real_completed_instance_through_the_http_layer
         detail_response = client.get(f"/api/v1/workflows/{workflow_id}", headers=headers)
         steps_response = client.get(f"/api/v1/workflows/{workflow_id}/steps", headers=headers)
         events_response = client.get(f"/api/v1/workflows/{workflow_id}/events", headers=headers)
+        manifest_response = client.get(
+            f"/api/v1/workflows/{workflow_id}/run_manifest", headers=headers
+        )
 
     assert detail_response.status_code == 200
     detail = detail_response.json()
@@ -196,6 +200,17 @@ def test_the_read_routes_return_a_real_completed_instance_through_the_http_layer
     assert "workflow.started" in event_types
     assert "workflow.completed" in event_types
 
+    # `_build_workflow_trigger` genuinely wires a real
+    # `SqlRunManifestRecorder`, so a genuinely completed instance has a
+    # real, recorded manifest to read back — not a fabricated one.
+    assert manifest_response.status_code == 200
+    manifest_body = manifest_response.json()
+    assert manifest_body["manifest_hash"].startswith("sha256:")
+    assert manifest_body["manifest"]["workflow_id"] == workflow_id
+    assert [entry["agent_id"] for entry in manifest_body["manifest"]["steps"]] == [
+        _PROMPTED_AGENT_ID
+    ]
+
 
 def test_the_read_routes_report_404_for_a_workflow_id_that_never_existed(
     database_url: str, monkeypatch: pytest.MonkeyPatch
@@ -209,10 +224,48 @@ def test_the_read_routes_report_404_for_a_workflow_id_that_never_existed(
         detail_response = client.get("/api/v1/workflows/wf_never_existed", headers=headers)
         steps_response = client.get("/api/v1/workflows/wf_never_existed/steps", headers=headers)
         events_response = client.get("/api/v1/workflows/wf_never_existed/events", headers=headers)
+        manifest_response = client.get(
+            "/api/v1/workflows/wf_never_existed/run_manifest", headers=headers
+        )
 
     assert detail_response.status_code == 404
     assert steps_response.status_code == 404
     assert events_response.status_code == 404
+    assert manifest_response.status_code == 404
+
+
+def test_the_run_manifest_route_is_honestly_404_for_a_real_instance_that_never_completed(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _create_uncompleted_instance() -> str:
+        engine = build_engine(database_url)
+        try:
+            definition = _build_demo_workflow_definition()
+            instance = await SqlWorkflowInstanceRepository(engine).create(
+                definition_id=definition.id,
+                definition_version=definition.version,
+                inputs={},
+                principal_id="run-manifest-404-test-principal",
+            )
+            return instance.workflow_id
+        finally:
+            await engine.dispose()
+
+    workflow_id = asyncio.run(_create_uncompleted_instance())
+
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/v1/workflows/{workflow_id}/run_manifest",
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+
+    # A real, distinct 404 reason from the "never existed" case above —
+    # the instance is genuinely real, just never reached completion, so
+    # `record()` was never called for it.
+    assert response.status_code == 404
+    assert "no run manifest recorded" in response.json()["detail"]
 
 
 def test_list_workflows_paginates_through_every_instance_with_no_duplicates_or_gaps(

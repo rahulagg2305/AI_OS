@@ -361,6 +361,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workflows/{workflow_id}/run_manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Workflow Run Manifest
+         * @description api_architecture.md §6.1's own documented ``GET
+         *     /api/v1/workflows/{id}/run_manifest`` ("Reproducibility manifest")
+         *     — ADR-0022's own complete pinned-conditions bundle.
+         *     ``SqlRunManifestRecorder.record`` is real production-wired
+         *     (``bootstrap.py``/``delivery_pipeline.py``) and writes exactly once
+         *     per genuinely completed run; a `404` here means either the
+         *     workflow itself does not exist, or it exists but has not
+         *     (yet, or ever) genuinely completed — a plain, honest absence, never
+         *     a fabricated empty manifest.
+         */
+        get: operations["get_workflow_run_manifest_api_v1_workflows__workflow_id__run_manifest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workflows/{workflow_id}/steps": {
         parameters: {
             query?: never;
@@ -769,6 +797,56 @@ export interface components {
             status: string;
         };
         /**
+         * RunManifest
+         * @description The real, persisted ``manifest`` JSONB shape — see this module's
+         *     own docstring for the three fields ADR-0022 names that are
+         *     deliberately absent, not fabricated.
+         */
+        RunManifest: {
+            /** Kernel Version */
+            kernel_version: string;
+            /** Steps */
+            steps: components["schemas"]["RunManifestStepEntry"][];
+            /** Workflow Definition Id */
+            workflow_definition_id: string;
+            /** Workflow Definition Version */
+            workflow_definition_version: string;
+            /** Workflow Id */
+            workflow_id: string;
+        };
+        /**
+         * RunManifestStepEntry
+         * @description One real step's own contribution to the manifest — see this
+         *     module's own docstring for exactly which fields are real joins and
+         *     which are honestly ``None``.
+         */
+        RunManifestStepEntry: {
+            /** Agent Id */
+            agent_id: string | null;
+            /** Agent Version */
+            agent_version: string | null;
+            /** Model Alias */
+            model_alias: string | null;
+            /** Pack Id */
+            pack_id: string | null;
+            /** Pack Version */
+            pack_version: string | null;
+            /** Prompt Id */
+            prompt_id: string | null;
+            /** Prompt Version */
+            prompt_version: string | null;
+            /** Resolved Model Id */
+            resolved_model_id: string | null;
+            /** Resolved Provider */
+            resolved_provider: string | null;
+            /** Step Id */
+            step_id: string;
+            /** Tool Id */
+            tool_id: string | null;
+            /** Tool Version */
+            tool_version: string | null;
+        };
+        /**
          * StartWorkflowRequest
          * @description Deliberately just ``inputs`` — see module docstring for the
          *     fields the full documented contract has that this does not yet.
@@ -808,6 +886,24 @@ export interface components {
          * @enum {string}
          */
         StepType: "agent" | "tool" | "decision" | "parallel" | "sub_workflow" | "quality_gate" | "human_approval" | "foreach";
+        /**
+         * StoredRunManifest
+         * @description The real, persisted row — ``manifest`` is the exact
+         *     :class:`RunManifest` this module's own ``record()`` wrote,
+         *     reconstructed from the stored JSONB, not a separate read-side
+         *     shape. Backs ``GET /api/v1/workflows/{id}/run_manifest``
+         *     (api_architecture.md §6.1: "Reproducibility manifest"), which
+         *     ADR-0022 names as the complete pinned-conditions bundle —
+         *     ``manifest_hash`` is the real, tamper-evident digest of exactly
+         *     that bundle, so a caller can verify it, not merely display it.
+         */
+        StoredRunManifest: {
+            manifest: components["schemas"]["RunManifest"];
+            /** Manifest Hash */
+            manifest_hash: string;
+            /** Run Manifest Id */
+            run_manifest_id: string;
+        };
         /**
          * TriggerDeliveryPipelineRequest
          * @description Mirrors ``capability_packs/software-engineering/workflows/delivery_pipeline.yaml``'s
@@ -1706,6 +1802,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkflowEventRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workflow_run_manifest_api_v1_workflows__workflow_id__run_manifest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoredRunManifest"];
                 };
             };
             /** @description Validation Error */

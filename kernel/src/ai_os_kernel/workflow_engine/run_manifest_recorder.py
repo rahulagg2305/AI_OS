@@ -149,6 +149,23 @@ class RunManifest(BaseModel):
     steps: list[RunManifestStepEntry]
 
 
+class StoredRunManifest(BaseModel):
+    """The real, persisted row — ``manifest`` is the exact
+    :class:`RunManifest` this module's own ``record()`` wrote,
+    reconstructed from the stored JSONB, not a separate read-side
+    shape. Backs ``GET /api/v1/workflows/{id}/run_manifest``
+    (api_architecture.md §6.1: "Reproducibility manifest"), which
+    ADR-0022 names as the complete pinned-conditions bundle —
+    ``manifest_hash`` is the real, tamper-evident digest of exactly
+    that bundle, so a caller can verify it, not merely display it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    run_manifest_id: str
+    manifest_hash: str
+    manifest: RunManifest
+
+
 class RunManifestRecorder(Protocol):
     """Persistence boundary for recording one completed run's real
     manifest — the seam a fake implementation substitutes in unit tests
@@ -157,6 +174,8 @@ class RunManifestRecorder(Protocol):
     async def record(
         self, *, workflow_id: str, definition_id: str, definition_version: str
     ) -> str: ...
+
+    async def get_by_workflow_id(self, *, workflow_id: str) -> StoredRunManifest | None: ...
 
 
 class SqlRunManifestRecorder:
@@ -287,3 +306,23 @@ class SqlRunManifestRecorder:
                 f"failed to record run manifest for workflow '{workflow_id}': {exc}"
             ) from exc
         return run_manifest_id
+
+    async def get_by_workflow_id(self, *, workflow_id: str) -> StoredRunManifest | None:
+        """A plain, unguarded read — the identical shape every other
+        real read in this package already establishes (`ApprovalRepository
+        .get_by_id`, etc.). At most one real row can ever exist per
+        `workflow_id` (`ix_run_manifests_workflow_id` is not unique, but
+        `record()` is only ever called once per real, genuinely-completed
+        instance — see this module's own docstring)."""
+        async with self._engine.connect() as connection:
+            result = await connection.execute(
+                sa.select(run_manifests).where(run_manifests.c.workflow_id == workflow_id)
+            )
+            row = result.mappings().one_or_none()
+        if row is None:
+            return None
+        return StoredRunManifest(
+            run_manifest_id=row["run_manifest_id"],
+            manifest_hash=row["manifest_hash"],
+            manifest=RunManifest.model_validate(row["manifest"]),
+        )

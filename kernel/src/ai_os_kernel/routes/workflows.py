@@ -1,9 +1,9 @@
 """The Workflow Engine's HTTP routes (api_architecture.md §6.1):
 ``POST /api/v1/workflows`` (the authenticated write, fronting the
 composition root's ``app.state.trigger_prompted_agent_workflow``), the
-cursor-paginated collection route ``GET /api/v1/workflows`` added this
-step, and three read-only instance routes — ``GET
-/api/v1/workflows/{id}``, ``.../steps``, ``.../events`` — all reusing
+cursor-paginated collection route ``GET /api/v1/workflows``, and four
+read-only instance routes — ``GET /api/v1/workflows/{id}``,
+``.../steps``, ``.../events``, ``.../run_manifest`` — all reusing
 the same ``WorkflowInstanceRepository`` read accessors
 (:meth:`~ai_os_kernel.workflow_engine.repository.WorkflowInstanceRepository.get_instance`/
 :meth:`~ai_os_kernel.workflow_engine.repository.WorkflowInstanceRepository.list_steps`/
@@ -61,6 +61,15 @@ the approved framing for this step is a *correct list endpoint*, not
 search; a filtered list is a distinct, later step layered on the same
 cursor mechanism.
 
+**Updated (2026-08-10, `P06-S01-M36-T04`): ``GET .../run_manifest`` is
+real too** — the last of §6.1's own routes named in this module's own
+docstring above as still missing before this step. Reuses
+``SqlRunManifestRecorder.get_by_workflow_id`` (a new read method on the
+same recorder ``WorkflowInstanceService`` already writes through at
+real completion — no new persistence concept, the identical
+"repository already has the seam, just no HTTP caller yet" shape
+``list_instances``/`GET /approvals/history` both already established).
+
 **Updated (``P03-S05-M14-T09``): ``start_workflow`` now forwards
 ``security_context.permissions`` into ``trigger()``, not only
 ``.principal.principal_id``.** Previously this real, computed
@@ -86,6 +95,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.security_manager import (
     WORKFLOW_READ,
@@ -97,6 +107,10 @@ from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
 from ai_os_kernel.workflow_engine.event_record import WorkflowEventRecord
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository, WorkflowListCursor
+from ai_os_kernel.workflow_engine.run_manifest_recorder import (
+    SqlRunManifestRecorder,
+    StoredRunManifest,
+)
 from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
 
 router = APIRouter(prefix="/api/v1", tags=["workflows"])
@@ -162,6 +176,18 @@ def _get_repository(request: Request) -> WorkflowInstanceRepository:
     if repository is None:
         raise HTTPException(status_code=503, detail="workflow engine is not available")
     return repository
+
+
+def _get_engine(request: Request) -> AsyncEngine:
+    # The identical `app.state.database_engine` accessor
+    # `routes/approvals.py`'s own `_get_engine` already establishes —
+    # `run_manifests` has no repository-level seam of its own yet
+    # (`SqlRunManifestRecorder` is constructed directly, mirroring
+    # `SqlApprovalRepository`'s own on-demand construction there).
+    engine: AsyncEngine | None = getattr(request.app.state, "database_engine", None)
+    if engine is None:
+        raise HTTPException(status_code=503, detail="workflow engine is not available")
+    return engine
 
 
 async def _get_instance_or_404(
@@ -262,3 +288,29 @@ async def get_workflow_events(
 ) -> list[WorkflowEventRecord]:
     await _get_instance_or_404(repository, workflow_id)
     return await repository.list_events(workflow_id)
+
+
+@router.get("/workflows/{workflow_id}/run_manifest", response_model=StoredRunManifest)
+async def get_workflow_run_manifest(
+    request: Request,
+    workflow_id: str,
+    _security_context: SecurityContext = Depends(require_permission(WORKFLOW_READ)),  # noqa: B008
+    repository: WorkflowInstanceRepository = Depends(_get_repository),  # noqa: B008
+) -> StoredRunManifest:
+    """api_architecture.md §6.1's own documented ``GET
+    /api/v1/workflows/{id}/run_manifest`` ("Reproducibility manifest")
+    — ADR-0022's own complete pinned-conditions bundle.
+    ``SqlRunManifestRecorder.record`` is real production-wired
+    (``bootstrap.py``/``delivery_pipeline.py``) and writes exactly once
+    per genuinely completed run; a `404` here means either the
+    workflow itself does not exist, or it exists but has not
+    (yet, or ever) genuinely completed — a plain, honest absence, never
+    a fabricated empty manifest."""
+    await _get_instance_or_404(repository, workflow_id)
+    engine = _get_engine(request)
+    manifest = await SqlRunManifestRecorder(engine).get_by_workflow_id(workflow_id=workflow_id)
+    if manifest is None:
+        raise HTTPException(
+            status_code=404, detail=f"no run manifest recorded for workflow '{workflow_id}'"
+        )
+    return manifest

@@ -1,7 +1,9 @@
-"""``aios workflow`` — ``start``/``list``/``show``/``events``
-(``cli_design.md`` §4). ``cancel``/``retry``/``manifest`` are declared
-but not built — no cancel/retry route or manifest-read route exists
-yet (``ai_os_kernel.routes.workflows``' own module docstring)."""
+"""``aios workflow`` — ``start``/``list``/``show``/``events``/``manifest``
+(``cli_design.md`` §4). ``manifest`` closed 2026-08-10
+(``P06-S01-M36-T04``) once ``GET .../run_manifest`` became real.
+``cancel``/``retry`` remain declared but not built — no
+cancel/retry route exists yet (``ai_os_kernel.routes.workflows``' own
+module docstring)."""
 
 from __future__ import annotations
 
@@ -85,5 +87,10 @@ def retry(workflow_id: str) -> None:
 
 
 @app.command()
-def manifest(workflow_id: str) -> None:
-    not_yet_implemented("no run-manifest read route exists yet")
+def manifest(ctx: typer.Context, workflow_id: str) -> None:
+    client = AiosClient(load_config())
+    try:
+        response = client.get(f"/api/v1/workflows/{workflow_id}/run_manifest")
+    finally:
+        client.close()
+    render(response.json(), output_format=ctx.obj["output_format"])

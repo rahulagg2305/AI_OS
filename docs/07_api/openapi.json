@@ -867,6 +867,189 @@
         "title": "RoleGrant",
         "type": "object"
       },
+      "RunManifest": {
+        "description": "The real, persisted ``manifest`` JSONB shape \u2014 see this module's\nown docstring for the three fields ADR-0022 names that are\ndeliberately absent, not fabricated.",
+        "properties": {
+          "kernel_version": {
+            "title": "Kernel Version",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RunManifestStepEntry"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "workflow_definition_id": {
+            "title": "Workflow Definition Id",
+            "type": "string"
+          },
+          "workflow_definition_version": {
+            "title": "Workflow Definition Version",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow_id",
+          "workflow_definition_id",
+          "workflow_definition_version",
+          "kernel_version",
+          "steps"
+        ],
+        "title": "RunManifest",
+        "type": "object"
+      },
+      "RunManifestStepEntry": {
+        "description": "One real step's own contribution to the manifest \u2014 see this\nmodule's own docstring for exactly which fields are real joins and\nwhich are honestly ``None``.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "agent_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Version"
+          },
+          "model_alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Alias"
+          },
+          "pack_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Id"
+          },
+          "pack_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Version"
+          },
+          "prompt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Id"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "resolved_model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Model Id"
+          },
+          "resolved_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Provider"
+          },
+          "step_id": {
+            "title": "Step Id",
+            "type": "string"
+          },
+          "tool_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Id"
+          },
+          "tool_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Version"
+          }
+        },
+        "required": [
+          "step_id",
+          "agent_id",
+          "agent_version",
+          "tool_id",
+          "tool_version",
+          "pack_id",
+          "pack_version",
+          "prompt_id",
+          "prompt_version",
+          "model_alias",
+          "resolved_provider",
+          "resolved_model_id"
+        ],
+        "title": "RunManifestStepEntry",
+        "type": "object"
+      },
       "StartWorkflowRequest": {
         "description": "Deliberately just ``inputs`` \u2014 see module docstring for the\nfields the full documented contract has that this does not yet.",
         "properties": {
@@ -928,6 +1111,29 @@
         ],
         "title": "StepType",
         "type": "string"
+      },
+      "StoredRunManifest": {
+        "description": "The real, persisted row \u2014 ``manifest`` is the exact\n:class:`RunManifest` this module's own ``record()`` wrote,\nreconstructed from the stored JSONB, not a separate read-side\nshape. Backs ``GET /api/v1/workflows/{id}/run_manifest``\n(api_architecture.md \u00a76.1: \"Reproducibility manifest\"), which\nADR-0022 names as the complete pinned-conditions bundle \u2014\n``manifest_hash`` is the real, tamper-evident digest of exactly\nthat bundle, so a caller can verify it, not merely display it.",
+        "properties": {
+          "manifest": {
+            "$ref": "#/components/schemas/RunManifest"
+          },
+          "manifest_hash": {
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "run_manifest_id": {
+            "title": "Run Manifest Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_manifest_id",
+          "manifest_hash",
+          "manifest"
+        ],
+        "title": "StoredRunManifest",
+        "type": "object"
       },
       "TriggerDeliveryPipelineRequest": {
         "description": "Mirrors ``capability_packs/software-engineering/workflows/delivery_pipeline.yaml``'s\nown declared ``inputs`` schema exactly\n(``ai_os_pack_software_engineering.workflows.models:PipelineInput``).",
@@ -2530,6 +2736,54 @@
           }
         ],
         "summary": "Get Workflow Events",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/run_manifest": {
+      "get": {
+        "description": "api_architecture.md \u00a76.1's own documented ``GET\n/api/v1/workflows/{id}/run_manifest`` (\"Reproducibility manifest\")\n\u2014 ADR-0022's own complete pinned-conditions bundle.\n``SqlRunManifestRecorder.record`` is real production-wired\n(``bootstrap.py``/``delivery_pipeline.py``) and writes exactly once\nper genuinely completed run; a `404` here means either the\nworkflow itself does not exist, or it exists but has not\n(yet, or ever) genuinely completed \u2014 a plain, honest absence, never\na fabricated empty manifest.",
+        "operationId": "get_workflow_run_manifest_api_v1_workflows__workflow_id__run_manifest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredRunManifest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Workflow Run Manifest",
         "tags": [
           "workflows"
         ]

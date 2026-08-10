@@ -378,3 +378,87 @@ def test_the_latest_attempt_wins_when_a_step_genuinely_retried(database_url: str
             await engine.dispose()
 
     asyncio.run(_run())
+
+
+def test_get_by_workflow_id_returns_the_real_recorded_manifest(database_url: str) -> None:
+    """Backs ``GET /api/v1/workflows/{id}/run_manifest``
+    (added 2026-08-10, `P06-S01-M36-T04`) — the read side of this
+    same recorder, reconstructing the identical `RunManifest` shape
+    `record()` wrote from the real, persisted JSONB."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            await _seed_workflow_definition(
+                engine, definition_id="test.run-manifest-read-workflow", version="1.0.0"
+            )
+            instance = await SqlWorkflowInstanceRepository(engine).create(
+                definition_id="test.run-manifest-read-workflow",
+                definition_version="1.0.0",
+                inputs={},
+                principal_id="test-principal",
+            )
+            workflow_id = instance.workflow_id
+
+            async with engine.begin() as connection:
+                await connection.execute(
+                    sa.insert(workflow_steps).values(
+                        _step_row(
+                            step_id="stp_read_1",
+                            workflow_id=workflow_id,
+                            step_name="analyze",
+                            agent_id=None,
+                            tool_id=None,
+                            prompt_id=None,
+                            prompt_version=None,
+                            model_alias=None,
+                        )
+                    )
+                )
+
+            recorder = SqlRunManifestRecorder(engine)
+            run_manifest_id = await recorder.record(
+                workflow_id=workflow_id,
+                definition_id="test.run-manifest-read-workflow",
+                definition_version="1.0.0",
+            )
+
+            stored = await recorder.get_by_workflow_id(workflow_id=workflow_id)
+
+            assert stored is not None
+            assert stored.run_manifest_id == run_manifest_id
+            assert stored.manifest_hash.startswith("sha256:")
+            assert stored.manifest.workflow_id == workflow_id
+            assert stored.manifest.workflow_definition_id == "test.run-manifest-read-workflow"
+            assert {entry.step_id for entry in stored.manifest.steps} == {"analyze"}
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_get_by_workflow_id_is_honestly_none_when_no_manifest_was_ever_recorded(
+    database_url: str,
+) -> None:
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            await _seed_workflow_definition(
+                engine, definition_id="test.run-manifest-unrecorded-workflow", version="1.0.0"
+            )
+            instance = await SqlWorkflowInstanceRepository(engine).create(
+                definition_id="test.run-manifest-unrecorded-workflow",
+                definition_version="1.0.0",
+                inputs={},
+                principal_id="test-principal",
+            )
+
+            stored = await SqlRunManifestRecorder(engine).get_by_workflow_id(
+                workflow_id=instance.workflow_id
+            )
+
+            assert stored is None
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
