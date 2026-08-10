@@ -23,6 +23,20 @@ Deploys the real, two-process-role image (`Dockerfile`,
   own `APIRouter(prefix="/api/v1", ...)`, matching
   `deployment_architecture.md` §6's own table exactly).
 - `terminationGracePeriodSeconds: 330` on both roles (NFR-036).
+- **Rootless Podman sidecar** (`P07-S01-M40-T01`, ADR-0020 §6 pattern 1) —
+  **opt-in** (`sandboxSidecar.enabled`, default `false`; zero regression
+  for a default install). When enabled: `quay.io/podman/stable` runs as
+  its own non-root uid/gid 1000, storing layers with Podman's `vfs`
+  driver (no `/dev/fuse`, no host path — see `values.yaml`'s own
+  extensive comment for the full, verified design and the two narrow,
+  confirmed-necessary `securityContext` relaxations on the sidecar
+  container only). Proven end to end, including a genuine nested
+  container run, against a real local Docker daemon. **Genuinely
+  blocked one layer deeper against a real `kind` cluster**: Podman's own
+  setuid `newuidmap` helper fails with "operation not permitted" under
+  containerd's CRI runtime — confirmed unfixable via `SYS_ADMIN`,
+  `seccomp: Unconfined`, or `allowPrivilegeEscalation: true`, all three
+  already set; see "Disclosed gaps" below.
 - `NetworkPolicy/aios-egress` (`P07-S01-M40-T02`) — **opt-in**
   (`networkPolicy.enabled`, default `false`; zero regression for a
   default install). When enabled: a real DNS (`kube-dns`) + same-namespace
@@ -62,7 +76,17 @@ genuinely unbuilt, each for a real, specific reason, not oversight:
   (`values.yaml`'s own `existingSecretName`, default `aios-secrets`)
   by name only — it never creates, populates, or reads a secret value
   itself.
-- **No Podman-sidecar or gVisor sandbox pattern.** `deployment_architecture.md`
+- **Podman sidecar genuinely blocked one layer past socket-service-start**
+  (real, disclosed, not fabricated): under a real `kind` cluster
+  (containerd CRI), Podman's own setuid `newuidmap`/`newgidmap` helpers
+  fail with "operation not permitted" — most likely a `nosuid`
+  container-filesystem mount flag no Pod-level `securityContext` field
+  can override. `tests/integration/infra/test_ai_os_helm_chart.py::test_the_sandbox_sidecar_is_genuinely_accepted_but_cannot_yet_start_rootless_podman`
+  asserts this exact, current failure explicitly, so a future
+  environment change that resolves it (different CRI runtime, a
+  cluster-level mount-flag change, a newer Podman release) makes the
+  test fail loudly rather than leaving a stale assertion in place.
+- **No gVisor sandbox pattern.** `deployment_architecture.md`
   §6's own text already calls this "deliberate node configuration" —
   a real, separate, larger piece of work, not a Helm-chart-shaped one.
 

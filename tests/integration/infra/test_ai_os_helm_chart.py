@@ -241,6 +241,74 @@ def rendered_manifests_with_network_policy_path(
     return path
 
 
+def test_the_sandbox_sidecar_is_absent_by_default(helm_binary: str) -> None:
+    """``P07-S01-M40-T01`` — opt-in, matching ``networkPolicy.enabled``'s
+    own precedent: a default render (no ``--set``) must declare exactly
+    one container on the worker Deployment and no ``fsGroup``/extra
+    volume at all — zero regression for a default install."""
+    rendered = _run([helm_binary, "template", _RELEASE_NAME, str(CHART_PATH)])
+    documents = [doc for doc in yaml.safe_load_all(rendered) if doc is not None]
+    worker_deployment = next(
+        doc
+        for doc in documents
+        if doc["kind"] == "Deployment" and doc["metadata"]["name"] == f"{_RELEASE_NAME}-worker"
+    )
+    pod_spec = worker_deployment["spec"]["template"]["spec"]
+    assert len(pod_spec["containers"]) == 1
+    assert "securityContext" not in pod_spec
+    assert "volumes" not in pod_spec
+
+
+def test_the_sandbox_sidecar_when_enabled_has_the_real_verified_security_shape(
+    helm_binary: str,
+) -> None:
+    """When explicitly enabled, the rendered worker Deployment has
+    exactly the two real, verified-against-a-live-Docker-daemon
+    properties this pattern needs (see ``values.yaml``'s own
+    docstring): the sidecar runs non-root with `SYS_ADMIN` (and nothing
+    else) plus `Unconfined` seccomp, and never anything this chart
+    already refuses (`privileged`, `hostPath`, `hostNetwork`,
+    `hostPID`) — asserted explicitly, not merely absent by omission."""
+    rendered = _run(
+        [
+            helm_binary,
+            "template",
+            _RELEASE_NAME,
+            str(CHART_PATH),
+            "--set",
+            "sandboxSidecar.enabled=true",
+        ]
+    )
+    documents = [doc for doc in yaml.safe_load_all(rendered) if doc is not None]
+    worker_deployment = next(
+        doc
+        for doc in documents
+        if doc["kind"] == "Deployment" and doc["metadata"]["name"] == f"{_RELEASE_NAME}-worker"
+    )
+    pod_spec = worker_deployment["spec"]["template"]["spec"]
+    assert pod_spec["securityContext"]["fsGroup"] == 1000
+    assert "hostPID" not in pod_spec
+    assert "hostNetwork" not in pod_spec
+    assert all("hostPath" not in v for v in pod_spec["volumes"])
+    assert pod_spec["volumes"] == [{"name": "sandbox-socket", "emptyDir": {}}]
+
+    containers = {c["name"]: c for c in pod_spec["containers"]}
+    assert containers["worker"]["env"][-1] == {
+        "name": "DOCKER_HOST",
+        "value": "unix:///run/podman/podman.sock",
+    }
+
+    sidecar = containers["podman-sidecar"]
+    assert sidecar["image"] == "quay.io/podman/stable:v5.6.2"
+    assert "--storage-driver" in sidecar["args"] and "vfs" in sidecar["args"]
+    sidecar_security = sidecar["securityContext"]
+    assert sidecar_security["runAsNonRoot"] is True
+    assert sidecar_security.get("privileged") is not True
+    assert sidecar_security["capabilities"]["add"] == ["SYS_ADMIN"]
+    assert sidecar_security["capabilities"]["drop"] == ["ALL"]
+    assert sidecar_security["seccompProfile"]["type"] == "Unconfined"
+
+
 @pytest.fixture(scope="module")
 def real_kind_cluster(
     kind_binary: str, kubectl_binary: str, helm_binary: str
@@ -385,3 +453,127 @@ def test_the_network_policy_is_genuinely_accepted_by_a_real_kubernetes_api_serve
     )
     assert policy["spec"]["policyTypes"] == ["Egress"]
     assert len(policy["spec"]["egress"]) == 2  # the real DNS + same-namespace baseline only
+
+
+@pytest.fixture(scope="module")
+def rendered_manifests_with_sandbox_sidecar_path(
+    helm_binary: str, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """The identical render, with the opt-in Podman sidecar switched on
+    — see ``test_the_sandbox_sidecar_is_genuinely_accepted_but_cannot_yet_start_rootless_podman``'s
+    own docstring for why a real cluster apply is the strongest
+    available proof here."""
+    rendered = _run(
+        [
+            helm_binary,
+            "template",
+            _RELEASE_NAME,
+            str(CHART_PATH),
+            "--set",
+            "sandboxSidecar.enabled=true",
+        ]
+    )
+    path = tmp_path_factory.mktemp("ai-os-helm-sandbox") / "rendered.yaml"
+    path.write_text(rendered, encoding="utf-8")
+    return path
+
+
+def test_the_sandbox_sidecar_is_genuinely_accepted_but_cannot_yet_start_rootless_podman(
+    rendered_manifests_with_sandbox_sidecar_path: Path,
+    real_kind_cluster: str,
+    kubectl_binary: str,
+) -> None:
+    """The honest, real state of `P07-S01-M40-T01`'s own "Podman
+    sidecar" pattern against an *actual* kind cluster (containerd CRI),
+    not merely a standalone `docker run` reproduction — proven real,
+    not fabricated, in both directions.
+
+    The manifest itself is genuinely accepted by a live API server (the
+    identical proof `test_the_rendered_manifests_are_genuinely_accepted_
+    by_a_real_kubernetes_api_server` already establishes for the base
+    chart), and `quay.io/podman/stable` — a real, publicly pullable
+    image, unlike `ai-os:0.1.0` — genuinely gets pulled and started.
+
+    **A second, deeper real limitation was found here, beyond the
+    fuse/hostPath one `values.yaml`'s own docstring already documents:
+    Podman's own rootless user-namespace remapping calls the setuid
+    helper `newuidmap`, which fails with "operation not permitted"
+    under this cluster's own containerd CRI runtime — confirmed
+    unaffected by `SYS_ADMIN`, `seccomp: Unconfined`, or
+    `allowPrivilegeEscalation: true`, all three already set. This looks
+    like a `nosuid` container-filesystem mount, a CRI-runtime-level
+    default no Pod-level `securityContext` field can override — a real,
+    separate, deeper gap than the fuse one, found only by testing
+    against a genuine cluster rather than a bare `docker run`.**
+
+    This test asserts that *exact*, real, current failure explicitly
+    (the same "assert the real expected failure, do not silently
+    tolerate a different one" discipline the base chart's own
+    `ErrImagePull` assertion already established) — so a future
+    environment change that resolves this (a different CRI runtime, a
+    cluster-level mount-flag change, a newer Podman release) makes this
+    test fail loudly, prompting it to be strengthened into the full,
+    genuine nested-execution proof this pattern still needs, rather
+    than silently leaving a stale, over-broad assertion in place.
+    """
+    context = ["--context", real_kind_cluster]
+
+    _run(
+        [
+            kubectl_binary,
+            *context,
+            "apply",
+            "--dry-run=server",
+            "-f",
+            str(rendered_manifests_with_sandbox_sidecar_path),
+        ]
+    )
+    _run(
+        [kubectl_binary, *context, "apply", "-f", str(rendered_manifests_with_sandbox_sidecar_path)]
+    )
+
+    def _sidecar_container_status(pod: dict[str, Any]) -> dict[str, Any] | None:
+        statuses: list[dict[str, Any]] = pod["status"].get("containerStatuses", [])
+        for status in statuses:
+            if status["name"] == "podman-sidecar":
+                return status
+        return None
+
+    def _a_sidecar_that_has_genuinely_attempted_to_start() -> tuple[str, dict[str, Any]] | None:
+        pods = yaml.safe_load(
+            _run([kubectl_binary, *context, "get", "pods", "-l", "aios.role=worker", "-o", "yaml"])
+        )
+        for pod in pods["items"]:
+            status = _sidecar_container_status(pod)
+            if status is None:
+                continue
+            # A real attempt genuinely happened once either state is
+            # populated — `waiting` alone (e.g. still `ContainerCreating`)
+            # is not yet a real attempt to report on.
+            terminated = status.get("state", {}).get("terminated") or status.get(
+                "lastState", {}
+            ).get("terminated")
+            if terminated is not None:
+                return pod["metadata"]["name"], terminated
+        return None
+
+    found: tuple[str, dict[str, Any]] | None = None
+    for _ in range(90):
+        found = _a_sidecar_that_has_genuinely_attempted_to_start()
+        if found is not None:
+            break
+        time.sleep(1.0)
+
+    assert found is not None, (
+        "no worker pod's own podman-sidecar container ever genuinely attempted to "
+        "start (no terminated state observed after polling) — see this test's own "
+        "docstring for the real failure this was expected to reach instead"
+    )
+    pod_name, terminated = found
+    assert terminated["exitCode"] == 125  # Podman's own real CLI-usage-error exit code
+
+    logs = _run(
+        [kubectl_binary, *context, "logs", pod_name, "-c", "podman-sidecar", "--tail", "20"]
+    )
+    assert "newuidmap" in logs
+    assert "operation not permitted" in logs

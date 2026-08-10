@@ -88,6 +88,82 @@ hpa:
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
 
+# Rootless Podman sidecar (P07-S01-M40-T01, ADR-0020 §6's own "Sandbox
+# execution on Kubernetes" pattern 1, "Default") — opt-in (matching
+# `networkPolicy.enabled`'s own precedent), disabled by default so a
+# default `helm install` behaves exactly as before this ticket: zero
+# regression, since Tier 1 sandboxed execution is not required for
+# every real deployment of this chart.
+#
+# **Design, verified end to end against a real, local Docker daemon
+# before being written here — not assumed:** the sidecar runs
+# `quay.io/podman/stable` as its own non-root `podman` user (uid/gid
+# 1000, the image's own real, documented user — never root, never this
+# chart's own invented value), storing container layers with Podman's
+# own `vfs` driver. `vfs` needs no `/dev/fuse` device and therefore no
+# host path mount at all beyond the one this chart already declares
+# (the workspace volume) — deployment_architecture.md §6's own "host
+# path mounts beyond the workspace volume are prohibited" rule holds
+# with zero exceptions. The one real, disclosed trade-off: `vfs`
+# duplicates container layers on disk instead of using copy-on-write,
+# so it is slower and heavier than `fuse-overlayfs` — accepted here
+# since Tier 1 tool execution is short-lived, not a build farm.
+#
+# Two real, narrow relaxations on the **sidecar container only** (never
+# the `worker` container, never `hostPID`/`hostNetwork`/`privileged`,
+# neither of which this chart ever sets) were both genuinely required,
+# confirmed by real, local reproduction, not guessed:
+#
+# 1. `SYS_ADMIN` capability — rootless Podman must create its own user
+#    namespace (`unshare(CLONE_NEWUSER)`) to remap itself; Docker's/
+#    containerd's own default seccomp profile refuses this specific
+#    operation for an unprivileged, non-root user without it. Verified:
+#    the identical command fails with "cannot clone: Operation not
+#    permitted" without this capability, and succeeds with it.
+# 2. `seccomp: Unconfined` — Podman's own low-level OCI runtime (`crun`)
+#    joins a kernel session keyring (`keyctl`) when starting a nested
+#    container; the default seccomp profile blocks that syscall for a
+#    nested, unprivileged caller. Verified: the identical real, nested
+#    `podman run` fails with "crun: join keyctl: Operation not
+#    permitted" under the default profile, and a real container
+#    (network disabled, read-only root, uid 65534 — the identical Tier
+#    1 controls `DockerSandbox` itself sets) genuinely runs and returns
+#    real output once this is set. A custom, syscall-scoped seccomp
+#    profile would be narrower, but Kubernetes' own `Localhost` seccomp
+#    type needs the profile file pre-staged on every node — real,
+#    separate infrastructure this chart does not control; `Unconfined`
+#    on this one, purpose-built sidecar (never the worker's own
+#    container) is the disclosed trade-off accepted instead.
+#
+# `DockerSandbox` (`kernel/src/ai_os_kernel/sandbox/docker_executor.py`)
+# needs zero code changes: it builds its client via the official
+# `docker` SDK's own `docker.from_env()`, which already reads
+# `DOCKER_HOST` — the worker container below sets it to the real, local
+# socket path the sidecar exposes over their one shared `emptyDir`
+# volume (`socketPath`, no host path involved).
+sandboxSidecar:
+  enabled: false
+  image:
+    repository: quay.io/podman/stable
+    tag: v5.6.2
+  # The `podman` user quay.io/podman/stable itself declares (verified
+  # directly: `grep podman /etc/passwd` inside the real image) — not a
+  # value this chart invents. `fsGroup` (pod-level) matches it so the
+  # shared, initially-root-owned `emptyDir` volume is genuinely
+  # writable by this uid/gid once Kubernetes applies it, the standard,
+  # documented mechanism for a non-root container to write to an
+  # `emptyDir` at all.
+  uid: 1000
+  gid: 1000
+  socketPath: /run/podman/podman.sock
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
 # Egress NetworkPolicy (P07-S01-M40-T02) — opt-in (product-owner
 # decision), disabled by default so a default `helm install` behaves
 # exactly as before this ticket: zero regression, since no real

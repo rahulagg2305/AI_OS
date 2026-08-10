@@ -15,6 +15,15 @@
 # A real worker-specific health signal (e.g. a heartbeat file, or a
 # small internal HTTP listener) is unbuilt, disclosed follow-up work —
 # see README.md.
+#
+# **The rootless Podman sidecar (`P07-S01-M40-T01`, opt-in via
+# `sandboxSidecar.enabled`) is real too — see `values.yaml`'s own
+# extensive docstring for the full, verified design.** When enabled,
+# `podFsGroup` makes the shared `sandbox-socket` `emptyDir` volume
+# genuinely writable by the sidecar's own non-root user, and the
+# `worker` container gets `DOCKER_HOST` pointing at the real socket the
+# sidecar exposes on it — `DockerSandbox`'s own `docker.from_env()`
+# already reads that variable, no Kernel code change needed.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -37,6 +46,10 @@ spec:
     spec:
       serviceAccountName: {{ include "ai-os.serviceAccountName" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- if .Values.sandboxSidecar.enabled }}
+      securityContext:
+        fsGroup: {{ .Values.sandboxSidecar.gid }}
+      {{- end }}
       containers:
         - name: worker
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -54,8 +67,53 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.existingSecretName }}
                   key: AIOS_REDIS_URL
+            {{- if .Values.sandboxSidecar.enabled }}
+            - name: DOCKER_HOST
+              value: "unix://{{ .Values.sandboxSidecar.socketPath }}"
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "ai-os.fullname" . }}-config
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
+          {{- if .Values.sandboxSidecar.enabled }}
+          volumeMounts:
+            - name: sandbox-socket
+              mountPath: {{ dir .Values.sandboxSidecar.socketPath }}
+          {{- end }}
+        {{- if .Values.sandboxSidecar.enabled }}
+        - name: podman-sidecar
+          image: "{{ .Values.sandboxSidecar.image.repository }}:{{ .Values.sandboxSidecar.image.tag }}"
+          # Real, verified command — see values.yaml's own docstring
+          # for exactly what each flag/capability below was confirmed
+          # necessary for, against a real local daemon, before being
+          # written here.
+          command: ["podman"]
+          args:
+            - --storage-driver
+            - vfs
+            - system
+            - service
+            - --time=0
+            - "unix://{{ .Values.sandboxSidecar.socketPath }}"
+          securityContext:
+            runAsUser: {{ .Values.sandboxSidecar.uid }}
+            runAsGroup: {{ .Values.sandboxSidecar.gid }}
+            runAsNonRoot: true
+            allowPrivilegeEscalation: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+              drop: ["ALL"]
+            seccompProfile:
+              type: Unconfined
+          resources:
+            {{- toYaml .Values.sandboxSidecar.resources | nindent 12 }}
+          volumeMounts:
+            - name: sandbox-socket
+              mountPath: {{ dir .Values.sandboxSidecar.socketPath }}
+        {{- end }}
+      {{- if .Values.sandboxSidecar.enabled }}
+      volumes:
+        - name: sandbox-socket
+          emptyDir: {}
+      {{- end }}
