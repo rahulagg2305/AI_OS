@@ -140,6 +140,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/gates/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Gate Results */
+        get: operations["list_gate_results_api_v1_gates_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health/live": {
         parameters: {
             query?: never;
@@ -753,6 +770,50 @@ export interface components {
             gate_id: string;
             /** Status */
             status: string;
+        };
+        /**
+         * GateResultListResponse
+         * @description api_architecture.md §9's documented collection envelope
+         *     (``{"items": [...], "next_cursor": "…" | null}``), the same real
+         *     shape ``GET /workflows`` already uses.
+         */
+        GateResultListResponse: {
+            /** Items */
+            items: components["schemas"]["GateResultRecord"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * GateResultRecord
+         * @description One ``evaluation.gate_results`` row — a read model returned by a
+         *     query, not a new architectural concept: every field already exists
+         *     as a column :meth:`SqlGateResultRecorder.record` writes. See this
+         *     module's own docstring for what each column really means (and the
+         *     one honestly-always-``0`` limitation, ``duration_ms``).
+         */
+        GateResultRecord: {
+            /** Duration Ms */
+            duration_ms: number;
+            /** Gate Id */
+            gate_id: string;
+            /** Gate Version */
+            gate_version: string;
+            /** Messages */
+            messages: unknown[];
+            /** Metrics */
+            metrics: {
+                [key: string]: unknown;
+            };
+            /** Result Id */
+            result_id: string;
+            /** Severity */
+            severity: string;
+            /** Status */
+            status: string;
+            /** Step Id */
+            step_id: string;
+            /** Workflow Id */
+            workflow_id: string;
         };
         /**
          * GrantRoleRequest
@@ -1641,6 +1702,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CostAndQualityReport"];
+                };
+            };
+        };
+    };
+    list_gate_results_api_v1_gates_results_get: {
+        parameters: {
+            query?: {
+                workflow_id?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GateResultListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

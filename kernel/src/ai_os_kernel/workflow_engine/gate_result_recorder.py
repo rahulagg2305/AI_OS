@@ -119,6 +119,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 import sqlalchemy as sa
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.persistence.evaluation_schema import gate_results
@@ -127,6 +128,27 @@ from ai_os_kernel.workflow_engine.ids import new_gate_result_id
 from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
 
 _SEVERITY_BLOCKING = "blocking"
+
+
+class GateResultRecord(BaseModel):
+    """One ``evaluation.gate_results`` row — a read model returned by a
+    query, not a new architectural concept: every field already exists
+    as a column :meth:`SqlGateResultRecorder.record` writes. See this
+    module's own docstring for what each column really means (and the
+    one honestly-always-``0`` limitation, ``duration_ms``)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    result_id: str
+    workflow_id: str
+    step_id: str
+    gate_id: str
+    gate_version: str
+    status: str
+    severity: str
+    metrics: dict[str, Any]
+    messages: list[Any]
+    duration_ms: int
 
 
 class GateResultRecorder(Protocol):
@@ -178,3 +200,47 @@ class SqlGateResultRecorder:
                 f"failed to record gate result for workflow '{workflow_id}' "
                 f"step '{step.step_name}': {exc}"
             ) from exc
+
+    async def list_all(
+        self, *, workflow_id: str | None = None, limit: int, before: str | None = None
+    ) -> list[GateResultRecord]:
+        """api_architecture.md §6.4's own documented ``GET
+        /api/v1/gates/results`` ("Gate results (filterable)"). Real,
+        cursor-paginated — §9's own blanket "every collection" rule,
+        since real gate results accumulate for the platform's whole
+        life (one row per real gate evaluation), unlike the genuinely
+        bounded collections `list_pending`/`list_all` (workflow
+        definitions) deliberately stay unpaginated for.
+
+        The keyset is `result_id` alone — a real, prefixed ULID
+        (`new_gate_result_id`), itself time-sortable by construction
+        (the identical "no separate timestamp column needed" reasoning
+        `workflow_id`'s own ULID already gets elsewhere in this
+        codebase), descending so the newest result comes first. `before`
+        is the previous page's own last `result_id`, a plain string
+        comparison — no decoding, no separate cursor type, since a
+        single-column keyset needs neither.
+
+        `workflow_id`, the one real, disclosed filter — `ix_gate_
+        results_workflow_id` already exists specifically for this
+        access pattern (viewing every gate result for one real run).
+        `status`/`gate_id` filtering is a real, narrower, deliberately
+        unbuilt slice, not attempted here.
+        """
+        # A plain, unguarded read — the identical shape
+        # `WorkflowDefinitionCatalog.get`/`list_all` already establish;
+        # unlike `record` above, there is no ambiguous failure mode
+        # here worth a dedicated wrapper exception, and
+        # `GateResultRecordingError`'s own name ("could not be
+        # recorded") would misdescribe a read failure.
+        query = sa.select(gate_results).order_by(gate_results.c.result_id.desc()).limit(limit)
+        if workflow_id is not None:
+            query = query.where(gate_results.c.workflow_id == workflow_id)
+        if before is not None:
+            query = query.where(gate_results.c.result_id < before)
+
+        async with self._engine.connect() as connection:
+            result = await connection.execute(query)
+            rows = result.mappings().all()
+
+        return [GateResultRecord.model_validate(dict(row)) for row in rows]

@@ -538,6 +538,96 @@
         "title": "GateFailureSummaryEntry",
         "type": "object"
       },
+      "GateResultListResponse": {
+        "description": "api_architecture.md \u00a79's documented collection envelope\n(``{\"items\": [...], \"next_cursor\": \"\u2026\" | null}``), the same real\nshape ``GET /workflows`` already uses.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GateResultRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "GateResultListResponse",
+        "type": "object"
+      },
+      "GateResultRecord": {
+        "description": "One ``evaluation.gate_results`` row \u2014 a read model returned by a\nquery, not a new architectural concept: every field already exists\nas a column :meth:`SqlGateResultRecorder.record` writes. See this\nmodule's own docstring for what each column really means (and the\none honestly-always-``0`` limitation, ``duration_ms``).",
+        "properties": {
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "gate_id": {
+            "title": "Gate Id",
+            "type": "string"
+          },
+          "gate_version": {
+            "title": "Gate Version",
+            "type": "string"
+          },
+          "messages": {
+            "items": {},
+            "title": "Messages",
+            "type": "array"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "title": "Metrics",
+            "type": "object"
+          },
+          "result_id": {
+            "title": "Result Id",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "step_id": {
+            "title": "Step Id",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_id",
+          "workflow_id",
+          "step_id",
+          "gate_id",
+          "gate_version",
+          "status",
+          "severity",
+          "metrics",
+          "messages",
+          "duration_ms"
+        ],
+        "title": "GateResultRecord",
+        "type": "object"
+      },
       "GrantRoleRequest": {
         "description": "Mirrors :meth:`RoleAdministrationService.grant`'s own keyword\narguments exactly \u2014 no parallel request shape.",
         "properties": {
@@ -2575,6 +2665,88 @@
         "summary": "Get Cost And Quality Report",
         "tags": [
           "evaluation"
+        ]
+      }
+    },
+    "/api/v1/gates/results": {
+      "get": {
+        "operationId": "list_gate_results_api_v1_gates_results_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workflow_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "exclusiveMinimum": 0,
+              "maximum": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GateResultListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Gate Results",
+        "tags": [
+          "gates"
         ]
       }
     },
