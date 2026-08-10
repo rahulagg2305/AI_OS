@@ -142,6 +142,8 @@ class WorkflowInstanceRepository(Protocol):
         reason: str,
     ) -> WorkflowInstance: ...
 
+    async def cancel(self, *, workflow_id: str, reason: str) -> WorkflowInstance: ...
+
     async def record_failed_attempt(
         self,
         *,
@@ -840,6 +842,94 @@ class SqlWorkflowInstanceRepository:
             raise WorkflowInstanceCreationError(
                 f"failed to mark workflow instance '{workflow_id}' waiting for human: {exc}"
             ) from exc
+
+        return WorkflowInstance.model_validate(dict(instance_row))
+
+    async def cancel(self, *, workflow_id: str, reason: str) -> WorkflowInstance:
+        """api_architecture.md §6.1's own documented ``POST
+        /api/v1/workflows/{id}/cancel`` — workflow_engine.md §7's
+        ``cancelled`` state ("Cancelled by an authorized principal"),
+        genuinely reached for the first time. Guarded by the identical
+        "affects zero rows means refuse" CAS shape
+        :meth:`~ai_os_kernel.workflow_engine.human_approval.
+        SqlApprovalRepository.decide` already establishes for its own
+        one-way, terminal transition — no ``definition_id``/
+        ``current_step_id`` match needed, since cancellation does not
+        care which step an instance is on.
+
+        **Real, disclosed, narrower scope than full preemption**: this
+        stops the instance from ever being *discovered* again by
+        ``list_runnable_instances``/``list_startable_instances`` (both
+        already filter on a real, still-non-terminal status), the
+        identical "prevents re-discovery, does not interrupt an
+        already-in-flight step" limit ``mark_waiting_for_human`` already
+        has. A worker holding a real lease on this instance right now
+        finishes its current step normally; only the *next* attempt to
+        advance a genuinely ``cancelled`` instance is refused.
+
+        Only ``created``/``running``/``waiting_for_human`` are included
+        in the guard — the only three of the nine declared states any
+        real instance is ever actually written into today (`workflow_
+        engine.md`'s own Implementation Status: ``waiting_for_retry``/
+        ``quality_gate_failed``/``compensating`` are declared, never
+        reached by any real writer) — guarding against unreachable
+        states would be untestable, speculative code.
+        """
+        async with self._engine.begin() as connection:
+            current = (
+                await connection.execute(
+                    sa.select(workflow_instances.c.status).where(
+                        workflow_instances.c.workflow_id == workflow_id
+                    )
+                )
+            ).scalar_one_or_none()
+
+            result = await connection.execute(
+                sa.update(workflow_instances)
+                .where(
+                    workflow_instances.c.workflow_id == workflow_id,
+                    workflow_instances.c.status.in_(
+                        (
+                            WorkflowInstanceStatus.CREATED.value,
+                            WorkflowInstanceStatus.RUNNING.value,
+                            WorkflowInstanceStatus.WAITING_FOR_HUMAN.value,
+                        )
+                    ),
+                )
+                .values(
+                    status=WorkflowInstanceStatus.CANCELLED.value,
+                    last_event_seq=workflow_instances.c.last_event_seq + 1,
+                    updated_at=sa.func.now(),
+                )
+                .returning(*workflow_instances.columns)
+            )
+            instance_row = result.mappings().one_or_none()
+
+            if instance_row is None:
+                if current is None:
+                    raise WorkflowInvalidTransitionError(
+                        f"workflow instance '{workflow_id}' does not exist"
+                    )
+                raise WorkflowInvalidTransitionError(
+                    f"workflow instance '{workflow_id}' cannot be cancelled from its "
+                    f"current status '{current}'"
+                )
+
+            await connection.execute(
+                sa.insert(workflow_events).values(
+                    event_id=new_event_id(),
+                    workflow_id=workflow_id,
+                    seq=instance_row["last_event_seq"],
+                    event_type=_STATE_TRANSITIONED_EVENT_TYPE,
+                    schema_version=_STATE_TRANSITIONED_SCHEMA_VERSION,
+                    payload={
+                        "previousStatus": current,
+                        "newStatus": WorkflowInstanceStatus.CANCELLED.value,
+                        "reason": reason,
+                    },
+                    occurred_at=datetime.now(UTC),
+                )
+            )
 
         return WorkflowInstance.model_validate(dict(instance_row))
 

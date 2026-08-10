@@ -190,6 +190,9 @@ class _FakeInstanceRepository:
     async def mark_waiting_for_human(self, **kwargs: Any) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
+    async def cancel(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
     async def record_failed_attempt(self, **kwargs: Any) -> None:
         raise NotImplementedError("not exercised by these tests")
 
@@ -309,6 +312,9 @@ class _StatefulInstanceRepository:
         raise NotImplementedError("not exercised by these tests")
 
     async def mark_waiting_for_human(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def cancel(self, **kwargs: Any) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
     async def record_failed_attempt(self, **kwargs: Any) -> None:
@@ -435,6 +441,9 @@ class _GateRetryInstanceRepository:
         return _instance(current_step_id=self._current_step_id, status=self._status)
 
     async def mark_waiting_for_human(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def cancel(self, **kwargs: Any) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
     async def record_failed_attempt(

@@ -73,6 +73,18 @@ already established. ``workflow_definitions`` is deliberately
 unpaginated (a genuinely small, bounded set — one row per real,
 distinct definition version a pack ever declares, not per run).
 
+**Updated (2026-08-10, later step): ``POST .../cancel`` is real too —
+the last of §6.1's own routes, and workflow_engine.md §7's
+``cancelled`` state, genuinely reached for the first time.** Gated by a
+new ``workflow:control`` permission (authentication_authorization.md
+§4.2's own documented row, granted identically to ``workflow:start``:
+``operator``/``maintainer``/``admin``). See
+:meth:`~ai_os_kernel.workflow_engine.repository.
+SqlWorkflowInstanceRepository.cancel`'s own docstring for the real,
+disclosed scope this stops short of: prevents future re-discovery by
+the worker loop, does not forcibly interrupt an already-in-flight
+step.
+
 **Updated (``P03-S05-M14-T09``): ``start_workflow`` now forwards
 ``security_context.permissions`` into ``trigger()``, not only
 ``.principal.principal_id``.** Previously this real, computed
@@ -101,6 +113,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.security_manager import (
+    WORKFLOW_CONTROL,
     WORKFLOW_READ,
     WORKFLOW_START,
     SecurityContext,
@@ -108,6 +121,7 @@ from ai_os_kernel.security_manager import (
 )
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
+from ai_os_kernel.workflow_engine.errors import WorkflowInvalidTransitionError
 from ai_os_kernel.workflow_engine.event_record import WorkflowEventRecord
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance
 from ai_os_kernel.workflow_engine.models import WorkflowDefinition
@@ -260,6 +274,48 @@ async def list_workflows(
         )
 
     return WorkflowListResponse(items=page, next_cursor=next_cursor)
+
+
+class CancelWorkflowRequest(BaseModel):
+    """Deliberately just an optional ``reason`` — no documented request
+    body shape exists for this route beyond api_architecture.md §6.1's
+    own one-line table entry. Mirrors ``DecideApprovalRequest``'s own
+    "required body, optional field inside" shape (``routes/approvals.py``)
+    rather than inventing a second, "body itself is optional"
+    convention nothing else in this API uses."""
+
+    reason: str | None = None
+
+
+@router.post("/workflows/{workflow_id}/cancel", response_model=WorkflowInstance, status_code=202)
+async def cancel_workflow(
+    workflow_id: str,
+    body: CancelWorkflowRequest,
+    # Declared before `repository` — the identical "authorization
+    # resolves before this route can reveal whether the Workflow Engine
+    # itself is available" ordering every other route here establishes.
+    _security_context: SecurityContext = Depends(require_permission(WORKFLOW_CONTROL)),  # noqa: B008
+    repository: WorkflowInstanceRepository = Depends(_get_repository),  # noqa: B008
+) -> WorkflowInstance:
+    """api_architecture.md §6.1's own documented ``POST
+    /api/v1/workflows/{id}/cancel`` ("Request cancellation") —
+    workflow_engine.md §7's ``cancelled`` state, genuinely reached for
+    the first time. See :meth:`~ai_os_kernel.workflow_engine.repository.
+    SqlWorkflowInstanceRepository.cancel`'s own docstring for the real,
+    disclosed scope: this prevents the instance from ever being
+    *discovered* again by the worker loop, it does not forcibly
+    interrupt an already-in-flight step a worker is mid-executing right
+    now. `404` if the workflow never existed; `409` if it exists but is
+    already in a terminal state (``completed``/``failed``/``cancelled``)
+    or a real, declared-but-unreached one (never both conflated with
+    "not found")."""
+    await _get_instance_or_404(repository, workflow_id)
+    try:
+        return await repository.cancel(
+            workflow_id=workflow_id, reason=body.reason or "cancelled via API"
+        )
+    except WorkflowInvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/workflows/{workflow_id}", response_model=WorkflowInstance)

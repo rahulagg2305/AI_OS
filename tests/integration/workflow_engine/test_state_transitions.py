@@ -206,3 +206,113 @@ def test_a_failed_event_append_rolls_back_the_snapshot_update(database_url: str)
             await engine.dispose()
 
     asyncio.run(_run())
+
+
+def test_cancel_from_running_succeeds_and_appends_the_event(database_url: str) -> None:
+    """Backs ``POST /api/v1/workflows/{id}/cancel`` (added 2026-08-10,
+    `P06-S01-M36-T04`) — workflow_engine.md §7's own ``cancelled``
+    state, genuinely reached for the first time."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            repository = SqlWorkflowInstanceRepository(engine)
+            created = await repository.create(
+                definition_id="se.product_creation",
+                definition_version="1.0.0",
+                inputs={"specPath": "specs/product.md"},
+                principal_id="user-42",
+            )
+            await repository.transition_to_running(
+                workflow_id=created.workflow_id, reason="worker picked it up"
+            )
+
+            cancelled = await repository.cancel(
+                workflow_id=created.workflow_id, reason="operator requested cancellation"
+            )
+
+            assert cancelled.status == WorkflowInstanceStatus.CANCELLED
+            assert cancelled.last_event_seq == 3
+
+            stored = await _fetch_instance(database_url, created.workflow_id)
+            assert stored is not None
+            assert stored["status"] == "cancelled"
+
+            events = await _fetch_events(database_url, created.workflow_id)
+            assert [e["event_type"] for e in events] == [
+                "workflow.started",
+                "state.transitioned",
+                "state.transitioned",
+            ]
+            assert events[2]["payload"]["previousStatus"] == "running"
+            assert events[2]["payload"]["newStatus"] == "cancelled"
+            assert events[2]["payload"]["reason"] == "operator requested cancellation"
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_cancel_from_created_succeeds_without_ever_having_run(database_url: str) -> None:
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            repository = SqlWorkflowInstanceRepository(engine)
+            created = await repository.create(
+                definition_id="se.product_creation",
+                definition_version="1.0.0",
+                inputs={"specPath": "specs/product.md"},
+                principal_id="user-42",
+            )
+
+            cancelled = await repository.cancel(
+                workflow_id=created.workflow_id, reason="cancelled before it ever started"
+            )
+
+            assert cancelled.status == WorkflowInstanceStatus.CANCELLED
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_cancel_is_rejected_when_instance_does_not_exist(database_url: str) -> None:
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            repository = SqlWorkflowInstanceRepository(engine)
+
+            with pytest.raises(WorkflowInvalidTransitionError, match="does not exist"):
+                await repository.cancel(workflow_id="wf_does_not_exist", reason="irrelevant")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_cancel_is_rejected_when_the_instance_is_already_cancelled(database_url: str) -> None:
+    """A real, disclosed, deliberate limit: cancellation is one-way —
+    a second cancel against an already-cancelled instance is refused,
+    the identical "guarded write affecting zero rows means refuse"
+    shape :meth:`~ai_os_kernel.workflow_engine.human_approval.
+    SqlApprovalRepository.decide` already establishes for its own
+    one-way transition."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            repository = SqlWorkflowInstanceRepository(engine)
+            created = await repository.create(
+                definition_id="se.product_creation",
+                definition_version="1.0.0",
+                inputs={"specPath": "specs/product.md"},
+                principal_id="user-42",
+            )
+            await repository.cancel(workflow_id=created.workflow_id, reason="first cancel")
+
+            with pytest.raises(WorkflowInvalidTransitionError, match="cannot be cancelled"):
+                await repository.cancel(workflow_id=created.workflow_id, reason="second cancel")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())

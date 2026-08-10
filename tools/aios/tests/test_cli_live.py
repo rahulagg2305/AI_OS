@@ -145,3 +145,35 @@ def test_workflow_manifest_authorized_reaches_the_real_workflow_engine_unavailab
     result = invoke(["workflow", "manifest", "wf-1"])
     assert result.exit_code == EXIT_GENERAL_ERROR
     assert result.error_message == "workflow engine is not available"
+
+
+def test_workflow_cancel_without_a_real_bearer_token_is_a_real_authorization_denial(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+
+    result = invoke(["workflow", "cancel", "wf-1"])
+    assert result.exit_code == EXIT_AUTHORIZATION_DENIED
+
+
+def test_workflow_cancel_lacking_workflow_control_is_a_real_authorization_denial(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+    # workflow:control is granted only to operator/maintainer/admin
+    # (permissions.py's own role table) — viewer/approver do not have it.
+    monkeypatch.setenv("AIOS_TOKEN", _token(["viewer"]))
+
+    result = invoke(["workflow", "cancel", "wf-1"])
+    assert result.exit_code == EXIT_AUTHORIZATION_DENIED
+
+
+def test_workflow_cancel_authorized_reaches_the_real_workflow_engine_unavailable_degrade(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+    monkeypatch.setenv("AIOS_TOKEN", _token(["operator"]))
+
+    result = invoke(["workflow", "cancel", "wf-1"])
+    assert result.exit_code == EXIT_GENERAL_ERROR
+    assert result.error_message == "workflow engine is not available"

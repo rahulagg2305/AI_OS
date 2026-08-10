@@ -143,6 +143,24 @@
         "title": "ApprovalHistoryResponse",
         "type": "object"
       },
+      "CancelWorkflowRequest": {
+        "description": "Deliberately just an optional ``reason`` \u2014 no documented request\nbody shape exists for this route beyond api_architecture.md \u00a76.1's\nown one-line table entry. Mirrors ``DecideApprovalRequest``'s own\n\"required body, optional field inside\" shape (``routes/approvals.py``)\nrather than inventing a second, \"body itself is optional\"\nconvention nothing else in this API uses.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "CancelWorkflowRequest",
+        "type": "object"
+      },
       "ComponentStatus": {
         "properties": {
           "critical": {
@@ -3156,6 +3174,64 @@
         "summary": "Decide Approval",
         "tags": [
           "approvals"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/cancel": {
+      "post": {
+        "description": "api_architecture.md \u00a76.1's own documented ``POST\n/api/v1/workflows/{id}/cancel`` (\"Request cancellation\") \u2014\nworkflow_engine.md \u00a77's ``cancelled`` state, genuinely reached for\nthe first time. See :meth:`~ai_os_kernel.workflow_engine.repository.\nSqlWorkflowInstanceRepository.cancel`'s own docstring for the real,\ndisclosed scope: this prevents the instance from ever being\n*discovered* again by the worker loop, it does not forcibly\ninterrupt an already-in-flight step a worker is mid-executing right\nnow. `404` if the workflow never existed; `409` if it exists but is\nalready in a terminal state (``completed``/``failed``/``cancelled``)\nor a real, declared-but-unreached one (never both conflated with\n\"not found\").",
+        "operationId": "cancel_workflow_api_v1_workflows__workflow_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowInstance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Workflow",
+        "tags": [
+          "workflows"
         ]
       }
     },

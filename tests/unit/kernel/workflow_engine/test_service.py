@@ -322,6 +322,9 @@ class _FakeRepository:
             current_step_id=expected_current_step_id,
         )
 
+    async def cancel(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
     async def record_failed_attempt(
         self,
         *,

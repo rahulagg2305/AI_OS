@@ -375,6 +375,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workflows/{workflow_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Workflow
+         * @description api_architecture.md §6.1's own documented ``POST
+         *     /api/v1/workflows/{id}/cancel`` ("Request cancellation") —
+         *     workflow_engine.md §7's ``cancelled`` state, genuinely reached for
+         *     the first time. See :meth:`~ai_os_kernel.workflow_engine.repository.
+         *     SqlWorkflowInstanceRepository.cancel`'s own docstring for the real,
+         *     disclosed scope: this prevents the instance from ever being
+         *     *discovered* again by the worker loop, it does not forcibly
+         *     interrupt an already-in-flight step a worker is mid-executing right
+         *     now. `404` if the workflow never existed; `409` if it exists but is
+         *     already in a terminal state (``completed``/``failed``/``cancelled``)
+         *     or a real, declared-but-unreached one (never both conflated with
+         *     "not found").
+         */
+        post: operations["cancel_workflow_api_v1_workflows__workflow_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workflows/{workflow_id}/events": {
         parameters: {
             query?: never;
@@ -492,6 +523,19 @@ export interface components {
             items: components["schemas"]["Approval"][];
             /** Next Cursor */
             next_cursor: string | null;
+        };
+        /**
+         * CancelWorkflowRequest
+         * @description Deliberately just an optional ``reason`` — no documented request
+         *     body shape exists for this route beyond api_architecture.md §6.1's
+         *     own one-line table entry. Mirrors ``DecideApprovalRequest``'s own
+         *     "required body, optional field inside" shape (``routes/approvals.py``)
+         *     rather than inventing a second, "body itself is optional"
+         *     convention nothing else in this API uses.
+         */
+        CancelWorkflowRequest: {
+            /** Reason */
+            reason?: string | null;
         };
         /** ComponentStatus */
         ComponentStatus: {
@@ -1982,6 +2026,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DecideApprovalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_workflow_api_v1_workflows__workflow_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelWorkflowRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowInstance"];
                 };
             };
             /** @description Validation Error */

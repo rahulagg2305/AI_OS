@@ -46,7 +46,6 @@ def test_every_documented_but_not_built_command_fails_clearly_not_silently() -> 
         ["experiment", "compare", "exp-1"],
         ["logs", "tail"],
         ["logs", "search", "query"],
-        ["workflow", "cancel", "wf-1"],
         ["workflow", "retry", "wf-1"],
     ):
         result = invoke(args)

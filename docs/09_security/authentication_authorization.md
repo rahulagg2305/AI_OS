@@ -24,7 +24,9 @@ This document is subordinate to:
 
 ---
 
-## Implementation Status (2026-08-03, `P03-S05-M14-T09`)
+## Implementation Status (2026-08-03, `P03-S05-M14-T09`; `workflow:control` added 2026-08-10, `P06-S01-M36-T04`)
+
+**§4.2's "operator: ... start / cancel / retry workflows" grant is now fully real, not just `workflow:start`.** `security_manager.permissions.WORKFLOW_CONTROL` (`"workflow:control"`) gates `POST /api/v1/workflows/{id}/cancel` (`api_architecture.md` §6.1), granted identically to `workflow:start` — `operator`/`maintainer`/`admin`, since this table's own text names both together for the same role, and no role holds one without the other. `retry` remains ungated by anything real, since no retry route exists yet.
 
 **The identity and role layer is real; the permission-narrowing chain it composes into is not — yet, and the gap is disclosed by the implementing module's own docstring, not glossed over.** Verified against `kernel/src/ai_os_kernel/security_manager/models.py`: `Principal` (id, type, roles) and `SecurityContext` (principal + computed `permissions: frozenset[str]`) both exist and are used at the API boundary — §4.2's roles and §3.2's "Security Context" are real.
 

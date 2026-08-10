@@ -10,6 +10,7 @@ from ai_os_kernel.security_manager.permissions import (
     PACK_MANAGE,
     PACK_READ,
     SECRET_ACCESS,
+    WORKFLOW_CONTROL,
     WORKFLOW_READ,
     WORKFLOW_START,
     permissions_for_roles,
@@ -22,10 +23,12 @@ def test_viewer_can_read_but_not_start_workflows() -> None:
     assert permissions == frozenset({WORKFLOW_READ, EVALUATION_READ})
 
 
-def test_operator_can_read_and_start_workflows() -> None:
+def test_operator_can_read_start_and_control_workflows() -> None:
     permissions = permissions_for_roles(["operator"])
 
-    assert permissions == frozenset({WORKFLOW_READ, WORKFLOW_START, EVALUATION_READ})
+    assert permissions == frozenset(
+        {WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ}
+    )
 
 
 def test_approver_can_read_but_not_start_workflows() -> None:
@@ -34,11 +37,12 @@ def test_approver_can_read_but_not_start_workflows() -> None:
     assert permissions == frozenset({WORKFLOW_READ, EVALUATION_READ, APPROVAL_READ})
 
 
-def test_maintainer_and_admin_can_read_and_start_workflows() -> None:
+def test_maintainer_and_admin_can_read_start_and_control_workflows() -> None:
     assert permissions_for_roles(["maintainer"]) == frozenset(
         {
             WORKFLOW_READ,
             WORKFLOW_START,
+            WORKFLOW_CONTROL,
             PACK_READ,
             PACK_MANAGE,
             CONFIG_READ,
@@ -50,6 +54,7 @@ def test_maintainer_and_admin_can_read_and_start_workflows() -> None:
         {
             WORKFLOW_READ,
             WORKFLOW_START,
+            WORKFLOW_CONTROL,
             PACK_READ,
             PACK_MANAGE,
             SECRET_ACCESS,
@@ -59,6 +64,18 @@ def test_maintainer_and_admin_can_read_and_start_workflows() -> None:
             APPROVAL_READ,
         }
     )
+
+
+def test_only_operator_maintainer_and_admin_can_control_workflows() -> None:
+    """authentication_authorization.md §4.2's own table names
+    "start / cancel / retry workflows" together, in the same clause, for
+    `operator` — no role holds `workflow:start` without also holding
+    `workflow:control`, and vice versa."""
+    for role in ("viewer", "approver"):
+        assert WORKFLOW_CONTROL not in permissions_for_roles([role])
+
+    for role in ("operator", "maintainer", "admin"):
+        assert WORKFLOW_CONTROL in permissions_for_roles([role])
 
 
 def test_only_approver_and_admin_can_read_pending_approvals() -> None:
@@ -118,7 +135,9 @@ def test_only_admin_can_access_secrets() -> None:
 def test_multiple_roles_union_their_permissions() -> None:
     permissions = permissions_for_roles(["viewer", "operator"])
 
-    assert permissions == frozenset({WORKFLOW_READ, WORKFLOW_START, EVALUATION_READ})
+    assert permissions == frozenset(
+        {WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ}
+    )
 
 
 def test_an_unrecognised_role_grants_nothing_rather_than_raising() -> None:

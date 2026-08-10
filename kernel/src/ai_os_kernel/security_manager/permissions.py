@@ -75,6 +75,13 @@ from collections.abc import Iterable
 
 WORKFLOW_READ = "workflow:read"
 WORKFLOW_START = "workflow:start"
+# api_architecture.md §5's own documented row ("workflow:control |
+# Cancel, retry, resume"), added (P06-S01-M36-T04) the moment a real
+# route (POST /api/v1/workflows/{id}/cancel) first needs to enforce it.
+# Granted identically to WORKFLOW_START — §4.2's own table names both
+# together in the same clause ("operator: ... start / cancel / retry
+# workflows"), so no role holds one without the other.
+WORKFLOW_CONTROL = "workflow:control"
 PACK_READ = "pack:read"
 PACK_MANAGE = "pack:manage"
 SECRET_ACCESS = "secret:access"  # noqa: S105 -- a permission string, not a credential
@@ -113,12 +120,13 @@ APPROVAL_READ = "approval:read"
 # reasoning already applied to packs.
 _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "viewer": frozenset({WORKFLOW_READ, EVALUATION_READ}),
-    "operator": frozenset({WORKFLOW_READ, WORKFLOW_START, EVALUATION_READ}),
+    "operator": frozenset({WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ}),
     "approver": frozenset({WORKFLOW_READ, EVALUATION_READ, APPROVAL_READ}),
     "maintainer": frozenset(
         {
             WORKFLOW_READ,
             WORKFLOW_START,
+            WORKFLOW_CONTROL,
             PACK_READ,
             PACK_MANAGE,
             CONFIG_READ,
@@ -130,6 +138,7 @@ _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         {
             WORKFLOW_READ,
             WORKFLOW_START,
+            WORKFLOW_CONTROL,
             PACK_READ,
             PACK_MANAGE,
             SECRET_ACCESS,

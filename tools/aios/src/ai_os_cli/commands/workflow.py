@@ -1,9 +1,11 @@
-"""``aios workflow`` — ``start``/``list``/``show``/``events``/``manifest``
-(``cli_design.md`` §4). ``manifest`` closed 2026-08-10
-(``P06-S01-M36-T04``) once ``GET .../run_manifest`` became real.
-``cancel``/``retry`` remain declared but not built — no
-cancel/retry route exists yet (``ai_os_kernel.routes.workflows``' own
-module docstring)."""
+"""``aios workflow`` — ``start``/``list``/``show``/``events``/
+``manifest``/``cancel`` (``cli_design.md`` §4). ``manifest`` closed
+2026-08-10 (``P06-S01-M36-T04``) once ``GET .../run_manifest`` became
+real; ``cancel`` closed the same day once ``POST .../cancel`` did.
+``retry`` remains declared but not built — no real, operator-triggered
+retry mechanism exists yet (only an internal, automatic-retriable-error
+primitive — see ``ai_os_kernel.workflow_engine.service``'s
+``retry_after_step_failure``, not the same thing)."""
 
 from __future__ import annotations
 
@@ -77,8 +79,17 @@ def events(ctx: typer.Context, workflow_id: str) -> None:
 
 
 @app.command()
-def cancel(workflow_id: str) -> None:
-    not_yet_implemented("no cancel route exists yet")
+def cancel(
+    ctx: typer.Context,
+    workflow_id: str,
+    reason: str | None = typer.Option(None, "--reason"),
+) -> None:
+    client = AiosClient(load_config())
+    try:
+        response = client.post(f"/api/v1/workflows/{workflow_id}/cancel", json={"reason": reason})
+    finally:
+        client.close()
+    render(response.json(), output_format=ctx.obj["output_format"])
 
 
 @app.command()

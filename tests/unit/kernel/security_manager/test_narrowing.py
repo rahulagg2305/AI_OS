@@ -16,6 +16,7 @@ from ai_os_kernel.security_manager.permissions import (
     PACK_MANAGE,
     PACK_READ,
     SECRET_ACCESS,
+    WORKFLOW_CONTROL,
     WORKFLOW_READ,
     WORKFLOW_START,
     permissions_for_roles,
@@ -46,6 +47,7 @@ def test_a_broad_principal_is_genuinely_narrowed_by_a_restrictive_workflow_agent
         {
             WORKFLOW_READ,
             WORKFLOW_START,
+            WORKFLOW_CONTROL,
             PACK_READ,
             PACK_MANAGE,
             SECRET_ACCESS,

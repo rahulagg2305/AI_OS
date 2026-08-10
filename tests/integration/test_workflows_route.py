@@ -362,3 +362,110 @@ def test_workflow_definitions_route_requires_authentication(
         response = client.get("/api/v1/workflow_definitions")
 
     assert response.status_code == 401
+
+
+def _create_uncancelled_instance(database_url: str) -> str:
+    async def _create() -> str:
+        engine = build_engine(database_url)
+        try:
+            definition = _build_demo_workflow_definition()
+            instance = await SqlWorkflowInstanceRepository(engine).create(
+                definition_id=definition.id,
+                definition_version=definition.version,
+                inputs={},
+                principal_id="cancel-route-test-principal",
+            )
+            return instance.workflow_id
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_create())
+
+
+def test_cancel_route_requires_authentication(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+
+    with TestClient(app) as client:
+        response = client.post("/api/v1/workflows/wf-does-not-matter/cancel", json={})
+
+    assert response.status_code == 401
+
+
+def test_cancel_route_requires_workflow_control_not_just_workflow_read(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workflow_id = _create_uncancelled_instance(database_url)
+
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        # viewer has workflow:read but not workflow:control
+        # (authentication_authorization.md §4.2's own table).
+        response = client.post(
+            f"/api/v1/workflows/{workflow_id}/cancel",
+            json={},
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+
+    assert response.status_code == 403
+
+
+def test_cancel_route_genuinely_cancels_a_real_instance(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workflow_id = _create_uncancelled_instance(database_url)
+
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/v1/workflows/{workflow_id}/cancel",
+            json={"reason": "operator requested cancellation via HTTP"},
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+        assert response.status_code == 202
+        assert response.json()["status"] == "cancelled"
+
+        # Genuinely persisted — a real, independent read confirms it,
+        # not just the write's own echoed response.
+        detail_response = client.get(
+            f"/api/v1/workflows/{workflow_id}",
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+    assert detail_response.json()["status"] == "cancelled"
+
+
+def test_cancel_route_returns_404_for_a_workflow_id_that_never_existed(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/workflows/wf_never_existed/cancel",
+            json={},
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+
+    assert response.status_code == 404
+
+
+def test_cancel_route_returns_409_for_an_already_cancelled_instance(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workflow_id = _create_uncancelled_instance(database_url)
+
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    headers = {"Authorization": f"Bearer {_token(['operator'])}"}
+    with TestClient(app) as client:
+        first = client.post(f"/api/v1/workflows/{workflow_id}/cancel", json={}, headers=headers)
+        assert first.status_code == 202
+
+        second = client.post(f"/api/v1/workflows/{workflow_id}/cancel", json={}, headers=headers)
+
+    assert second.status_code == 409
