@@ -406,6 +406,23 @@ every case; there is no readiness race). **Not purely an
 disclosed root cause existed and was fixed, not merely documented as
 accepted.
 
+**Addendum (2026-08-10, `P06-S01-M36-T04`) — a real, new data point
+that partially contradicts this entry's own "never once occurred on
+the real...GitHub Actions runners" claim.** CI run `31378794330`
+(Integration tests job) genuinely failed on the real Ubuntu runner:
+`test_worker_loop_execution.py::
+test_run_worker_loop_genuinely_drives_a_real_instance_to_completion_on_its_own`
+— `AssertionError: assert ...RUNNING... == ...COMPLETED...`, a
+concurrency/timing-margin assertion, not an HTTP-server one (a
+different test family than the three named above). An immediate
+`gh run rerun --failed`, no code change, passed clean, job-by-job. Not
+reopening R-015 itself (a different test family, no root cause
+investigated yet, one occurrence in ~30+ pushes since its own closure)
+— recorded here as a disclosed, real exception to its own "never on
+real CI" claim, not silently left standing as still fully accurate.
+If this recurs on CI, it warrants its own investigation, the identical
+discipline this entry's own root-cause analysis already modeled.
+
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 
 Found `P05-S02-M32-T01`, closed `P05-S02-M32-T02` (2026-08-09).
