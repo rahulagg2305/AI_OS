@@ -12,10 +12,10 @@ significant rework) · **L** (contained).
 
 **Reviewed 2026-07-31 (R1–R4 final closeout); R-008 and R-009 closed
 2026-08-01; R-014 opened and closed 2026-08-09; R-015 opened and closed
-2026-08-09.** 13 closed, 1 open (R-006, an accepted baseline, not
-pending action) plus R-001 (a permanent standing rule, not a risk
-pending closure). Zero open process-defect risks and zero open
-product-development gaps with real, unaddressed impact.
+2026-08-09; R-016 opened 2026-08-10.** 13 closed, 2 open (R-006, an
+accepted baseline, not pending action; R-016, a real, unaddressed
+Workflow Engine design gap) plus R-001 (a permanent standing rule, not
+a risk pending closure).
 
 | ID | Risk | Sev | Status | Owner decision |
 |---|---|---|---|---|
@@ -34,6 +34,7 @@ product-development gaps with real, unaddressed impact.
 | R-013 | Two dependency edges were judgement calls | L | **Closed** 2026-07-31 | Both decided, no change |
 | R-014 | No CI job ever ran any Capability Pack's own `tests/` | M | **Closed** 2026-08-09 | — |
 | R-015 | Local-HTTP-server tests flaky under full local suite runs (never on real CI) | L | **Closed** 2026-08-09 | — |
+| R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Open — real, undecided design question** | Product owner, 2026-08-10 |
 
 ---
 
@@ -480,3 +481,68 @@ real Kernel process (`P01-S04-M03-T06`, via
 `GracefulShutdownCoordinator`), and `AccessBroker`
 (`P01-S02-M19-T04`) is a real, audited consumer. FR-110
 ("tamper-evident audit log") is genuinely implemented.
+
+### R-016 — No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever
+
+Opened 2026-08-10, `P06-S01-M36-T04`, while investigating
+`POST /api/v1/workflows/{id}/retry` ("retry from where" — the doc's own
+literal words say "from last failure"). Before building anything, a
+genuine fork was found via direct source inspection, not guessed, and
+presented to the product owner via `AskUserQuestion`, who chose:
+**defer the route, record this finding, move to a different task.**
+
+**Real finding — confirmed by tracing every real writer, not
+assumed:** `WorkflowInstanceStatus.FAILED` (`workflow_engine/
+instance.py`) is declared but never written by any real caller,
+anywhere in this codebase.
+
+- `WorkflowInstanceService.advance()` (`service.py`): on any step
+  exception, writes a real `workflow_steps` row (`status="failed"`,
+  via `WorkflowInstanceRepository.record_failed_attempt`) and
+  re-raises the *original* exception unchanged — it never touches
+  `workflow_instances.status`.
+- `WorkflowAdvanceRunner.run_once` (`advance_runner.py`) — the method
+  `WorkflowWorkerLoop._advance_one` (`worker_loop.py`) actually calls
+  — has no retry/bound logic of its own; a raised exception propagates
+  straight out.
+- `_advance_one` catches that exception, logs it, and returns
+  `"failed"` as a purely in-memory per-tick outcome label
+  (`_Outcome`) — never a database write. The lease is already released
+  (`run_once`'s own `finally`), so the identical instance — still
+  `status='running'`, `current_step_id` unchanged — is rediscovered by
+  `list_runnable_instances` on the very next poll and retried again.
+  **No persisted attempt count, no bound, no terminal state**: a
+  permanently-failing step retries forever, for the life of the Kernel
+  process, for the one real, continuously-running production path.
+- `WorkflowAdvanceRunner.run_to_completion`'s own bounded
+  `RetryPolicy.max_attempts`/`max_duration_seconds` exhaustion (used
+  only by the synchronous, one-shot demo/`se.delivery_pipeline`
+  triggers) is real, but its `step_failure_counts`/
+  `step_retry_deadlines` are local Python dicts, scoped to one method
+  call's own stack — never persisted. By the time anyone could call an
+  operator-triggered retry, that original HTTP request has already
+  returned `WorkflowRunOutcome.FAILED` to its own caller, and the
+  instance's own row still sits at `status='running'`, with no record
+  that its own bound was ever exhausted.
+
+**Why this blocks `POST /retry`, not just delays it**: the documented
+route needs a real "genuinely, permanently failed, waiting for an
+operator" instance to act on. None can exist today — an instance is
+either still being retried automatically (forever, unbounded) or its
+own exhaustion (for the one path that has bounded retry at all) was
+never recorded anywhere a later HTTP call could see. Building the
+route now would be dead code (gated on a status no writer ever
+produces) unless a new, undecided, real design (a bounded
+failure-exhaustion policy for the worker-loop path, and where its
+result gets persisted) is invented unilaterally — a decision with no
+existing documentation to answer it, materially larger than "add the
+remaining routes" (this ticket's own literal scope).
+
+**Not closed — this is a real, open, unaddressed gap**, not an
+accepted baseline like R-006. `POST /workflows/{id}/retry` stays
+disclosed, unbuilt in `api_architecture.md`/`cli_design.md`. Closing
+this needs its own, later, dedicated design step: decide a real
+retry-exhaustion policy for the worker loop (bound, persistence,
+whether "retry forever" is in fact an intentional resilience choice
+that should stay undisturbed), before `/retry` itself can be built
+against something real.
