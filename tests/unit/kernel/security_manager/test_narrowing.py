@@ -9,6 +9,7 @@ from __future__ import annotations
 from ai_os_kernel.security_manager.models import Principal, PrincipalType, SecurityContext
 from ai_os_kernel.security_manager.narrowing import is_permitted, narrow_permissions
 from ai_os_kernel.security_manager.permissions import (
+    APPROVAL_READ,
     CONFIG_MANAGE,
     CONFIG_READ,
     EVALUATION_READ,
@@ -51,6 +52,7 @@ def test_a_broad_principal_is_genuinely_narrowed_by_a_restrictive_workflow_agent
             CONFIG_READ,
             CONFIG_MANAGE,
             EVALUATION_READ,
+            APPROVAL_READ,
         }
     )
 

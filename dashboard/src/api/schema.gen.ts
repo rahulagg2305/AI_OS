@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Pending Approvals */
+        get: operations["list_pending_approvals_api_v1_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/config": {
         parameters: {
             query?: never;
@@ -315,6 +332,43 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Approval
+         * @description One ``workflow.approvals`` row (data_model.md §4.5).
+         */
+        Approval: {
+            /** Approval Class */
+            approval_class: string;
+            /** Approval Id */
+            approval_id: string;
+            /** Context Digest */
+            context_digest: string;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decided By */
+            decided_by: string | null;
+            /** Decision Comment */
+            decision_comment: string | null;
+            /** Description */
+            description: string;
+            /** Expires At */
+            expires_at: string | null;
+            /** Options */
+            options: string[];
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Status */
+            status: string;
+            /** Step Id */
+            step_id: string;
+            /** Title */
+            title: string;
+            /** Workflow Id */
+            workflow_id: string;
+        };
         /** ComponentStatus */
         ComponentStatus: {
             /**
@@ -503,6 +557,21 @@ export interface components {
          */
         PackState: "discovered" | "validated" | "installed" | "configured" | "activated" | "deactivated" | "failed" | "uninstalled";
         /**
+         * PendingApprovalsResponse
+         * @description api_architecture.md §6.2's own documented ``GET /api/v1/approvals``
+         *     ("Pending approvals") — the real gap this module's own sibling,
+         *     ``human_approval.py``, named as "real, separate, later work"
+         *     (``P06-S03-M39-T02``). Deliberately unpaginated — see
+         *     :meth:`~ai_os_kernel.workflow_engine.human_approval.
+         *     SqlApprovalRepository.list_pending`'s own docstring for why the
+         *     pending queue does not need the cursor-paginated envelope
+         *     ``GET /workflows`` uses.
+         */
+        PendingApprovalsResponse: {
+            /** Approvals */
+            approvals: components["schemas"]["Approval"][];
+        };
+        /**
          * PlatformConfig
          * @description Immutable, fully resolved configuration for one Kernel process.
          *
@@ -665,10 +734,15 @@ export interface components {
         };
         /**
          * StepType
-         * @description The seven Supported Step Types (workflow_architecture.md).
+         * @description The eight Supported Step Types (workflow_architecture.md).
+         *     ``FOREACH`` added `P08-S02-M30-T01` — ADR-0021's own "dynamic
+         *     decomposition without dynamic control flow" pattern: a
+         *     ``technical-planner`` plan artifact drives a bounded fan-out of a
+         *     declared sub-workflow, one child instance per item, never an
+         *     unbounded or model-chosen loop.
          * @enum {string}
          */
-        StepType: "agent" | "tool" | "decision" | "parallel" | "sub_workflow" | "quality_gate" | "human_approval";
+        StepType: "agent" | "tool" | "decision" | "parallel" | "sub_workflow" | "quality_gate" | "human_approval" | "foreach";
         /**
          * TriggerDeliveryPipelineRequest
          * @description Mirrors ``capability_packs/software-engineering/workflows/delivery_pipeline.yaml``'s
@@ -924,6 +998,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_pending_approvals_api_v1_approvals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingApprovalsResponse"];
+                };
+            };
+        };
+    };
     get_effective_config_api_v1_config_get: {
         parameters: {
             query?: never;

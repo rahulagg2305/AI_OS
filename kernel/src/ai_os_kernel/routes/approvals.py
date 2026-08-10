@@ -58,7 +58,12 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.context_manager.resolvers import KnowledgeResolver
-from ai_os_kernel.security_manager import SecurityContext, authenticate
+from ai_os_kernel.security_manager import (
+    APPROVAL_READ,
+    SecurityContext,
+    authenticate,
+    require_permission,
+)
 from ai_os_kernel.security_manager.errors import ApprovalNotAuthorizedError
 from ai_os_kernel.security_manager.role_administration import SqlRoleGrantRepository
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
@@ -67,7 +72,11 @@ from ai_os_kernel.workflow_engine.delivery_pipeline import (
 )
 from ai_os_kernel.workflow_engine.delivery_pipeline import resume_pipeline_after_approval
 from ai_os_kernel.workflow_engine.errors import ApprovalNotPendingError
-from ai_os_kernel.workflow_engine.human_approval import ApprovalService, SqlApprovalRepository
+from ai_os_kernel.workflow_engine.human_approval import (
+    Approval,
+    ApprovalService,
+    SqlApprovalRepository,
+)
 from ai_os_kernel.workflow_engine.registry import AgentRegistry
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 
@@ -114,6 +123,34 @@ def _get_instance_repository(request: Request) -> WorkflowInstanceRepository:
     if repository is None:
         raise HTTPException(status_code=503, detail="workflow engine is not available")
     return repository
+
+
+class PendingApprovalsResponse(BaseModel):
+    """api_architecture.md §6.2's own documented ``GET /api/v1/approvals``
+    ("Pending approvals") — the real gap this module's own sibling,
+    ``human_approval.py``, named as "real, separate, later work"
+    (``P06-S03-M39-T02``). Deliberately unpaginated — see
+    :meth:`~ai_os_kernel.workflow_engine.human_approval.
+    SqlApprovalRepository.list_pending`'s own docstring for why the
+    pending queue does not need the cursor-paginated envelope
+    ``GET /workflows`` uses."""
+
+    approvals: list[Approval]
+
+
+@router.get("/approvals", response_model=PendingApprovalsResponse)
+async def list_pending_approvals(
+    request: Request,
+    # Declared before `engine` — the identical "authorization resolves
+    # before this route can reveal whether the Workflow Engine itself is
+    # available" ordering `routes/workflows.py`'s own list route already
+    # establishes.
+    _security_context: SecurityContext = Depends(require_permission(APPROVAL_READ)),  # noqa: B008
+) -> PendingApprovalsResponse:
+    engine = _get_engine(request)
+    approval_repository = SqlApprovalRepository(engine)
+    pending = await approval_repository.list_pending()
+    return PendingApprovalsResponse(approvals=pending)
 
 
 @router.post(

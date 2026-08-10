@@ -3,6 +3,7 @@
 step models — see ai_os_kernel.security_manager.permissions)."""
 
 from ai_os_kernel.security_manager.permissions import (
+    APPROVAL_READ,
     CONFIG_MANAGE,
     CONFIG_READ,
     EVALUATION_READ,
@@ -30,7 +31,7 @@ def test_operator_can_read_and_start_workflows() -> None:
 def test_approver_can_read_but_not_start_workflows() -> None:
     permissions = permissions_for_roles(["approver"])
 
-    assert permissions == frozenset({WORKFLOW_READ, EVALUATION_READ})
+    assert permissions == frozenset({WORKFLOW_READ, EVALUATION_READ, APPROVAL_READ})
 
 
 def test_maintainer_and_admin_can_read_and_start_workflows() -> None:
@@ -55,8 +56,24 @@ def test_maintainer_and_admin_can_read_and_start_workflows() -> None:
             CONFIG_READ,
             CONFIG_MANAGE,
             EVALUATION_READ,
+            APPROVAL_READ,
         }
     )
+
+
+def test_only_approver_and_admin_can_read_pending_approvals() -> None:
+    """authentication_authorization.md §4.2's own role table mentions
+    approvals for exactly two roles: `approver` ("`viewer` + decide
+    Human Approval Points" — deciding requires first seeing) and
+    `admin` ("All"). `viewer`/`operator`/`maintainer`'s own documented
+    grants say nothing about approvals — the identical "nothing
+    documented, no grant" discipline `test_only_maintainer_and_admin_
+    can_read_or_manage_packs`/`_config` already establish."""
+    for role in ("viewer", "operator", "maintainer"):
+        assert APPROVAL_READ not in permissions_for_roles([role])
+
+    for role in ("approver", "admin"):
+        assert APPROVAL_READ in permissions_for_roles([role])
 
 
 def test_every_real_role_can_read_evaluation_data() -> None:

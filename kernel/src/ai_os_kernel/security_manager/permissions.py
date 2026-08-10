@@ -85,6 +85,20 @@ CONFIG_MANAGE = "config:manage"
 # permission is that real, already-documented grant, added
 # (P06-S03-M39-T03) the moment a real route first needs to enforce it.
 EVALUATION_READ = "evaluation:read"
+# api_architecture.md §5's own documented row ("approval:read | See
+# pending approvals"), added (P06-S03-M39-T02) the moment a real route
+# (GET /api/v1/approvals) first needs to enforce it. Unlike
+# `approval:decide:<class>` (never modelled here at all — see this
+# module's own docstring on why a class-scoped permission family cannot
+# be expressed by this flat dict), `approval:read` is not documented as
+# class-scoped anywhere — it is a flat "may see the pending queue at
+# all" gate, granted only where §4.2's own role table actually mentions
+# approvals: `approver` ("`viewer` + decide Human Approval Points" —
+# deciding requires first seeing) and `admin` ("All"). `viewer`/
+# `operator`/`maintainer`'s own documented grants say nothing about
+# approvals, the identical "nothing documented, no grant" discipline
+# already applied to packs/secrets/configuration above.
+APPROVAL_READ = "approval:read"
 
 # authentication_authorization.md §4.2's role table, reduced to the
 # seven permissions modelled above. Unknown roles grant nothing (deny by
@@ -100,7 +114,7 @@ EVALUATION_READ = "evaluation:read"
 _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "viewer": frozenset({WORKFLOW_READ, EVALUATION_READ}),
     "operator": frozenset({WORKFLOW_READ, WORKFLOW_START, EVALUATION_READ}),
-    "approver": frozenset({WORKFLOW_READ, EVALUATION_READ}),
+    "approver": frozenset({WORKFLOW_READ, EVALUATION_READ, APPROVAL_READ}),
     "maintainer": frozenset(
         {
             WORKFLOW_READ,
@@ -122,6 +136,7 @@ _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             CONFIG_READ,
             CONFIG_MANAGE,
             EVALUATION_READ,
+            APPROVAL_READ,
         }
     ),
 }

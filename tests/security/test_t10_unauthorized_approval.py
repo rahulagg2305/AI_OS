@@ -185,6 +185,9 @@ class _FakeApprovalRepository:
     async def get_by_id(self, *, approval_id: str) -> Approval | None:
         return self._approval
 
+    async def list_pending(self) -> list[Approval]:
+        raise NotImplementedError("not exercised by this test")
+
     async def create_pending(
         self, *, workflow_id: str, step_id: str, point: HumanApprovalPoint
     ) -> Approval:
@@ -244,6 +247,9 @@ class _RefuseIfDecided:
 
     async def get_by_step(self, *, workflow_id: str, step_id: str) -> Approval | None:
         return self._approval
+
+    async def list_pending(self) -> list[Approval]:
+        raise NotImplementedError("not exercised by this test")
 
     async def create_pending(self, **kwargs: Any) -> Approval:
         raise NotImplementedError("not exercised by this test")

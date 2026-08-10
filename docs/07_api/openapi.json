@@ -1,6 +1,119 @@
 {
   "components": {
     "schemas": {
+      "Approval": {
+        "description": "One ``workflow.approvals`` row (data_model.md \u00a74.5).",
+        "properties": {
+          "approval_class": {
+            "title": "Approval Class",
+            "type": "string"
+          },
+          "approval_id": {
+            "title": "Approval Id",
+            "type": "string"
+          },
+          "context_digest": {
+            "title": "Context Digest",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decision_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Comment"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "step_id": {
+            "title": "Step Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approval_id",
+          "workflow_id",
+          "step_id",
+          "approval_class",
+          "title",
+          "description",
+          "context_digest",
+          "options",
+          "status",
+          "decided_by",
+          "decision_comment",
+          "requested_at",
+          "expires_at",
+          "decided_at"
+        ],
+        "title": "Approval",
+        "type": "object"
+      },
       "ComponentStatus": {
         "properties": {
           "critical": {
@@ -385,6 +498,23 @@
         ],
         "title": "PackState",
         "type": "string"
+      },
+      "PendingApprovalsResponse": {
+        "description": "api_architecture.md \u00a76.2's own documented ``GET /api/v1/approvals``\n(\"Pending approvals\") \u2014 the real gap this module's own sibling,\n``human_approval.py``, named as \"real, separate, later work\"\n(``P06-S03-M39-T02``). Deliberately unpaginated \u2014 see\n:meth:`~ai_os_kernel.workflow_engine.human_approval.\nSqlApprovalRepository.list_pending`'s own docstring for why the\npending queue does not need the cursor-paginated envelope\n``GET /workflows`` uses.",
+        "properties": {
+          "approvals": {
+            "items": {
+              "$ref": "#/components/schemas/Approval"
+            },
+            "title": "Approvals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "approvals"
+        ],
+        "title": "PendingApprovalsResponse",
+        "type": "object"
       },
       "PlatformConfig": {
         "description": "Immutable, fully resolved configuration for one Kernel process.\n\n``env`` and ``role`` are bootstrap identity \u2014 how this process was\nstarted \u2014 never values a configuration file may set. They are\nalways supplied explicitly by\n:class:`~ai_os_kernel.configuration_manager.loader.ConfigurationManager`,\nnot read from YAML (see\n``docs/03_architecture/services/configuration_management.md`` \u00a73.3).",
@@ -1391,6 +1521,32 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/approvals": {
+      "get": {
+        "operationId": "list_pending_approvals_api_v1_approvals_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingApprovalsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Pending Approvals",
+        "tags": [
+          "approvals"
+        ]
+      }
+    },
     "/api/v1/config": {
       "get": {
         "operationId": "get_effective_config_api_v1_config_get",

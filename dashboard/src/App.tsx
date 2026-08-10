@@ -3,9 +3,10 @@ import { TokenBar } from "./auth/TokenBar";
 import { HealthView } from "./views/HealthView";
 import { WorkflowsView } from "./views/WorkflowsView";
 import { CostQualityView } from "./views/CostQualityView";
+import { PendingApprovalsView } from "./views/PendingApprovalsView";
 import "./App.css";
 
-type Tab = "health" | "workflows" | "cost-quality";
+type Tab = "health" | "workflows" | "cost-quality" | "approvals";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("health");
@@ -36,13 +37,22 @@ export function App() {
         >
           Cost & Quality
         </button>
+        <button
+          type="button"
+          aria-pressed={tab === "approvals"}
+          onClick={() => setTab("approvals")}
+        >
+          Approvals
+        </button>
       </nav>
       {tab === "health" ? (
         <HealthView />
       ) : tab === "workflows" ? (
         <WorkflowsView />
-      ) : (
+      ) : tab === "cost-quality" ? (
         <CostQualityView />
+      ) : (
+        <PendingApprovalsView />
       )}
     </main>
   );

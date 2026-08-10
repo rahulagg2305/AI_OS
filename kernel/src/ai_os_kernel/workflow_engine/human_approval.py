@@ -182,6 +182,8 @@ class ApprovalRepository(Protocol):
 
     async def get_by_id(self, *, approval_id: str) -> Approval | None: ...
 
+    async def list_pending(self) -> list[Approval]: ...
+
     async def create_pending(
         self, *, workflow_id: str, step_id: str, point: HumanApprovalPoint
     ) -> Approval: ...
@@ -232,6 +234,33 @@ class SqlApprovalRepository:
             )
             row = result.mappings().one_or_none()
         return Approval.model_validate(dict(row)) if row is not None else None
+
+    async def list_pending(self) -> list[Approval]:
+        """Every real, currently ``pending`` row — api_architecture.md
+        §6.2's own documented ``GET /api/v1/approvals`` ("Pending
+        approvals"), and the real gap `human_approval.py`'s own module
+        docstring named as "real, separate, later work"
+        (``P06-S03-M39-T02``). Oldest-first (``requested_at`` ascending)
+        — the same fairness convention
+        :meth:`~ai_os_kernel.workflow_engine.repository.
+        SqlWorkflowInstanceRepository.list_runnable_instances` already
+        establishes for an actionable queue: a decision-maker should see
+        the longest-waiting approval first, not have it buried under
+        newer ones. Unpaginated by design — a real, disclosed, narrower
+        scope than ``GET /workflows``'s own cursor-paginated listing
+        (api_architecture.md §9): the set of *pending* approvals is
+        genuinely small and bounded in practice (workflows spend most of
+        their time `running`, not waiting on a human), so a real cursor
+        mechanism here would be speculative complexity for a collection
+        that does not need one."""
+        async with self._engine.connect() as connection:
+            result = await connection.execute(
+                sa.select(approvals)
+                .where(approvals.c.status == "pending")
+                .order_by(approvals.c.requested_at.asc())
+            )
+            rows = result.mappings().all()
+        return [Approval.model_validate(dict(row)) for row in rows]
 
     async def create_pending(
         self, *, workflow_id: str, step_id: str, point: HumanApprovalPoint

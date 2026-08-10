@@ -46,6 +46,9 @@ class _FakeApprovalRepository:
     async def get_by_step(self, *, workflow_id: str, step_id: str) -> Approval | None:
         return self._approval
 
+    async def list_pending(self) -> list[Approval]:
+        raise NotImplementedError
+
     async def create_pending(self, **kwargs: object) -> Approval:
         raise NotImplementedError
 
