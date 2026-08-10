@@ -153,6 +153,29 @@ async def list_pending_approvals(
     return PendingApprovalsResponse(approvals=pending)
 
 
+@router.get("/approvals/{approval_id}", response_model=Approval)
+async def get_approval(
+    request: Request,
+    approval_id: str,
+    # Same ordering precedent as `list_pending_approvals` above.
+    _security_context: SecurityContext = Depends(require_permission(APPROVAL_READ)),  # noqa: B008
+) -> Approval:
+    """A single approval by id — not named in ``api_architecture.md``
+    §6.2, but a genuine, small addition closing a real gap ``aios
+    approve show`` (``P06-S04-M38-T01``) disclosed as blocked pending
+    "no get-approval-by-id route." The underlying read
+    (``SqlApprovalRepository.get_by_id``) already existed — used
+    internally by ``decide_approval`` above — this route only exposes
+    it directly, over the same ``APPROVAL_READ`` permission the list
+    route already gates on."""
+    engine = _get_engine(request)
+    approval_repository = SqlApprovalRepository(engine)
+    approval = await approval_repository.get_by_id(approval_id=approval_id)
+    if approval is None:
+        raise HTTPException(status_code=404, detail=f"no approval with id '{approval_id}'")
+    return approval
+
+
 @router.post(
     "/workflows/{workflow_id}/approvals/{approval_id}/decisions",
     response_model=DecideApprovalResponse,

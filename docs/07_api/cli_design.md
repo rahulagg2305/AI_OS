@@ -8,13 +8,15 @@
 
 ---
 
-## Implementation Status (2026-08-09, `P06-S04-M38-T01`)
+## Implementation Status (2026-08-10, `P06-S04-M38-T01`, revisited)
 
-**Built: a real `aios` CLI, 5 of 8 documented command groups real.** `tools/aios` is a real, installable `ai-os-cli` distribution (Typer + Rich, exactly this document's own §4 tech choice), a pure client of the platform API — no Kernel import, no database credential, ever. `auth` (login/logout/whoami — see below), `health` (live/ready), `workflow` (start/list/show/events), `approve` (decide), `pack` (list/show/activate/deactivate, fully real), `config` (get/set/flags, fully real) all call real HTTP endpoints. `--output human`/`--output json` and this section's own §4 exit-code table are both real, driven by the actual HTTP response.
+**Built: a real `aios` CLI, 5 of 8 documented command groups fully real, `approve` now fully real too.** `tools/aios` is a real, installable `ai-os-cli` distribution (Typer + Rich, exactly this document's own §4 tech choice), a pure client of the platform API — no Kernel import, no database credential, ever. `auth` (login/logout/whoami — see below), `health` (live/ready), `workflow` (start/list/show/events), `approve` (decide/list/show — `list`/`show` closed this step), `pack` (list/show/activate/deactivate, fully real), `config` (get/set/flags, fully real) all call real HTTP endpoints. `--output human`/`--output json` and this section's own §4 exit-code table are both real, driven by the actual HTTP response.
 
 **`auth login`/`whoami` do not round-trip through a real server** — there is no `/auth/login` endpoint anywhere to exchange credentials for a token (the Kernel only ever *verifies* a token someone else already issued: a pre-shared HS256 secret or a real OIDC provider). `login` stores a token the caller already has; `whoami` decodes that token's own claims locally, correct without a server round trip since a JWT's claims are readable without verifying its signature.
 
-**Not built — no HTTP endpoint exists yet, disclosed rather than faked** (every command below is still discoverable via `--help`, and fails with the real, specific reason when run): `workflow cancel`/`retry`/`manifest`, `approve list`/`show` (`ApprovalRepository` has no method that lists approvals at all — the identical gap Dashboard's own `P06-S03-M39-T02` report disclosed for its Pending Approvals view), `experiment` (Benchmarking Pack still 0% built), `logs` (no log-query route), `health detail` (no distinct endpoint — `ready` already returns full per-component detail).
+**Updated: `approve list`/`show` are real.** The blocker disclosed here through `P06-S04-M38-T01` (`ApprovalRepository` had no method that lists approvals) closed at `P06-S03-M39-T02` (Dashboard's Pending Approvals view: `list_pending()`/`GET /api/v1/approvals`) — this step wires `approve list` onto that same route and adds the one further real route `approve show` needed, `GET /api/v1/approvals/{approval_id}`, over the already-existing `SqlApprovalRepository.get_by_id` read (previously used only internally by the decide route).
+
+**Not built — no HTTP endpoint exists yet, disclosed rather than faked** (every command below is still discoverable via `--help`, and fails with the real, specific reason when run): `workflow cancel`/`retry`/`manifest`, `experiment` (Benchmarking Pack still 0% built), `logs` (no log-query route), `health detail` (no distinct endpoint — `ready` already returns full per-component detail).
 
 Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 

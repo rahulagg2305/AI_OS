@@ -1,9 +1,11 @@
-"""``aios approve`` — ``decide`` (``cli_design.md`` §4). ``list``/``show``
-are declared but not built: ``ApprovalRepository`` has no method that
-lists approvals at all — the identical, already-disclosed gap
-Dashboard's own ``P06-S03-M39-T02`` report named for its Pending
-Approvals view. There is no way, at the query layer or the HTTP layer,
-to fetch "all pending approvals" today."""
+"""``aios approve`` — ``decide``/``list``/``show`` (``cli_design.md``
+§4), all real. ``list``/``show`` were disclosed as blocked at
+``P06-S04-M38-T01`` ("``ApprovalRepository`` has no method that lists
+approvals at all") — that gap closed at ``P06-S03-M39-T02``
+(Dashboard's own Pending Approvals view: ``list_pending()``/
+``GET /api/v1/approvals``), and this step adds the one further real
+route (``GET /api/v1/approvals/{approval_id}``) ``show`` needs, over
+the same, already-existing ``SqlApprovalRepository.get_by_id`` read."""
 
 from __future__ import annotations
 
@@ -12,7 +14,6 @@ import typer
 from ai_os_cli.client import AiosClient
 from ai_os_cli.config import load_config
 from ai_os_cli.errors import EXIT_USAGE_ERROR, CliError
-from ai_os_cli.not_built import not_yet_implemented
 from ai_os_cli.output import render
 
 app = typer.Typer(help="Decide Human Approval Points.")
@@ -46,10 +47,20 @@ def decide(
 
 
 @app.command(name="list")
-def list_approvals() -> None:
-    not_yet_implemented("ApprovalRepository has no method that lists approvals")
+def list_approvals(ctx: typer.Context) -> None:
+    client = AiosClient(load_config())
+    try:
+        response = client.get("/api/v1/approvals")
+    finally:
+        client.close()
+    render(response.json()["approvals"], output_format=ctx.obj["output_format"])
 
 
 @app.command()
-def show(approval_id: str) -> None:
-    not_yet_implemented("no get-approval-by-id route exists")
+def show(ctx: typer.Context, approval_id: str) -> None:
+    client = AiosClient(load_config())
+    try:
+        response = client.get(f"/api/v1/approvals/{approval_id}")
+    finally:
+        client.close()
+    render(response.json(), output_format=ctx.obj["output_format"])

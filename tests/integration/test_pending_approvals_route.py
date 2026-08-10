@@ -15,6 +15,13 @@ authenticated ``approver``/``admin`` principal — the same real
 where authentication_authorization.md §4.2's own role table actually
 mentions approvals.
 
+**Also covers ``GET /api/v1/approvals/{approval_id}`` (added
+2026-08-10, `P06-S04-M38-T01`)** — a single approval by id, over the
+same real ``approval:read`` gate and the already-real
+``SqlApprovalRepository.get_by_id`` read (previously exercised only
+indirectly, via the decide route), closing the CLI's own disclosed
+``approve show`` gap.
+
 Real Postgres via testcontainers (ADR-0015) — no mocking the database.
 """
 
@@ -277,3 +284,70 @@ def test_get_approvals_route_serves_real_pending_approvals_to_an_authorized_prin
     )
     assert matching["workflow_id"] == workflow_id
     assert matching["status"] == "pending"
+
+
+def test_get_approval_by_id_route_requires_authentication(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.get("/api/v1/approvals/does-not-matter")
+    assert response.status_code == 401
+
+
+def test_get_approval_by_id_route_refuses_a_principal_without_approval_read(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/approvals/does-not-matter",
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+    assert response.status_code == 403
+
+
+def test_get_approval_by_id_route_returns_404_for_a_real_unknown_id(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/approvals/does-not-exist",
+            headers={"Authorization": f"Bearer {_token(['approver'])}"},
+        )
+    assert response.status_code == 404
+
+
+def test_get_approval_by_id_route_serves_the_real_approval_to_an_authorized_principal(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _seed() -> tuple[str, str]:
+        engine = build_engine(database_url)
+        try:
+            workflow_id = await _create_real_instance(engine, version="1.0.5")
+            approval = await SqlApprovalRepository(engine).create_pending(
+                workflow_id=workflow_id, step_id="approve-it", point=_point("approve-it")
+            )
+            return workflow_id, approval.approval_id
+        finally:
+            await engine.dispose()
+
+    workflow_id, approval_id = asyncio.run(_seed())
+
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/v1/approvals/{approval_id}",
+            headers={"Authorization": f"Bearer {_token(['approver'])}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["approval_id"] == approval_id
+    assert body["workflow_id"] == workflow_id
+    assert body["status"] == "pending"

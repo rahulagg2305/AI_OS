@@ -78,3 +78,48 @@ def test_an_authorized_request_reaches_the_real_capability_manager_unavailable_d
     # real, honest "no database" degrade, not the security boundary.
     assert result.exit_code == EXIT_GENERAL_ERROR
     assert result.error_message == "capability manager is not available"
+
+
+def test_approve_list_without_a_real_bearer_token_is_a_real_authorization_denial(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+
+    result = invoke(["approve", "list"])
+    assert result.exit_code == EXIT_AUTHORIZATION_DENIED
+
+
+def test_approve_list_lacking_approval_read_against_a_real_kernel_is_a_real_authorization_denial(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+    # approval:read is granted only to approver/admin (permissions.py's own
+    # role table) — maintainer does not have it.
+    monkeypatch.setenv("AIOS_TOKEN", _token(["maintainer"]))
+
+    result = invoke(["approve", "list"])
+    assert result.exit_code == EXIT_AUTHORIZATION_DENIED
+
+
+def test_approve_list_authorized_reaches_the_real_workflow_engine_unavailable_degrade(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+    monkeypatch.setenv("AIOS_TOKEN", _token(["approver"]))
+
+    result = invoke(["approve", "list"])
+    # Authentication and authorization both passed — the failure is the
+    # real, honest "no database" degrade, not the security boundary.
+    assert result.exit_code == EXIT_GENERAL_ERROR
+    assert result.error_message == "workflow engine is not available"
+
+
+def test_approve_show_authorized_reaches_the_real_workflow_engine_unavailable_degrade(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+    monkeypatch.setenv("AIOS_TOKEN", _token(["approver"]))
+
+    result = invoke(["approve", "show", "appr-1"])
+    assert result.exit_code == EXIT_GENERAL_ERROR
+    assert result.error_message == "workflow engine is not available"

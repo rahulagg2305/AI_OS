@@ -49,8 +49,6 @@ def test_every_documented_but_not_built_command_fails_clearly_not_silently() -> 
         ["workflow", "cancel", "wf-1"],
         ["workflow", "retry", "wf-1"],
         ["workflow", "manifest", "wf-1"],
-        ["approve", "list"],
-        ["approve", "show", "appr-1"],
     ):
         result = invoke(args)
         assert result.exit_code == EXIT_GENERAL_ERROR, f"{args} did not exit 1"

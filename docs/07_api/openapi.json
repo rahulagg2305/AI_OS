@@ -1547,6 +1547,54 @@
         ]
       }
     },
+    "/api/v1/approvals/{approval_id}": {
+      "get": {
+        "description": "A single approval by id \u2014 not named in ``api_architecture.md``\n\u00a76.2, but a genuine, small addition closing a real gap ``aios\napprove show`` (``P06-S04-M38-T01``) disclosed as blocked pending\n\"no get-approval-by-id route.\" The underlying read\n(``SqlApprovalRepository.get_by_id``) already existed \u2014 used\ninternally by ``decide_approval`` above \u2014 this route only exposes\nit directly, over the same ``APPROVAL_READ`` permission the list\nroute already gates on.",
+        "operationId": "get_approval_api_v1_approvals__approval_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Approval"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Approval",
+        "tags": [
+          "approvals"
+        ]
+      }
+    },
     "/api/v1/config": {
       "get": {
         "operationId": "get_effective_config_api_v1_config_get",
