@@ -410,6 +410,9 @@ class _FakeDefinitionCatalog:
     async def get_declared_permissions(self, *, definition_id: str, version: str) -> frozenset[str]:
         return frozenset()
 
+    async def list_all(self) -> list[WorkflowDefinition]:
+        raise NotImplementedError("not exercised by these tests")
+
 
 class _FakeGateResultRecorder:
     """Records every call made to it; never touches a database."""

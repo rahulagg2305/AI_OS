@@ -287,6 +287,9 @@ class _FakeDefinitionCatalog:
     async def get_declared_permissions(self, *, definition_id: str, version: str) -> frozenset[str]:
         return frozenset()
 
+    async def list_all(self) -> list[WorkflowDefinition]:
+        raise NotImplementedError("not exercised by this test")
+
 
 async def test_a_real_human_approval_step_genuinely_blocks_when_configured() -> None:
     """The real, positive control this file's own docstring promises:

@@ -275,6 +275,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workflow_definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Workflow Definitions
+         * @description api_architecture.md §6.1's own documented ``GET
+         *     /api/v1/workflow_definitions`` ("Registered definitions") — every
+         *     real, registered ``catalog.workflow_definitions`` row, reusing
+         *     :meth:`~ai_os_kernel.workflow_engine.definition_catalog.
+         *     SqlWorkflowDefinitionCatalog.get`'s own lossless reconstruction via
+         *     the new :meth:`~ai_os_kernel.workflow_engine.definition_catalog.
+         *     SqlWorkflowDefinitionCatalog.list_all`. Deliberately unpaginated,
+         *     like ``GET /approvals`` (the pending queue) — a real, disclosed,
+         *     narrower shape than §9's cursor envelope: a workflow *definition*
+         *     registers once per real, distinct version a pack ever declares, a
+         *     genuinely small, bounded collection, unlike the *instances* the
+         *     plain ``GET /workflows`` route lists.
+         */
+        get: operations["list_workflow_definitions_api_v1_workflow_definitions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workflows": {
         parameters: {
             query?: never;
@@ -555,6 +586,28 @@ export interface components {
             workflow_id: string;
         };
         /**
+         * DecisionCondition
+         * @description A ``decision`` step's real, statically-declared condition —
+         *     genuinely evaluated at runtime against a named prior step's own
+         *     recorded output, not an expression language (``P02-S01-M05-T09``,
+         *     closing the gap this module's own docstring used to record: "no
+         *     document defines a field-level contract for [decision-step
+         *     branching] yet"). Kept deliberately narrow, matching the Step
+         *     Contract's own stated design principle for the whole file
+         *     (workflow_architecture.md: "not a general orchestration language"):
+         *     one named source step, one field of its output, one literal
+         *     equality comparison — never a computed expression, template, or
+         *     arbitrary code.
+         */
+        DecisionCondition: {
+            /** Equals */
+            equals: string | number | boolean | null;
+            /** Field */
+            field: string;
+            /** Sourcestepid */
+            sourceStepId: string;
+        };
+        /**
          * FeatureFlagState
          * @description One real, resolved feature flag — declared by at least one
          *     activated pack's own manifest, current value resolved through the
@@ -565,6 +618,29 @@ export interface components {
             enabled: boolean;
             /** Name */
             name: string;
+        };
+        /**
+         * ForeachSpec
+         * @description A ``foreach`` step's real, statically-declared fan-out
+         *     contract (`P08-S02-M30-T01`, ADR-0021: "A `foreach` step consumes
+         *     that artifact and executes a declared sub-workflow per item ...
+         *     `foreach` declares a maximum fan-out"). Mirrors
+         *     :class:`DecisionCondition`'s own "one named source step, one field
+         *     of its output" shape — ``sourceStepId``/``itemsField`` name which
+         *     prior step's output holds the real plan-artifact list and which
+         *     field of it is the list itself; ``maxFanOut`` is the real,
+         *     mandatory bound ADR-0021 requires ("no unbounded agent-driven
+         *     loop"), enforced by :class:`~ai_os_kernel.workflow_engine.
+         *     step_executor.ForeachStepExecutor` before any child instance is
+         *     created.
+         */
+        ForeachSpec: {
+            /** Itemsfield */
+            itemsField: string;
+            /** Maxfanout */
+            maxFanOut: number;
+            /** Sourcestepid */
+            sourceStepId: string;
         };
         /**
          * GateFailureSummaryEntry
@@ -597,6 +673,38 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * HumanApprovalPoint
+         * @description Full Human Approval Point Contract (human_approval_points.md §4).
+         */
+        HumanApprovalPoint: {
+            /** Channels */
+            channels?: string[] | null;
+            /** Context */
+            context: {
+                [key: string]: unknown;
+            };
+            /** Description */
+            description: string;
+            /** Escalationpolicy */
+            escalationPolicy?: {
+                [key: string]: unknown;
+            } | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Options */
+            options: string[];
+            /** Timeout */
+            timeout?: number | null;
+        };
+        /**
+         * JoinPolicy
+         * @description Mandatory for a ``parallel`` step (workflow_engine.md §7.1).
+         * @enum {string}
+         */
+        JoinPolicy: "all" | "any" | "collect";
         /**
          * PackLifecycleActionRequest
          * @description Shared by activate/deactivate — just ``reason``. ``actor`` is
@@ -753,6 +861,18 @@ export interface components {
             sdk_version: string;
             /** Version */
             version: string;
+        };
+        /**
+         * RetryPolicy
+         * @description Retries must be bounded by both count and duration — not either
+         *     alone (error_handling_retry.md §4: "Retries must be bounded (maximum
+         *     attempts + maximum duration)").
+         */
+        RetryPolicy: {
+            /** Maxattempts */
+            maxAttempts: number;
+            /** Maxdurationseconds */
+            maxDurationSeconds: number;
         };
         /**
          * RevokeRoleRequest
@@ -973,6 +1093,47 @@ export interface components {
             type: string;
         };
         /**
+         * WorkflowDefinition
+         * @description The Workflow Contract, as loaded from one definition file.
+         */
+        WorkflowDefinition: {
+            /** Agents */
+            agents?: string[];
+            /** Description */
+            description: string;
+            /** Failurehandling */
+            failureHandling: {
+                [key: string]: unknown;
+            };
+            /** Humanapprovalpoints */
+            humanApprovalPoints?: components["schemas"]["HumanApprovalPoint"][];
+            /** Id */
+            id: string;
+            /** Inputs */
+            inputs: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Outputs */
+            outputs: {
+                [key: string]: unknown;
+            };
+            /** Qualitygates */
+            qualityGates?: string[];
+            /** Requiredtools */
+            requiredTools?: string[];
+            retryPolicy?: components["schemas"]["RetryPolicy"] | null;
+            /** Steps */
+            steps: components["schemas"]["WorkflowStep"][];
+            /** Timeout */
+            timeout?: number | null;
+            /** Trigger */
+            trigger?: string | null;
+            /** Version */
+            version: string;
+        };
+        /**
          * WorkflowEventRecord
          * @description One ``workflow_events`` row.
          *
@@ -1090,6 +1251,36 @@ export interface components {
          * @enum {string}
          */
         WorkflowRunOutcome: "completed" | "max_iterations_reached" | "failed" | "waiting_for_human";
+        /**
+         * WorkflowStep
+         * @description One entry in the workflow's declared step sequence.
+         */
+        WorkflowStep: {
+            /** Agentid */
+            agentId?: string | null;
+            /** Branches */
+            branches?: {
+                [key: string]: string;
+            } | null;
+            condition?: components["schemas"]["DecisionCondition"] | null;
+            foreach?: components["schemas"]["ForeachSpec"] | null;
+            /** Id */
+            id: string;
+            joinPolicy?: components["schemas"]["JoinPolicy"] | null;
+            /** Modelalias */
+            modelAlias?: string | null;
+            /** Parallelsteps */
+            parallelSteps?: components["schemas"]["WorkflowStep"][] | null;
+            /** Promptid */
+            promptId?: string | null;
+            /** Promptversion */
+            promptVersion?: string | null;
+            /** Subworkflowid */
+            subWorkflowId?: string | null;
+            /** Toolid */
+            toolId?: string | null;
+            type: components["schemas"]["StepType"];
+        };
         /**
          * WorkflowStepRecord
          * @description One ``workflow_steps`` row.
@@ -1615,6 +1806,26 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    list_workflow_definitions_api_v1_workflow_definitions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowDefinition"][];
                 };
             };
         };

@@ -61,14 +61,17 @@ the approved framing for this step is a *correct list endpoint*, not
 search; a filtered list is a distinct, later step layered on the same
 cursor mechanism.
 
-**Updated (2026-08-10, `P06-S01-M36-T04`): ``GET .../run_manifest`` is
-real too** — the last of §6.1's own routes named in this module's own
-docstring above as still missing before this step. Reuses
-``SqlRunManifestRecorder.get_by_workflow_id`` (a new read method on the
-same recorder ``WorkflowInstanceService`` already writes through at
-real completion — no new persistence concept, the identical
-"repository already has the seam, just no HTTP caller yet" shape
-``list_instances``/`GET /approvals/history` both already established).
+**Updated (2026-08-10, `P06-S01-M36-T04`): ``GET .../run_manifest`` and
+``GET /workflow_definitions`` are real too** — the two routes §6.1's
+own text above still named missing. Both reuse an existing recorder's
+own seam, extended with one new read method each
+(``SqlRunManifestRecorder.get_by_workflow_id``;
+``SqlWorkflowDefinitionCatalog.list_all``) — no new persistence
+concept, the identical "repository already has the seam, just no HTTP
+caller yet" shape ``list_instances``/`GET /approvals/history` both
+already established. ``workflow_definitions`` is deliberately
+unpaginated (a genuinely small, bounded set — one row per real,
+distinct definition version a pack ever declares, not per run).
 
 **Updated (``P03-S05-M14-T09``): ``start_workflow`` now forwards
 ``security_context.permissions`` into ``trigger()``, not only
@@ -104,8 +107,10 @@ from ai_os_kernel.security_manager import (
     require_permission,
 )
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
+from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.event_record import WorkflowEventRecord
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance
+from ai_os_kernel.workflow_engine.models import WorkflowDefinition
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository, WorkflowListCursor
 from ai_os_kernel.workflow_engine.run_manifest_recorder import (
     SqlRunManifestRecorder,
@@ -314,3 +319,24 @@ async def get_workflow_run_manifest(
             status_code=404, detail=f"no run manifest recorded for workflow '{workflow_id}'"
         )
     return manifest
+
+
+@router.get("/workflow_definitions", response_model=list[WorkflowDefinition])
+async def list_workflow_definitions(
+    request: Request,
+    _security_context: SecurityContext = Depends(require_permission(WORKFLOW_READ)),  # noqa: B008
+) -> list[WorkflowDefinition]:
+    """api_architecture.md §6.1's own documented ``GET
+    /api/v1/workflow_definitions`` ("Registered definitions") — every
+    real, registered ``catalog.workflow_definitions`` row, reusing
+    :meth:`~ai_os_kernel.workflow_engine.definition_catalog.
+    SqlWorkflowDefinitionCatalog.get`'s own lossless reconstruction via
+    the new :meth:`~ai_os_kernel.workflow_engine.definition_catalog.
+    SqlWorkflowDefinitionCatalog.list_all`. Deliberately unpaginated,
+    like ``GET /approvals`` (the pending queue) — a real, disclosed,
+    narrower shape than §9's cursor envelope: a workflow *definition*
+    registers once per real, distinct version a pack ever declares, a
+    genuinely small, bounded collection, unlike the *instances* the
+    plain ``GET /workflows`` route lists."""
+    engine = _get_engine(request)
+    return await SqlWorkflowDefinitionCatalog(engine).list_all()

@@ -304,3 +304,36 @@ def test_get_declared_permissions_returns_a_real_non_empty_value_once_one_is_wri
             await engine.dispose()
 
     asyncio.run(_run())
+
+
+def test_list_all_returns_a_real_registered_definition_losslessly(database_url: str) -> None:
+    """Backs ``GET /api/v1/workflow_definitions`` (added 2026-08-10,
+    `P06-S01-M36-T04`) — reuses :meth:`get`'s own lossless
+    reconstruction, applied across every real row. This module-scoped
+    database already has several other real definitions registered by
+    the tests above by the time this runs, so this asserts the one,
+    real, specific definition genuinely appears — not that it is the
+    only one."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            catalog = SqlWorkflowDefinitionCatalog(engine)
+            definition = _definition(
+                definition_id="se.definition_catalog_list_all", version="1.0.0"
+            )
+            await catalog.register(definition=definition, pack_id="se.software_engineering")
+
+            all_definitions = await catalog.list_all()
+            matching = next(
+                d
+                for d in all_definitions
+                if d.id == "se.definition_catalog_list_all" and d.version == "1.0.0"
+            )
+            assert matching.name == "Definition Catalog Test"
+            assert matching.inputs == definition.inputs
+            assert matching.outputs == definition.outputs
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())

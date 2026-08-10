@@ -341,6 +341,47 @@
         "title": "DecideApprovalResponse",
         "type": "object"
       },
+      "DecisionCondition": {
+        "additionalProperties": false,
+        "description": "A ``decision`` step's real, statically-declared condition \u2014\ngenuinely evaluated at runtime against a named prior step's own\nrecorded output, not an expression language (``P02-S01-M05-T09``,\nclosing the gap this module's own docstring used to record: \"no\ndocument defines a field-level contract for [decision-step\nbranching] yet\"). Kept deliberately narrow, matching the Step\nContract's own stated design principle for the whole file\n(workflow_architecture.md: \"not a general orchestration language\"):\none named source step, one field of its output, one literal\nequality comparison \u2014 never a computed expression, template, or\narbitrary code.",
+        "properties": {
+          "equals": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equals"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "sourceStepId": {
+            "title": "Sourcestepid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceStepId",
+          "field",
+          "equals"
+        ],
+        "title": "DecisionCondition",
+        "type": "object"
+      },
       "FeatureFlagState": {
         "description": "One real, resolved feature flag \u2014 declared by at least one\nactivated pack's own manifest, current value resolved through the\nidentical layered precedence every other real caller uses.",
         "properties": {
@@ -358,6 +399,32 @@
           "enabled"
         ],
         "title": "FeatureFlagState",
+        "type": "object"
+      },
+      "ForeachSpec": {
+        "additionalProperties": false,
+        "description": "A ``foreach`` step's real, statically-declared fan-out\ncontract (`P08-S02-M30-T01`, ADR-0021: \"A `foreach` step consumes\nthat artifact and executes a declared sub-workflow per item ...\n`foreach` declares a maximum fan-out\"). Mirrors\n:class:`DecisionCondition`'s own \"one named source step, one field\nof its output\" shape \u2014 ``sourceStepId``/``itemsField`` name which\nprior step's output holds the real plan-artifact list and which\nfield of it is the list itself; ``maxFanOut`` is the real,\nmandatory bound ADR-0021 requires (\"no unbounded agent-driven\nloop\"), enforced by :class:`~ai_os_kernel.workflow_engine.\nstep_executor.ForeachStepExecutor` before any child instance is\ncreated.",
+        "properties": {
+          "itemsField": {
+            "title": "Itemsfield",
+            "type": "string"
+          },
+          "maxFanOut": {
+            "exclusiveMinimum": 0.0,
+            "title": "Maxfanout",
+            "type": "integer"
+          },
+          "sourceStepId": {
+            "title": "Sourcestepid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceStepId",
+          "itemsField",
+          "maxFanOut"
+        ],
+        "title": "ForeachSpec",
         "type": "object"
       },
       "GateFailureSummaryEntry": {
@@ -420,6 +487,93 @@
         },
         "title": "HTTPValidationError",
         "type": "object"
+      },
+      "HumanApprovalPoint": {
+        "additionalProperties": false,
+        "description": "Full Human Approval Point Contract (human_approval_points.md \u00a74).",
+        "properties": {
+          "channels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channels"
+          },
+          "context": {
+            "additionalProperties": true,
+            "title": "Context",
+            "type": "object"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "escalationPolicy": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalationpolicy"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "timeout": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "context",
+          "options"
+        ],
+        "title": "HumanApprovalPoint",
+        "type": "object"
+      },
+      "JoinPolicy": {
+        "description": "Mandatory for a ``parallel`` step (workflow_engine.md \u00a77.1).",
+        "enum": [
+          "all",
+          "any",
+          "collect"
+        ],
+        "title": "JoinPolicy",
+        "type": "string"
       },
       "PackLifecycleActionRequest": {
         "description": "Shared by activate/deactivate \u2014 just ``reason``. ``actor`` is\ndeliberately not a client-supplied field: it is the authenticated\nprincipal's own id, the same \"who did this comes from\nauthentication, not client-declared honesty\" convention\n``start_workflow`` already established.",
@@ -759,6 +913,28 @@
           "reason"
         ],
         "title": "RegisterPackRequest",
+        "type": "object"
+      },
+      "RetryPolicy": {
+        "additionalProperties": false,
+        "description": "Retries must be bounded by both count and duration \u2014 not either\nalone (error_handling_retry.md \u00a74: \"Retries must be bounded (maximum\nattempts + maximum duration)\").",
+        "properties": {
+          "maxAttempts": {
+            "exclusiveMinimum": 0.0,
+            "title": "Maxattempts",
+            "type": "integer"
+          },
+          "maxDurationSeconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Maxdurationseconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "maxAttempts",
+          "maxDurationSeconds"
+        ],
+        "title": "RetryPolicy",
         "type": "object"
       },
       "RevokeRoleRequest": {
@@ -1272,6 +1448,125 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "WorkflowDefinition": {
+        "additionalProperties": false,
+        "description": "The Workflow Contract, as loaded from one definition file.",
+        "properties": {
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "failureHandling": {
+            "additionalProperties": true,
+            "title": "Failurehandling",
+            "type": "object"
+          },
+          "humanApprovalPoints": {
+            "items": {
+              "$ref": "#/components/schemas/HumanApprovalPoint"
+            },
+            "title": "Humanapprovalpoints",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outputs": {
+            "additionalProperties": true,
+            "title": "Outputs",
+            "type": "object"
+          },
+          "qualityGates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Qualitygates",
+            "type": "array"
+          },
+          "requiredTools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requiredtools",
+            "type": "array"
+          },
+          "retryPolicy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetryPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "timeout": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout"
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger"
+          },
+          "version": {
+            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "version",
+          "inputs",
+          "outputs",
+          "steps",
+          "failureHandling"
+        ],
+        "title": "WorkflowDefinition",
+        "type": "object"
+      },
       "WorkflowEventRecord": {
         "description": "One ``workflow_events`` row.\n\n``event_type`` is a plain ``str``, not an enum: data_model.md \u00a74.2\nlists example values (``workflow.started``, ``step.started``, \u2026)\nending in an ellipsis \u2014 an explicitly open-ended, illustrative set,\nnot a closed list like ``step_type``'s seven values. Enumerating\none here would invent a closed vocabulary the doc deliberately\ndoes not declare, and the table itself has no ``CHECK`` constraint\non this column either.",
         "properties": {
@@ -1580,6 +1875,149 @@
         ],
         "title": "WorkflowRunOutcome",
         "type": "string"
+      },
+      "WorkflowStep": {
+        "additionalProperties": false,
+        "description": "One entry in the workflow's declared step sequence.",
+        "properties": {
+          "agentId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agentid"
+          },
+          "branches": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branches"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionCondition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "foreach": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForeachSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "joinPolicy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JoinPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modelAlias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelalias"
+          },
+          "parallelSteps": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WorkflowStep"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parallelsteps"
+          },
+          "promptId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promptid"
+          },
+          "promptVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promptversion"
+          },
+          "subWorkflowId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subworkflowid"
+          },
+          "toolId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Toolid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/StepType"
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "WorkflowStep",
+        "type": "object"
       },
       "WorkflowStepRecord": {
         "description": "One ``workflow_steps`` row.\n\n``status`` is a plain ``str``, not an enum: unlike\n``workflow_instances.status``, data_model.md \u00a74.3 gives\n``workflow_steps.status`` no canonical value list, so typing it as\nan enum here would invent one. ``step_type`` *is* typed as\n:class:`StepType` \u2014 its seven values are already documented\n(workflow_architecture.md's Supported Step Types) and already\nenforced by the table's own ``CHECK`` constraint.",
@@ -2418,6 +2856,37 @@
         "summary": "Get Version",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/api/v1/workflow_definitions": {
+      "get": {
+        "description": "api_architecture.md \u00a76.1's own documented ``GET\n/api/v1/workflow_definitions`` (\"Registered definitions\") \u2014 every\nreal, registered ``catalog.workflow_definitions`` row, reusing\n:meth:`~ai_os_kernel.workflow_engine.definition_catalog.\nSqlWorkflowDefinitionCatalog.get`'s own lossless reconstruction via\nthe new :meth:`~ai_os_kernel.workflow_engine.definition_catalog.\nSqlWorkflowDefinitionCatalog.list_all`. Deliberately unpaginated,\nlike ``GET /approvals`` (the pending queue) \u2014 a real, disclosed,\nnarrower shape than \u00a79's cursor envelope: a workflow *definition*\nregisters once per real, distinct version a pack ever declares, a\ngenuinely small, bounded collection, unlike the *instances* the\nplain ``GET /workflows`` route lists.",
+        "operationId": "list_workflow_definitions_api_v1_workflow_definitions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkflowDefinition"
+                  },
+                  "title": "Response List Workflow Definitions Api V1 Workflow Definitions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Workflow Definitions",
+        "tags": [
+          "workflows"
         ]
       }
     },

@@ -164,6 +164,21 @@ def build_workflow_definition_row(
     }
 
 
+def _row_to_definition(row: sa.RowMapping) -> WorkflowDefinition:
+    """The exact inverse of :func:`build_workflow_definition_row`'s own
+    ``graph``/``inputs_schema``/``outputs_schema`` split — shared by
+    :meth:`SqlWorkflowDefinitionCatalog.get`/:meth:`~SqlWorkflowDefinitionCatalog.
+    list_all` so the one real reconstruction is never duplicated."""
+    payload: dict[str, Any] = {
+        **row["graph"],
+        "id": row["definition_id"],
+        "version": row["version"],
+        "inputs": row["inputs_schema"],
+        "outputs": row["outputs_schema"],
+    }
+    return WorkflowDefinition.model_validate(payload)
+
+
 class WorkflowDefinitionCatalog(Protocol):
     """Persistence boundary for registering, and now reading back, a
     validated :class:`WorkflowDefinition` in
@@ -178,6 +193,8 @@ class WorkflowDefinitionCatalog(Protocol):
     async def get_declared_permissions(
         self, *, definition_id: str, version: str
     ) -> frozenset[str]: ...
+
+    async def list_all(self) -> list[WorkflowDefinition]: ...
 
 
 class SqlWorkflowDefinitionCatalog:
@@ -221,14 +238,21 @@ class SqlWorkflowDefinitionCatalog:
             row = result.mappings().one_or_none()
         if row is None:
             return None
-        payload: dict[str, Any] = {
-            **row["graph"],
-            "id": row["definition_id"],
-            "version": row["version"],
-            "inputs": row["inputs_schema"],
-            "outputs": row["outputs_schema"],
-        }
-        return WorkflowDefinition.model_validate(payload)
+        return _row_to_definition(row)
+
+    async def list_all(self) -> list[WorkflowDefinition]:
+        """api_architecture.md §6.1's own documented ``GET
+        /api/v1/workflow_definitions`` ("Registered definitions") —
+        every real, registered row, reusing :meth:`get`'s own lossless
+        reconstruction. Deliberately unpaginated, the same "genuinely
+        small, bounded collection" reasoning `list_pending` (Approvals)
+        already establishes: a workflow *definition* registers once per
+        real, distinct version ever written by a pack, not once per
+        real run — a handful of rows in practice, not a growing log."""
+        async with self._engine.connect() as connection:
+            result = await connection.execute(sa.select(workflow_definitions))
+            rows = result.mappings().all()
+        return [_row_to_definition(row) for row in rows]
 
     async def get_declared_permissions(self, *, definition_id: str, version: str) -> frozenset[str]:
         """The workflow term of ADR-0023's monotonic-narrowing chain

@@ -35,6 +35,8 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from ai_os_kernel.bootstrap import (
+    _DEMO_WORKFLOW_DEFINITION_ID,
+    _DEMO_WORKFLOW_DEFINITION_VERSION,
     _DEMO_WORKFLOW_PROMPT_ID,
     _DEMO_WORKFLOW_PROMPT_VERSION,
     _PROMPTED_AGENT_ID,
@@ -316,3 +318,47 @@ def test_list_workflows_rejects_a_malformed_cursor_end_to_end(
         )
 
     assert response.status_code == 400
+
+
+def test_workflow_definitions_route_lists_a_real_registered_definition(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``_build_workflow_trigger``'s own ``create_instance`` call
+    genuinely registers ``platform.prompted_agent_smoke_test`` into
+    ``catalog.workflow_definitions`` before it ever runs a step — so
+    driving one real instance to completion (the identical technique
+    every read-route test above already uses) is enough to prove
+    ``GET /api/v1/workflow_definitions`` reads real, registered rows,
+    not fabricated ones."""
+    asyncio.run(_drive_a_completed_instance(database_url))
+
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/workflow_definitions",
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+
+    assert response.status_code == 200
+    definitions = response.json()
+    matching = next(
+        d
+        for d in definitions
+        if d["id"] == _DEMO_WORKFLOW_DEFINITION_ID
+        and d["version"] == _DEMO_WORKFLOW_DEFINITION_VERSION
+    )
+    assert matching["steps"][0]["agentId"] == _PROMPTED_AGENT_ID
+
+
+def test_workflow_definitions_route_requires_authentication(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/workflow_definitions")
+
+    assert response.status_code == 401
