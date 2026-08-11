@@ -16,6 +16,7 @@ import asyncio
 import os
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -25,13 +26,20 @@ import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from ulid import ULID
 
 from ai_os_kernel.bootstrap import build_app
 from ai_os_kernel.configuration_manager import PlatformConfig
+from ai_os_kernel.evaluation_engine.experiment_repository import (
+    ExperimentDefinitionInput,
+    SqlExperimentRepository,
+)
 from ai_os_kernel.persistence.engine import build_engine
-from ai_os_kernel.persistence.evaluation_schema import experiment_runs
+from ai_os_kernel.persistence.evaluation_schema import experiment_runs, metrics
+from ai_os_kernel.sdk_adapters.experiment_run_recorder_adapter import SqlExperimentRunRecorder
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.models import WorkflowDefinition
+from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from tests.integration._postgres_fixture import postgres_container
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -137,6 +145,69 @@ def _count_experiment_runs(database_url: str, experiment_id: str) -> int:
             await engine.dispose()
 
     return asyncio.run(_count())
+
+
+def _seed_experiment_with_completed_runs_and_metrics(database_url: str) -> str:
+    """Seed one experiment with three real, completed, non-cache-served
+    runs for a single variant, each with a real `cost_usd_total` metric
+    (1.0, 2.0, 3.0 → mean 2.0, sample variance 1.0) — enough for a real,
+    non-empty comparison to flow through the route. Each run needs a real
+    `workflow_instances` row (both `experiment_runs` and `metrics` FK it),
+    created the same way the orchestrator does."""
+
+    async def _seed() -> str:
+        engine = build_engine(database_url)
+        try:
+            catalog = SqlWorkflowDefinitionCatalog(engine)
+            experiment_repository = SqlExperimentRepository(engine, definition_catalog=catalog)
+            experiment = await experiment_repository.create(
+                ExperimentDefinitionInput(
+                    name="seeded comparison experiment",
+                    description="three completed replicates of one variant, with metrics",
+                    definition_id=_DEFINITION_ID,
+                    definition_version=_DEFINITION_VERSION,
+                    variables={"model_alias": ["coding-strong", "coding-balanced"]},
+                    runs_per_variant=3,
+                ),
+                created_by="seed",
+            )
+            instance_repository = SqlWorkflowInstanceRepository(engine)
+            recorder = SqlExperimentRunRecorder(engine)
+            for replicate_index, value in enumerate(("1.0", "2.0", "3.0")):
+                instance = await instance_repository.create(
+                    definition_id=_DEFINITION_ID,
+                    definition_version=_DEFINITION_VERSION,
+                    inputs={},
+                    principal_id="seed",
+                )
+                run_id = await recorder.record(
+                    experiment_id=experiment.experiment_id,
+                    workflow_id=instance.workflow_id,
+                    variant_key="model_alias=coding-strong",
+                    model_alias="coding-strong",
+                    resolved_model_id="claude-opus-5",
+                    replicate_index=replicate_index,
+                    served_from_cache=False,
+                    status="completed",
+                )
+                async with engine.begin() as connection:
+                    await connection.execute(
+                        sa.insert(metrics).values(
+                            metric_id=f"met_{ULID()}",
+                            workflow_id=instance.workflow_id,
+                            run_id=run_id,
+                            metric_name="cost_usd_total",
+                            metric_value=Decimal(value),
+                            unit="usd",
+                            source_component="test-seed",
+                            recorded_at=datetime.now(UTC),
+                        )
+                    )
+            return experiment.experiment_id
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_seed())
 
 
 def test_create_route_requires_authentication(
@@ -320,6 +391,117 @@ def test_running_a_non_model_experiment_is_a_real_422(
             headers={"Authorization": f"Bearer {_token(['operator'])}"},
         )
     assert response.status_code == 422
+
+
+def test_comparison_and_runs_routes_require_authentication(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        assert client.get("/api/v1/experiments/exp_x/comparison").status_code == 401
+        assert client.get("/api/v1/experiments/exp_x/runs").status_code == 401
+
+
+def test_comparison_and_runs_404_for_a_missing_experiment(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    headers = {"Authorization": f"Bearer {_token(['viewer'])}"}
+    with TestClient(app) as client:
+        assert (
+            client.get("/api/v1/experiments/exp_missing/comparison", headers=headers).status_code
+            == 404
+        )
+        assert (
+            client.get("/api/v1/experiments/exp_missing/runs", headers=headers).status_code == 404
+        )
+
+
+def test_a_defined_but_unrun_experiment_has_an_empty_comparison_and_no_runs(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _register_workflow_definition(database_url)
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/v1/experiments",
+            json=_runnable_body(),
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+        experiment_id = created.json()["experiment_id"]
+        # viewer (evaluation:read) can read both; an existing-but-unrun
+        # experiment is a real, empty-but-valid report, never a 404.
+        comparison = client.get(
+            f"/api/v1/experiments/{experiment_id}/comparison",
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+        runs = client.get(
+            f"/api/v1/experiments/{experiment_id}/runs",
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+    assert comparison.status_code == 200
+    assert comparison.json() == {"experiment_id": experiment_id, "variants": []}
+    assert runs.status_code == 200
+    assert runs.json() == {"items": []}
+
+
+def test_the_runs_route_lists_the_rows_a_real_run_produced(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _register_workflow_definition(database_url)
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/v1/experiments",
+            json=_runnable_body(),
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+        experiment_id = created.json()["experiment_id"]
+        client.post(
+            f"/api/v1/experiments/{experiment_id}/run",
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+        runs = client.get(
+            f"/api/v1/experiments/{experiment_id}/runs",
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+    assert runs.status_code == 200
+    items = runs.json()["items"]
+    # Two aliases x three replicates = six real rows, each fully populated.
+    assert len(items) == 6
+    assert {item["model_alias"] for item in items} == {"coding-strong", "coding-balanced"}
+    assert all(item["experiment_id"] == experiment_id for item in items)
+    assert all(item["run_id"].startswith("xr_") for item in items)
+
+
+def test_the_comparison_route_returns_the_real_computed_report(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _register_workflow_definition(database_url)
+    experiment_id = _seed_experiment_with_completed_runs_and_metrics(database_url)
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/v1/experiments/{experiment_id}/comparison",
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["experiment_id"] == experiment_id
+    variants = {v["variant_key"]: v for v in body["variants"]}
+    assert "model_alias=coding-strong" in variants
+    strong = variants["model_alias=coding-strong"]
+    metric = next(m for m in strong["metrics"] if m["metric_name"] == "cost_usd_total")
+    # Values 1.0, 2.0, 3.0 → mean 2.0, sample variance 1.0 (Decimal-exact).
+    assert metric["replicate_count"] == 3
+    assert Decimal(str(metric["mean"])) == Decimal("2")
+    assert Decimal(str(metric["variance"])) == Decimal("1")
+    assert strong["excluded_cache_served_count"] == 0
 
 
 def test_referencing_an_unknown_workflow_definition_is_a_real_404(

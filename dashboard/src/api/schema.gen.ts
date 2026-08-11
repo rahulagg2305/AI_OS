@@ -175,6 +175,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/experiments/{experiment_id}/comparison": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Experiment Comparison
+         * @description The cross-variant comparison (mean/variance per variant × metric,
+         *     cache-served runs excluded and flagged) computed live over this
+         *     experiment's real `experiment_runs`/`metrics` by the already-real
+         *     `SqlComparisonComputer` (`P04-S01-M12-T06`/`T07`) — this is the REST
+         *     consumer that reader was built for. A missing experiment is 404; an
+         *     experiment that exists but has no completed, non-cache-served runs
+         *     yet is a real, empty-but-valid comparison (200), never a 404 — the
+         *     same honest empty report the computer's own tests already prove.
+         */
+        get: operations["get_experiment_comparison_api_v1_experiments__experiment_id__comparison_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/experiments/{experiment_id}/run": {
         parameters: {
             query?: never;
@@ -196,6 +223,29 @@ export interface paths {
          *     not a server fault.
          */
         post: operations["run_experiment_api_v1_experiments__experiment_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiments/{experiment_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Experiment Runs
+         * @description The raw per-run rows this experiment produced (`P04-S01-M12-T14`),
+         *     read by `SqlExperimentRunReader` — no aggregation, unlike
+         *     `/comparison`. A missing experiment is 404; an experiment with no runs
+         *     yet is a real, empty list (200).
+         */
+        get: operations["list_experiment_runs_api_v1_experiments__experiment_id__runs_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -820,6 +870,18 @@ export interface components {
             sourceStepId: string;
         };
         /**
+         * ExperimentComparison
+         * @description The real, complete comparison for one experiment — this
+         *     ticket's own "Output": per-variant, per-metric mean and variance,
+         *     never a single run's own point value.
+         */
+        ExperimentComparison: {
+            /** Experiment Id */
+            experiment_id: string;
+            /** Variants */
+            variants: components["schemas"]["VariantComparison"][];
+        };
+        /**
          * ExperimentDefinitionInput
          * @description The raw, caller-supplied experiment definition — the body
          *     ``POST /api/v1/experiments`` accepts. ``created_by`` is deliberately
@@ -887,6 +949,41 @@ export interface components {
             variables: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * ExperimentRunListResponse
+         * @description The ``{"items": [...]}`` envelope for one experiment's own run rows
+         *     — same shape/reasoning as ``ExperimentListResponse``, bounded by the
+         *     experiment's own (variants × runs_per_variant).
+         */
+        ExperimentRunListResponse: {
+            /** Items */
+            items: components["schemas"]["ExperimentRunRecord"][];
+        };
+        /**
+         * ExperimentRunRecord
+         * @description One real, persisted ``evaluation.experiment_runs`` row — the read
+         *     model ``GET /experiments/{id}/runs`` returns, column-for-column.
+         */
+        ExperimentRunRecord: {
+            /** Experiment Id */
+            experiment_id: string;
+            /** Model Alias */
+            model_alias: string;
+            /** Replicate Index */
+            replicate_index: number;
+            /** Resolved Model Id */
+            resolved_model_id: string;
+            /** Run Id */
+            run_id: string;
+            /** Served From Cache */
+            served_from_cache: boolean;
+            /** Status */
+            status: string;
+            /** Variant Key */
+            variant_key: string;
+            /** Workflow Id */
+            workflow_id: string;
         };
         /**
          * ExperimentRunSummary
@@ -1047,6 +1144,23 @@ export interface components {
          * @enum {string}
          */
         JoinPolicy: "all" | "any" | "collect";
+        /**
+         * MetricComparison
+         * @description One metric's own real mean/variance across a variant's own
+         *     real, non-cache-served, completed replicates.
+         */
+        MetricComparison: {
+            /** Mean */
+            mean: string;
+            /** Metric Name */
+            metric_name: string;
+            /** Replicate Count */
+            replicate_count: number;
+            /** Unit */
+            unit: string;
+            /** Variance */
+            variance: string | null;
+        };
         /**
          * PackLifecycleActionRequest
          * @description Shared by activate/deactivate — just ``reason``. ``actor`` is
@@ -1465,6 +1579,24 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * VariantComparison
+         * @description One variant's own real comparison — every metric name observed
+         *     across its own real, non-cache-served, completed replicates, plus
+         *     a real, visible flag (`P04-S01-M12-T07`, FR-075) for how many of
+         *     this variant's own real replicates were excluded specifically for
+         *     being cache-served — `overview.md` §7's own "excluded... **and
+         *     flagged**" rule, the second half T06's own exclusion-only logic
+         *     left silent.
+         */
+        VariantComparison: {
+            /** Excluded Cache Served Count */
+            excluded_cache_served_count: number;
+            /** Metrics */
+            metrics: components["schemas"]["MetricComparison"][];
+            /** Variant Key */
+            variant_key: string;
         };
         /**
          * WorkflowDefinition
@@ -2004,6 +2136,37 @@ export interface operations {
             };
         };
     };
+    get_experiment_comparison_api_v1_experiments__experiment_id__comparison_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentComparison"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     run_experiment_api_v1_experiments__experiment_id__run_post: {
         parameters: {
             query?: never;
@@ -2022,6 +2185,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExperimentRunSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_experiment_runs_api_v1_experiments__experiment_id__runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentRunListResponse"];
                 };
             };
             /** @description Validation Error */

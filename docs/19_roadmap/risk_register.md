@@ -739,20 +739,21 @@ Genuine instances, worst first:
    tests already import the Benchmarking pack as a plain library. §6.3
    needs **routes**, not a manifest.
 3. **`evaluation_engine/reporting_interface.py`** and
-   **`comparison_computer.py`** — **the upstream gap keeping these idle
-   is now closed (`P04-S01-M12-T13`, 2026-08-11).** History: `T12`
-   (2026-08-11) gave `evaluation.experiments` its first writer
-   (`POST /experiments`), half-closing this; `T13` closes the other half.
-   A correction to what the `T12` note here claimed: `experiment_runs`
-   was never writer-less — `SqlExperimentRunRecorder` (`P04-S03-M34-T02`)
-   had been its tested writer all along; what it lacked was a *production
-   caller*. `ExperimentRunOrchestrator` (`POST /experiments/{id}/run`) is
-   now that caller: it runs a real workflow per variant × replicate and
-   records real `experiment_runs` rows, so a real experiment run now
-   flows all the way to the comparison/reporting readers. The readers are
-   still not yet *called from a route* (`GET /experiments/{id}/comparison`
-   / `.../runs` are the remaining §6.3 slice), but they are no longer
-   idle-for-lack-of-data — real rows now exist for them to read.
+   **`comparison_computer.py`** — **fully closed (`P04-S01-M12-T14`,
+   2026-08-11).** History: `T12` gave `evaluation.experiments` its first
+   writer (`POST /experiments`); `T13` gave `experiment_runs` its first
+   production caller (`POST /experiments/{id}/run`) — a correction to the
+   `T12` note here: `experiment_runs` was never writer-less
+   (`SqlExperimentRunRecorder`, `P04-S03-M34-T02`, was its tested writer);
+   it lacked a *caller*. `T14` now exposes the readers themselves over
+   HTTP: `GET /experiments/{id}/comparison` calls `SqlComparisonComputer`
+   directly, and `GET /experiments/{id}/runs` a new `SqlExperimentRunReader`.
+   So both readers now have real production callers, over real rows a real
+   run produces — this instance of R-018 is closed end to end. (The
+   comparison route is not *wired into a Dashboard view* yet, and the
+   Benchmarking pack's own reporting/presentation layer is separate — but
+   that is downstream product surface, not the "100% done yet unreachable"
+   hollowness this item opened for.)
 4. **`ParallelStepExecutor`/`SubWorkflowStepExecutor`** — zero
    production construction; `parallel`/`sub_workflow` used by 0 of 27
    real workflow steps. (`ForeachStepExecutor` **is** wired.) Accepted:

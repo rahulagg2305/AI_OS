@@ -37,6 +37,7 @@ from ai_os_kernel.evaluation_engine.experiment_run_orchestrator import (
     ExperimentRunOrchestrator,
     expand_model_variants,
 )
+from ai_os_kernel.evaluation_engine.experiment_run_reader import SqlExperimentRunReader
 from ai_os_kernel.llm_gateway.errors import LLMProviderError
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 from ai_os_kernel.persistence.engine import build_engine
@@ -224,6 +225,53 @@ def test_a_full_run_materialises_one_experiment_run_row_per_variant_and_replicat
                 f"model_alias={_ALIAS_ONE}",
                 f"model_alias={_ALIAS_TWO}",
             }
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_the_run_reader_lists_every_produced_row_in_a_stable_order(database_url: str) -> None:
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            experiment_id = await _create_experiment(
+                engine, variables={"model_alias": [_ALIAS_ONE, _ALIAS_TWO]}, runs_per_variant=3
+            )
+            await _build_orchestrator(engine).run(experiment_id, principal_id="runner-1")
+
+            records = await SqlExperimentRunReader(engine).list_for_experiment(experiment_id)
+
+            assert len(records) == 6
+            # Ordered by (variant_key, replicate_index): alias-one 0,1,2 then alias-two 0,1,2.
+            assert [(r.model_alias, r.replicate_index) for r in records] == [
+                (_ALIAS_ONE, 0),
+                (_ALIAS_ONE, 1),
+                (_ALIAS_ONE, 2),
+                (_ALIAS_TWO, 0),
+                (_ALIAS_TWO, 1),
+                (_ALIAS_TWO, 2),
+            ]
+            assert all(r.experiment_id == experiment_id for r in records)
+            assert all(r.status == "completed" for r in records)
+            assert all(r.served_from_cache is False for r in records)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_the_run_reader_returns_an_empty_list_for_an_experiment_with_no_runs(
+    database_url: str,
+) -> None:
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            experiment_id = await _create_experiment(
+                engine, variables={"model_alias": [_ALIAS_ONE, _ALIAS_TWO]}, runs_per_variant=3
+            )
+            records = await SqlExperimentRunReader(engine).list_for_experiment(experiment_id)
+            assert records == []
         finally:
             await engine.dispose()
 

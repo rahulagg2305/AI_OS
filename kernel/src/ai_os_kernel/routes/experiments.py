@@ -1,10 +1,10 @@
 """api_architecture.md §6.3's own Experiments endpoints:
 ``POST /api/v1/experiments`` (define, ``P04-S01-M12-T12``),
 ``GET /api/v1/experiments`` (list), ``GET /api/v1/experiments/{id}``
-(detail), and ``POST /api/v1/experiments/{id}/run`` (run,
-``P04-S01-M12-T13``). The comparison endpoints
-(``GET /experiments/{id}/comparison``, ``.../runs``) remain a real,
-disclosed later slice.
+(detail), ``POST /api/v1/experiments/{id}/run`` (run,
+``P04-S01-M12-T13``), ``GET /api/v1/experiments/{id}/comparison``
+(cross-variant comparison) and ``GET /api/v1/experiments/{id}/runs``
+(raw per-run rows) — the last two closing §6.3 (``P04-S01-M12-T14``).
 
 **Kernel-owned, pack-agnostic.** These routes are backed by the Kernel's
 own :class:`~ai_os_kernel.evaluation_engine.experiment_repository.
@@ -42,6 +42,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ai_os_kernel.context_manager.manager import ContextManager
+from ai_os_kernel.evaluation_engine.comparison_computer import (
+    ExperimentComparison,
+    SqlComparisonComputer,
+)
 from ai_os_kernel.evaluation_engine.experiment_repository import (
     ExperimentDefinitionInput,
     ExperimentDefinitionNotFoundError,
@@ -54,6 +58,10 @@ from ai_os_kernel.evaluation_engine.experiment_run_orchestrator import (
     ExperimentNotRunnableError,
     ExperimentRunOrchestrator,
     ExperimentRunSummary,
+)
+from ai_os_kernel.evaluation_engine.experiment_run_reader import (
+    ExperimentRunRecord,
+    SqlExperimentRunReader,
 )
 from ai_os_kernel.llm_gateway.errors import LLMProviderError
 from ai_os_kernel.llm_gateway.router import Router
@@ -80,12 +88,17 @@ from ai_os_kernel.workflow_engine.step_executor import (
 router = APIRouter(prefix="/api/v1", tags=["experiments"])
 
 
-def _get_repository(request: Request) -> SqlExperimentRepository:
+def _get_engine(request: Request) -> AsyncEngine:
     # The identical `app.state.database_engine` accessor
     # `routes/gates.py`/`routes/traceability.py` already establish.
     engine: AsyncEngine | None = getattr(request.app.state, "database_engine", None)
     if engine is None:
         raise HTTPException(status_code=503, detail="evaluation engine is not available")
+    return engine
+
+
+def _get_repository(request: Request) -> SqlExperimentRepository:
+    engine = _get_engine(request)
     return SqlExperimentRepository(engine, definition_catalog=SqlWorkflowDefinitionCatalog(engine))
 
 
@@ -140,6 +153,14 @@ class ExperimentListResponse(BaseModel):
     items: list[ExperimentRecord]
 
 
+class ExperimentRunListResponse(BaseModel):
+    """The ``{"items": [...]}`` envelope for one experiment's own run rows
+    — same shape/reasoning as ``ExperimentListResponse``, bounded by the
+    experiment's own (variants × runs_per_variant)."""
+
+    items: list[ExperimentRunRecord]
+
+
 @router.post("/experiments", response_model=ExperimentRecord, status_code=201)
 async def create_experiment(
     request: Request,
@@ -187,6 +208,42 @@ async def run_experiment(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (ExperimentNotRunnableError, LLMProviderError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/experiments/{experiment_id}/comparison", response_model=ExperimentComparison)
+async def get_experiment_comparison(
+    request: Request,
+    experiment_id: str,
+    _security_context: SecurityContext = Depends(require_permission(EVALUATION_READ)),  # noqa: B008
+) -> ExperimentComparison:
+    """The cross-variant comparison (mean/variance per variant × metric,
+    cache-served runs excluded and flagged) computed live over this
+    experiment's real `experiment_runs`/`metrics` by the already-real
+    `SqlComparisonComputer` (`P04-S01-M12-T06`/`T07`) — this is the REST
+    consumer that reader was built for. A missing experiment is 404; an
+    experiment that exists but has no completed, non-cache-served runs
+    yet is a real, empty-but-valid comparison (200), never a 404 — the
+    same honest empty report the computer's own tests already prove."""
+    if await _get_repository(request).get(experiment_id) is None:
+        raise HTTPException(status_code=404, detail=f"no experiment with id '{experiment_id}'")
+    computer = SqlComparisonComputer(_get_engine(request))
+    return await computer.compute(experiment_id=experiment_id)
+
+
+@router.get("/experiments/{experiment_id}/runs", response_model=ExperimentRunListResponse)
+async def list_experiment_runs(
+    request: Request,
+    experiment_id: str,
+    _security_context: SecurityContext = Depends(require_permission(EVALUATION_READ)),  # noqa: B008
+) -> ExperimentRunListResponse:
+    """The raw per-run rows this experiment produced (`P04-S01-M12-T14`),
+    read by `SqlExperimentRunReader` — no aggregation, unlike
+    `/comparison`. A missing experiment is 404; an experiment with no runs
+    yet is a real, empty list (200)."""
+    if await _get_repository(request).get(experiment_id) is None:
+        raise HTTPException(status_code=404, detail=f"no experiment with id '{experiment_id}'")
+    reader = SqlExperimentRunReader(_get_engine(request))
+    return ExperimentRunListResponse(items=await reader.list_for_experiment(experiment_id))
 
 
 @router.get("/experiments/{experiment_id}", response_model=ExperimentRecord)

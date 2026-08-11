@@ -469,6 +469,28 @@
         "title": "DecisionCondition",
         "type": "object"
       },
+      "ExperimentComparison": {
+        "description": "The real, complete comparison for one experiment \u2014 this\nticket's own \"Output\": per-variant, per-metric mean and variance,\nnever a single run's own point value.",
+        "properties": {
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/VariantComparison"
+            },
+            "title": "Variants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "variants"
+        ],
+        "title": "ExperimentComparison",
+        "type": "object"
+      },
       "ExperimentDefinitionInput": {
         "description": "The raw, caller-supplied experiment definition \u2014 the body\n``POST /api/v1/experiments`` accepts. ``created_by`` is deliberately\nabsent: it is the authenticated principal's own id, never a\nclient-declared field (the \"who did this comes from authentication\"\nconvention ``start_workflow``/pack-lifecycle already establish).",
         "properties": {
@@ -595,6 +617,77 @@
           "created_by"
         ],
         "title": "ExperimentRecord",
+        "type": "object"
+      },
+      "ExperimentRunListResponse": {
+        "description": "The ``{\"items\": [...]}`` envelope for one experiment's own run rows\n\u2014 same shape/reasoning as ``ExperimentListResponse``, bounded by the\nexperiment's own (variants \u00d7 runs_per_variant).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExperimentRunRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ExperimentRunListResponse",
+        "type": "object"
+      },
+      "ExperimentRunRecord": {
+        "description": "One real, persisted ``evaluation.experiment_runs`` row \u2014 the read\nmodel ``GET /experiments/{id}/runs`` returns, column-for-column.",
+        "properties": {
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "model_alias": {
+            "title": "Model Alias",
+            "type": "string"
+          },
+          "replicate_index": {
+            "title": "Replicate Index",
+            "type": "integer"
+          },
+          "resolved_model_id": {
+            "title": "Resolved Model Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "served_from_cache": {
+            "title": "Served From Cache",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "variant_key": {
+            "title": "Variant Key",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "experiment_id",
+          "workflow_id",
+          "variant_key",
+          "model_alias",
+          "resolved_model_id",
+          "replicate_index",
+          "served_from_cache",
+          "status"
+        ],
+        "title": "ExperimentRunRecord",
         "type": "object"
       },
       "ExperimentRunSummary": {
@@ -916,6 +1009,49 @@
         ],
         "title": "JoinPolicy",
         "type": "string"
+      },
+      "MetricComparison": {
+        "description": "One metric's own real mean/variance across a variant's own\nreal, non-cache-served, completed replicates.",
+        "properties": {
+          "mean": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Mean",
+            "type": "string"
+          },
+          "metric_name": {
+            "title": "Metric Name",
+            "type": "string"
+          },
+          "replicate_count": {
+            "title": "Replicate Count",
+            "type": "integer"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "variance": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variance"
+          }
+        },
+        "required": [
+          "metric_name",
+          "unit",
+          "replicate_count",
+          "mean",
+          "variance"
+        ],
+        "title": "MetricComparison",
+        "type": "object"
       },
       "PackLifecycleActionRequest": {
         "description": "Shared by activate/deactivate \u2014 just ``reason``. ``actor`` is\ndeliberately not a client-supplied field: it is the authenticated\nprincipal's own id, the same \"who did this comes from\nauthentication, not client-declared honesty\" convention\n``start_workflow`` already established.",
@@ -1844,6 +1980,33 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VariantComparison": {
+        "description": "One variant's own real comparison \u2014 every metric name observed\nacross its own real, non-cache-served, completed replicates, plus\na real, visible flag (`P04-S01-M12-T07`, FR-075) for how many of\nthis variant's own real replicates were excluded specifically for\nbeing cache-served \u2014 `overview.md` \u00a77's own \"excluded... **and\nflagged**\" rule, the second half T06's own exclusion-only logic\nleft silent.",
+        "properties": {
+          "excluded_cache_served_count": {
+            "title": "Excluded Cache Served Count",
+            "type": "integer"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/MetricComparison"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "variant_key": {
+            "title": "Variant Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant_key",
+          "metrics",
+          "excluded_cache_served_count"
+        ],
+        "title": "VariantComparison",
         "type": "object"
       },
       "WorkflowDefinition": {
@@ -3006,6 +3169,54 @@
         ]
       }
     },
+    "/api/v1/experiments/{experiment_id}/comparison": {
+      "get": {
+        "description": "The cross-variant comparison (mean/variance per variant \u00d7 metric,\ncache-served runs excluded and flagged) computed live over this\nexperiment's real `experiment_runs`/`metrics` by the already-real\n`SqlComparisonComputer` (`P04-S01-M12-T06`/`T07`) \u2014 this is the REST\nconsumer that reader was built for. A missing experiment is 404; an\nexperiment that exists but has no completed, non-cache-served runs\nyet is a real, empty-but-valid comparison (200), never a 404 \u2014 the\nsame honest empty report the computer's own tests already prove.",
+        "operationId": "get_experiment_comparison_api_v1_experiments__experiment_id__comparison_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentComparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Experiment Comparison",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
     "/api/v1/experiments/{experiment_id}/run": {
       "post": {
         "description": "Synchronously run a defined experiment: one real workflow per\nvariant x replicate, each recorded to ``evaluation.experiment_runs``\n(``P04-S01-M12-T13``). ``EXPERIMENT_RUN`` is \u00a75's own write capability\n\u2014 the same permission ``POST /experiments`` uses. A missing experiment\nis 404; an experiment this synchronous slice cannot run (its\n``variables`` do not vary exactly the ``model`` dimension, or an alias\nhas no configured route) is 422 \u2014 a caller-fixable definition problem,\nnot a server fault.",
@@ -3049,6 +3260,54 @@
           }
         ],
         "summary": "Run Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/runs": {
+      "get": {
+        "description": "The raw per-run rows this experiment produced (`P04-S01-M12-T14`),\nread by `SqlExperimentRunReader` \u2014 no aggregation, unlike\n`/comparison`. A missing experiment is 404; an experiment with no runs\nyet is a real, empty list (200).",
+        "operationId": "list_experiment_runs_api_v1_experiments__experiment_id__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentRunListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Experiment Runs",
         "tags": [
           "experiments"
         ]
