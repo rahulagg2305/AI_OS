@@ -175,6 +175,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/experiments/{experiment_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Experiment
+         * @description Synchronously run a defined experiment: one real workflow per
+         *     variant x replicate, each recorded to ``evaluation.experiment_runs``
+         *     (``P04-S01-M12-T13``). ``EXPERIMENT_RUN`` is §5's own write capability
+         *     — the same permission ``POST /experiments`` uses. A missing experiment
+         *     is 404; an experiment this synchronous slice cannot run (its
+         *     ``variables`` do not vary exactly the ``model`` dimension, or an alias
+         *     has no configured route) is 422 — a caller-fixable definition problem,
+         *     not a server fault.
+         */
+        post: operations["run_experiment_api_v1_experiments__experiment_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/gates/results": {
         parameters: {
             query?: never;
@@ -860,6 +887,23 @@ export interface components {
             variables: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * ExperimentRunSummary
+         * @description What ``POST /experiments/{id}/run`` returns — the experiment's new
+         *     status plus the real ``run_id``s written, one per variant x replicate.
+         */
+        ExperimentRunSummary: {
+            /** Experiment Id */
+            experiment_id: string;
+            /** Run Ids */
+            run_ids: string[];
+            /** Runs Per Variant */
+            runs_per_variant: number;
+            /** Status */
+            status: string;
+            /** Variant Count */
+            variant_count: number;
         };
         /**
          * FeatureFlagState
@@ -1947,6 +1991,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExperimentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_experiment_api_v1_experiments__experiment_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentRunSummary"];
                 };
             };
             /** @description Validation Error */

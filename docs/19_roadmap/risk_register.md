@@ -738,17 +738,21 @@ Genuine instances, worst first:
    `comparison_computer` are all real, and the Kernel's own integration
    tests already import the Benchmarking pack as a plain library. §6.3
    needs **routes**, not a manifest.
-3. **`evaluation_engine/reporting_interface.py`** — zero importers
-   anywhere. **`comparison_computer.py`** — imported only from inside
-   its own package. Not ticketed. **Partially advanced 2026-08-11
-   (`P04-S01-M12-T12`): the *upstream* gap that keeps these idle is now
-   half-closed.** These readers were unreachable because no
-   `experiments`/`experiment_runs` row ever existed; that step gave
-   `evaluation.experiments` its first real writer (`POST /experiments`),
-   so experiments are now genuinely createable. They still have no
-   production caller, though, because `experiment_runs` still has no
-   writer (materialised only by the unbuilt `POST /experiments/{id}/run`)
-   — so the comparison/reporting readers stay idle until that lands.
+3. **`evaluation_engine/reporting_interface.py`** and
+   **`comparison_computer.py`** — **the upstream gap keeping these idle
+   is now closed (`P04-S01-M12-T13`, 2026-08-11).** History: `T12`
+   (2026-08-11) gave `evaluation.experiments` its first writer
+   (`POST /experiments`), half-closing this; `T13` closes the other half.
+   A correction to what the `T12` note here claimed: `experiment_runs`
+   was never writer-less — `SqlExperimentRunRecorder` (`P04-S03-M34-T02`)
+   had been its tested writer all along; what it lacked was a *production
+   caller*. `ExperimentRunOrchestrator` (`POST /experiments/{id}/run`) is
+   now that caller: it runs a real workflow per variant × replicate and
+   records real `experiment_runs` rows, so a real experiment run now
+   flows all the way to the comparison/reporting readers. The readers are
+   still not yet *called from a route* (`GET /experiments/{id}/comparison`
+   / `.../runs` are the remaining §6.3 slice), but they are no longer
+   idle-for-lack-of-data — real rows now exist for them to read.
 4. **`ParallelStepExecutor`/`SubWorkflowStepExecutor`** — zero
    production construction; `parallel`/`sub_workflow` used by 0 of 27
    real workflow steps. (`ForeachStepExecutor` **is** wired.) Accepted:

@@ -195,6 +195,22 @@ class SqlExperimentRepository:
             await connection.execute(sa.insert(experiments).values(**record.model_dump()))
         return record
 
+    async def update_status(self, experiment_id: str, status: str) -> None:
+        """Transition an experiment's lifecycle ``status`` — e.g.
+        ``defined`` -> ``running`` -> ``complete`` as
+        ``POST /experiments/{id}/run`` drives it (``P04-S01-M12-T13``).
+        A row-count-agnostic ``UPDATE``: an ``experiment_id`` matching no
+        row updates nothing rather than raising, since the only caller
+        (the run orchestrator) has already confirmed the row exists via
+        :meth:`get`. ``status`` has no ``CHECK`` constraint (§6 gives the
+        column no closed value list — see ``evaluation_schema.py``)."""
+        async with self._engine.begin() as connection:
+            await connection.execute(
+                sa.update(experiments)
+                .where(experiments.c.experiment_id == experiment_id)
+                .values(status=status)
+            )
+
     async def get(self, experiment_id: str) -> ExperimentRecord | None:
         async with self._engine.connect() as connection:
             row = (

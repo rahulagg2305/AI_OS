@@ -1818,6 +1818,21 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # higher-level repository/service that does not expose it.
         app.state.database_engine = engine
         app.state.agent_registry = await _build_prompted_agent_registry(engine)
+        # The model router, exposed for POST /experiments/{id}/run's own
+        # orchestrator to resolve each variant's alias -> real model id
+        # (ADR-0002). Built the identical config-driven way
+        # _build_prompted_agent_registry builds its own (the same
+        # config/llm.yaml, _build_router) — a second, cheap construction,
+        # the "cheap to construct a second one" reasoning _build_router's
+        # own callers already use. Degrades independently: a missing/
+        # malformed config leaves app.state.model_router unset, and the
+        # run route reports a clear 503, never crashing _lifespan.
+        try:
+            app.state.model_router = _build_router(
+                load_provider_config(Path.cwd() / "config" / "llm.yaml")
+            )
+        except Exception as exc:
+            logger.warning("kernel.bootstrap.model_router_unavailable", error=str(exc))
         # The Context Manager's first real slice (ai_os_kernel.context_manager)
         # — one real resolver, reading through the same read accessor
         # workflow_instance_repository below already wraps, plus a real

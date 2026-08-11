@@ -20,23 +20,27 @@ data_model.md §6 (see ``llm_calls``' own note below), so this module now
 covers the full ``evaluation`` schema §6 documents.
 
 This docstring's original "Schema and migration only — no writer for
-any of the six" is now stale — real writers landed incrementally:
-``gate_results``/``run_manifests``/``llm_calls``/``metrics`` all gained
-one (see ``evaluation_engine.md``'s own Implementation Status), and
+any of the six" is now stale — **all six tables have a real writer.**
+``gate_results``/``run_manifests``/``llm_calls``/``metrics`` gained one
+incrementally (see ``evaluation_engine.md``'s own Implementation Status);
 ``experiments`` gained ``evaluation_engine.experiment_repository.
 SqlExperimentRepository`` (``P04-S01-M12-T12``, ``POST /api/v1/
-experiments``). Only ``experiment_runs`` still has no writer — it is
-materialised by ``POST /experiments/{id}/run`` (a later ticket). §6
-describes ``run_manifests`` as "the complete pinned-conditions bundle
-required by ADR-0022 (Reproducibility over Determinism)";
-``experiment_runs`` records one variant/replicate of a running
-experiment; ``experiments`` is the experiment definition itself;
-``gate_results`` records one Quality Gate Engine evaluation; ``metrics``
-records one measured value produced somewhere in a workflow run;
-``llm_calls`` is "the single authoritative record of model spend" (§6's
-own words) for one LLM Gateway call. No
-Evaluation Engine, Quality Gate Engine, or LLM Gateway exists yet to
-define, run, evaluate, call, or record any of them.
+experiments``); and ``experiment_runs`` gained
+``sdk_adapters.experiment_run_recorder_adapter.SqlExperimentRunRecorder``
+(``P04-S03-M34-T02``). That recorder had **no production caller** until
+``evaluation_engine.experiment_run_orchestrator.ExperimentRunOrchestrator``
+(``P04-S01-M12-T13``, ``POST /experiments/{id}/run``) became the first —
+it must be a caller, not just the writer, because ``experiment_runs``'
+own ``workflow_id``/``resolved_model_id``/``served_from_cache`` columns
+below are all ``NOT NULL``, so a row can only be written for a workflow
+that has genuinely been launched and run. §6 describes ``run_manifests``
+as "the complete pinned-conditions bundle required by ADR-0022
+(Reproducibility over Determinism)"; ``experiment_runs`` records one
+variant/replicate of a running experiment; ``experiments`` is the
+experiment definition itself; ``gate_results`` records one Quality Gate
+Engine evaluation; ``metrics`` records one measured value produced
+somewhere in a workflow run; ``llm_calls`` is "the single authoritative
+record of model spend" (§6's own words) for one LLM Gateway call.
 
 ``run_manifests`` — column-for-column per §6: ``run_manifest_id`` PK,
 ``workflow_id``, ``manifest`` (jsonb), ``manifest_hash``. §6 marks no

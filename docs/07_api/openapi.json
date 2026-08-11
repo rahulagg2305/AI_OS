@@ -597,6 +597,43 @@
         "title": "ExperimentRecord",
         "type": "object"
       },
+      "ExperimentRunSummary": {
+        "description": "What ``POST /experiments/{id}/run`` returns \u2014 the experiment's new\nstatus plus the real ``run_id``s written, one per variant x replicate.",
+        "properties": {
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Run Ids",
+            "type": "array"
+          },
+          "runs_per_variant": {
+            "title": "Runs Per Variant",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "variant_count": {
+            "title": "Variant Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "status",
+          "run_ids",
+          "variant_count",
+          "runs_per_variant"
+        ],
+        "title": "ExperimentRunSummary",
+        "type": "object"
+      },
       "FeatureFlagState": {
         "description": "One real, resolved feature flag \u2014 declared by at least one\nactivated pack's own manifest, current value resolved through the\nidentical layered precedence every other real caller uses.",
         "properties": {
@@ -2964,6 +3001,54 @@
           }
         ],
         "summary": "Get Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}/run": {
+      "post": {
+        "description": "Synchronously run a defined experiment: one real workflow per\nvariant x replicate, each recorded to ``evaluation.experiment_runs``\n(``P04-S01-M12-T13``). ``EXPERIMENT_RUN`` is \u00a75's own write capability\n\u2014 the same permission ``POST /experiments`` uses. A missing experiment\nis 404; an experiment this synchronous slice cannot run (its\n``variables`` do not vary exactly the ``model`` dimension, or an alias\nhas no configured route) is 422 \u2014 a caller-fixable definition problem,\nnot a server fault.",
+        "operationId": "run_experiment_api_v1_experiments__experiment_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentRunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Run Experiment",
         "tags": [
           "experiments"
         ]

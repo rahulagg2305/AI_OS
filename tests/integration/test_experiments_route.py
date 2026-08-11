@@ -21,6 +21,7 @@ from typing import Any
 
 import jwt
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
@@ -28,6 +29,7 @@ from fastapi.testclient import TestClient
 from ai_os_kernel.bootstrap import build_app
 from ai_os_kernel.configuration_manager import PlatformConfig
 from ai_os_kernel.persistence.engine import build_engine
+from ai_os_kernel.persistence.evaluation_schema import experiment_runs
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.models import WorkflowDefinition
 from tests.integration._postgres_fixture import postgres_container
@@ -111,6 +113,30 @@ def _valid_body() -> dict[str, Any]:
         "variables": {"model_alias": ["coding-strong", "coding-fast"]},
         "runs_per_variant": 3,
     }
+
+
+def _runnable_body() -> dict[str, Any]:
+    # Both aliases are real, routable entries in config/llm.yaml, so the
+    # run reaches real execution rather than a 422 on an unroutable alias.
+    return _valid_body() | {"variables": {"model_alias": ["coding-strong", "coding-balanced"]}}
+
+
+def _count_experiment_runs(database_url: str, experiment_id: str) -> int:
+    async def _count() -> int:
+        engine = build_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                return (
+                    await connection.execute(
+                        sa.select(sa.func.count())
+                        .select_from(experiment_runs)
+                        .where(experiment_runs.c.experiment_id == experiment_id)
+                    )
+                ).scalar_one()
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_count())
 
 
 def test_create_route_requires_authentication(
@@ -211,6 +237,89 @@ def test_semantically_invalid_definitions_are_real_422s(
 
     assert r1.status_code == 422
     assert r2.status_code == 422
+
+
+def test_run_route_requires_authentication(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.post("/api/v1/experiments/exp_whatever/run")
+    assert response.status_code == 401
+
+
+def test_a_viewer_cannot_run_but_an_operator_can(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _register_workflow_definition(database_url)
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/v1/experiments",
+            json=_runnable_body(),
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+        experiment_id = created.json()["experiment_id"]
+
+        # viewer has evaluation:read but not experiment:run.
+        denied = client.post(
+            f"/api/v1/experiments/{experiment_id}/run",
+            headers={"Authorization": f"Bearer {_token(['viewer'])}"},
+        )
+        assert denied.status_code == 403
+
+        ran = client.post(
+            f"/api/v1/experiments/{experiment_id}/run",
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+
+    assert ran.status_code == 200
+    summary = ran.json()
+    # Two aliases x three replicates = six real experiment_runs rows.
+    assert summary["experiment_id"] == experiment_id
+    assert summary["variant_count"] == 2
+    assert summary["runs_per_variant"] == 3
+    assert len(summary["run_ids"]) == 6
+    assert summary["status"] == "complete"
+    # Every run_id is a genuinely persisted row.
+    assert _count_experiment_runs(database_url, experiment_id) == 6
+
+
+def test_running_a_missing_experiment_is_a_real_404(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/experiments/exp_does_not_exist/run",
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+    assert response.status_code == 404
+
+
+def test_running_a_non_model_experiment_is_a_real_422(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _register_workflow_definition(database_url)
+    monkeypatch.setenv("AIOS_SECRET_SECURITY_JWT_SIGNING_KEY", _SIGNING_KEY)
+    app = build_app(_config())
+    with TestClient(app) as client:
+        # Valid at definition time (two variants), but this synchronous
+        # slice only runs experiments varying the `model_alias` dimension.
+        created = client.post(
+            "/api/v1/experiments",
+            json=_valid_body() | {"variables": {"prompt_variant": ["a", "b"]}},
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+        experiment_id = created.json()["experiment_id"]
+        response = client.post(
+            f"/api/v1/experiments/{experiment_id}/run",
+            headers={"Authorization": f"Bearer {_token(['operator'])}"},
+        )
+    assert response.status_code == 422
 
 
 def test_referencing_an_unknown_workflow_definition_is_a_real_404(
