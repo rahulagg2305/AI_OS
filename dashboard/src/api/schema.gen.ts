@@ -292,6 +292,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/traceability/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Coverage */
+        get: operations["get_coverage_api_v1_traceability_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/traceability/impact/{external_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Impact */
+        get: operations["get_impact_api_v1_traceability_impact__external_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/version": {
         parameters: {
             query?: never;
@@ -1185,6 +1219,38 @@ export interface components {
             run_manifest_id: string;
         };
         /**
+         * TraceArtifact
+         * @description One real, persisted ``trace.artifacts`` row (data_model.md §8).
+         */
+        TraceArtifact: {
+            /** Artifact Key */
+            artifact_key: string;
+            /** Artifact Type */
+            artifact_type: string;
+            /** External Id */
+            external_id: string;
+            /** Location */
+            location: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: string;
+        };
+        /**
+         * TraceArtifactListResponse
+         * @description The documented collection envelope (``{"items": [...]}``), the
+         *     same real shape ``GET /gates/results`` uses. Deliberately unpaginated:
+         *     both the impact set (artifacts reachable from one real artifact) and
+         *     the coverage set (uncovered requirements) are genuinely small,
+         *     bounded results at this codebase's own scale — the identical "small,
+         *     bounded collection stays unpaginated" reasoning ``GET /approvals``
+         *     (the pending queue) already uses, not §9's cursor envelope.
+         */
+        TraceArtifactListResponse: {
+            /** Items */
+            items: components["schemas"]["TraceArtifact"][];
+        };
+        /**
          * TriggerDeliveryPipelineRequest
          * @description Mirrors ``capability_packs/software-engineering/workflows/delivery_pipeline.yaml``'s
          *     own declared ``inputs`` schema exactly
@@ -1988,6 +2054,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RoleGrant"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_coverage_api_v1_traceability_coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceArtifactListResponse"];
+                };
+            };
+        };
+    };
+    get_impact_api_v1_traceability_impact__external_id__get: {
+        parameters: {
+            query: {
+                artifact_type: string;
+            };
+            header?: never;
+            path: {
+                external_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceArtifactListResponse"];
                 };
             };
             /** @description Validation Error */

@@ -521,6 +521,7 @@ from ai_os_kernel.routes.packs import router as packs_router
 from ai_os_kernel.routes.problem_details import register_problem_detail_handlers
 from ai_os_kernel.routes.role_administration import router as role_administration_router
 from ai_os_kernel.routes.stream import router as stream_router
+from ai_os_kernel.routes.traceability import router as traceability_router
 from ai_os_kernel.routes.workflows import router as workflows_router
 from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
 from ai_os_kernel.secrets_manager.backend_selection import (
@@ -2240,6 +2241,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.include_router(approvals_router)
     app.include_router(agents_router)
     app.include_router(gates_router)
+    app.include_router(traceability_router)
     app.include_router(packs_router)
     app.include_router(role_administration_router)
     app.include_router(config_router)

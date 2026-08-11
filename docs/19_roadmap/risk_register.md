@@ -672,10 +672,17 @@ Genuine instances, worst first:
    now records a real `workflow_run --produced--> documentation` link
    (bootstrap-wired `app.state.trace_link_writer`), proven end to end
    against real Postgres through the real `build_app()` composition, with
-   a test that fails if the wiring is reverted. **Still open here**: the
-   read side (impact/coverage/§6.6 routes) remains unbuilt — ticketed
-   `P04-S02-M16-T05` — so a `/traceability/*` HTTP consumer still cannot
-   read what is now genuinely being written.
+   a test that fails if the wiring is reverted. **The read side landed
+   too (`P04-S02-M16-T05`, 2026-08-11): `GET /api/v1/traceability/impact/
+   {id}` and `.../coverage` are real thin routes over the already-real
+   impact/coverage queries, proven over writer-seeded rows through the
+   real `build_app()` composition.** This instance of R-018 is now
+   **closed on both halves** — a real writer feeds real rows and a real
+   HTTP consumer can read them. The only remaining Traceability gap is
+   `GET /traceability/query` (the raw link graph, a separate shape
+   decision) and any writer beyond the one delivery-pipeline link type —
+   real, disclosed, smaller follow-ups, not the systemic "100% done yet
+   totally unreachable" hollowness this item opened for.
 2. **Benchmarking pack** (module 34) and **Project Intelligence pack**
    (module 32) have no `manifest.yaml` and no `pack.py`. Only two
    manifests exist repo-wide (`_template`, `software-engineering`), so

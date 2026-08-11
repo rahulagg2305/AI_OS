@@ -1488,6 +1488,62 @@
         "title": "StoredRunManifest",
         "type": "object"
       },
+      "TraceArtifact": {
+        "description": "One real, persisted ``trace.artifacts`` row (data_model.md \u00a78).",
+        "properties": {
+          "artifact_key": {
+            "title": "Artifact Key",
+            "type": "string"
+          },
+          "artifact_type": {
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "external_id": {
+            "title": "External Id",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_key",
+          "artifact_type",
+          "external_id",
+          "title",
+          "location",
+          "version"
+        ],
+        "title": "TraceArtifact",
+        "type": "object"
+      },
+      "TraceArtifactListResponse": {
+        "description": "The documented collection envelope (``{\"items\": [...]}``), the\nsame real shape ``GET /gates/results`` uses. Deliberately unpaginated:\nboth the impact set (artifacts reachable from one real artifact) and\nthe coverage set (uncovered requirements) are genuinely small,\nbounded results at this codebase's own scale \u2014 the identical \"small,\nbounded collection stays unpaginated\" reasoning ``GET /approvals``\n(the pending queue) already uses, not \u00a79's cursor envelope.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TraceArtifact"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "TraceArtifactListResponse",
+        "type": "object"
+      },
       "TriggerDeliveryPipelineRequest": {
         "description": "Mirrors ``capability_packs/software-engineering/workflows/delivery_pipeline.yaml``'s\nown declared ``inputs`` schema exactly\n(``ai_os_pack_software_engineering.workflows.models:PipelineInput``).",
         "properties": {
@@ -3120,6 +3176,88 @@
         "summary": "Grant Role",
         "tags": [
           "role-administration"
+        ]
+      }
+    },
+    "/api/v1/traceability/coverage": {
+      "get": {
+        "operationId": "get_coverage_api_v1_traceability_coverage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceArtifactListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Coverage",
+        "tags": [
+          "traceability"
+        ]
+      }
+    },
+    "/api/v1/traceability/impact/{external_id}": {
+      "get": {
+        "operationId": "get_impact_api_v1_traceability_impact__external_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "external_id",
+            "required": true,
+            "schema": {
+              "title": "External Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "artifact_type",
+            "required": true,
+            "schema": {
+              "title": "Artifact Type",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceArtifactListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Impact",
+        "tags": [
+          "traceability"
         ]
       }
     },
