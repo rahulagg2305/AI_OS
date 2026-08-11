@@ -31,15 +31,24 @@ them). A multi-dimensional ``variables`` map (valid at *definition* time
 per ``P04-S01-M12-T12``) is rejected *here* with a clear error — genuine
 multi-factor experiments are later work, not silently mis-run.
 
-**Two honest limitations, disclosed not hidden.** (1) ``served_from_cache``
-is ``False`` by construction: ``overview.md`` §7 requires response caching
-disabled for experiment runs, so a real run is never cache-served. (2) The
-resolved model is *recorded* as each run's pinned model, but true per-run
-pinning of that model into the workflow's own agent LLM calls is not yet
-plumbed — :mod:`~ai_os_kernel.llm_gateway.router`'s own docstring states
-"no experiment pinning" — so the run executes with the composition's
-configured model. Recording the declared pin honestly, and enforcing it
-mid-run, are separate; the latter is the natural follow-up.
+**Model pinning is real (``P04-S01-M12-T15``).** Each variant's runs are
+executed against a run-time copy of the workflow definition with *every*
+agent step's ``model_alias`` overridden to the variant's model
+(:func:`pin_definition_to_model`) — ``overview.md`` §5 step 5, "each run
+uses the LLM Gateway with the pinned model." This works because every
+real agent reads its model from ``inputs['modelAlias']``, which the step
+executor forwards from ``step.model_alias``; overriding that field is
+what genuinely makes the run use the variant's model, so the
+``resolved_model_id`` recorded is the model the run actually used, not
+merely a declared intent. The catalog definition is never mutated.
+
+**One honest limitation, disclosed not hidden.** ``served_from_cache`` is
+``False`` by construction: ``overview.md`` §7 requires response caching
+disabled for experiment runs, so a real run is never cache-served.
+Separately, *completing* a run against a real provider still needs a real
+model credential — inherent to calling a real model, not a gap this
+orchestrator can close; a keyless environment proves the full loop with a
+fake/NoOp executor (as the tests do), never against a live provider.
 """
 
 from __future__ import annotations
@@ -51,6 +60,7 @@ from ai_os_kernel.llm_gateway.router import Router
 from ai_os_kernel.sdk_adapters.experiment_run_recorder_adapter import SqlExperimentRunRecorder
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner
 from ai_os_kernel.workflow_engine.definition_catalog import WorkflowDefinitionCatalog
+from ai_os_kernel.workflow_engine.models import StepType, WorkflowDefinition, WorkflowStep
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 
 # overview.md §7: the model is the only legitimate experiment variable, so
@@ -101,6 +111,40 @@ class ExperimentRunSummary(BaseModel):
     run_ids: list[str]
     variant_count: int
     runs_per_variant: int
+
+
+def _pin_step_to_model(step: WorkflowStep, model_alias: str) -> WorkflowStep:
+    """Return a copy of ``step`` pinned to ``model_alias``: an agent step
+    gets its ``model_alias`` overridden; a step with nested branches
+    (``parallel_steps``) has each branch pinned recursively; anything else
+    is returned unchanged. ``WorkflowStep`` validation forbids
+    ``model_alias`` on non-agent steps, so only agent steps (top-level or
+    nested) are ever touched."""
+    if step.type is StepType.AGENT:
+        return step.model_copy(update={"model_alias": model_alias})
+    if step.parallel_steps is not None:
+        return step.model_copy(
+            update={
+                "parallel_steps": [_pin_step_to_model(b, model_alias) for b in step.parallel_steps]
+            }
+        )
+    return step
+
+
+def pin_definition_to_model(definition: WorkflowDefinition, model_alias: str) -> WorkflowDefinition:
+    """A copy of ``definition`` with every agent step (nested branches
+    included) pinned to ``model_alias`` — ``overview.md`` §5 step 5, "each
+    run uses the LLM Gateway with the pinned model." Every real agent
+    reads its model from ``inputs['modelAlias']``, which the step executor
+    forwards from ``step.model_alias`` (``PromptedAgent`` and every SE-pack
+    agent's ``_REQUIRED_INVOCATION_FIELDS``), so overriding the step field
+    is what genuinely makes the run use the variant's model. The catalog
+    row is never mutated: the pin is a run-time condition applied to the
+    in-memory definition the run executes (ADR-0022, pinned conditions),
+    not a new registered definition."""
+    return definition.model_copy(
+        update={"steps": [_pin_step_to_model(step, model_alias) for step in definition.steps]}
+    )
 
 
 def expand_model_variants(variables: dict[str, list[str]]) -> list[tuple[str, str]]:
@@ -168,6 +212,10 @@ class ExperimentRunOrchestrator:
 
         run_ids: list[str] = []
         for variant_key, model_alias in variants:
+            # Pin every agent step of this variant's runs to the variant's
+            # model (overview.md §5 step 5) — a run-time copy, the catalog
+            # definition is never mutated.
+            pinned_definition = pin_definition_to_model(definition, model_alias)
             for replicate_index in range(experiment.runs_per_variant):
                 instance = await self._instance_repository.create(
                     definition_id=experiment.definition_id,
@@ -182,7 +230,7 @@ class ExperimentRunOrchestrator:
                 )
                 result = await self._advance_runner.run_to_completion(
                     workflow_id=instance.workflow_id,
-                    definition=definition,
+                    definition=pinned_definition,
                     worker_id=_WORKER_ID,
                     lease_duration_seconds=_LEASE_DURATION_SECONDS,
                     max_iterations=_MAX_ITERATIONS,

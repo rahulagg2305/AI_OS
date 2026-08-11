@@ -20,6 +20,7 @@ import asyncio
 import os
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -46,7 +47,7 @@ from ai_os_kernel.sdk_adapters.experiment_run_recorder_adapter import SqlExperim
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
-from ai_os_kernel.workflow_engine.models import WorkflowDefinition
+from ai_os_kernel.workflow_engine.models import WorkflowDefinition, WorkflowStep
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.service import WorkflowInstanceService
 from ai_os_kernel.workflow_engine.step_executor import DispatchingStepExecutor, NoOpStepExecutor
@@ -125,6 +126,62 @@ def _build_orchestrator(engine: AsyncEngine) -> ExperimentRunOrchestrator:
         ),
         run_recorder=SqlExperimentRunRecorder(engine),
     )
+
+
+class _RecordingAgentExecutor:
+    """A real StepExecutor that records the `model_alias` on each agent
+    step it executes — used to prove per-run model pinning actually reaches
+    the executed step, not just the recorded row."""
+
+    def __init__(self) -> None:
+        self.seen_model_aliases: list[str | None] = []
+
+    async def execute(
+        self,
+        step: WorkflowStep,
+        *,
+        workflow_id: str | None = None,
+        principal_permissions: frozenset[str] | None = None,
+        workflow_permissions: frozenset[str] | None = None,
+    ) -> dict[str, Any]:
+        self.seen_model_aliases.append(step.model_alias)
+        return {"status": "ok"}
+
+
+def _build_recording_orchestrator(
+    engine: AsyncEngine,
+) -> tuple[ExperimentRunOrchestrator, _RecordingAgentExecutor]:
+    recording = _RecordingAgentExecutor()
+    definition_catalog = SqlWorkflowDefinitionCatalog(engine)
+    instance_repository = SqlWorkflowInstanceRepository(engine)
+    instance_service = WorkflowInstanceService(
+        repository=instance_repository,
+        step_executor=DispatchingStepExecutor(
+            agent_executor=recording,
+            tool_executor=NoOpStepExecutor(),
+            default_executor=NoOpStepExecutor(),
+        ),
+        definition_catalog=definition_catalog,
+    )
+    orchestrator = ExperimentRunOrchestrator(
+        experiment_repository=SqlExperimentRepository(
+            engine, definition_catalog=definition_catalog
+        ),
+        definition_catalog=definition_catalog,
+        instance_repository=instance_repository,
+        advance_runner=WorkflowAdvanceRunner(
+            instance_service=instance_service,
+            lease_service=WorkflowLeaseService(SqlWorkflowLeaseRepository(engine)),
+        ),
+        router=StaticRouter(
+            routes={
+                _ALIAS_ONE: RoutingDecision(provider="anthropic", model_id=_MODEL_ONE),
+                _ALIAS_TWO: RoutingDecision(provider="anthropic", model_id=_MODEL_TWO),
+            }
+        ),
+        run_recorder=SqlExperimentRunRecorder(engine),
+    )
+    return orchestrator, recording
 
 
 async def _create_experiment(
@@ -272,6 +329,32 @@ def test_the_run_reader_returns_an_empty_list_for_an_experiment_with_no_runs(
             )
             records = await SqlExperimentRunReader(engine).list_for_experiment(experiment_id)
             assert records == []
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_each_variants_runs_are_pinned_to_that_variants_model(database_url: str) -> None:
+    """The point of an experiment: variant A's runs genuinely execute
+    against model A, variant B's against model B — proven by capturing the
+    model_alias the executed agent step actually received, not merely the
+    row recorded afterwards."""
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            experiment_id = await _create_experiment(
+                engine, variables={"model_alias": [_ALIAS_ONE, _ALIAS_TWO]}, runs_per_variant=3
+            )
+            orchestrator, recording = _build_recording_orchestrator(engine)
+
+            await orchestrator.run(experiment_id, principal_id="runner-1")
+
+            # Variant loop is alias-one then alias-two, 3 replicates each,
+            # one agent step per run: the executed steps carry the pinned
+            # variant model, overriding the definition's own (None) value.
+            assert recording.seen_model_aliases == [_ALIAS_ONE] * 3 + [_ALIAS_TWO] * 3
         finally:
             await engine.dispose()
 
