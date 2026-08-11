@@ -19,12 +19,18 @@ the repository root (the same "every documented way of running the
 Kernel starts the process from the repository root" assumption
 ``bootstrap.py``'s own docstring states), so ``PlatformConfig``'s own
 default ``capability_pack_dirs`` (``["capability_packs"]``) resolves to
-the real, on-disk tree — which today contains both the real
-``software-engineering`` pack and the schema-valid, capability-less
-``_template`` example pack. Both are asserted on below: the second as
-proof that a manifest declaring no agents/prompts/tools registers and
-activates cleanly, deriving zero catalog rows, not a special case this
-step had to add error handling for.
+the real, on-disk tree — which today contains the real
+``software-engineering`` pack, the schema-valid, capability-less
+``_template`` example pack, and (since ``P05-S02-M32-T07``) the real,
+tools-only ``project-intelligence`` pack. The first two are asserted on
+below: ``_template`` as proof that a manifest declaring no
+agents/prompts/tools registers and activates cleanly, deriving zero
+catalog rows, not a special case this step had to add error handling
+for. ``project-intelligence`` is asserted on directly by its own file,
+``tests/integration/capability_manager/test_project_intelligence_manifest.py``;
+here it simply must not break discovery of the others — a third
+discovered pack this test's own by-id (never by-count) assertions
+already tolerate.
 
 No live Anthropic credential is used or required anywhere in this file:
 the QA/Test Agent (``qa-test``) makes no LLM call at all, so it alone is

@@ -151,6 +151,38 @@ def _render_markdown(
     return "\n".join(sections)
 
 
+class _ModuleInput(BaseModel):
+    """One entry of this Tool's required `modules` input — the exact shape
+    `architecture.recover`'s own output already produces (`name`/`fanIn`/
+    `fanOut`); mirrored locally, the identical `FileEntryInput` precedent."""
+
+    name: str
+    fan_in: int = Field(..., alias="fanIn")
+    fan_out: int = Field(..., alias="fanOut")
+
+    model_config = {"populate_by_name": True}
+
+
+class DocumentationGenerationInput(BaseModel):
+    """Documents this Tool's own manifest-declarable `inputSchema`
+    reference target — the exact `modules`/`moduleEdges`/`circularDependencies`
+    shape `architecture.recover`'s own output produces (`P05-S02-M32-T07`:
+    added so this already-real Tool is declarable, since `manifest.schema.
+    json` requires a real `inputSchema` Pydantic model per tool; `execute`
+    is unchanged — this is the declared input contract, not a new runtime
+    validator, the same role `LanguageDetectionInput` plays for
+    `language.detect`). `moduleEdges`/`circularDependencies` stay
+    `list[dict[str, Any]]` because `execute` itself consumes them loosely,
+    only `modules` field-by-field — the model describes what the Tool
+    genuinely reads, not a stricter shape it does not enforce."""
+
+    modules: list[_ModuleInput]
+    module_edges: list[dict[str, Any]] = Field(..., alias="moduleEdges")
+    circular_dependencies: list[dict[str, Any]] = Field(..., alias="circularDependencies")
+
+    model_config = {"populate_by_name": True}
+
+
 class DocumentationGenerationOutput(BaseModel):
     """Documents this Tool's own manifest-declarable `outputSchema`
     reference target — mirrors `_OUTPUT_SCHEMA` exactly."""

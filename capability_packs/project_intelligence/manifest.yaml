@@ -1,0 +1,117 @@
+# Project Intelligence Capability Pack manifest (P05-S02-M32-T07).
+#
+# Validated against platform_sdk/schemas/manifest.schema.json by
+# ai_os_kernel.manifest_loader.ManifestLoader. Filed by the 2026-08-11
+# health audit (risk register R-018, Risk A): this pack had five real,
+# tested Tools but no manifest, so the Manifest Loader could never find
+# them and catalog.tools never got a row — the exact "proven but idle"
+# shape the audit exists to catch.
+#
+# Tools-only, deliberately no `entryPoint`: manifest.schema.json's own
+# `allOf` requires `entryPoint` (a pack.py CapabilityPack class) only
+# when `agents` or `workflows` has an entry (see the SoftwareEngineering
+# pack's own pack.py docstring, which states this rule). This pack
+# declares neither, so no pack.py exists or is needed — creating a
+# stub CapabilityPack nothing would call would be speculative code.
+#
+# Now genuinely reachable, not merely declared: `P02-S05-M18-T04`
+# (R-017) wired a real SqlToolRegistry into the production PackContext,
+# so once this pack is registered+activated, an agent's own
+# context.tools.invoke("repository.ingest", ...) resolves the real Tool
+# through the registry — the caveat this ticket was filed with ("no
+# production composition reads catalog.tools today") is now closed.
+
+apiVersion: ai-os/v1
+kind: CapabilityPack
+
+metadata:
+  id: project-intelligence
+  name: Project Intelligence Pack
+  version: 0.1.0
+  description: >-
+    Understand, analyse, and document existing or legacy codebases. Five
+    real, deterministic Tools chained by shape: repository.ingest walks a
+    repository inside a real sandbox and emits its files; language.detect
+    classifies languages/frameworks/build systems from that file list;
+    dependency.graph extracts real Python import edges (stdlib ast) inside
+    a sandbox; architecture.recover aggregates those edges into a
+    module-level model with fan-in/out coupling and cycle detection;
+    documentation.generate renders that model into a deterministic
+    Markdown report. No LLM call anywhere — every output is a real,
+    reproducible computation over the previous Tool's own output.
+  owner: platform-team
+  license: UNLICENSED
+
+compatibility:
+  minKernelVersion: 0.1.0
+
+dependencies:
+  sdkVersion: ">=0.1.0,<1.0.0"
+
+permissions:
+  - sandbox:execute
+
+tools:
+  - id: repository.ingest
+    name: Repository Ingestion Tool
+    version: 0.1.0
+    description: >-
+      Walks a real repository through a real, directly-injected sandbox
+      (ADR-0016, tier1_sandboxed) and emits its files as (path, language)
+      entries — the first Tool in this pack's own shape-chain.
+    entrypoint: ai_os_pack_project_intelligence.tools.repository_ingestion:RepositoryIngestionToolEntrypoint
+    inputSchema: ai_os_pack_project_intelligence.tools.repository_ingestion:RepositoryIngestionInput
+    outputSchema: ai_os_pack_project_intelligence.tools.repository_ingestion:RepositoryIngestionOutput
+    trustTier: tier1_sandboxed
+    permissions:
+      - sandbox:execute
+
+  - id: language.detect
+    name: Language Detection Tool
+    version: 0.1.0
+    description: >-
+      Classifies languages, frameworks, and build systems from
+      repository.ingest's own file list — pure, deterministic, no I/O
+      (tier2_trusted, real confidence per FR-051).
+    entrypoint: ai_os_pack_project_intelligence.tools.language_detection:LanguageDetectionToolEntrypoint
+    inputSchema: ai_os_pack_project_intelligence.tools.language_detection:LanguageDetectionInput
+    outputSchema: ai_os_pack_project_intelligence.tools.language_detection:LanguageDetectionOutput
+    trustTier: tier2_trusted
+
+  - id: dependency.graph
+    name: Dependency Graph Tool
+    version: 0.1.0
+    description: >-
+      Extracts real Python import edges via stdlib ast inside a real
+      sandbox (tier1_sandboxed, same ADR-0016 reasoning as
+      repository.ingest) — Python only, other languages disclosed/deferred.
+    entrypoint: ai_os_pack_project_intelligence.tools.dependency_graph:DependencyGraphToolEntrypoint
+    inputSchema: ai_os_pack_project_intelligence.tools.dependency_graph:DependencyGraphInput
+    outputSchema: ai_os_pack_project_intelligence.tools.dependency_graph:DependencyGraphOutput
+    trustTier: tier1_sandboxed
+    permissions:
+      - sandbox:execute
+
+  - id: architecture.recover
+    name: Architecture Recovery Tool
+    version: 0.1.0
+    description: >-
+      Aggregates dependency.graph's own file-level edges into a
+      module-level model with real fan-in/fan-out coupling and DFS cycle
+      detection — deterministic, no I/O or execution (tier2_trusted).
+    entrypoint: ai_os_pack_project_intelligence.tools.architecture_recovery:ArchitectureRecoveryToolEntrypoint
+    inputSchema: ai_os_pack_project_intelligence.tools.architecture_recovery:ArchitectureRecoveryInput
+    outputSchema: ai_os_pack_project_intelligence.tools.architecture_recovery:ArchitectureRecoveryOutput
+    trustTier: tier2_trusted
+
+  - id: documentation.generate
+    name: Documentation Generation Tool
+    version: 0.1.0
+    description: >-
+      Renders architecture.recover's own recovered model into a
+      deterministic Markdown report (module overview, dependency table,
+      named architectural concerns) — no LLM, no I/O (tier2_trusted).
+    entrypoint: ai_os_pack_project_intelligence.tools.documentation_generation:DocumentationGenerationToolEntrypoint
+    inputSchema: ai_os_pack_project_intelligence.tools.documentation_generation:DocumentationGenerationInput
+    outputSchema: ai_os_pack_project_intelligence.tools.documentation_generation:DocumentationGenerationOutput
+    trustTier: tier2_trusted

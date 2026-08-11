@@ -140,6 +140,39 @@ def _find_cycles(module_edges: dict[str, set[str]]) -> list[list[str]]:
     return cycles
 
 
+class _NodeInput(BaseModel):
+    """One entry of this Tool's required `nodes` input — the exact shape
+    `dependency.graph`'s own `GraphNode` output already produces (mirrored
+    locally, not imported, the identical `FileEntryInput`/`repository.
+    ingest` precedent every other Tool in this pack already follows)."""
+
+    path: str
+
+
+class _EdgeInput(BaseModel):
+    """One entry of `edges` — the exact shape `dependency.graph`'s own
+    `GraphEdge` output already produces (`from`/`to`/`importedName`)."""
+
+    from_: str = Field(..., alias="from")
+    to: str
+    imported_name: str = Field(..., alias="importedName")
+
+    model_config = {"populate_by_name": True}
+
+
+class ArchitectureRecoveryInput(BaseModel):
+    """Documents this Tool's own manifest-declarable `inputSchema`
+    reference target — the exact `nodes`/`edges` shape `dependency.graph`'s
+    own output produces (`P05-S02-M32-T07`: added so this already-real Tool
+    is declarable, since `manifest.schema.json` requires a real `inputSchema`
+    Pydantic model per tool; `execute` is unchanged — this model is the
+    declared input contract, not a new runtime validator, the identical
+    role `LanguageDetectionInput` already plays for `language.detect`)."""
+
+    nodes: list[_NodeInput]
+    edges: list[_EdgeInput]
+
+
 class ArchitectureRecoveryOutput(BaseModel):
     """Documents this Tool's own manifest-declarable `outputSchema`
     reference target — mirrors `_OUTPUT_SCHEMA` exactly."""

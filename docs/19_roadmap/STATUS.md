@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 94%** (236.5 of 251 Task-equivalents complete)
+**Overall: 95%** (237.5 of 251 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -38,7 +38,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P04 (D) | S02 Traceability Engine | 5 | 5 | 0 | 0 | 100% |
 | P04 (D) | S03 Benchmarking Pack | 5 | 4 | 0 | 1 | 80% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 2 | 0 | 50% |
-| P05 (E) | S02 Project Intelligence Pack | 7 | 0 | 6 | 1 | 43% |
+| P05 (E) | S02 Project Intelligence Pack | 7 | 1 | 6 | 0 | 57% |
 | P06 (F) | S01 API Completion and Published Contract | 4 | 3 | 1 | 0 | 88% |
 | P06 (F) | S02 Realtime Stream | 1 | 1 | 0 | 0 | 100% |
 | P06 (F) | S03 Dashboard | 3 | 3 | 0 | 0 | 100% |
@@ -60,7 +60,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (Stage B) - Minimum Viable Kernel | 101 | 99 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 21 | 20 | 95% |
-| P05 (Stage E) - Project Intelligence | 9 | 0 | 44% |
+| P05 (Stage E) - Project Intelligence | 9 | 1 | 56% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 7 | 77% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 75% |
 | P08 (Stage H) - Expansion | 9 | 9 | 100% |
@@ -68,10 +68,9 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-2 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+1 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
 - `P04-S03-M34-T05` Declare the Benchmarking pack in a real manifest and entry point
-- `P05-S02-M32-T07` Declare the Project Intelligence pack's five Tools in a real manifest
 
 ## Dependency review signal
 

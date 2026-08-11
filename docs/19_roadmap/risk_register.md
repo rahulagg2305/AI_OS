@@ -684,10 +684,22 @@ Genuine instances, worst first:
    real, disclosed, smaller follow-ups, not the systemic "100% done yet
    totally unreachable" hollowness this item opened for.
 2. **Benchmarking pack** (module 34) and **Project Intelligence pack**
-   (module 32) have no `manifest.yaml` and no `pack.py`. Only two
-   manifests exist repo-wide (`_template`, `software-engineering`), so
-   the Manifest Loader can never discover either pack. **Ticketed as
-   `P04-S03-M34-T05` and `P05-S02-M32-T07`.** A correction the audit
+   (module 32) had no `manifest.yaml` and no `pack.py`, so the Manifest
+   Loader could never discover either. **Project Intelligence is now
+   closed (`P05-S02-M32-T07`, 2026-08-11): a real, schema-valid
+   `manifest.yaml` declares all five of its real Tools, and they
+   genuinely register and resolve through the real `SqlToolRegistry`
+   (proven end to end, incl. a real `language.detect` resolve+run) — a
+   real, additive payoff, since `P02-S05-M18-T04` (R-017) had already
+   wired the registry into production, so a declared Tool is now
+   invocable, not merely catalogued. Two of the five (`architecture.
+   recover`, `documentation.generate`) needed a real `inputSchema`
+   Pydantic model added to be declarable at all (the schema requires
+   one per tool); those were added, matching the existing 3-tool
+   precedent, `execute` unchanged.** Benchmarking (`P04-S03-M34-T05`)
+   remains open, and near-hollow by comparison: it declares no
+   agent/tool/workflow, so a manifest there only registers a
+   `catalog.packs` row. A correction the audit
    itself made while filing: its first claim that this blocks
    `api_architecture.md` §6.3 (Experiments) is **wrong** —
    `evaluation.experiments`, `SqlExperimentRunRecorder` and
