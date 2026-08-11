@@ -44,7 +44,7 @@ One image, two entry points ([ADR-0020](../18_decision_log/adr/ADR-0020-deployme
 
 Both roles run the same composition root, so a component behaves identically in either. The only difference is which loop is started.
 
-Optional single-process mode (`ai_os_kernel.entrypoints.all_in_one`) runs both in one process for local development; it is not supported for production.
+A single-process mode (`ai_os_kernel.entrypoints.all_in_one`) is **designed but not built** — corrected 2026-08-11 (full-project audit), which found this line previously described it in the present tense as though it existed. `kernel/src/ai_os_kernel/entrypoints/` contains only `__init__.py`, `api.py` and `worker.py`; there is no `all_in_one` module. It would not be supported for production in any case. For local development today, run the `api` role — its `_lifespan` already starts the same worker loop as a background task (see the Implementation Status note above), so one process genuinely does both.
 
 ---
 

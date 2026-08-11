@@ -20,7 +20,7 @@ Every entry shows its **status**, because a reader needs to know whether a docum
 
 1. Start with `../README.md` and `../PROJECT_INDEX.md` for orientation.
 2. **Read `../CLAUDE.md`** — the working process (approval workflow, standing rules, environment quirks).
-3. **Read `19_roadmap/implementation_status.md`** — what actually exists right now. Short by design.
+3. **Read `19_roadmap/feature_inventory.md`** — the authority on what actually exists right now, per module. (Corrected 2026-08-11: this step used to say "read `19_roadmap/implementation_status.md` … every session"; that document is **superseded** and `CLAUDE.md`'s Core process rule explicitly forbids reading it as step input.) For *ticket*-level state, use the generated `19_roadmap/STATUS.md` / `MODULE_BOARD.md`.
 4. Read the Constitution and the AI Governance Framework.
 5. **Read the Decision Log** (`18_decision_log/README.md`) — it records every technology and architecture decision (all 25 ADRs, each with an appended implementation-status note), and is the fastest route to understanding why the platform is shaped as it is.
 6. Use this index to find the detailed document you need.
@@ -45,13 +45,16 @@ Entirely unbuilt as of 2026-07-28 — these documents are pure specification, wi
 - `06_capability_packs/{project_intelligence,voice_jarvis,benchmarking}/`
 - `ai_context/` and `knowledge/` structure documents — both describe root directories with zero content
 
-**The three live-status documents are the authority on what is real:**
+**Which document is the authority on what is real** (single-valued as of 2026-08-11 — see `19_roadmap/feature_inventory.md`'s own header banner for the full ruling):
 
-| Document | Purpose |
+| Question | Document |
 |---|---|
-| `19_roadmap/implementation_status.md` | Short: current stage, what exists, blockers, next step. Read first, every session. |
-| `19_roadmap/feature_inventory.md` | Per-module completion tracker — the authority on "how done is X" |
-| `19_roadmap/history/INDEX.md` | Full chronological build history by milestone |
+| **How complete is module X? Is it wired into a real production path?** | `19_roadmap/feature_inventory.md` — **the authority**; updated every step from direct source inspection |
+| Is ticket X done? Overall Task-equivalent percentage? | `19_roadmap/STATUS.md` and `19_roadmap/MODULE_BOARD.md` — *generated*; a real test fails the build if stale or hand-edited |
+| Is FR-### in scope, and what proves it? | `02_requirements/functional/functional_requirements.md` — scope and acceptance criteria only, **not** built/not-built state |
+| Which risks are open? | `19_roadmap/risk_register.md` |
+| What happened historically? | `19_roadmap/history/INDEX.md` |
+| *(nothing — do not read)* | ~~`19_roadmap/implementation_status.md`~~ — **superseded 2026-08-11**, frozen historical record only |
 
 ---
 
@@ -197,8 +200,11 @@ Entirely unbuilt as of 2026-07-28 — these documents are pure specification, wi
 | Document | Path | Status |
 |---|---|---|
 | Implementation Roadmap | `19_roadmap/implementation_roadmap.md` | Approved (v2.0) |
-| **Implementation Status (living, short)** | `19_roadmap/implementation_status.md` | Active |
-| **Feature / Module / Phase Completion Tracker (living)** | `19_roadmap/feature_inventory.md` | Active |
+| ~~Implementation Status~~ | `19_roadmap/implementation_status.md` | **Superseded** (2026-08-11) |
+| **Feature / Module / Phase Completion Tracker (living) — authority on per-module completeness** | `19_roadmap/feature_inventory.md` | Active |
+| **Roadmap Status (generated)** | `19_roadmap/STATUS.md` | Active (generated) |
+| **Module Board (generated)** | `19_roadmap/MODULE_BOARD.md` | Active (generated) |
+| **Risk Register** | `19_roadmap/risk_register.md` | Active |
 | **Implementation History Index (detailed, split by milestone)** | `19_roadmap/history/INDEX.md` | Active |
 | Phase 0 Completion Review | `19_roadmap/phase_0_completion_review.md` | Approved |
 | Documentation Baseline Record | `19_roadmap/documentation_freeze.md` | Approved (v2.0) |
@@ -213,6 +219,12 @@ Entirely unbuilt as of 2026-07-28 — these documents are pure specification, wi
 | Reporting Format | `process/reporting_format.md` | Active |
 | Coding Standards (curated pointer) | `process/coding_standards.md` | Active |
 | Folder Structure (real vs. placeholder) | `process/folder_structure.md` | Active |
+| How Development Works | `process/how_development_works.md` | Active |
+| Acceptance Checkpoints | `process/acceptance_checkpoints.md` | Active |
+| Ticket Templates | `process/ticket_templates.md` | Active |
+| Interface Stability | `process/interface_stability.md` | Active |
+| API Contract Boundary | `process/api_contract_boundary.md` | Active |
+| Release Tagging | `process/release_tagging.md` | Active |
 
 ---
 

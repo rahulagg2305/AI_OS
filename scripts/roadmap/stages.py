@@ -164,10 +164,17 @@ MODULE_PATHS: dict[int, str] = {
     19: "kernel/src/ai_os_kernel/secrets_manager",
     20: "kernel/src/ai_os_kernel/sandbox",
     21: "kernel/src/ai_os_kernel/storage_service",  # PLANNED
-    22: "platform_services/notification",  # PLANNED
+    # 22/24/25 corrected 2026-08-11 (full-project audit): these pointed at
+    # `platform_services/<name>`, a directory that has never existed in this
+    # repository. Every one of these three subsystems was in fact built
+    # inside the Kernel. The generator validates ticket module_path against
+    # this registry, but not this registry against the filesystem, so the
+    # mismatch passed CI silently. Their tickets were corrected in the same
+    # step.
+    22: "kernel/src/ai_os_kernel/notification",
     23: "kernel/src/ai_os_kernel/caching",  # PLANNED
-    24: "platform_services/git_integration",  # PLANNED
-    25: "platform_services/speech_gateway",  # PLANNED
+    24: "kernel/src/ai_os_kernel/git_integration",
+    25: "kernel/src/ai_os_kernel/speech_gateway",
     26: "kernel/src/ai_os_kernel/document_processing",  # PLANNED
     27: "platform_sdk/src/ai_os_sdk",
     28: "platform_sdk/schemas",
@@ -175,7 +182,13 @@ MODULE_PATHS: dict[int, str] = {
     30: "capability_packs/software-engineering/workflows",
     31: "capability_packs/software-engineering/src/ai_os_pack_software_engineering",
     32: "capability_packs/project_intelligence",  # PLANNED
-    33: "capability_packs/voice_jarvis",  # PLANNED
+    # 33 corrected 2026-08-11 (full-project audit): `capability_packs/
+    # voice_jarvis` does not exist and deliberately never will — that pack
+    # was attempted and rejected the same day (`P06-S06-M33-T01`) because a
+    # pure HTTP-client pack violates the real pack_contract_suite
+    # import-boundary check. The real Platform Integration Layer lives in
+    # the Kernel. See docs/process/folder_structure.md's capability_packs row.
+    33: "kernel/src/ai_os_kernel/voice_jarvis",
     34: "capability_packs/benchmarking",  # PLANNED
     36: "kernel/src/ai_os_kernel/routes",
     37: "kernel/src/ai_os_kernel/routes",

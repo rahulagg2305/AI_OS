@@ -46,7 +46,7 @@ to that rule, not as evidence it failed.
 | R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop concurrency margin) | L | **Closed** 2026-08-09; worker-loop timing half **remediated** 2026-08-11 (`P02-S01-M05-T16`) | — |
 | R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Open — real, undecided design question** | Product owner, 2026-08-10 |
 | R-017 | Manifest-declared Tools were unreachable in production — no caller ever passed a `ToolRegistry` | M | **Closed** 2026-08-11 (`P02-S05-M18-T04`) | — |
-| R-018 | "Proven but idle": real, tested subsystems with zero production reachability (Traceability Engine at 100% `done`; two packs with no manifest) | M | **Open — partially ticketed** | Health audit, 2026-08-11 |
+| R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3 now closed; 5 further Kernel packages added 2026-08-11) | M | **Open — partially ticketed** | Health audit, 2026-08-11 |
 
 ---
 
@@ -764,9 +764,39 @@ Genuine instances, worst first:
    workflow (`api-designer`, `database`, `frontend-developer`,
    `performance`, `refactoring`, `release`, `security-analysis`).
    Accepted: a pack catalogue legitimately ships more agents than any
-   one workflow uses.
+   one workflow uses. **Re-verified 2026-08-11: still exactly 7 of 16** —
+   only 9 distinct `agentId:` values are declared across every real
+   workflow YAML (`architecture`, `build`, `code-review`,
+   `documentation`, `git-push`, `lint`, `qa-test`,
+   `requirements-analyst`, `technical-planner`). The three that *appear*
+   to be referenced (`database`, `frontend-developer`, `release`) match
+   only inside YAML **comments**, not real step declarations.
+7. **Five further Kernel packages have real, tested code that no
+   production composition constructs — added 2026-08-11 by the
+   full-project audit, which swept all 30 kernel subpackages for
+   production importers outside their own package.** Each was already
+   disclosed individually in `feature_inventory.md`; what was missing is
+   that they were never collected *here*, so this entry understated the
+   real size of this risk class by five. None is a misdocumented module;
+   this is an aggregation fix.
 
-**R-017 was originally item 7 of this same list** and is now closed —
+   | Package | Real code | Production importers | Where it is already disclosed |
+   |---|---|---|---|
+   | `caching` | 4 files (`ResponseCache`, `RedisSettings`) | **0** — `ResponseCache(` is never constructed in production | module 23: "Not wired into `llm_gateway.gateway`'s real call path yet" |
+   | `document_processing` | 7 files, 8 classes | **0** | module 26: "not wired into any real production composition/route" |
+   | `speech_gateway` | 5 files, 14 classes | **0** | module 25: "no real caller exists" |
+   | `storage_service` | 3 files (`LocalFilesystemArtifactStore`) | **0** | module 21: "nothing in a real Kernel composition constructs this store yet" |
+   | `memory_manager` | 1 file, **0 classes** — a docstring-only `__init__.py`; the real store is `persistence/memory_writer.py`'s `SqlMemoryStore` | **0** | `memory_manager.md`: "`memory_manager/` itself is still a docstring-only `__init__.py`" |
+
+   `bootstrap.py`'s apparent mentions of `caching` and `memory_manager`
+   are **comments only**, not wirings. One package the same sweep flagged
+   was checked and cleared as a false positive: `entrypoints` has zero
+   importers because it *is* the top of the call graph — it is genuinely
+   wired via `deploy/entrypoint.sh` (`exec uvicorn
+   ai_os_kernel.entrypoints.api:app`, `exec python -m
+   ai_os_kernel.entrypoints.worker`).
+
+**R-017 was originally the last item of this same list** (numbered 7 before the 2026-08-11 additions above renumbered it) and is now closed —
 which is the reason this entry stays open rather than being written off
 as cosmetic. One member of this list turned out to be a real,
 production-affecting defect, so the others deserve checking rather than
