@@ -534,6 +534,7 @@ from ai_os_kernel.security_manager.token_verifier import (
     build_jwt_bearer_token_verifier,
     build_oidc_bearer_token_verifier,
 )
+from ai_os_kernel.traceability_engine.link_writer import SqlTraceLinkWriter
 from ai_os_kernel.workflow_engine.advance_runner import (
     WorkflowAdvanceRunner,
     WorkflowRunResult,
@@ -1952,6 +1953,18 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # WorkflowInstanceService instance _build_workflow_trigger builds
         # internally for writes.
         app.state.workflow_instance_repository = SqlWorkflowInstanceRepository(engine)
+        # The Traceability Engine's first real production write path
+        # (`P04-S02-M16-T04`, closing risk register R-018's own
+        # worst-case "proven but idle" instance: `SqlTraceLinkWriter`
+        # and both trace queries were `done` yet nothing in production
+        # ever constructed the writer). Set the moment a real engine
+        # exists, the identical optional-collaborator shape every
+        # `app.state` attribute here already follows —
+        # `routes/delivery_pipeline.py` records a real
+        # `workflow_run --produced--> documentation` link through it when
+        # a run genuinely produces its documentation, and treats its
+        # absence (a degraded, no-engine composition) as a clean no-op.
+        app.state.trace_link_writer = SqlTraceLinkWriter(engine)
         # IdempotencyKeyMiddleware's own real store — set the moment a
         # real engine exists, the identical lazy-population pattern
         # every other app.state collaborator here already follows; see

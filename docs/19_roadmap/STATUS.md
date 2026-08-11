@@ -6,11 +6,11 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-08-11 from 250 Task tickets.
+**Generated:** 2026-08-11 from 251 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 94%** (234.5 of 250 Task-equivalents complete)
+**Overall: 94%** (235.5 of 251 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -35,7 +35,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S05 Security and Human Approval | 10 | 10 | 0 | 0 | 100% |
 | P03 (C) | S06 Threat Controls | 2 | 2 | 0 | 0 | 100% |
 | P04 (D) | S01 Evaluation Engine | 11 | 11 | 0 | 0 | 100% |
-| P04 (D) | S02 Traceability Engine | 4 | 3 | 0 | 1 | 75% |
+| P04 (D) | S02 Traceability Engine | 5 | 4 | 0 | 1 | 80% |
 | P04 (D) | S03 Benchmarking Pack | 5 | 4 | 0 | 1 | 80% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 2 | 0 | 50% |
 | P05 (E) | S02 Project Intelligence Pack | 7 | 0 | 6 | 1 | 43% |
@@ -59,7 +59,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (Stage A) - Platform Skeleton | 47 | 46 | 98% |
 | P02 (Stage B) - Minimum Viable Kernel | 101 | 99 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
-| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 20 | 18 | 90% |
+| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 21 | 19 | 90% |
 | P05 (Stage E) - Project Intelligence | 9 | 0 | 44% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 7 | 77% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 75% |
@@ -70,7 +70,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 3 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
-- `P04-S02-M16-T04` Wire the Traceability Engine into a real production path
+- `P04-S02-M16-T05` Expose the Traceability Engine over §6.6 HTTP routes
 - `P04-S03-M34-T05` Declare the Benchmarking pack in a real manifest and entry point
 - `P05-S02-M32-T07` Declare the Project Intelligence pack's five Tools in a real manifest
 

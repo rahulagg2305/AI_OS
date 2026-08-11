@@ -660,16 +660,22 @@ to reach from any running code path.**
 
 Genuine instances, worst first:
 
-1. **Traceability Engine** (module 16). `P04-S02-M16-T01/T02/T03` are
-   all `done` and stage P04-S02 reports **100%**, yet there are zero
-   production importers of `traceability_engine` outside its own
-   package, zero production `SqlTraceLinkWriter` construction, and no
-   `/api/v1/traceability/*` route. `persistence/trace_schema.py`'s own
-   docstring already admitted "nothing writes a traceability link yet
-   either." **Ticketed 2026-08-11 as `P04-S02-M16-T04`.** Note the
-   honest tension this creates: those three tickets are `done` by the
-   letter of their own Output, so the percentage overstates reachable
-   capability until T04 lands.
+1. **Traceability Engine** (module 16) — **the writer half is now
+   closed (`P04-S02-M16-T04`, 2026-08-11); the read half is not.** When
+   this risk opened, `P04-S02-M16-T01/T02/T03` were all `done` and stage
+   P04-S02 reported 100%, yet there were zero production importers of
+   `traceability_engine` outside its own package, zero production
+   `SqlTraceLinkWriter` construction, and no `/api/v1/traceability/*`
+   route — `persistence/trace_schema.py`'s own docstring admitted
+   "nothing writes a traceability link yet either." T04 gave the writer
+   its first real production call site: `routes/delivery_pipeline.py`
+   now records a real `workflow_run --produced--> documentation` link
+   (bootstrap-wired `app.state.trace_link_writer`), proven end to end
+   against real Postgres through the real `build_app()` composition, with
+   a test that fails if the wiring is reverted. **Still open here**: the
+   read side (impact/coverage/§6.6 routes) remains unbuilt — ticketed
+   `P04-S02-M16-T05` — so a `/traceability/*` HTTP consumer still cannot
+   read what is now genuinely being written.
 2. **Benchmarking pack** (module 34) and **Project Intelligence pack**
    (module 32) have no `manifest.yaml` and no `pack.py`. Only two
    manifests exist repo-wide (`_template`, `software-engineering`), so

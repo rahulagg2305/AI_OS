@@ -42,13 +42,32 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ai_os_kernel.observability.logging import get_logger
 from ai_os_kernel.security_manager import WORKFLOW_START, SecurityContext, require_permission
+from ai_os_kernel.traceability_engine.errors import TraceabilityError
+from ai_os_kernel.traceability_engine.link_writer import TraceLinkWriter
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowRunOutcome
+from ai_os_kernel.workflow_engine.delivery_pipeline import record_documentation_traceability_link
+from ai_os_kernel.workflow_engine.instance import WorkflowInstance
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 
 router = APIRouter(prefix="/api/v1", tags=["delivery-pipeline"])
 
+_logger = get_logger(__name__)
+
 _DOCUMENTATION_STEP_ID = "documentation"
+
+# The two outcomes in which the `documentation` step has genuinely run
+# and persisted its output: a fully-completed run, and a run paused at
+# the definition's own `approve-git-push` human-approval step (which
+# sits *after* `documentation`). Reading `documentation_path` — and
+# recording the produced-documentation trace link — in the paused case
+# too is deliberate (product-owner decision, `P04-S02-M16-T04`): the
+# documentation artifact really exists the moment that step completes,
+# independent of the separate git-push approval still pending.
+_DOCUMENTATION_PRODUCED_OUTCOMES = frozenset(
+    {WorkflowRunOutcome.COMPLETED, WorkflowRunOutcome.WAITING_FOR_HUMAN}
+)
 
 
 class TriggerDeliveryPipelineRequest(BaseModel):
@@ -88,6 +107,14 @@ class TriggerDeliveryPipelineResponse(BaseModel):
     iterations: int
     error: str | None
     documentation_path: str | None
+    """The real documentation file this run produced, or ``None``. Now
+    populated for a ``waiting_for_human`` outcome too, not only
+    ``completed`` (`P04-S02-M16-T04`): the definition's own
+    ``approve-git-push`` human-approval step sits *after* ``documentation``,
+    so a run paused there has genuinely produced the file already —
+    reporting it is more honest than withholding it until the separate
+    git-push approval lands. ``None`` for a run that never reached the
+    ``documentation`` step (an early ``failed``)."""
 
 
 async def _read_documentation_path(
@@ -101,6 +128,53 @@ async def _read_documentation_path(
         return None
     path = documentation_outputs.get("documentationPath")
     return path if isinstance(path, str) else None
+
+
+async def _record_documentation_link_best_effort(
+    request: Request,
+    workflow_id: str,
+    last_instance: WorkflowInstance,
+    documentation_path: str,
+) -> None:
+    """Record the real ``workflow_run --produced--> documentation`` link
+    for this run — the Traceability Engine's first production write call
+    site (``P04-S02-M16-T04``, risk register R-018).
+
+    **Best-effort, and deliberately so.** By the time this runs, the
+    pipeline has genuinely produced a real documentation file and the
+    caller is about to return a real, successful response describing it.
+    A traceability side-record is an observability artifact, not the
+    run's primary deliverable — failing an already-successful pipeline
+    response because a secondary link write hit a transient database
+    error would be a real regression, so a :class:`TraceabilityError` is
+    logged at ``warning`` and swallowed here rather than propagated. The
+    catch is narrow on purpose: only the writer's own declared error
+    type, never a bare ``Exception`` that could hide an unrelated bug.
+    The happy path is proven by a real test, so a change that silently
+    stops writing the link fails that test rather than passing quietly.
+
+    A no-op when no ``trace_link_writer`` is wired (a degraded, no-engine
+    composition) — the identical "unconfigured means the real feature
+    does not run" shape every other optional ``app.state`` collaborator
+    already uses.
+    """
+    writer: TraceLinkWriter | None = getattr(request.app.state, "trace_link_writer", None)
+    if writer is None:
+        return
+    try:
+        await record_documentation_traceability_link(
+            writer,
+            workflow_id=workflow_id,
+            definition_id=last_instance.definition_id,
+            definition_version=last_instance.definition_version,
+            documentation_path=documentation_path,
+        )
+    except TraceabilityError:
+        _logger.warning(
+            "traceability.link_write_failed",
+            workflow_id=workflow_id,
+            documentation_path=documentation_path,
+        )
 
 
 @router.post("/workflows/se.delivery_pipeline", response_model=TriggerDeliveryPipelineResponse)
@@ -126,8 +200,13 @@ async def trigger_delivery_pipeline(
     repository: WorkflowInstanceRepository | None = getattr(
         request.app.state, "workflow_instance_repository", None
     )
-    if result.outcome is WorkflowRunOutcome.COMPLETED and repository is not None:
+    if result.outcome in _DOCUMENTATION_PRODUCED_OUTCOMES and repository is not None:
         documentation_path = await _read_documentation_path(repository, result.workflow_id)
+
+    if documentation_path is not None and result.last_instance is not None:
+        await _record_documentation_link_best_effort(
+            request, result.workflow_id, result.last_instance, documentation_path
+        )
 
     return TriggerDeliveryPipelineResponse(
         workflow_id=result.workflow_id,
