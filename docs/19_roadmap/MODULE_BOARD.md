@@ -6,7 +6,7 @@
 
 # AI_OS - Module Board
 
-**Generated:** 2026-08-10. Replaces `feature_inventory.md` §5's hand-maintained completion table.
+**Generated:** 2026-08-11. Replaces `feature_inventory.md` §5's hand-maintained completion table.
 
 Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retired and never reused.
 
@@ -27,9 +27,9 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M13 | Capability Manager | P02 | 8 | 8 | 100% |
 | M14 | Security Manager | P03+P07 | 12 | 12 | 100% |
 | M15 | Quality Gate Engine | P02 | 9 | 9 | 100% |
-| M16 | Traceability Engine | P04 | 3 | 3 | 100% |
+| M16 | Traceability Engine | P04 | 4 | 3 | 75% |
 | M17 | Event Bus | P02 | 3 | 3 | 100% |
-| M18 | Tool Invoker (SDK interface) | P02 | 3 | 3 | 100% |
+| M18 | Tool Invoker (SDK interface) | P02 | 4 | 4 | 100% |
 | M19 | Secrets Manager | P01+P07 | 7 | 7 | 100% |
 | M20 | Sandbox / SandboxExecutor | P03 | 5 | 4 | 90% |
 | M21 | Storage Service | P02 | 1 | 1 | 100% |
@@ -43,9 +43,9 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M29 | SE Pack - Agents | P03+P08 | 15 | 15 | 100% |
 | M30 | SE Pack - Workflows | P03+P08 | 8 | 8 | 100% |
 | M31 | SE Pack - Tools & Quality Gates | P03 | 4 | 4 | 100% |
-| M32 | Project Intelligence Pack | P05 | 6 | 0 | 50% |
+| M32 | Project Intelligence Pack | P05 | 7 | 0 | 43% |
 | M33 | Voice (Jarvis) Pack | P06 | 1 | 0 | 50% |
-| M34 | Benchmarking Pack | P04 | 4 | 4 | 100% |
+| M34 | Benchmarking Pack | P04 | 5 | 4 | 80% |
 | M36 | API (HTTP surface) | P02+P06 | 8 | 7 | 94% |
 | M37 | WebSocket stream | P06 | 1 | 1 | 100% |
 | M38 | CLI (aios) | P06 | 1 | 0 | 50% |

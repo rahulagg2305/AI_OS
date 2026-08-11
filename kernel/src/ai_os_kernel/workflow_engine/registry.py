@@ -288,6 +288,13 @@ def _bind_pack_context_if_receiver(
     sandbox: SandboxExecutor | None,
     git_service: GitIntegrationService | None,
     call_recorder: LLMCallRecorder | None = None,
+    # Quoted deliberately: this module has no `from __future__ import
+    # annotations`, so an unquoted annotation is evaluated at
+    # function-definition time — and `ToolRegistry` is defined further
+    # down this same file than this function is. Quoting it is the
+    # surgical fix; adding the __future__ import would change annotation
+    # semantics for every class in this large module at once.
+    tool_registry: "ToolRegistry | None" = None,
 ) -> None:
     """Shared by :class:`SqlAgentRegistry`/:class:`SqlToolRegistry`: if
     ``loaded`` implements
@@ -330,6 +337,20 @@ def _bind_pack_context_if_receiver(
     requires — recording an LLM call a tool happened to make under a
     tool id would write a wrong, not merely absent, row, so a tool's
     own resolution never receives either.
+
+    **``tool_registry`` (``P02-S05-M18-T04``, R-017) is forwarded only
+    when ``kind == "agent"``, the identical narrowing ``call_recorder``
+    above already uses — and for a concrete, structural reason, not
+    symmetry.** An *agent* invoking a manifest-declared Tool is the
+    documented pattern this parameter exists to finally make work (see
+    :func:`~ai_os_kernel.sdk_adapters.pack_context.build_pack_context`'s
+    own docstring for why it never worked before). A *tool* invoking
+    another tool is documented nowhere, and granting it would mean
+    :class:`SqlToolRegistry` handing out a ``PackContext`` able to
+    re-enter :class:`SqlToolRegistry` — a recursion this codebase has no
+    depth bound for. Withholding it keeps every tool's own
+    ``context.tools`` exactly as it is today (the sandbox shim), so this
+    change cannot alter any already-proven tool's behaviour.
     """
     if not isinstance(loaded, PackContextReceiver):
         return
@@ -347,6 +368,7 @@ def _bind_pack_context_if_receiver(
             git_service=git_service,
             agent_id=declared_id if kind == "agent" else None,
             call_recorder=call_recorder if kind == "agent" else None,
+            tool_registry=tool_registry if kind == "agent" else None,
         )
     except ValueError as exc:
         # A structural, permanent cause (retriable=False, the default)
@@ -500,6 +522,7 @@ class SqlAgentRegistry:
         sandbox: SandboxExecutor | None = None,
         git_service: GitIntegrationService | None = None,
         call_recorder: LLMCallRecorder | None = None,
+        tool_registry: ToolRegistry | None = None,
     ) -> None:
         self._engine = engine
         self._loader = loader or EntrypointLoader()
@@ -531,6 +554,27 @@ class SqlAgentRegistry:
         # above -- None means "no real call recording," never a crash,
         # for every existing caller/test that does not supply one.
         self._call_recorder = call_recorder
+        # tool_registry (P02-S05-M18-T04, R-017) DOES get a real default,
+        # unlike every optional parameter above -- and for a real reason,
+        # not inconsistency. The others need composition this class
+        # genuinely cannot do (secrets, env config, an audit writer);
+        # a catalog-backed ToolRegistry needs exactly one thing this
+        # constructor already holds, `engine`, plus the same loader and
+        # sandbox already resolved above. Defaulting it to None instead
+        # is precisely the bug R-017 records: `ToolInvokerAdapter`'s own
+        # `registry` already defaulted to None, so a second silent None
+        # here would have left manifest-declared Tools unreachable for
+        # every caller that did not know to opt in. An explicit argument
+        # still wins (tests inject a fake), and `SqlToolRegistry`
+        # resolves nothing until something really calls `resolve_tool`,
+        # so constructing one eagerly costs a single object.
+        self._tool_registry = tool_registry or SqlToolRegistry(
+            engine,
+            self._loader,
+            llm_gateway=llm_gateway,
+            prompt_engine=prompt_engine,
+            sandbox=self._sandbox,
+        )
 
     async def resolve_agent(
         self,
@@ -617,6 +661,7 @@ class SqlAgentRegistry:
             sandbox=self._sandbox,
             git_service=self._git_service,
             call_recorder=self._call_recorder,
+            tool_registry=self._tool_registry,
         )
 
         return loaded

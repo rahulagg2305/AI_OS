@@ -44,6 +44,7 @@ future step's input.
 from __future__ import annotations
 
 from collections.abc import Collection
+from typing import TYPE_CHECKING
 
 from ai_os_kernel.capability_manager.pack_contract import PackContext
 from ai_os_kernel.git_integration.service import GitIntegrationService
@@ -54,6 +55,18 @@ from ai_os_kernel.sandbox.executor import SandboxExecutor
 from ai_os_kernel.sdk_adapters.llm_gateway_adapter import LLMGatewayAdapter
 from ai_os_kernel.sdk_adapters.prompt_registry_adapter import PromptRegistryAdapter
 from ai_os_kernel.sdk_adapters.tool_invoker_adapter import ToolInvokerAdapter
+
+if TYPE_CHECKING:
+    # Import-time-only, deliberately: importing
+    # `ai_os_kernel.workflow_engine.registry` at module level here would
+    # re-create the exact circular import
+    # `registry._bind_pack_context_if_receiver` defers its own
+    # `build_pack_context` import to call time to break (see that
+    # function's own docstring for the full chain). `ToolRegistry` is a
+    # Protocol used only as an annotation, and `from __future__ import
+    # annotations` above makes every annotation a string, so it is
+    # genuinely never needed at runtime.
+    from ai_os_kernel.workflow_engine.registry import ToolRegistry
 
 _LLM_PERMISSION = "llm:invoke"
 _SANDBOX_PERMISSION = "sandbox:execute"
@@ -71,6 +84,7 @@ def build_pack_context(
     git_service: GitIntegrationService | None = None,
     agent_id: str | None = None,
     call_recorder: LLMCallRecorder | None = None,
+    tool_registry: ToolRegistry | None = None,
 ) -> PackContext:
     """Build the real ``PackContext`` one entrypoint should receive,
     given *that entrypoint's own* declared ``permissions`` (see this
@@ -132,6 +146,26 @@ def build_pack_context(
     passes ``agent_id`` either (a tool's id is not a real
     ``catalog.agents`` foreign key, so recording under it would be
     incorrect, not merely unimplemented).
+
+    **``tool_registry`` (``P02-S05-M18-T04``, risk register R-017) is the
+    parameter whose absence made every manifest-declared Tool
+    unreachable in production for as long as they have existed.**
+    ``P02-S05-M18-T03`` built the real registry-resolution path inside
+    :class:`~ai_os_kernel.sdk_adapters.tool_invoker_adapter.
+    ToolInvokerAdapter` behind an optional ``registry`` parameter that
+    defaults to ``None`` "for backward compatibility" — and this
+    function, the *only* production construction site of that adapter,
+    never passed one. The result was silent and total: an agent calling
+    ``context.tools.invoke("fs.read", ...)`` got
+    :class:`~ai_os_sdk.errors.UnknownToolError`, because only the
+    ``platform.sandbox.run_command`` shim was reachable. Three separate
+    places had already disclosed that ``fs.read``/``build.run`` were
+    "not yet adopted by any agent" (that ticket, the manifest's own tool
+    descriptions, and this codebase's own audit) — but none recorded
+    that adoption was *impossible*, which is why it survived so long.
+    Defaults to ``None``, so a caller that genuinely has no catalog
+    behind it (every unit test, ``InMemoryAgentRegistry``) is unchanged
+    and still gets the shim-only adapter.
     """
     llm: KernelLLMGatewayProtocol | LLMGatewayAdapter | None = None
     prompts: PromptEngine | PromptRegistryAdapter | None = None
@@ -155,6 +189,7 @@ def build_pack_context(
             )
         tools = ToolInvokerAdapter(
             sandbox,
+            registry=tool_registry,
             git_service=git_service if _GIT_PERMISSION in permissions else None,
         )
 

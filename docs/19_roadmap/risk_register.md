@@ -12,10 +12,20 @@ significant rework) · **L** (contained).
 
 **Reviewed 2026-07-31 (R1–R4 final closeout); R-008 and R-009 closed
 2026-08-01; R-014 opened and closed 2026-08-09; R-015 opened and closed
-2026-08-09; R-016 opened 2026-08-10.** 13 closed, 2 open (R-006, an
-accepted baseline, not pending action; R-016, a real, unaddressed
-Workflow Engine design gap) plus R-001 (a permanent standing rule, not
-a risk pending closure).
+2026-08-09; R-016 opened 2026-08-10; R-017 opened and closed 2026-08-11;
+R-018 opened 2026-08-11.** 14 closed, 3 open (R-006, an accepted
+baseline, not pending action; R-016, a real, unaddressed Workflow Engine
+design gap; R-018, the "proven but idle" sweep, partially ticketed) plus
+R-001 (a permanent standing rule, not a risk pending closure).
+
+**R-017 and R-018 both came from one whole-project health audit
+(2026-08-11), not from normal step-by-step work — and could not have.**
+`CLAUDE.md`'s Core process rule deliberately restricts a development
+step to its own ticket and direct dependencies, which structurally
+cannot surface "this module is complete but nothing calls it," because
+that fact lives *between* modules. R-017 was a real, production-affecting
+defect found this way. Treat periodic audits as the intended counterweight
+to that rule, not as evidence it failed.
 
 | ID | Risk | Sev | Status | Owner decision |
 |---|---|---|---|---|
@@ -35,6 +45,8 @@ a risk pending closure).
 | R-014 | No CI job ever ran any Capability Pack's own `tests/` | M | **Closed** 2026-08-09 | — |
 | R-015 | Local-HTTP-server tests flaky under full local suite runs (never on real CI) | L | **Closed** 2026-08-09 | — |
 | R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Open — real, undecided design question** | Product owner, 2026-08-10 |
+| R-017 | Manifest-declared Tools were unreachable in production — no caller ever passed a `ToolRegistry` | M | **Closed** 2026-08-11 (`P02-S05-M18-T04`) | — |
+| R-018 | "Proven but idle": real, tested subsystems with zero production reachability (Traceability Engine at 100% `done`; two packs with no manifest) | M | **Open — partially ticketed** | Health audit, 2026-08-11 |
 
 ---
 
@@ -567,3 +579,133 @@ retry-exhaustion policy for the worker loop (bound, persistence,
 whether "retry forever" is in fact an intentional resilience choice
 that should stay undisturbed), before `/retry` itself can be built
 against something real.
+
+---
+
+### R-017 — Manifest-declared Tools were unreachable in production *(closed)*
+
+Found 2026-08-11 by the full-project health audit; fixed the same day
+by `P02-S05-M18-T04`. **Closed, but recorded in full because the
+*shape* of this bug is the valuable part, not the one-line fix.**
+
+**What was actually wrong.** `P02-S05-M18-T03` built the real
+registry-resolution path inside
+`ai_os_kernel.sdk_adapters.tool_invoker_adapter.ToolInvokerAdapter`,
+behind an optional `registry: ToolRegistry | None = None` parameter,
+explicitly documented as "Backward compatible: `registry` defaults to
+`None`, unchanged behavior for every existing caller." That was true
+and reasonable. What no one checked afterwards is that
+`ai_os_kernel.sdk_adapters.pack_context.build_pack_context` — the
+**single** production construction site of that adapter, reached for
+every agent resolved through `SqlAgentRegistry` — never passed it.
+`SqlToolRegistry` was therefore never constructed anywhere in
+production code at all (`grep` for `SqlToolRegistry(` across
+`kernel/src/` returned zero hits). Every agent's `context.tools` could
+reach only the `platform.sandbox.run_command` shim;
+`_invoke_registered_tool` raised `UnknownToolError` for every real
+`tool_id`. The two real, manifest-declared Tools (`fs.read`,
+`build.run`, `P03-S04-M31-T02`) had been unreachable from any agent for
+their entire existence.
+
+**Why it survived so long — the transferable lesson.** Three separate
+places had already disclosed that those Tools were "not yet adopted by
+any agent": `P03-S04-M31-T02`'s own ticket body, both tool descriptions
+in `capability_packs/software-engineering/manifest.yaml`, and the
+roadmap's own module rows. Every one of those readings is compatible
+with "adoption is pending work someone will do later." **None of them
+recorded that adoption was structurally impossible.** The gap between
+"not done yet" and "cannot be done" is exactly what went unnoticed.
+
+The test suite could not catch it either, and that is the second half
+of the lesson: every prior proof — including
+`test_a_real_pack_declared_tier1_sandboxed_tool_resolves_and_genuinely_reads_a_real_file`
+— hand-constructed `ToolInvokerAdapter(sandbox, registry=registry)`
+itself. Those tests genuinely proved the *mechanism*, and passed
+forever, while the production *wiring* of that mechanism did not exist.
+**A test that injects a collaborator by hand can never prove the
+production composition injects it too.** The regression test added with
+this fix
+(`test_a_resolved_agent_can_genuinely_invoke_a_manifest_declared_tool`)
+deliberately does the opposite: it resolves a real agent through
+`SqlAgentRegistry` with no `tool_registry=` argument at all, and asserts
+on the context the registry itself built. Reverting the one-line fix
+makes it fail with the exact original `UnknownToolError` — verified,
+not assumed.
+
+**The fix.** `tool_registry` threaded through
+`SqlAgentRegistry.__init__` → `_bind_pack_context_if_receiver` →
+`build_pack_context` → `ToolInvokerAdapter(registry=...)`. Unlike every
+other optional collaborator on `SqlAgentRegistry`, it gets a **real
+default** (`SqlToolRegistry` over the engine the constructor already
+holds), specifically so that a second silent `None` cannot recreate this
+bug for a caller who does not know to opt in. Deliberately scoped to the
+**agent** path only: forwarding it on the tool path would let
+`SqlToolRegistry` hand out a context able to re-enter `SqlToolRegistry`,
+an unbounded recursion with no depth limit anywhere in this codebase,
+and tool-invokes-tool is documented nowhere. That decision is itself
+asserted by a test, not merely written down here.
+
+### R-018 — "Proven but idle": real subsystems with zero production reachability
+
+Opened 2026-08-11 by the full-project health audit. **Open, and only
+partially ticketed** — the entries below that have tickets are named;
+the rest are recorded here so they cannot go invisible again.
+
+The audit swept every module marked `done` or `partial` for real
+production reachability (`grep` for importers outside the module's own
+package, construction sites, and route registration). It found a
+recurring pattern the roadmap emits no signal for: **a subsystem can be
+fully built, fully tested, and marked 100% `done` while being impossible
+to reach from any running code path.**
+
+Genuine instances, worst first:
+
+1. **Traceability Engine** (module 16). `P04-S02-M16-T01/T02/T03` are
+   all `done` and stage P04-S02 reports **100%**, yet there are zero
+   production importers of `traceability_engine` outside its own
+   package, zero production `SqlTraceLinkWriter` construction, and no
+   `/api/v1/traceability/*` route. `persistence/trace_schema.py`'s own
+   docstring already admitted "nothing writes a traceability link yet
+   either." **Ticketed 2026-08-11 as `P04-S02-M16-T04`.** Note the
+   honest tension this creates: those three tickets are `done` by the
+   letter of their own Output, so the percentage overstates reachable
+   capability until T04 lands.
+2. **Benchmarking pack** (module 34) and **Project Intelligence pack**
+   (module 32) have no `manifest.yaml` and no `pack.py`. Only two
+   manifests exist repo-wide (`_template`, `software-engineering`), so
+   the Manifest Loader can never discover either pack. **Ticketed as
+   `P04-S03-M34-T05` and `P05-S02-M32-T07`.** A correction the audit
+   itself made while filing: its first claim that this blocks
+   `api_architecture.md` §6.3 (Experiments) is **wrong** —
+   `evaluation.experiments`, `SqlExperimentRunRecorder` and
+   `comparison_computer` are all real, and the Kernel's own integration
+   tests already import the Benchmarking pack as a plain library. §6.3
+   needs **routes**, not a manifest.
+3. **`evaluation_engine/reporting_interface.py`** — zero importers
+   anywhere. **`comparison_computer.py`** — imported only from inside
+   its own package. Not ticketed.
+4. **`ParallelStepExecutor`/`SubWorkflowStepExecutor`** — zero
+   production construction; `parallel`/`sub_workflow` used by 0 of 27
+   real workflow steps. (`ForeachStepExecutor` **is** wired.) Accepted:
+   ADR-0021 step types built ahead of a consumer, already disclosed.
+5. **`voice_jarvis`** — zero production importers outside its own
+   package, no route, no entry point. Consistent with M25/M33 `partial`.
+6. **7 of 16 Software Engineering agents** are referenced by no real
+   workflow (`api-designer`, `database`, `frontend-developer`,
+   `performance`, `refactoring`, `release`, `security-analysis`).
+   Accepted: a pack catalogue legitimately ships more agents than any
+   one workflow uses.
+
+**R-017 was originally item 7 of this same list** and is now closed —
+which is the reason this entry stays open rather than being written off
+as cosmetic. One member of this list turned out to be a real,
+production-affecting defect, so the others deserve checking rather than
+assuming.
+
+**Why normal step-by-step work cannot find these.** `CLAUDE.md`'s Core
+process rule — read only your own ticket and its direct dependencies —
+is correct for execution and deliberately prevents cross-module reading.
+It therefore *structurally cannot* surface "this module is complete but
+nothing calls it," because that fact lives between modules. Periodic
+whole-project audits are the intended counterweight, not a sign the
+process failed.

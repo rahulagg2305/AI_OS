@@ -6,11 +6,11 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-08-10 from 246 Task tickets.
+**Generated:** 2026-08-11 from 250 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 95%** (233.5 of 246 Task-equivalents complete)
+**Overall: 94%** (234.5 of 250 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -24,7 +24,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (B) | S02 LLM Gateway | 12 | 12 | 0 | 0 | 100% |
 | P02 (B) | S03 Prompt and Context Assembly | 20 | 19 | 0 | 1 | 95% |
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 13 | 0 | 1 | 93% |
-| P02 (B) | S05 Capability Manager and Platform SDK | 19 | 19 | 0 | 0 | 100% |
+| P02 (B) | S05 Capability Manager and Platform SDK | 20 | 20 | 0 | 0 | 100% |
 | P02 (B) | S06 Quality Gate Engine | 9 | 9 | 0 | 0 | 100% |
 | P02 (B) | S07 Platform Services and Error Model | 7 | 7 | 0 | 0 | 100% |
 | P02 (B) | S08 Kernel HTTP Surface | 4 | 4 | 0 | 0 | 100% |
@@ -35,10 +35,10 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S05 Security and Human Approval | 10 | 10 | 0 | 0 | 100% |
 | P03 (C) | S06 Threat Controls | 2 | 2 | 0 | 0 | 100% |
 | P04 (D) | S01 Evaluation Engine | 11 | 11 | 0 | 0 | 100% |
-| P04 (D) | S02 Traceability Engine | 3 | 3 | 0 | 0 | 100% |
-| P04 (D) | S03 Benchmarking Pack | 4 | 4 | 0 | 0 | 100% |
+| P04 (D) | S02 Traceability Engine | 4 | 3 | 0 | 1 | 75% |
+| P04 (D) | S03 Benchmarking Pack | 5 | 4 | 0 | 1 | 80% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 2 | 0 | 50% |
-| P05 (E) | S02 Project Intelligence Pack | 6 | 0 | 6 | 0 | 50% |
+| P05 (E) | S02 Project Intelligence Pack | 7 | 0 | 6 | 1 | 43% |
 | P06 (F) | S01 API Completion and Published Contract | 4 | 3 | 1 | 0 | 88% |
 | P06 (F) | S02 Realtime Stream | 1 | 1 | 0 | 0 | 100% |
 | P06 (F) | S03 Dashboard | 3 | 3 | 0 | 0 | 100% |
@@ -57,10 +57,10 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 46 | 98% |
-| P02 (Stage B) - Minimum Viable Kernel | 100 | 98 | 98% |
+| P02 (Stage B) - Minimum Viable Kernel | 101 | 99 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
-| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 18 | 18 | 100% |
-| P05 (Stage E) - Project Intelligence | 8 | 0 | 50% |
+| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 20 | 18 | 90% |
+| P05 (Stage E) - Project Intelligence | 9 | 0 | 44% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 7 | 77% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 75% |
 | P08 (Stage H) - Expansion | 9 | 9 | 100% |
@@ -68,8 +68,11 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-0 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+3 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
+- `P04-S02-M16-T04` Wire the Traceability Engine into a real production path
+- `P04-S03-M34-T05` Declare the Benchmarking pack in a real manifest and entry point
+- `P05-S02-M32-T07` Declare the Project Intelligence pack's five Tools in a real manifest
 
 ## Dependency review signal
 

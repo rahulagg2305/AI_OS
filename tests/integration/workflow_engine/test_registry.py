@@ -28,7 +28,7 @@ from alembic.config import Config
 
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.sandbox.executor import LocalSubprocessSandbox
-from ai_os_kernel.sdk_adapters.tool_invoker_adapter import ToolInvokerAdapter
+from ai_os_kernel.sdk_adapters.tool_invoker_adapter import ToolInvokerAdapter, UnknownToolError
 from ai_os_kernel.workflow_engine.agent import EchoAgent
 from ai_os_kernel.workflow_engine.errors import (
     AgentNotRegisteredError,
@@ -1133,6 +1133,142 @@ def test_list_all_reports_a_real_missing_pack_honestly(database_url: str) -> Non
             assert matching.pack_id == "se.pack_that_does_not_exist"
             assert matching.pack_state is None
             assert matching.pack_version is None
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_a_resolved_agent_can_genuinely_invoke_a_manifest_declared_tool(
+    database_url: str, tmp_path: Path
+) -> None:
+    """R-017 / `P02-S05-M18-T04`: the real production path — resolve an
+    agent through `SqlAgentRegistry`, then invoke a *manifest-declared*
+    Tool through that agent's own bound `context.tools`.
+
+    **This is the case that was impossible before this ticket**, and the
+    reason it went unnoticed for so long is worth stating: every prior
+    proof (including
+    `test_a_real_pack_declared_tier1_sandboxed_tool_resolves_and_genuinely_reads_a_real_file`
+    above) hand-constructed `ToolInvokerAdapter(sandbox, registry=...)`
+    itself, so the mechanism was genuinely proven — while the one real
+    production construction site
+    (`sdk_adapters.pack_context.build_pack_context`) silently never
+    passed `registry` at all, leaving `_invoke_registered_tool` to raise
+    `UnknownToolError` for every real tool_id in production. A test that
+    injects the registry by hand can never catch that; this one resolves
+    a real agent and asserts on the context the *registry itself* built.
+    """
+
+    async def _run() -> None:
+        real_file = tmp_path / "greeting.py"
+        real_file.write_text('print("real file, real tool, real agent")', encoding="utf-8")
+
+        await _seed_pack(
+            database_url,
+            pack_id="se.r017_pack",
+            state="activated",
+            manifest={"permissions": ["sandbox:execute"]},
+        )
+        await _seed_tool(
+            database_url,
+            tool_id="se.r017_fs_read",
+            entrypoint="ai_os_pack_software_engineering.tools.fs_read:FsReadToolEntrypoint",
+            trust_tier="tier1_sandboxed",
+            pack_id="se.r017_pack",
+            required_permissions=["sandbox:execute"],
+        )
+        # `qa-test`'s own real entrypoint: a genuine PackContextReceiver
+        # declaring only `sandbox:execute`, so no LLM gateway or prompt
+        # engine has to be composed to resolve it.
+        await _seed_agent(
+            database_url,
+            agent_id="se.r017_qa_test",
+            entrypoint="ai_os_pack_software_engineering.agents.verification:TestAgentEntrypoint",
+            pack_id="se.r017_pack",
+            required_permissions=["sandbox:execute"],
+        )
+
+        engine = build_engine(database_url)
+        try:
+            sandbox = LocalSubprocessSandbox()
+            # No `tool_registry=` argument: the whole point is that the
+            # real default now wires one, so an ordinary caller gets a
+            # working `context.tools` without knowing to opt in.
+            agent_registry = SqlAgentRegistry(engine, sandbox=sandbox)
+
+            resolved = await agent_registry.resolve_agent("se.r017_qa_test")
+
+            # `resolve_agent` returns the loaded entrypoint itself, and
+            # `TestAgentEntrypoint` stores its bound context on
+            # `_context` (its own `bind_pack_context` contract). Reading
+            # it here is deliberate: the assertion under test is about
+            # what the *registry* injected, which is only observable
+            # through the object it injected it into. Via `getattr`
+            # because the declared return type is the `Agent` Protocol,
+            # which correctly has no such attribute — `mypy --strict`
+            # rejects the direct access, and it is right to.
+            context = getattr(resolved, "_context", None)
+            assert context is not None, "the registry never bound a PackContext at all"
+            assert context.tools is not None, "sandbox:execute was declared but tools is None"
+
+            result = await context.tools.invoke(
+                "se.r017_fs_read",
+                {"filePath": str(real_file), "workingDirectory": str(tmp_path)},
+            )
+
+            assert result.status is ToolStatus.SUCCESS
+            assert result.outputs == {"content": 'print("real file, real tool, real agent")'}
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_a_resolved_tool_deliberately_cannot_reach_other_manifest_declared_tools(
+    database_url: str, tmp_path: Path
+) -> None:
+    """The other half of `P02-S05-M18-T04`'s scope decision, asserted
+    rather than merely written down: `tool_registry` is forwarded only on
+    the *agent* path. A tool's own `context.tools` stays exactly as it
+    was — the sandbox shim only — because `SqlToolRegistry` handing out a
+    context able to re-enter `SqlToolRegistry` is an unbounded recursion
+    this codebase has no depth limit for, and tool-invokes-tool is
+    documented nowhere.
+
+    Uses `build.run`, whose entrypoint is a real `PackContextReceiver`
+    (unlike `fs.read`), so a context genuinely is built for it.
+    """
+
+    async def _run() -> None:
+        await _seed_pack(
+            database_url,
+            pack_id="se.r017_tool_pack",
+            state="activated",
+            manifest={"permissions": ["sandbox:execute"]},
+        )
+        await _seed_tool(
+            database_url,
+            tool_id="se.r017_build_run",
+            entrypoint="ai_os_pack_software_engineering.tools.build_run:BuildRunToolEntrypoint",
+            trust_tier="tier1_sandboxed",
+            pack_id="se.r017_tool_pack",
+            required_permissions=["sandbox:execute"],
+        )
+
+        engine = build_engine(database_url)
+        try:
+            registry = SqlToolRegistry(engine, sandbox=LocalSubprocessSandbox())
+            resolved = await registry.resolve_tool("se.r017_build_run")
+
+            # Whatever context this tool received, it must not carry a
+            # registry — asserted through behaviour, not a private attr.
+            context = getattr(resolved, "_context", None)
+            if context is not None and context.tools is not None:
+                with pytest.raises(UnknownToolError):
+                    await context.tools.invoke(
+                        "se.r017_build_run", {"command": ["true"], "workingDirectory": "."}
+                    )
         finally:
             await engine.dispose()
 
