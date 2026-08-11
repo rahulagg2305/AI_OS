@@ -106,9 +106,23 @@ EVALUATION_READ = "evaluation:read"
 # approvals, the identical "nothing documented, no grant" discipline
 # already applied to packs/secrets/configuration above.
 APPROVAL_READ = "approval:read"
+# api_architecture.md §5's own documented row ("experiment:read /
+# experiment:run | Read / launch experiments"), added (P04-S01-M12-T12)
+# the moment a real route (POST /api/v1/experiments) first needs to
+# enforce a write. Only the write half is a new constant here: the read
+# half (`experiment:read`) is already covered by EVALUATION_READ, whose
+# own comment above names "experiments" — this codebase never split the
+# two, and both `GET /experiments` and `GET /gates/results` read under
+# `evaluation:read`. §5 names no separate "define" permission, so both
+# defining and (the future) launching an experiment fall under this one
+# write capability, granted to exactly the `operator`/`maintainer`/
+# `admin` roles §4.2's own table documents as able to "run experiments"
+# (viewer/approver read only) — reusing §5's documented vocabulary
+# rather than inventing a third string.
+EXPERIMENT_RUN = "experiment:run"
 
 # authentication_authorization.md §4.2's role table, reduced to the
-# seven permissions modelled above. Unknown roles grant nothing (deny by
+# permissions modelled above. Unknown roles grant nothing (deny by
 # default) — see permissions_for_roles.
 #
 # CONFIG_READ/CONFIG_MANAGE (P06-S01-M36-T04) follow the identical
@@ -120,7 +134,9 @@ APPROVAL_READ = "approval:read"
 # reasoning already applied to packs.
 _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "viewer": frozenset({WORKFLOW_READ, EVALUATION_READ}),
-    "operator": frozenset({WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ}),
+    "operator": frozenset(
+        {WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ, EXPERIMENT_RUN}
+    ),
     "approver": frozenset({WORKFLOW_READ, EVALUATION_READ, APPROVAL_READ}),
     "maintainer": frozenset(
         {
@@ -132,6 +148,7 @@ _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             CONFIG_READ,
             CONFIG_MANAGE,
             EVALUATION_READ,
+            EXPERIMENT_RUN,
         }
     ),
     "admin": frozenset(
@@ -146,6 +163,7 @@ _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             CONFIG_MANAGE,
             EVALUATION_READ,
             APPROVAL_READ,
+            EXPERIMENT_RUN,
         }
     ),
 }

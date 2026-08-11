@@ -33,3 +33,10 @@ def new_approval_id() -> str:
 
 def new_run_manifest_id() -> str:
     return f"rm_{ULID()}"
+
+
+def new_experiment_id() -> str:
+    # An evaluation-engine id (like `new_gate_result_id` above, which also
+    # lives here rather than in `evaluation_engine`) — this module is this
+    # codebase's single home for prefixed-ULID factories, data_model.md §2.
+    return f"exp_{ULID()}"

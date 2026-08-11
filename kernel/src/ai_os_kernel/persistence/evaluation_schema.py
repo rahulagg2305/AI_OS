@@ -19,14 +19,22 @@ needed at the time. Both gaps are now resolved and recorded in
 data_model.md §6 (see ``llm_calls``' own note below), so this module now
 covers the full ``evaluation`` schema §6 documents.
 
-Schema and migration only — no writer for any of the six. §6 describes
-``run_manifests`` as "the complete pinned-conditions bundle required by
-ADR-0022 (Reproducibility over Determinism)"; ``experiment_runs`` records
-one variant/replicate of a running experiment; ``experiments`` is the
-experiment definition itself; ``gate_results`` records one Quality Gate
-Engine evaluation; ``metrics`` records one measured value produced
-somewhere in a workflow run; ``llm_calls`` is "the single authoritative
-record of model spend" (§6's own words) for one LLM Gateway call. No
+This docstring's original "Schema and migration only — no writer for
+any of the six" is now stale — real writers landed incrementally:
+``gate_results``/``run_manifests``/``llm_calls``/``metrics`` all gained
+one (see ``evaluation_engine.md``'s own Implementation Status), and
+``experiments`` gained ``evaluation_engine.experiment_repository.
+SqlExperimentRepository`` (``P04-S01-M12-T12``, ``POST /api/v1/
+experiments``). Only ``experiment_runs`` still has no writer — it is
+materialised by ``POST /experiments/{id}/run`` (a later ticket). §6
+describes ``run_manifests`` as "the complete pinned-conditions bundle
+required by ADR-0022 (Reproducibility over Determinism)";
+``experiment_runs`` records one variant/replicate of a running
+experiment; ``experiments`` is the experiment definition itself;
+``gate_results`` records one Quality Gate Engine evaluation; ``metrics``
+records one measured value produced somewhere in a workflow run;
+``llm_calls`` is "the single authoritative record of model spend" (§6's
+own words) for one LLM Gateway call. No
 Evaluation Engine, Quality Gate Engine, or LLM Gateway exists yet to
 define, run, evaluate, call, or record any of them.
 

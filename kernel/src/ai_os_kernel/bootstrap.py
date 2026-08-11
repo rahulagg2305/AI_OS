@@ -514,6 +514,7 @@ from ai_os_kernel.routes.approvals import router as approvals_router
 from ai_os_kernel.routes.config import router as config_router
 from ai_os_kernel.routes.delivery_pipeline import router as delivery_pipeline_router
 from ai_os_kernel.routes.evaluation import router as evaluation_router
+from ai_os_kernel.routes.experiments import router as experiments_router
 from ai_os_kernel.routes.gates import router as gates_router
 from ai_os_kernel.routes.health import router as health_router
 from ai_os_kernel.routes.idempotency import IdempotencyKeyMiddleware, SqlIdempotencyKeyStore
@@ -2241,6 +2242,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.include_router(approvals_router)
     app.include_router(agents_router)
     app.include_router(gates_router)
+    app.include_router(experiments_router)
     app.include_router(traceability_router)
     app.include_router(packs_router)
     app.include_router(role_administration_router)

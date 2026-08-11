@@ -7,6 +7,7 @@ from ai_os_kernel.security_manager.permissions import (
     CONFIG_MANAGE,
     CONFIG_READ,
     EVALUATION_READ,
+    EXPERIMENT_RUN,
     PACK_MANAGE,
     PACK_READ,
     SECRET_ACCESS,
@@ -27,7 +28,7 @@ def test_operator_can_read_start_and_control_workflows() -> None:
     permissions = permissions_for_roles(["operator"])
 
     assert permissions == frozenset(
-        {WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ}
+        {WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ, EXPERIMENT_RUN}
     )
 
 
@@ -48,6 +49,7 @@ def test_maintainer_and_admin_can_read_start_and_control_workflows() -> None:
             CONFIG_READ,
             CONFIG_MANAGE,
             EVALUATION_READ,
+            EXPERIMENT_RUN,
         }
     )
     assert permissions_for_roles(["admin"]) == frozenset(
@@ -62,6 +64,7 @@ def test_maintainer_and_admin_can_read_start_and_control_workflows() -> None:
             CONFIG_MANAGE,
             EVALUATION_READ,
             APPROVAL_READ,
+            EXPERIMENT_RUN,
         }
     )
 
@@ -136,7 +139,7 @@ def test_multiple_roles_union_their_permissions() -> None:
     permissions = permissions_for_roles(["viewer", "operator"])
 
     assert permissions == frozenset(
-        {WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ}
+        {WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ, EXPERIMENT_RUN}
     )
 
 

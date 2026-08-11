@@ -469,6 +469,134 @@
         "title": "DecisionCondition",
         "type": "object"
       },
+      "ExperimentDefinitionInput": {
+        "description": "The raw, caller-supplied experiment definition \u2014 the body\n``POST /api/v1/experiments`` accepts. ``created_by`` is deliberately\nabsent: it is the authenticated principal's own id, never a\nclient-declared field (the \"who did this comes from authentication\"\nconvention ``start_workflow``/pack-lifecycle already establish).",
+        "properties": {
+          "definition_id": {
+            "title": "Definition Id",
+            "type": "string"
+          },
+          "definition_version": {
+            "title": "Definition Version",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pinned_conditions": {
+            "additionalProperties": true,
+            "title": "Pinned Conditions",
+            "type": "object"
+          },
+          "runs_per_variant": {
+            "title": "Runs Per Variant",
+            "type": "integer"
+          },
+          "variables": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Variables",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "definition_id",
+          "definition_version",
+          "variables",
+          "runs_per_variant"
+        ],
+        "title": "ExperimentDefinitionInput",
+        "type": "object"
+      },
+      "ExperimentListResponse": {
+        "description": "The documented collection envelope (``{\"items\": [...]}``), the same\nshape ``GET /gates/results`` uses. Unpaginated \u2014 experiments are a\ngenuinely small, human-defined set (see the repository's own note).",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExperimentRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ExperimentListResponse",
+        "type": "object"
+      },
+      "ExperimentRecord": {
+        "description": "One real, persisted ``evaluation.experiments`` row \u2014 the read model\n``GET /experiments``/``GET /experiments/{id}`` return.",
+        "properties": {
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "definition_id": {
+            "title": "Definition Id",
+            "type": "string"
+          },
+          "definition_version": {
+            "title": "Definition Version",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pinned_conditions": {
+            "additionalProperties": true,
+            "title": "Pinned Conditions",
+            "type": "object"
+          },
+          "runs_per_variant": {
+            "title": "Runs Per Variant",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "variables": {
+            "additionalProperties": true,
+            "title": "Variables",
+            "type": "object"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "name",
+          "description",
+          "definition_id",
+          "definition_version",
+          "variables",
+          "pinned_conditions",
+          "runs_per_variant",
+          "status",
+          "created_by"
+        ],
+        "title": "ExperimentRecord",
+        "type": "object"
+      },
       "FeatureFlagState": {
         "description": "One real, resolved feature flag \u2014 declared by at least one\nactivated pack's own manifest, current value resolved through the\nidentical layered precedence every other real caller uses.",
         "properties": {
@@ -2721,6 +2849,123 @@
         "summary": "Get Cost And Quality Report",
         "tags": [
           "evaluation"
+        ]
+      }
+    },
+    "/api/v1/experiments": {
+      "get": {
+        "operationId": "list_experiments_api_v1_experiments_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Experiments",
+        "tags": [
+          "experiments"
+        ]
+      },
+      "post": {
+        "operationId": "create_experiment_api_v1_experiments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentDefinitionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/api/v1/experiments/{experiment_id}": {
+      "get": {
+        "operationId": "get_experiment_api_v1_experiments__experiment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Experiment",
+        "tags": [
+          "experiments"
         ]
       }
     },

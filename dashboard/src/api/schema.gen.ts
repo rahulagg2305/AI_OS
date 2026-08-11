@@ -140,6 +140,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/experiments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Experiments */
+        get: operations["list_experiments_api_v1_experiments_get"];
+        put?: never;
+        /** Create Experiment */
+        post: operations["create_experiment_api_v1_experiments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiments/{experiment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Experiment */
+        get: operations["get_experiment_api_v1_experiments__experiment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/gates/results": {
         parameters: {
             query?: never;
@@ -756,6 +791,75 @@ export interface components {
             field: string;
             /** Sourcestepid */
             sourceStepId: string;
+        };
+        /**
+         * ExperimentDefinitionInput
+         * @description The raw, caller-supplied experiment definition — the body
+         *     ``POST /api/v1/experiments`` accepts. ``created_by`` is deliberately
+         *     absent: it is the authenticated principal's own id, never a
+         *     client-declared field (the "who did this comes from authentication"
+         *     convention ``start_workflow``/pack-lifecycle already establish).
+         */
+        ExperimentDefinitionInput: {
+            /** Definition Id */
+            definition_id: string;
+            /** Definition Version */
+            definition_version: string;
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+            /** Pinned Conditions */
+            pinned_conditions?: {
+                [key: string]: unknown;
+            };
+            /** Runs Per Variant */
+            runs_per_variant: number;
+            /** Variables */
+            variables: {
+                [key: string]: string[];
+            };
+        };
+        /**
+         * ExperimentListResponse
+         * @description The documented collection envelope (``{"items": [...]}``), the same
+         *     shape ``GET /gates/results`` uses. Unpaginated — experiments are a
+         *     genuinely small, human-defined set (see the repository's own note).
+         */
+        ExperimentListResponse: {
+            /** Items */
+            items: components["schemas"]["ExperimentRecord"][];
+        };
+        /**
+         * ExperimentRecord
+         * @description One real, persisted ``evaluation.experiments`` row — the read model
+         *     ``GET /experiments``/``GET /experiments/{id}`` return.
+         */
+        ExperimentRecord: {
+            /** Created By */
+            created_by: string;
+            /** Definition Id */
+            definition_id: string;
+            /** Definition Version */
+            definition_version: string;
+            /** Description */
+            description: string;
+            /** Experiment Id */
+            experiment_id: string;
+            /** Name */
+            name: string;
+            /** Pinned Conditions */
+            pinned_conditions: {
+                [key: string]: unknown;
+            };
+            /** Runs Per Variant */
+            runs_per_variant: number;
+            /** Status */
+            status: string;
+            /** Variables */
+            variables: {
+                [key: string]: unknown;
+            };
         };
         /**
          * FeatureFlagState
@@ -1768,6 +1872,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CostAndQualityReport"];
+                };
+            };
+        };
+    };
+    list_experiments_api_v1_experiments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentListResponse"];
+                };
+            };
+        };
+    };
+    create_experiment_api_v1_experiments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExperimentDefinitionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_experiment_api_v1_experiments__experiment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

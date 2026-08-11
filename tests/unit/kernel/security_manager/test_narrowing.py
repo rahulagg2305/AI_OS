@@ -13,6 +13,7 @@ from ai_os_kernel.security_manager.permissions import (
     CONFIG_MANAGE,
     CONFIG_READ,
     EVALUATION_READ,
+    EXPERIMENT_RUN,
     PACK_MANAGE,
     PACK_READ,
     SECRET_ACCESS,
@@ -55,6 +56,7 @@ def test_a_broad_principal_is_genuinely_narrowed_by_a_restrictive_workflow_agent
             CONFIG_MANAGE,
             EVALUATION_READ,
             APPROVAL_READ,
+            EXPERIMENT_RUN,
         }
     )
 

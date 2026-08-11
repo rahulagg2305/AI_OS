@@ -708,7 +708,15 @@ Genuine instances, worst first:
    needs **routes**, not a manifest.
 3. **`evaluation_engine/reporting_interface.py`** — zero importers
    anywhere. **`comparison_computer.py`** — imported only from inside
-   its own package. Not ticketed.
+   its own package. Not ticketed. **Partially advanced 2026-08-11
+   (`P04-S01-M12-T12`): the *upstream* gap that keeps these idle is now
+   half-closed.** These readers were unreachable because no
+   `experiments`/`experiment_runs` row ever existed; that step gave
+   `evaluation.experiments` its first real writer (`POST /experiments`),
+   so experiments are now genuinely createable. They still have no
+   production caller, though, because `experiment_runs` still has no
+   writer (materialised only by the unbuilt `POST /experiments/{id}/run`)
+   — so the comparison/reporting readers stay idle until that lands.
 4. **`ParallelStepExecutor`/`SubWorkflowStepExecutor`** — zero
    production construction; `parallel`/`sub_workflow` used by 0 of 27
    real workflow steps. (`ForeachStepExecutor` **is** wired.) Accepted:
