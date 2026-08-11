@@ -43,7 +43,7 @@ to that rule, not as evidence it failed.
 | R-012 | Ticket dependency graph had no recorded edges | M | **Closed** 2026-07-31 | — |
 | R-013 | Two dependency edges were judgement calls | L | **Closed** 2026-07-31 | Both decided, no change |
 | R-014 | No CI job ever ran any Capability Pack's own `tests/` | M | **Closed** 2026-08-09 | — |
-| R-015 | Local-HTTP-server tests flaky under full local suite runs (never on real CI) | L | **Closed** 2026-08-09 | — |
+| R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop concurrency margin) | L | **Closed** 2026-08-09; worker-loop timing half **remediated** 2026-08-11 (`P02-S01-M05-T16`) | — |
 | R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Open — real, undecided design question** | Product owner, 2026-08-10 |
 | R-017 | Manifest-declared Tools were unreachable in production — no caller ever passed a `ToolRegistry` | M | **Closed** 2026-08-11 (`P02-S05-M18-T04`) | — |
 | R-018 | "Proven but idle": real, tested subsystems with zero production reachability (Traceability Engine at 100% `done`; two packs with no manifest) | M | **Open — partially ticketed** | Health audit, 2026-08-11 |
@@ -456,6 +456,38 @@ the code under test. Worth a dedicated investigation (widen the
 margin, or make the assertion resistant to real scheduler jitter) if a
 third occurrence lands — not attempted here, out of this ticket's own
 scope (`GET /api/v1/agents`, unrelated to workflow-engine timing).
+
+**Third occurrence + remediation (2026-08-11, `P02-S01-M05-T16`)** — the
+bar the entry above set for itself was met. CI run `31488950483`
+(Integration tests job, the `P04-S01-M12-T12` experiments push) failed
+on the real Ubuntu runner with the identical assertion —
+`test_a_single_tick_genuinely_advances_multiple_real_instances_concurrently`,
+`assert 0.456... < 0.4` — `gh run rerun --failed` again passed with no
+code change. Three genuine CI occurrences across three separate pushes,
+all the same tight 2x margin, none a real regression: this is now a
+dedicated, root-caused fix rather than another disclosed retry.
+
+**Root cause (measured, not guessed):** the assertion timed three real
+0.2s concurrent steps against a `< 0.4s` bound, but the tick's *fixed*
+per-instance overhead — three real DB round-trips to advance, a lease
+acquire, the discovery query, event-loop scheduling — is itself ~0.25s,
+*larger than the 0.2s step it was measuring*. That left only ~0.14s of
+real headroom below 0.4s, so ordinary runner jitter could cross the
+boundary while the code stayed genuinely concurrent (0.456s is still far
+under the 0.6s a serialized tick would take). The signal was smaller
+than the noise.
+
+**Fix:** the step is now 0.5s and the bound is
+`step_duration * instance_count * 0.7` (1.05s) against a 1.5s serialized
+time, all as named constants with an explaining comment — the concurrent
+result (~one step + overhead, ~0.75s) sits well below the bound, and a
+genuinely serialized regression (1.5s) still trips it. The signal now
+dominates the fixed overhead. **No production code changed** — the
+worker loop's real concurrency guarantee is untouched; only the test's
+timing margin widened. Proven: 5 consecutive `AIOS_ENV=ci` local runs of
+the test pass, and the full worker-loop file passes 5/5. The
+local-HTTP-server half of this entry (the original 2026-08-09 flakes) is
+a distinct family, unchanged and still closed as before.
 
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 

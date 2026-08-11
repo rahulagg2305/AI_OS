@@ -6,11 +6,11 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-08-11 from 252 Task tickets.
+**Generated:** 2026-08-11 from 253 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 95%** (238.5 of 252 Task-equivalents complete)
+**Overall: 95%** (239.5 of 253 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -20,7 +20,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S04 Health and Lifecycle | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S05 Observability and Audit | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S06 CI and Test Infrastructure | 10 | 10 | 0 | 0 | 100% |
-| P02 (B) | S01 Workflow Execution Core | 15 | 15 | 0 | 0 | 100% |
+| P02 (B) | S01 Workflow Execution Core | 16 | 16 | 0 | 0 | 100% |
 | P02 (B) | S02 LLM Gateway | 12 | 12 | 0 | 0 | 100% |
 | P02 (B) | S03 Prompt and Context Assembly | 20 | 19 | 0 | 1 | 95% |
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 13 | 0 | 1 | 93% |
@@ -57,7 +57,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 47 | 46 | 98% |
-| P02 (Stage B) - Minimum Viable Kernel | 101 | 99 | 98% |
+| P02 (Stage B) - Minimum Viable Kernel | 102 | 100 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 22 | 21 | 95% |
 | P05 (Stage E) - Project Intelligence | 9 | 1 | 56% |

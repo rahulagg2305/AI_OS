@@ -57,6 +57,18 @@ _DEFINITION_VERSION = "1.0.0"
 _PACK_ID = "se.software_engineering"
 _AGENT_ID = "se.software_engineering/analyst"
 
+# Timing bounds for the single-tick concurrency proof below. The step is
+# deliberately long relative to real per-instance DB/scheduler overhead
+# so the concurrent-vs-sequential distinction stays unambiguous even on a
+# busy CI runner. R-015: the original 0.2s step / tight 0.4s (2x) bound
+# left the fixed overhead larger than the signal it measured and failed
+# the real Ubuntu runner three times without any regression in the code
+# under test. The bound is now expressed as a fraction of the serialized
+# time, with a wide margin, rather than an absolute number.
+_STEP_DURATION_SECONDS = 0.5
+_INSTANCE_COUNT = 3
+_CONCURRENCY_MARGIN = 0.7  # accept up to 0.7 x the fully-serialized tick time
+
 
 @pytest.fixture(scope="module")
 def database_url() -> Generator[str, None, None]:
@@ -161,16 +173,21 @@ def test_a_single_tick_genuinely_advances_multiple_real_instances_concurrently(
         engine = build_engine(database_url)
         try:
             repository = SqlWorkflowInstanceRepository(engine)
-            workflow_ids = [await _create_running_instance(engine) for _ in range(3)]
-            worker = _make_worker(engine, step_duration=0.2)
+            workflow_ids = [await _create_running_instance(engine) for _ in range(_INSTANCE_COUNT)]
+            worker = _make_worker(engine, step_duration=_STEP_DURATION_SECONDS)
 
             started = time.monotonic()
             result = await worker.tick_once(limit=100, lease_duration_seconds=60)
             elapsed = time.monotonic() - started
 
             assert set(workflow_ids) <= set(result.advanced)
-            assert elapsed < 0.4  # well under 3 x 0.2s = 0.6s a sequential tick would take
-            assert elapsed >= 0.2  # sanity: real work genuinely happened
+            # A serialized tick would take `sequential_duration`; genuine
+            # concurrent advancement finishes in ~one step plus real
+            # per-instance overhead. Assert comfortably below the
+            # serialized time — see the timing-bound constants above (R-015).
+            sequential_duration = _STEP_DURATION_SECONDS * _INSTANCE_COUNT
+            assert elapsed < sequential_duration * _CONCURRENCY_MARGIN
+            assert elapsed >= _STEP_DURATION_SECONDS  # sanity: real work genuinely happened
 
             for workflow_id in workflow_ids:
                 instance = await repository.get_instance(workflow_id)
