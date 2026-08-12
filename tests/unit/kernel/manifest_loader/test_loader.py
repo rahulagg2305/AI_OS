@@ -1,12 +1,21 @@
 """Unit tests for the Manifest Loader (discovery + schema validation)."""
 
+import base64
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from ai_os_kernel.manifest_loader import ManifestError, ManifestLoader
+from ai_os_kernel.manifest_loader.signature import (
+    ManifestSignatureVerifier,
+    SignatureStatus,
+    manifest_signing_digest,
+    signature_path_for,
+)
 from tests.unit.kernel.manifest_loader.conftest import write_dist_info
 
 SCHEMA_PATH = Path("platform_sdk/schemas/manifest.schema.json")
@@ -140,3 +149,111 @@ def test_the_committed_template_pack_is_discovered_and_schema_valid() -> None:
     discovered_ids = {m.metadata.id for m in report.discovered}
     assert "template-pack" in discovered_ids
     assert report.failed == []
+
+
+# --- FR-117: signature verification and its enforcement posture --------
+
+
+def _sign_manifest(pack_dir: Path, content: dict[str, Any], key: Ed25519PrivateKey) -> None:
+    digest = manifest_signing_digest(content).encode("utf-8")
+    sig = base64.b64encode(key.sign(digest)).decode("ascii")
+    signature_path_for(pack_dir / "manifest.yaml").write_text(sig, encoding="utf-8")
+
+
+def _trust_store(tmp_path: Path, key: Ed25519PrivateKey) -> Path:
+    store = tmp_path / "trust"
+    store.mkdir(parents=True, exist_ok=True)
+    (store / "aios-platform.pub").write_bytes(
+        key.public_key().public_bytes(
+            encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo
+        )
+    )
+    return store
+
+
+def test_every_discovered_manifest_carries_a_signature_result(tmp_path: Path) -> None:
+    """Recorded even with enforcement off, so the signing state of the
+    estate is observable *before* anyone turns enforcement on."""
+    _write_manifest(tmp_path / "example-pack", _VALID_MANIFEST)
+    loader = ManifestLoader(pack_dirs=[str(tmp_path)], schema_path=SCHEMA_PATH)
+
+    report = loader.scan()
+
+    assert len(report.discovered) == 1
+    assert report.discovered[0].signature.status is SignatureStatus.UNSIGNED
+
+
+def test_an_unsigned_pack_still_loads_when_signing_is_not_required(tmp_path: Path) -> None:
+    """The zero-regression guarantee, stated as a test: this is exactly
+    the position all three real packs are in today."""
+    _write_manifest(tmp_path / "example-pack", _VALID_MANIFEST)
+    loader = ManifestLoader(
+        pack_dirs=[str(tmp_path)], schema_path=SCHEMA_PATH, require_signed_manifests=False
+    )
+
+    assert len(loader.scan().discovered) == 1
+
+
+def test_an_unsigned_pack_is_refused_when_signing_is_required(tmp_path: Path) -> None:
+    pack_dir = tmp_path / "example-pack"
+    _write_manifest(pack_dir, _VALID_MANIFEST)
+    loader = ManifestLoader(
+        pack_dirs=[str(tmp_path)], schema_path=SCHEMA_PATH, require_signed_manifests=True
+    )
+
+    report = loader.scan()
+
+    # Refused at load, so it never reaches installation or activation at
+    # all — FR-001's "reject without partial registration" shape.
+    assert report.discovered == []
+    assert len(report.failed) == 1
+    assert "require_signed_manifests" in report.failed[0].error
+    assert "unsigned" in report.failed[0].error
+
+
+def test_a_properly_signed_pack_loads_when_signing_is_required(tmp_path: Path) -> None:
+    key = Ed25519PrivateKey.generate()
+    pack_dir = tmp_path / "example-pack"
+    _write_manifest(pack_dir, _VALID_MANIFEST)
+    _sign_manifest(pack_dir, _VALID_MANIFEST, key)
+    loader = ManifestLoader(
+        pack_dirs=[str(tmp_path)],
+        schema_path=SCHEMA_PATH,
+        signature_verifier=ManifestSignatureVerifier(trust_store_dir=_trust_store(tmp_path, key)),
+        require_signed_manifests=True,
+    )
+
+    report = loader.scan()
+
+    assert len(report.discovered) == 1
+    assert report.discovered[0].signature.is_trusted
+    assert report.discovered[0].signature.key_id == "aios-platform"
+
+
+def test_a_signed_pack_with_no_trust_anchor_is_refused_when_required(tmp_path: Path) -> None:
+    """`unverifiable` is refused as firmly as `invalid`: enforcement
+    demands proof, and an unusable trust store provides none."""
+    key = Ed25519PrivateKey.generate()
+    pack_dir = tmp_path / "example-pack"
+    _write_manifest(pack_dir, _VALID_MANIFEST)
+    _sign_manifest(pack_dir, _VALID_MANIFEST, key)
+    loader = ManifestLoader(
+        pack_dirs=[str(tmp_path)], schema_path=SCHEMA_PATH, require_signed_manifests=True
+    )
+
+    report = loader.scan()
+
+    assert report.discovered == []
+    assert "unverifiable" in report.failed[0].error
+
+
+def test_the_three_real_committed_packs_are_unsigned_and_still_load() -> None:
+    """Zero regression against the real repository, not a fixture: the
+    committed packs are unsigned today and must keep loading under the
+    default posture."""
+    loader = ManifestLoader(pack_dirs=["capability_packs"], schema_path=SCHEMA_PATH)
+
+    report = loader.scan()
+
+    assert report.discovered, "the committed packs stopped being discovered"
+    assert all(m.signature.status is SignatureStatus.UNSIGNED for m in report.discovered)

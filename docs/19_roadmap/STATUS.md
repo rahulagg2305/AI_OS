@@ -10,13 +10,13 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 95%** (244.5 of 258 Task-equivalents complete)
+**Overall: 95%** (245.5 of 258 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
 | P01 (A) | S01 Process, Packaging and Persistence Baseline | 5 | 5 | 0 | 0 | 100% |
 | P01 (A) | S02 Configuration and Secrets | 14 | 14 | 0 | 0 | 100% |
-| P01 (A) | S03 Manifest Discovery and Schema | 6 | 5 | 0 | 1 | 83% |
+| P01 (A) | S03 Manifest Discovery and Schema | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S04 Health and Lifecycle | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S05 Observability and Audit | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S06 CI and Test Infrastructure | 10 | 10 | 0 | 0 | 100% |
@@ -56,7 +56,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
-| P01 (Stage A) - Platform Skeleton | 47 | 46 | 98% |
+| P01 (Stage A) - Platform Skeleton | 47 | 47 | 100% |
 | P02 (Stage B) - Minimum Viable Kernel | 104 | 102 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 25 | 24 | 96% |
@@ -74,9 +74,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Blocked
 
-3 Task(s) with a real blocker that is **not** a `depends_on` edge — an unresolved decision or a missing prerequisite no other Task owns (Definition of Ready item 5). Their dependencies may well all be `done`; that does not make them ready. Each ticket's own body states its blocker:
+2 Task(s) with a real blocker that is **not** a `depends_on` edge — an unresolved decision or a missing prerequisite no other Task owns (Definition of Ready item 5). Their dependencies may well all be `done`; that does not make them ready. Each ticket's own body states its blocker:
 
-- `P01-S03-M28-T02` Signed-manifest fields
 - `P02-S03-M08-T14` Wire AIContextPackResolver into a production composition
 - `P02-S04-M10-T03` Promotion logic
 

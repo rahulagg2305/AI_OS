@@ -260,7 +260,7 @@ Every transition is recorded in `catalog.pack_state_transitions` with actor and 
 
 ## Not in v1
 
-- **Signed manifests.** Not implemented; provenance is controlled by the install path plus human-approved activation. Recorded as a known gap in `../../09_security/security_architecture.md` §8.
+- **~~Signed manifests.~~ Moved into v1 scope 2026-08-12** (product-owner decision) as **FR-117** — no longer a known accepted gap. Provenance is still controlled today by the install path plus human-approved activation, and those controls stay; signature verification is being added alongside them. Built the same day (`P01-S03-M28-T02`). **The schema itself is deliberately unchanged**, and that is a design decision rather than an omission: the signature is *detached*, living beside the manifest as `<manifest>.sig`, and covers the SHA-256 of the manifest's canonical JSON. An in-manifest `signature` field was rejected for two concrete reasons — it is self-referential (the field must be excluded from the document before hashing it), and adding it would change the contract every existing pack already validates against. Signing canonical JSON rather than raw file bytes means a reformatted manifest, or one checked out with different line endings, still verifies. Scheme, trust anchor and enforcement posture are documented in `../../09_security/security_architecture.md` §8; verification is off by default, so no existing pack is affected.
 - **Marketplace metadata.** No third-party distribution model in v1.
 - **Multi-language entrypoints.** Python only ([ADR-0008](../../18_decision_log/adr/ADR-0008-primary-language-and-runtime.md)).
 

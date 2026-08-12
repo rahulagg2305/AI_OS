@@ -31,16 +31,32 @@ from ai_os_kernel.manifest_loader.semantic import (
     validate_sdk_version_range,
     validate_workflow_definitions,
 )
+from ai_os_kernel.manifest_loader.signature import (
+    SIGNATURE_SUFFIX,
+    TRUST_ANCHOR_SUFFIX,
+    ManifestSignatureResult,
+    ManifestSignatureVerifier,
+    SignatureStatus,
+    manifest_signing_digest,
+    signature_path_for,
+)
 
 __all__ = [
     "ENTRY_POINT_GROUP",
+    "SIGNATURE_SUFFIX",
+    "TRUST_ANCHOR_SUFFIX",
     "DiscoveredManifest",
     "ManifestError",
     "ManifestLoadFailure",
     "ManifestLoader",
     "ManifestScanReport",
+    "ManifestSignatureResult",
+    "ManifestSignatureVerifier",
     "PackMetadata",
+    "SignatureStatus",
     "discover_entry_point_manifests",
+    "manifest_signing_digest",
+    "signature_path_for",
     "validate_sdk_version_range",
     "validate_workflow_definitions",
 ]

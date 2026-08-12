@@ -49,13 +49,29 @@ from ai_os_kernel.manifest_loader.semantic import (
     validate_sdk_version_range,
     validate_workflow_definitions,
 )
+from ai_os_kernel.manifest_loader.signature import ManifestSignatureVerifier
 
 
 class ManifestLoader:
-    def __init__(self, *, pack_dirs: list[str], schema_path: Path) -> None:
+    def __init__(
+        self,
+        *,
+        pack_dirs: list[str],
+        schema_path: Path,
+        signature_verifier: ManifestSignatureVerifier | None = None,
+        require_signed_manifests: bool = False,
+    ) -> None:
         self._pack_dirs = pack_dirs
         self._schema_path = schema_path
         self._validator = self._build_validator(schema_path)
+        # FR-117. Both default to the pre-2026-08-12 behaviour, so every
+        # existing caller and all three existing unsigned packs are
+        # unaffected until an operator opts in. The verifier still runs
+        # when absent — a default one reports honestly rather than
+        # returning nothing, so `DiscoveredManifest.signature` is never
+        # a lie of omission.
+        self._signature_verifier = signature_verifier or ManifestSignatureVerifier()
+        self._require_signed_manifests = require_signed_manifests
 
     @staticmethod
     def _build_validator(schema_path: Path) -> Draft202012Validator:
@@ -101,7 +117,25 @@ class ManifestLoader:
         metadata = self._extract_metadata(manifest_path, raw)
         validate_sdk_version_range(raw)
         validate_workflow_definitions(raw, manifest_path)
-        return DiscoveredManifest(manifest_path=str(manifest_path), metadata=metadata, raw=raw)
+        # Signature is established last, on a manifest already known to
+        # be structurally and semantically valid — verifying a document
+        # that is not yet known to be a manifest would prove nothing
+        # useful. Enforcement rejects here rather than at activation so
+        # an untrusted pack never reaches installation at all, matching
+        # FR-001's existing "reject without partial registration" shape.
+        signature = self._signature_verifier.verify(manifest_path, raw)
+        if self._require_signed_manifests and not signature.is_trusted:
+            raise ManifestError(
+                f"{manifest_path}: signature verification is required "
+                f"(`require_signed_manifests`) but the result was "
+                f"'{signature.status.value}' — {signature.detail}"
+            )
+        return DiscoveredManifest(
+            manifest_path=str(manifest_path),
+            metadata=metadata,
+            raw=raw,
+            signature=signature,
+        )
 
     def _parse_yaml(self, manifest_path: Path) -> dict[str, Any]:
         try:

@@ -489,6 +489,7 @@ from ai_os_kernel.llm_gateway.router import (
     build_routing_chain,
 )
 from ai_os_kernel.manifest_loader import ManifestLoader
+from ai_os_kernel.manifest_loader.signature import ManifestSignatureVerifier
 from ai_os_kernel.notification.recorder import SqlNotificationDeliveryRecorder
 from ai_os_kernel.notification.service import NotificationService
 from ai_os_kernel.notification.webhook import WebhookChannel
@@ -827,9 +828,23 @@ def load_configuration() -> PlatformConfig:
 
 def _build_manifest_loader(config: PlatformConfig) -> ManifestLoader:
     repo_root = Path.cwd()
+    # FR-117 (`P01-S03-M28-T02`). Both signature settings are read from
+    # real configuration rather than hardcoded, and both default to the
+    # pre-2026-08-12 behaviour: with no trust store configured and
+    # enforcement off, every existing unsigned pack loads exactly as
+    # before. The verifier is still constructed and still runs, so the
+    # signing state of the estate is recorded on every discovered
+    # manifest before anyone turns enforcement on.
+    trust_store_dir = (
+        repo_root / config.manifest_trust_store_dir
+        if config.manifest_trust_store_dir is not None
+        else None
+    )
     return ManifestLoader(
         pack_dirs=config.capability_pack_dirs,
         schema_path=repo_root / config.manifest_schema_path,
+        signature_verifier=ManifestSignatureVerifier(trust_store_dir=trust_store_dir),
+        require_signed_manifests=config.require_signed_manifests,
     )
 
 

@@ -737,6 +737,72 @@ M35 is already excluded from `feature_inventory.md`'s weighted total, or
 to introduce a distinct status for "descoped" rather than overloading
 `blocked`. **Not decided or changed unilaterally.**
 
+**Signed manifests moved into v1 scope and were built — 2026-08-12,
+`P01-S03-M28-T02` (FR-117).** Recorded here because this entry's own
+"permanent completion ceiling" note, added the previous step, is now
+partly obsolete, and because the security posture genuinely changed.
+
+*What changed.* A product-owner decision removed "Signed manifests" from
+`functional_requirements.md` §10's *Out of Scope for v1* list and added
+it as **FR-117**, a MUST. `security_architecture.md` §8 and
+`manifest_schema.md`'s "Not in v1" section, which had both recorded it
+as a *known accepted gap*, are corrected. `P01-S03-M28-T02` — the ticket
+the previous step verified as "genuinely blocked, permanently" — was
+blocked *only* by that scope exclusion, so removing it made the ticket
+real work, and it was delivered the same day.
+
+*Effect on the completion ceiling.* The previous step recorded that this
+ticket, permanently out of scope yet counted in the denominator, made
+literal 100% unreachable. That specific instance is gone: the ticket is
+now `done`, contributing to the numerator like any other. **The
+structural question it raised is not settled** — the roadmap still has
+no way to express "descoped", so if any future Task is parked as out of
+scope the same ceiling reappears. That remains an open product-owner
+decision, not something this step resolved.
+
+*Three design decisions, each put to the product owner rather than
+guessed, because no document had ever specified them:*
+
+- **Ed25519 detached signatures.** Asymmetric, so a verifying node holds
+  only public keys and cannot forge what it can check — the property an
+  HMAC shared secret cannot provide, and the reason "provenance" means
+  anything here. No new dependency (`cryptography` is already present
+  via `pyjwt[crypto]`). Sigstore was rejected: it requires network
+  reachability and OIDC infrastructure at verify time, contradicting
+  this platform's deny-by-default egress posture.
+- **A PEM trust-store directory**, path from
+  `PlatformConfig.manifest_trust_store_dir`, mirroring
+  `capability_pack_dirs`. A public key is not a secret, so anchors are
+  committed and reviewed in git and rotating a signer is a visible diff.
+  Routing them through the Secrets Manager was rejected as a category
+  error — it would emit secret-access audit rows for publishable data.
+- **Config-gated enforcement, default off.** All three committed packs
+  (`_template`, `project_intelligence`, `software-engineering`) are
+  unsigned. Fail-closed would have broken every one of them on day one
+  and made private-key material an operational prerequisite for running
+  the test suite at all. `require_signed_manifests` defaults to `false`,
+  so behaviour is byte-identical to before; turning it on refuses
+  anything not `signed_and_valid` at load, before installation.
+
+*A security property worth stating plainly.* Verification reports four
+outcomes, not two: `signed_and_valid`, `unsigned`, `invalid`, and
+**`unverifiable`** — a signature is present but no trust anchor exists
+to check it. Collapsing that fourth case into `unsigned` would make a
+misconfigured deployment indistinguishable from a clean one, so it is
+kept distinct and is refused as firmly as `invalid` under enforcement.
+Absence of proof is not proof. This follows `SandboxGuarantees`' own
+"report what is actually enforced, never what is merely intended"
+pattern.
+
+*No key material is in this repository.* Only public anchors are ever
+deployed; every private key in the test suite is generated at runtime
+and discarded. That is a direct consequence of choosing an asymmetric
+scheme and would not have held for HMAC.
+
+*Signing does not replace the existing controls.* Install-path control
+and human-approved activation both remain in force; signature
+verification is added alongside them.
+
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 
 Found `P05-S02-M32-T01`, closed `P05-S02-M32-T02` (2026-08-09).

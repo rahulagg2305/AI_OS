@@ -33,6 +33,26 @@ class PlatformConfig(BaseModel):
     capability_pack_dirs: list[str] = Field(default_factory=lambda: ["capability_packs"])
     """Directories scanned for Capability Packs (filesystem-scan discovery, ADR-0009)."""
 
+    manifest_trust_store_dir: str | None = None
+    """Directory of Ed25519 PEM **public** keys used to verify detached
+    pack-manifest signatures (FR-117, `P01-S03-M28-T02`). Deliberately a
+    directory of committed files, the same shape as
+    ``capability_pack_dirs`` above — a public key is not a secret, so
+    adding or rotating a signer is a reviewable git diff rather than an
+    environment change, and the Secrets Manager is not involved.
+    ``None`` (every environment today) means no anchor is configured, so
+    a manifest that *does* carry a signature is reported
+    ``unverifiable`` rather than being waved through."""
+
+    require_signed_manifests: bool = False
+    """Whether a manifest must carry a valid signature to load at all
+    (FR-117). ``False`` — every environment today — keeps the
+    pre-2026-08-12 behaviour exactly: all three existing unsigned packs
+    (`_template`, `project_intelligence`, `software-engineering`) load
+    unchanged, and the verification result is recorded but not enforced.
+    ``True`` refuses anything not ``signed_and_valid``, including
+    ``unverifiable``: absence of proof is not proof."""
+
     manifest_schema_path: str = "platform_sdk/schemas/manifest.schema.json"
     """Path to the authoritative manifest JSON Schema, relative to the repository root."""
 

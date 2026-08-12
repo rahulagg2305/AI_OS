@@ -1239,6 +1239,17 @@
             "title": "Manifest Schema Path",
             "type": "string"
           },
+          "manifest_trust_store_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Trust Store Dir"
+          },
           "notification_webhook_url": {
             "anyOf": [
               {
@@ -1309,6 +1320,11 @@
             "default": 8000,
             "title": "Port",
             "type": "integer"
+          },
+          "require_signed_manifests": {
+            "default": false,
+            "title": "Require Signed Manifests",
+            "type": "boolean"
           },
           "role": {
             "title": "Role",

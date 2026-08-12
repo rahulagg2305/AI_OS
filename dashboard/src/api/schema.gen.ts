@@ -1265,6 +1265,8 @@ export interface components {
              * @default platform_sdk/schemas/manifest.schema.json
              */
             manifest_schema_path: string;
+            /** Manifest Trust Store Dir */
+            manifest_trust_store_dir?: string | null;
             /** Notification Webhook Url */
             notification_webhook_url?: string | null;
             /** Oidc Audience */
@@ -1282,6 +1284,11 @@ export interface components {
              * @default 8000
              */
             port: number;
+            /**
+             * Require Signed Manifests
+             * @default false
+             */
+            require_signed_manifests: boolean;
             /** Role */
             role: string;
             /** Scheduler Interval Seconds */

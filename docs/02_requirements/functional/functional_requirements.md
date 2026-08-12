@@ -90,6 +90,7 @@ The audit verified six claims in this section against current source and found e
 | FR-020 | Record a complete run manifest for every workflow run | MUST | D | Manifest passes schema validation and the run is re-launchable from it |
 | FR-021 | Execute untrusted code only inside a Tier 1 sandbox | MUST | C | A Tier 1 step has no network, no secrets, and no host access; verified by test |
 | FR-022 | Enforce per-step and per-workflow budgets | MUST | C | Exceeding a budget raises `BudgetExceededError` and halts the step |
+| FR-117 | Verify a Capability Pack manifest's signature against a configured trust anchor before activation | MUST | A | A manifest whose signature is absent, malformed, or does not verify is refused activation when verification is required; the verification outcome is always recorded and reported, never assumed |
 
 ---
 
@@ -210,10 +211,11 @@ Three known reconciliation gaps between this document's `Stage` column and `feat
 
 Recorded so these are not rediscovered as gaps:
 
+> **Scope change 2026-08-12 (product-owner decision).** "Signed manifests" has been removed from this list and is now in v1 scope as **FR-117** (§3). `security_architecture.md` §8 and `manifest_schema.md`'s own "Not in v1" section, both of which recorded it as a known accepted gap, are updated to match. The ticket that had been parked as permanently out of scope, `P01-S03-M28-T02`, is unblocked.
+
 - Multi-tenancy and per-tenant isolation ([ADR-0023](../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md))
 - Domain packs beyond those listed (IoT, finance, analytics)
 - A Capability Pack marketplace or third-party pack distribution
-- Signed manifests
 - Autonomous production deployment without human approval
 - Non-English natural-language interfaces
 - MCP as a platform interface ([ADR-0014](../../18_decision_log/adr/ADR-0014-api-style-and-realtime-transport.md))

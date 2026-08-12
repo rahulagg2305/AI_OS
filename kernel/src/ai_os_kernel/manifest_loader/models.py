@@ -11,6 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ai_os_kernel.manifest_loader.signature import ManifestSignatureResult
+
 
 class PackMetadata(BaseModel):
     """The subset of ``manifest.metadata`` used at this stage."""
@@ -28,6 +30,11 @@ class DiscoveredManifest(BaseModel):
     manifest_path: str
     metadata: PackMetadata
     raw: dict[str, Any]
+    # Always populated (FR-117, `P01-S03-M28-T02`), including when
+    # enforcement is off — the point is that the signing state of the
+    # estate is observable *before* anyone turns enforcement on, rather
+    # than discovered at the moment activation starts failing.
+    signature: ManifestSignatureResult
 
 
 class ManifestLoadFailure(BaseModel):
