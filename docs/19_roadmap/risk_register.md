@@ -838,6 +838,46 @@ each new `done` ticket adds roughly 0.02pp against a growing
 denominator, so the headline only moves when rounding tips. It tipped
 here. Nothing about the rate of work changed.
 
+**A "write-only data" instance closed, and a duplicate-surface trap
+avoided — 2026-08-12 (`P06-S01-M36-T04`).** Recorded because both halves
+are the R-018 family in a form the package-level and module-level sweeps
+would both have missed: the code here was never idle, only the *data*
+was.
+
+*Closed.* `evaluation.llm_calls` has recorded `cache_read_tokens` and
+`cache_write_tokens` on every real LLM call since the table existed, and
+no reader anywhere surfaced either column. The existing cost report
+(`CostBreakdownEntry`) carries input tokens, output tokens and cost —
+and no cache columns at all. So prompt-cache effectiveness, a real
+cost-control question, was unanswerable from data the platform had been
+diligently writing all along. `GET /api/v1/usage/tokens` now reads it.
+
+*Avoided.* The same investigation found `GET /usage/cost` — documented
+in `api_architecture.md` §6.4 and listed there as unbuilt — is in fact
+**already satisfied** by `GET /api/v1/evaluation/cost-and-quality`
+(`P06-S03-M39-T03`, FR-095) over the identical `llm_calls` data.
+Building the documented path would have produced a second endpoint
+returning the same aggregation: duplicate surface counted as progress.
+It was deliberately not built, and the divergence is disclosed in
+`api_architecture.md` for a product-owner decision — alias the
+documented path, or amend the document. **This is the more useful
+finding of the two**: "documented but not built" is not the same as "not
+built", and a route-by-route diff of documentation against the live
+OpenAPI schema will report both identically.
+
+*Method worth reusing.* Comparing every route `api_architecture.md`
+documents against the live `openapi.json` surfaced 11 apparently
+unbuilt endpoints. Three were false positives or reasoned non-gaps
+(`approvals/{id}/decision` and `workflows/se` exist at documented
+different shapes; `health/detail` is a recorded deliberate decision),
+four carry genuine design forks (`gates/trends` — `gate_results` has no
+timestamp column; `traceability/query` — response shape undecided;
+`logs`/`traces` — no query surface exists at all), one is blocked by
+R-016 (`workflows/{id}/retry`), and one was already-satisfied-elsewhere
+(`usage/cost`). Only `usage/tokens` and `openapi` were genuinely
+buildable without a new decision. A raw count of "11 missing routes"
+would have been badly misleading as a measure of remaining work.
+
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 
 Found `P05-S02-M32-T01`, closed `P05-S02-M32-T02` (2026-08-09).

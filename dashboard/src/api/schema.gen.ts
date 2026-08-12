@@ -438,6 +438,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/usage/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Token Usage
+         * @description Gated by the already-real ``evaluation:read`` — the same
+         *     permission ``GET /gates/results``, the traceability reads and
+         *     ``GET /evaluation/cost-and-quality`` all use. §5's own table names
+         *     no dedicated usage permission, and this is read-only analytical
+         *     reporting over the identical data, so no new permission string was
+         *     invented.
+         */
+        get: operations["get_token_usage_api_v1_usage_tokens_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/version": {
         parameters: {
             query?: never;
@@ -1488,6 +1513,41 @@ export interface components {
             manifest_hash: string;
             /** Run Manifest Id */
             run_manifest_id: string;
+        };
+        /**
+         * TokenUsageEntry
+         * @description One real dimension value's own token totals, including the cache
+         *     split — e.g. one real ``model_id`` together with every real call
+         *     recorded against it.
+         */
+        TokenUsageEntry: {
+            /** Call Count */
+            call_count: number;
+            /** Dimension Value */
+            dimension_value: string;
+            /** Total Cache Read Tokens */
+            total_cache_read_tokens: number;
+            /** Total Cache Write Tokens */
+            total_cache_write_tokens: number;
+            /** Total Input Tokens */
+            total_input_tokens: number;
+            /** Total Output Tokens */
+            total_output_tokens: number;
+        };
+        /**
+         * TokenUsageReport
+         * @description §6.4's own "Token usage incl. cache split", across the same four
+         *     dimensions the cost report uses.
+         */
+        TokenUsageReport: {
+            /** By Agent */
+            by_agent: components["schemas"]["TokenUsageEntry"][];
+            /** By Model */
+            by_model: components["schemas"]["TokenUsageEntry"][];
+            /** By Pack */
+            by_pack: components["schemas"]["TokenUsageEntry"][];
+            /** By Workflow */
+            by_workflow: components["schemas"]["TokenUsageEntry"][];
         };
         /**
          * TraceArtifact
@@ -2582,6 +2642,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_token_usage_api_v1_usage_tokens_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenUsageReport"];
                 };
             };
         };

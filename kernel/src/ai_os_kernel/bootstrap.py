@@ -455,6 +455,7 @@ from ai_os_kernel.evaluation_engine.cost_anomaly import (
     SqlCostAnomalyDetector,
     run_periodic_cost_anomaly_check,
 )
+from ai_os_kernel.evaluation_engine.token_usage_views import SqlTokenUsageViews
 from ai_os_kernel.event_bus.bus import InProcessEventBus
 from ai_os_kernel.event_bus.outbox_relay import (
     OUTBOX_RELAY_INTERVAL_SECONDS,
@@ -529,6 +530,7 @@ from ai_os_kernel.routes.problem_details import register_problem_detail_handlers
 from ai_os_kernel.routes.role_administration import router as role_administration_router
 from ai_os_kernel.routes.stream import router as stream_router
 from ai_os_kernel.routes.traceability import router as traceability_router
+from ai_os_kernel.routes.usage import router as usage_router
 from ai_os_kernel.routes.workflows import router as workflows_router
 from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
 from ai_os_kernel.secrets_manager.backend_selection import (
@@ -2061,6 +2063,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # identical "plain, stateless wrapper over the engine" shape
         # every other real query collaborator here already follows.
         app.state.cost_and_quality_views = SqlCostAndQualityViews(engine)
+        # GET /api/v1/usage/tokens (ai_os_kernel.routes.usage) reads
+        # this. A second, additive view rather than more fields on the
+        # cost report above: widening that response would change a
+        # contract the Dashboard already consumes, for callers that
+        # never asked about cache behaviour.
+        app.state.token_usage_views = SqlTokenUsageViews(engine)
         # authenticate() (ai_os_kernel.security_manager.dependencies) reads
         # this to union real, persisted role grants into a principal's
         # token-claimed roles for every permission-checked route, not only
@@ -2321,6 +2329,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.include_router(config_router)
     app.include_router(stream_router)
     app.include_router(evaluation_router)
+    app.include_router(usage_router)
 
     logger.info("kernel.bootstrap.complete")
     return app

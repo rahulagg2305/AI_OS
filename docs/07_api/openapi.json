@@ -1816,6 +1816,86 @@
         "title": "StoredRunManifest",
         "type": "object"
       },
+      "TokenUsageEntry": {
+        "description": "One real dimension value's own token totals, including the cache\nsplit \u2014 e.g. one real ``model_id`` together with every real call\nrecorded against it.",
+        "properties": {
+          "call_count": {
+            "title": "Call Count",
+            "type": "integer"
+          },
+          "dimension_value": {
+            "title": "Dimension Value",
+            "type": "string"
+          },
+          "total_cache_read_tokens": {
+            "title": "Total Cache Read Tokens",
+            "type": "integer"
+          },
+          "total_cache_write_tokens": {
+            "title": "Total Cache Write Tokens",
+            "type": "integer"
+          },
+          "total_input_tokens": {
+            "title": "Total Input Tokens",
+            "type": "integer"
+          },
+          "total_output_tokens": {
+            "title": "Total Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dimension_value",
+          "call_count",
+          "total_input_tokens",
+          "total_output_tokens",
+          "total_cache_read_tokens",
+          "total_cache_write_tokens"
+        ],
+        "title": "TokenUsageEntry",
+        "type": "object"
+      },
+      "TokenUsageReport": {
+        "description": "\u00a76.4's own \"Token usage incl. cache split\", across the same four\ndimensions the cost report uses.",
+        "properties": {
+          "by_agent": {
+            "items": {
+              "$ref": "#/components/schemas/TokenUsageEntry"
+            },
+            "title": "By Agent",
+            "type": "array"
+          },
+          "by_model": {
+            "items": {
+              "$ref": "#/components/schemas/TokenUsageEntry"
+            },
+            "title": "By Model",
+            "type": "array"
+          },
+          "by_pack": {
+            "items": {
+              "$ref": "#/components/schemas/TokenUsageEntry"
+            },
+            "title": "By Pack",
+            "type": "array"
+          },
+          "by_workflow": {
+            "items": {
+              "$ref": "#/components/schemas/TokenUsageEntry"
+            },
+            "title": "By Workflow",
+            "type": "array"
+          }
+        },
+        "required": [
+          "by_model",
+          "by_workflow",
+          "by_agent",
+          "by_pack"
+        ],
+        "title": "TokenUsageReport",
+        "type": "object"
+      },
       "TraceArtifact": {
         "description": "One real, persisted ``trace.artifacts`` row (data_model.md \u00a78).",
         "properties": {
@@ -3874,6 +3954,33 @@
         "summary": "Get Impact",
         "tags": [
           "traceability"
+        ]
+      }
+    },
+    "/api/v1/usage/tokens": {
+      "get": {
+        "description": "Gated by the already-real ``evaluation:read`` \u2014 the same\npermission ``GET /gates/results``, the traceability reads and\n``GET /evaluation/cost-and-quality`` all use. \u00a75's own table names\nno dedicated usage permission, and this is read-only analytical\nreporting over the identical data, so no new permission string was\ninvented.",
+        "operationId": "get_token_usage_api_v1_usage_tokens_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenUsageReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Token Usage",
+        "tags": [
+          "usage"
         ]
       }
     },
