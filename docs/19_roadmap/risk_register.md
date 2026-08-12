@@ -638,10 +638,38 @@ tree and once with every change restored. That last pair is the point:
 it was briefly suspected of being a regression from this step, and the
 suspicion was settled by measurement rather than argument. It talks to a
 real OTel Collector **container**, not to any of the 19 in-process
-handlers fixed above, so the request-body drain does not apply to it;
-the most likely cause is Docker resource pressure after several
-container-heavy suite runs in succession. Recorded rather than left as
-unexplained noise.
+handlers fixed above, so the request-body drain does not apply to it.
+The explanation offered here was "Docker resource pressure after
+several container-heavy suite runs in succession".
+
+**Escalated 2026-08-12 (`P06-S01-M36-T04`): it has now failed on real
+CI, and that explanation no longer suffices.** CI run `31624893187`
+(Integration tests) failed with `httpx.ReadError: [Errno 104] Connection
+reset by peer` on a **fresh Ubuntu runner** — not a laptop that had
+just run the suite repeatedly. A `gh run rerun --failed` with no code
+change passed clean, all 8 jobs. This is the first CI occurrence; the
+seven runs before it were green.
+
+*Ruled out as a regression structurally, not statistically.* The test
+imports exactly two things from this codebase — `_build_metric_exporter`
+and `_build_span_exporter` — and never constructs the Kernel app. The
+step it failed under added an HTTP route, a SQL view module and
+bootstrap wiring, none of which is on that import path; no `infra/`,
+`docker-compose` or observability file was touched. It could not have
+caused this.
+
+*What this changes.* The flake is no longer local-only, so the "Windows
+laptop under load" framing is retired. Two CI-observable symptoms are
+now recorded — `[Errno 104] Connection reset by peer` on Linux,
+`[WinError 10053]` locally — both consistent with the collector
+container resetting the connection mid-read rather than with anything
+in the test's own logic. **Still not fixed, and deliberately not
+papered over**: a retry wrapper around the assertion would hide a real
+collector startup or readiness problem, which is the more likely root
+cause and is worth finding. Recommended as its own investigation —
+the first thing to check is whether the test waits for the collector
+to be genuinely ready rather than merely started, since
+`wait_container_is_ready` appears in the failure output.
 
 **Local `tests/performance` NFR thresholds under sustained load — observed
 2026-08-12 (`P02-S07-M17-T05`), not a regression, recorded for the next
