@@ -43,10 +43,10 @@ to that rule, not as evidence it failed.
 | R-012 | Ticket dependency graph had no recorded edges | M | **Closed** 2026-07-31 | — |
 | R-013 | Two dependency edges were judgement calls | L | **Closed** 2026-07-31 | Both decided, no change |
 | R-014 | No CI job ever ran any Capability Pack's own `tests/` | M | **Closed** 2026-08-09 | — |
-| R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop concurrency margin) | L | **Closed** 2026-08-09; worker-loop timing half **remediated** 2026-08-11 (`P02-S01-M05-T16`) | — |
+| R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop concurrency margin) | L | **Closed** 2026-08-09; worker-loop timing half **partially remediated** 2026-08-11 (`P02-S01-M05-T16`) — a 4th occurrence in the *unremediated* sibling test, with a reliable local reproduction and clean-tree proof, recorded 2026-08-12 and **not** fixed | — |
 | R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Open — real, undecided design question** | Product owner, 2026-08-10 |
 | R-017 | Manifest-declared Tools were unreachable in production — no caller ever passed a `ToolRegistry` | M | **Closed** 2026-08-11 (`P02-S05-M18-T04`) | — |
-| R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3 now closed; 5 further Kernel packages added 2026-08-11) | M | **Open — partially ticketed** | Health audit, 2026-08-11 |
+| R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3 and 8 now closed; 5 further Kernel packages added 2026-08-11; item 8 added *and* closed 2026-08-12, and showed the sweep must measure per module, not per package) | M | **Open — partially ticketed** | Health audit, 2026-08-11 |
 
 ---
 
@@ -489,6 +489,40 @@ the test pass, and the full worker-loop file passes 5/5. The
 local-HTTP-server half of this entry (the original 2026-08-09 flakes) is
 a distinct family, unchanged and still closed as before.
 
+**Fourth occurrence — the *other* test, with a reliable local
+reproduction (2026-08-12, `P02-S07-M17-T04`).** `P02-S01-M05-T16`'s fix
+above remediated exactly one test,
+`test_a_single_tick_genuinely_advances_multiple_real_instances_concurrently`.
+Its sibling in the same file —
+`test_run_worker_loop_genuinely_drives_a_real_instance_to_completion_on_its_own`,
+the one the 2026-08-10 addendum recorded failing real CI once with
+`assert ...RUNNING... == ...COMPLETED...` — was **never touched**, and it
+still carries the same too-tight margin: it sleeps `0.05 * 8` (0.4s
+total) and asserts the instance has reached `COMPLETED`, which needs two
+real ticks at a 0.05s poll interval.
+
+**New evidence this entry did not previously have: a deterministic local
+trigger, and proof it is not a regression.** Running the whole
+`tests/integration/workflow_engine` directory (33 files, ~4 minutes)
+fails this test reliably on Windows, while the same test passes in
+isolation and passes when only its own file runs (5/5). It was then
+**reproduced on a genuinely clean tree** — `git stash push -u` to remove
+every change from the step that found it, re-run the same directory:
+identical result, `1 failed, 132 passed, 6 skipped`, the same test. So
+the flake is independent of any code change, and specifically *not*
+caused by the outbox insert that step added to the same completion path
+(the plausible suspect, ruled out by measurement rather than argument).
+
+**Not fixed here — deliberately, and this is the disclosed reason.** It
+is pre-existing, it is out of that step's approved scope (the Event Bus
+outbox writer), and it has passed every CI run since its single
+2026-08-10 CI occurrence, so the Ubuntu runner does not currently
+exhibit it. The fix itself is known and small — the same treatment its
+sibling already received: express the wait as named constants with real
+headroom over the two-tick minimum instead of a bare `0.05 * 8`. Worth
+its own small step; recorded here so the next person does not have to
+rediscover the reproduction recipe.
+
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 
 Found `P05-S02-M32-T01`, closed `P05-S02-M32-T02` (2026-08-09).
@@ -795,6 +829,35 @@ Genuine instances, worst first:
    wired via `deploy/entrypoint.sh` (`exec uvicorn
    ai_os_kernel.entrypoints.api:app`, `exec python -m
    ai_os_kernel.entrypoints.worker`).
+
+8. **The Outbox Relay and `platform.event_outbox` — CLOSED 2026-08-12
+   (`P02-S07-M17-T04`).** Found while choosing the next step, and worth
+   recording because **the 2026-08-11 sweep above structurally could not
+   have caught it**: that sweep counted production importers per
+   *package*, and `event_bus` is a wired package (`bus.py` has real
+   publishers and subscribers). The idle code was two modules *inside*
+   it, so a package-granularity query reported the package as reachable
+   and moved on. Real code, zero production reachability, stated
+   outright in the codebase's own docstrings:
+   `ai_os_kernel.event_bus.__init__` said "No writer for
+   `platform.event_outbox` exists yet", and `event_bus.md` §4 said "no
+   continuously-running relay loop wired into `bootstrap.py` yet
+   (`run_outbox_relay_loop` exists, unwired)". So `OutboxRelay` (4 real
+   Postgres tests), its `run_outbox_relay_loop`, and the
+   `platform.event_outbox` table and migration were all real, tested,
+   and unreachable — the table had never held a production row.
+
+   Closed by giving the table its first real writer
+   (`outbox_writer.write_outbox_event`, joining the caller's
+   transaction) and starting the relay loop in `bootstrap.py`. The
+   payoff is the same shape as item 3's: a *second* idle component was
+   waiting downstream — `NotificationService`'s `workflow.completed`
+   category had been subscribed but unreachable since it was built, and
+   is now genuinely reachable in a configured deployment.
+
+   **Lesson for the next sweep:** measure reachability per *module*, not
+   per package. A package can be wired while carrying dead modules, and
+   this is now a confirmed instance, not a hypothetical.
 
 **R-017 was originally the last item of this same list** (numbered 7 before the 2026-08-11 additions above renumbered it) and is now closed —
 which is the reason this entry stays open rather than being written off

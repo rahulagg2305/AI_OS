@@ -18,6 +18,7 @@ import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from ai_os_kernel.event_bus.outbox_writer import write_outbox_event
 from ai_os_kernel.persistence.schema import (
     workflow_events,
     workflow_instances,
@@ -658,6 +659,38 @@ class SqlWorkflowInstanceRepository:
                             payload={},
                             occurred_at=occurred_at,
                         )
+                    )
+                    # The same terminal fact, additionally written to the
+                    # transactional outbox (`P02-S07-M17-T04`) — not a
+                    # duplicate of the row above but a genuinely different
+                    # destination for a genuinely different consumer.
+                    # `workflow.workflow_events` is this engine's own
+                    # *event-sourcing* log, read only by
+                    # `list_events`/`GET /workflows/{id}/events`; nothing
+                    # subscribes to it. `platform.event_outbox` is
+                    # ADR-0012's cross-component delivery path, drained by
+                    # `OutboxRelay` into the real `InProcessEventBus` where
+                    # `NotificationService` is already subscribed.
+                    # `event_bus.md` §5's own decision table settles which
+                    # mechanism this event uses: "workflow lifecycle" is
+                    # listed under **Transactional outbox**, so a direct
+                    # `InProcessEventBus.publish` here would be wrong —
+                    # a committed completion whose notification was lost to
+                    # a crash is exactly the failure ADR-0012 exists to
+                    # prevent. Writing it inside this *already open*
+                    # transaction is what makes that guarantee real: a
+                    # rollback takes the outbox row with it.
+                    #
+                    # `workflow_id` travels in the payload because
+                    # `platform.event_outbox` has no such column and the
+                    # relay therefore always rebuilds `Event.workflow_id`
+                    # as `None` — a real, pre-existing schema limitation
+                    # `outbox_relay`'s own docstring documents, not
+                    # something introduced here.
+                    await write_outbox_event(
+                        connection,
+                        event_type=_WORKFLOW_COMPLETED_EVENT_TYPE,
+                        payload={"workflow_id": workflow_id},
                     )
         except sa.exc.SQLAlchemyError as exc:
             raise WorkflowInstanceCreationError(

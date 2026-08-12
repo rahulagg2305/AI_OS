@@ -456,6 +456,11 @@ from ai_os_kernel.evaluation_engine.cost_anomaly import (
     run_periodic_cost_anomaly_check,
 )
 from ai_os_kernel.event_bus.bus import InProcessEventBus
+from ai_os_kernel.event_bus.outbox_relay import (
+    OUTBOX_RELAY_INTERVAL_SECONDS,
+    OutboxRelay,
+    run_outbox_relay_loop,
+)
 from ai_os_kernel.git_integration.default_service import build_git_integration_service_from_env
 from ai_os_kernel.health import ComponentStatus, GracefulShutdownCoordinator, HealthService
 from ai_os_kernel.knowledge_manager.query_engine import QueryEngine
@@ -1787,10 +1792,15 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     (``ai_os_kernel.workflow_engine.scheduler.run_scheduler_loop``,
     starting a `created` instance once its own real, persisted
     `scheduled_at` is due — workflow_engine.md §5.13's own
-    previously-"not built at all" Scheduler component). All five are
-    genuinely stopped — cancelled or signalled to stop, then awaited —
-    before ``engine.dispose()`` runs, so no query any of them makes can
-    ever race a closed connection pool.
+    previously-"not built at all" Scheduler component) and, as of
+    ``P02-S07-M17-T04``, the Outbox Relay's own loop
+    (``ai_os_kernel.event_bus.outbox_relay.run_outbox_relay_loop``,
+    draining ``platform.event_outbox`` into ``app.state.event_bus`` —
+    likewise built, tested, and left unstarted until a real writer
+    existed to give it rows). All are genuinely stopped — cancelled or
+    signalled to stop, then awaited — before ``engine.dispose()`` runs,
+    so no query any of them makes can ever race a closed connection
+    pool.
     """
     app.state.token_verifier = await _build_token_verifier(app.state.config)
     # Needs no database, no config, and no LLM secret -- built
@@ -1942,6 +1952,38 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         app.state.scheduler_task = scheduler_task
         shutdown_coordinator.register_task("scheduler", scheduler_task)
+        # The Outbox Relay's own real background loop (P02-S07-M17-T04).
+        # `run_outbox_relay_loop` was built by P02-S07-M17-T03 and left
+        # unwired — `event_bus.md` §4's Implementation Status said so
+        # outright ("no continuously-running relay loop wired into
+        # bootstrap.py yet ... mirroring run_scheduler_loop's own
+        # shape"), which is exactly the shape followed here. Starting it
+        # is half of what makes the durable path real; the other half is
+        # the first genuine writer, now inserting `workflow.completed`
+        # into `platform.event_outbox` inside its own terminal
+        # transaction (SqlWorkflowInstanceRepository.advance_workflow).
+        # Together they carry a committed workflow completion all the
+        # way to NotificationService, which has been subscribed but
+        # unreachable for this category since it was built.
+        #
+        # Always started once a real engine exists, and cancellation-
+        # based rather than stop-event-based because
+        # `run_outbox_relay_loop` takes no stop_event — the identical
+        # `register_task` treatment `scheduler` above already gets. An
+        # empty backlog is a genuinely cheap no-op pass
+        # (`tick_once`'s own `outbox_relay.no_pending_rows` branch), so
+        # there is no configuration to gate this on.
+        outbox_relay_interval = app.state.config.outbox_relay_interval_seconds
+        if outbox_relay_interval is None:
+            outbox_relay_interval = OUTBOX_RELAY_INTERVAL_SECONDS
+        outbox_relay_task = asyncio.create_task(
+            run_outbox_relay_loop(
+                relay=OutboxRelay(engine, app.state.event_bus),
+                interval_seconds=outbox_relay_interval,
+            )
+        )
+        app.state.outbox_relay_task = outbox_relay_task
+        shutdown_coordinator.register_task("outbox_relay", outbox_relay_task)
         # The multi-instance worker loop's own real background loop
         # (P02-S01-M05-T14) — the first of the four P02-S01-M05-T09
         # through T12 "proven, unused" capabilities to move to "proven,

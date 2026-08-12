@@ -61,10 +61,16 @@ Complies with `docs/03_architecture/kernel/event_bus.md` and the Constitution's 
 
 ---
 
-## Implementation Status (appended 2026-07-28 — not part of the Accepted decision)
+## Implementation Status (appended 2026-07-28, corrected 2026-08-12 — not part of the Accepted decision)
 
-**Status in code:** Not yet implemented
+**Status in code:** Both parts of this decision are built and running; two named sub-components are not.
 
-`ai_os_kernel.event_bus` is a docstring-only stub — there is no in-process asyncio bus, no event envelope type, no publisher, and no subscriber anywhere in the codebase. The only part of this decision that exists is the `platform.event_outbox` table in the persistence schema, which has no writer and no relay.
+**This section was materially stale until 2026-08-12** and is preserved here as a correction rather than silently rewritten. It read: *"Not yet implemented — `ai_os_kernel.event_bus` is a docstring-only stub — there is no in-process asyncio bus, no event envelope type, no publisher, and no subscriber anywhere in the codebase. The only part of this decision that exists is the `platform.event_outbox` table in the persistence schema, which has no writer and no relay."* Every clause of that had become false: `bus.py`'s `InProcessEventBus` and `models.py`'s typed `Event` envelope shipped in `P02-S07-M17-T02`; `outbox_relay.py`'s `OutboxRelay` in `P02-S07-M17-T03`; real subscribers in `routes/stream.py` (`P06-S02-M37-T01`) and `notification/service.py` (`P06-S05-M22-T01`); and a real publisher in `evaluation_engine/cost_anomaly.py` (`P07-S03-M42-T02`).
 
-Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)
+**Part 1 (in-process bus) — built and running.** `InProcessEventBus` is constructed unconditionally in `bootstrap.py`'s `_lifespan`, with real production subscribers (the `/api/v1/stream` WebSocket endpoint, `NotificationService`) and a real production publisher (`cost.anomaly`).
+
+**Part 2 (transactional outbox) — built and running as of `P02-S07-M17-T04` (2026-08-12).** The table, a real writer, and a continuously-running relay all now exist. `event_bus.outbox_writer.write_outbox_event` takes the caller's `AsyncConnection` rather than an engine, so this decision's defining requirement — the event row written "in the same transaction as the state change that produced them" — is enforced structurally and proven by a test that rolls the transaction back and asserts no row survives. Its first producer is the Workflow Engine's terminal `workflow.completed` transition; `run_outbox_relay_loop` runs as a registered background task.
+
+**Not built:** the relay's bounded-retry / dead-letter policy (this decision's at-least-once guarantee is honoured, but `attempts` has no cutoff and `platform.event_outbox` has no dead-letter destination — `event_bus.md` §10 names this as the one genuinely open question, and it now matters because real rows finally flow); the Topic/Channel Manager; the Schema Registry (versioning exists only as `Event.schema_version`). Redis Streams remains unadopted, and correctly so — none of §"Scale trigger"'s conditions has been met, and **no Kernel code uses Redis at all**.
+
+Live status: [`feature_inventory.md`](../../19_roadmap/feature_inventory.md) — the authority on per-module completeness · Build history: [`history/INDEX.md`](../../19_roadmap/history/INDEX.md)

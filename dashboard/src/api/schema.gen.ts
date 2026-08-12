@@ -1273,6 +1273,8 @@ export interface components {
             oidc_issuer?: string | null;
             /** Oidc Jwks Uri */
             oidc_jwks_uri?: string | null;
+            /** Outbox Relay Interval Seconds */
+            outbox_relay_interval_seconds?: number | null;
             /** Pack Health Poll Interval Seconds */
             pack_health_poll_interval_seconds?: number | null;
             /**

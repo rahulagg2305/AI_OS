@@ -10,11 +10,15 @@ scale-out transport, adopted only when its trigger condition is met
 See docs/03_architecture/kernel/event_bus.md, ADR-0012.
 
 Implemented so far: the in-process asyncio pub/sub box
-(:class:`InProcessEventBus`, ``P02-S07-M17-T02``) and the Outbox Relay
+(:class:`InProcessEventBus`, ``P02-S07-M17-T02``), the Outbox Relay
 (:class:`OutboxRelay`, ``P02-S07-M17-T03``, draining
-``platform.event_outbox`` into the in-process bus). No writer for
-``platform.event_outbox`` exists yet; the Topic/Channel Manager and
-Schema Registry boxes remain not yet implemented.
+``platform.event_outbox`` into the in-process bus) and, since
+``P02-S07-M17-T04``, the outbox *writer*
+(:func:`write_outbox_event`) — with its first real producer, the
+Workflow Engine's own terminal ``workflow.completed`` transition, and
+the relay loop genuinely running in ``bootstrap.py``. The
+Topic/Channel Manager and Schema Registry boxes remain not yet
+implemented.
 """
 
 from ai_os_kernel.event_bus.bus import (
@@ -34,12 +38,14 @@ from ai_os_kernel.event_bus.outbox_relay import (
     OutboxRelayResult,
     run_outbox_relay_loop,
 )
+from ai_os_kernel.event_bus.outbox_writer import OUTBOX_SCHEMA_VERSION, write_outbox_event
 
 __all__ = [
     "DEFAULT_SUBSCRIBER_QUEUE_SIZE",
     "OUTBOX_RELAY_BATCH_LIMIT",
     "OUTBOX_RELAY_INTERVAL_SECONDS",
     "OUTBOX_RELAY_SOURCE",
+    "OUTBOX_SCHEMA_VERSION",
     "Event",
     "EventBus",
     "EventHandler",
@@ -50,4 +56,5 @@ __all__ = [
     "new_event_id",
     "new_outbox_id",
     "run_outbox_relay_loop",
+    "write_outbox_event",
 ]

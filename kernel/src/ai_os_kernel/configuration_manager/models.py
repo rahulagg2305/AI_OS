@@ -80,6 +80,16 @@ class PlatformConfig(BaseModel):
     already establishes — ``None`` (every real deployment) means "use
     the real, decided 5-second policy constant"."""
 
+    outbox_relay_interval_seconds: float | None = None
+    """Overrides :data:`ai_os_kernel.event_bus.outbox_relay.OUTBOX_RELAY_INTERVAL_SECONDS`
+    for the real background Outbox Relay loop
+    (`ai_os_kernel.bootstrap._lifespan`, `P02-S07-M17-T04`). The
+    identical "test-only override, never a second policy decision"
+    shape ``scheduler_interval_seconds`` above already establishes —
+    ``None`` (every real deployment) means "use the real, decided
+    5-second policy constant", which is also NFR-023's own documented
+    relay-lag budget (`event_bus.md` §4)."""
+
     # No `otlp_endpoint` field here: `OTEL_EXPORTER_OTLP_ENDPOINT` is one
     # of §3.3's named "bootstrap minimum" environment variables, read
     # directly (`ai_os_kernel.observability.settings.ObservabilitySettings`),

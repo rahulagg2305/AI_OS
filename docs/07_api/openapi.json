@@ -1283,6 +1283,17 @@
             ],
             "title": "Oidc Jwks Uri"
           },
+          "outbox_relay_interval_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outbox Relay Interval Seconds"
+          },
           "pack_health_poll_interval_seconds": {
             "anyOf": [
               {

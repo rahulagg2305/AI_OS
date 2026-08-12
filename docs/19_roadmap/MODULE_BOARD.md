@@ -6,7 +6,7 @@
 
 # AI_OS - Module Board
 
-**Generated:** 2026-08-11. Replaces `feature_inventory.md` §5's hand-maintained completion table.
+**Generated:** 2026-08-12. Replaces `feature_inventory.md` §5's hand-maintained completion table.
 
 Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retired and never reused.
 
@@ -28,7 +28,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M14 | Security Manager | P03+P07 | 12 | 12 | 100% |
 | M15 | Quality Gate Engine | P02 | 9 | 9 | 100% |
 | M16 | Traceability Engine | P04 | 5 | 5 | 100% |
-| M17 | Event Bus | P02 | 3 | 3 | 100% |
+| M17 | Event Bus | P02 | 4 | 4 | 100% |
 | M18 | Tool Invoker (SDK interface) | P02 | 4 | 4 | 100% |
 | M19 | Secrets Manager | P01+P07 | 7 | 7 | 100% |
 | M20 | Sandbox / SandboxExecutor | P03 | 5 | 4 | 90% |

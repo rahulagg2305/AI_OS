@@ -18,8 +18,12 @@ worker is mid-dispatching is skipped this pass, not blocked on.
 **A real, disclosed schema limitation.** ``platform.event_outbox``
 (``data_model.md`` §10) carries ``event_type``/``schema_version``/
 ``payload``/``trace_id``/``created_at`` — deliberately no ``source`` or
-``workflow_id`` column (no writer exists yet either; this ticket does
-not add one). Rebuilt :class:`~ai_os_kernel.event_bus.models.Event`\\ s
+``workflow_id`` column. (A real writer now exists —
+:func:`~ai_os_kernel.event_bus.outbox_writer.write_outbox_event`,
+``P02-S07-M17-T04`` — so a caller needing a subscriber to know *which*
+workflow an event concerns puts the id in ``payload``; see that
+module's own docstring.) Rebuilt
+:class:`~ai_os_kernel.event_bus.models.Event`\\ s
 therefore use ``source=OUTBOX_RELAY_SOURCE`` (a real, honest fact — the
 relay genuinely is the immediate republishing source, distinct from
 whatever process originally wrote the row) and ``workflow_id=None``.

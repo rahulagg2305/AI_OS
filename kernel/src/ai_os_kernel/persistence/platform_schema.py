@@ -19,12 +19,22 @@ this whole persistence layer has held since the very first migration:
 every table here mirrors a documented column list exactly. Add it once
 data_model.md names its columns.
 
-Schema and migration only for ``event_outbox`` — it is ADR-0012's
-transactional outbox ("written in the same transaction as the state
-change that produced the event"); nothing in this codebase writes to
-an outbox yet — `workflow_events` remains the only durable event log,
-and the Event Bus itself (in-process pub/sub plus the outbox relay)
-does not exist yet.
+``event_outbox`` is ADR-0012's transactional outbox ("written in the
+same transaction as the state change that produced the event"). **This
+paragraph was stale until 2026-08-12** and is corrected rather than
+quietly rewritten: it said "nothing in this codebase writes to an outbox
+yet ... and the Event Bus itself (in-process pub/sub plus the outbox
+relay) does not exist yet." The Event Bus shipped in ``P02-S07-M17-T02``
+and its relay in ``P02-S07-M17-T03``; the first real writer arrived in
+``P02-S07-M17-T04`` —
+:func:`~ai_os_kernel.event_bus.outbox_writer.write_outbox_event`, which
+takes the caller's ``AsyncConnection`` precisely so this table's
+defining same-transaction property is structural. Its first producer is
+:meth:`~ai_os_kernel.workflow_engine.repository.
+SqlWorkflowInstanceRepository.advance_workflow`'s terminal
+``workflow.completed`` branch. ``workflow_events`` remains a separate,
+unchanged concern — this engine's own event-*sourcing* log, read by
+``GET /workflows/{id}/events`` and subscribed to by nothing.
 
 ``idempotency_keys`` now has a real reader/writer (``P06-S01-M36-T03``,
 2026-08-06): :class:`~ai_os_kernel.routes.idempotency.
