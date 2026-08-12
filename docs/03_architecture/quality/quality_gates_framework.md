@@ -16,7 +16,7 @@
 
 Consequence a reader must not miss: the "blocking gates cannot be skipped" invariant stated in `PROJECT_INDEX.md` and [ADR-0006](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) is now **enforced for exactly this one real case, still an architectural commitment rather than a general mechanism everywhere else.** Building the full engine remains an outstanding Stage B deliverable.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

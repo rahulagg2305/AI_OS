@@ -35,7 +35,7 @@ This document is subordinate to:
 - **§4 Feature flags and §5 Experiment overrides are entirely unbuilt** — no feature-flag type or field exists anywhere in the Kernel, and the Experiment Manager they'd feed is 0% built.
 - **§6 Validation is real**: an unknown key or wrong type in `platform.yaml`/an environment file raises `ConfigurationError` at `load()` time via `PlatformConfig.model_validate`, matching "invalid configuration should prevent startup."
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 4, Configuration Manager) and `../../19_roadmap/implementation_status.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 4, Configuration Manager).
 
 ---
 
@@ -179,4 +179,4 @@ Order of precedence:
 - [`../kernel/configuration_manager.md`](../kernel/configuration_manager.md) — the parent design this document deepens; defines the canonical 7-layer precedence order
 - [`../../09_security/secrets_management.md`](../../09_security/secrets_management.md) — the secrets layer (§7) this document defers to, itself only partially built (env backend only)
 - [`../platform/technology_stack.md`](../platform/technology_stack.md) — confirms `pydantic-settings`/Pydantic as the validation technology
-- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) — live build status

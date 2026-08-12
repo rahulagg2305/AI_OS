@@ -55,7 +55,7 @@ the step at hand. A Task ticket is capped at 24 lines.
 
 **This rule replaces** the previous "Read `implementation_status.md` first,
 every session, before anything else" rule in `CLAUDE.md` and the
-`implementation_status.md`/`feature_inventory.md` update obligations under
+`feature_inventory.md` update obligations under
 Documentation discipline below — those two files are now **generated
 output** (`python -m scripts.roadmap.generate`) and must never be
 hand-edited. You update a **ticket's `status:` field**, not a tracker.
@@ -107,13 +107,13 @@ Four permanent additions to every step's report, in full in `docs/process/report
 Process and hygiene rules aimed at reducing per-step time/cost **without reducing safety or evidence quality** — none of these relax the "real evidence, zero regression, docs are truth" rules above; they scope *where* that evidence is gathered each step.
 
 1. **Test/lint runs are scoped by default.** A normal step runs tests only for the files/modules it touched plus their direct dependents (importers/callers) — not the entire suite, and not the full `mypy`/`ruff` sweep. A **full-suite + full `mypy --strict`/`ruff` sweep** still runs in exactly three cases, and is not optional in any of them:
-   - **(a) Every 5 steps, as a checkpoint** — counted against the same "Nth normal feature/implementation step" counter `implementation_status.md`'s own header already narrates (docs-only hygiene steps like this one don't advance that counter; feature and infrastructure steps do).
+   - **(a) Every 5 steps, as a checkpoint** — counted against the same "Nth normal feature/implementation step" counter `implementation_status.md` (**superseded**)'s own header already narrates (docs-only hygiene steps like this one don't advance that counter; feature and infrastructure steps do).
    - **(b) Before any commit that changes shared/core infrastructure** — `bootstrap.py`, anything under `persistence/`, `configuration_manager/`, cross-cutting Protocols, migrations, or anything else touched by more than one subsystem.
    - **(c) Whenever explicitly requested**, regardless of where the step count sits.
    This rule is easy to accidentally revert to "always full suite" out of caution — it is binding as written, not a suggestion to use judgment about; if a step's own scope is genuinely ambiguous about whether it's "core infrastructure," treat it as (b) and run the full sweep.
 2. **Don't re-verify unchanged subsystems.** If a step's own diff doesn't touch a subsystem (e.g. the Sandbox, the LLM Gateway) and the change could not plausibly affect it (no shared import, no shared table, no shared config), that subsystem's own prior proof stands — it does not need a fresh test run or a fresh manual check just because the step happened to touch the same repository. Re-verify it only when the change plausibly reaches it, even indirectly.
 3. **Report evidence defaults to bullets and short snippets, not full pasted output blocks.** See `docs/process/reporting_format.md`'s own item 6 for the exact shape — full detail (complete command output, long narrative) is preserved only when something surprising, a bug, or a real design decision occurred, matching the existing "judgment calls worth flagging" practice.
-4. **`implementation_status.md`/`feature_inventory.md` edits stay to a few lines per step** — a status line, a percentage, a one-sentence pointer to where the real detail lives (a commit, a test file, a `history/` entry) — not a paragraph. Full narrative detail belongs in a `docs/19_roadmap/history/` entry (or the relevant architecture doc's own Implementation Status section), never duplicated into the live tracker. This reverses the pattern the last 10 feature-step entries in `implementation_status.md` actually used (each a long, self-contained paragraph) — those existing entries are left as historical record, not rewritten, but every step from 2026-07-30 onward follows this shorter shape.
+4. **`feature_inventory.md` edits stay to a few lines per step** — a status line, a percentage, a one-sentence pointer to where the real detail lives (a commit, a test file, a `history/` entry) — not a paragraph. Full narrative detail belongs in a `docs/19_roadmap/history/` entry (or the relevant architecture doc's own Implementation Status section), never duplicated into the live tracker. This reverses the pattern the last 10 feature-step entries in `implementation_status.md` actually used (each a long, self-contained paragraph) — those existing entries are left as historical record, not rewritten, but every step from 2026-07-30 onward follows this shorter shape.
 
 ## Environment quirks worth knowing (see `CLAUDE.md` for the short version)
 

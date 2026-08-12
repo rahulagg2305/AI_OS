@@ -37,7 +37,7 @@ Version 2.0 replaces the earlier illustrative YAML sketch with a typed, enforcea
 - **Of the lifecycle states below, `discovered`, `validated`, `activated`, and `deactivated` have real code paths; `installed`, `configured`, `failed`, and `uninstalled` do not have distinct implemented transitions.** "Activation of a pack that affects platform behaviour requires human approval" has no implementation at all — there is no approvals writer or reader anywhere (see `../governance/human_approval_points.md`).
 - The `events`, `commands`, `qualityGates`, `tools`, `secrets`, and `health` manifest sections are all schema-valid and declarable but have **no consuming runtime**: no Event Bus, no command dispatcher, no Quality Gate Engine, no pack-declared Tool path, no per-pack secret resolution, and no health-check caller.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table — rows 2, 13, 28) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table — rows 2, 13, 28). Build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -208,7 +208,7 @@ The Manifest Loader is specified to enforce all of the following. Any failure re
 8. `dependencies.packs` is empty — pack-to-pack dependencies are prohibited.
 9. `secrets[].reference` matches the `secret://` pattern. A literal secret value cannot validate.
 10. `entryPoint` is required when the pack declares agents or workflows.
-11. `modelAlias` is required on an `agents[]` entry only when that entry's own `permissions` declares `llm:invoke`; an agent that declares no `llm:invoke` permission (because it genuinely makes no LLM call) may omit `modelAlias` entirely (fixed 2026-07-28 — a genuine, discovered gap: the schema originally required `modelAlias` unconditionally on every agent, forcing an agent with no LLM call to declare a syntactically-valid but unused decoy value; see `docs/19_roadmap/implementation_status.md` for the discovery and `platform_sdk/schemas/manifest.schema.json`'s own `agents[].if`/`then` for the fix).
+11. `modelAlias` is required on an `agents[]` entry only when that entry's own `permissions` declares `llm:invoke`; an agent that declares no `llm:invoke` permission (because it genuinely makes no LLM call) may omit `modelAlias` entirely (fixed 2026-07-28 — a genuine, discovered gap: the schema originally required `modelAlias` unconditionally on every agent, forcing an agent with no LLM call to declare a syntactically-valid but unused decoy value; see `docs/19_roadmap/history/INDEX.md` for the discovery and `platform_sdk/schemas/manifest.schema.json`'s own `agents[].if`/`then` for the fix).
 
 **Semantic-level** (to be enforced by the Loader beyond the schema — see the status note above for which of 12–21 are actually built):
 12. `compatibility.minKernelVersion` ≤ running Kernel version ≤ `maxKernelVersion`.
@@ -326,4 +326,4 @@ Order of precedence:
 
 **Current state of the build**
 
-- `../../19_roadmap/feature_inventory.md` (rows 2, 13, 28), `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md` (rows 2, 13, 28), `../../19_roadmap/history/INDEX.md`

@@ -14,7 +14,7 @@
 
 No code reads this structure: the Context Manager has no AI Context Pack resolver. Strategy and rationale: `ai_context_strategy.md`.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

@@ -14,7 +14,7 @@
 
 **Not built:** the `Cache` Protocol §1 describes (this module has a concrete `ResponseCache` only, no Protocol, no in-memory test adapter — no second implementation is real or imminent yet, ADR-0004); no platform cache (resolved configuration, resolved secrets, parsed documents, retrieval results, pack registry metadata); no rate limiter; `ResponseCache` is not wired into `llm_gateway.gateway`'s real call path yet — nothing in a real Kernel composition calls it. Stage B deliverable, still in progress.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

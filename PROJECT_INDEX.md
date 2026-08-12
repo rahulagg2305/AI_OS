@@ -45,7 +45,7 @@ AI_OS is **not** a coding assistant. It is an extensible AI platform that orches
 
 | Document | What it tells you |
 |---|---|
-| `docs/19_roadmap/implementation_status.md` | **Read this first, every session.** Short by design: current stage, what exists, current blockers, next recommended step. |
+| `docs/19_roadmap/feature_inventory.md` | **Read this first.** The authority on per-module completeness (2026-08-11 ruling). `implementation_status.md` is **superseded** — do not read it for status. |
 | `docs/19_roadmap/feature_inventory.md` | The per-module completion tracker — every module with a percentage, a status category, and what remains. The authority on "how done is X." |
 | `docs/19_roadmap/history/INDEX.md` | Full chronological build history, split by milestone. |
 
@@ -202,7 +202,7 @@ These are enforced by mechanism, not convention. Each has a governing ADR.
 
 Detail and exit criteria: `docs/19_roadmap/implementation_roadmap.md`. Per-module percentages: `docs/19_roadmap/feature_inventory.md`.
 
-> **Why stages overlap.** A product-owner reprioritization (2026-07-27) redirected work toward the shortest real path to a working multi-agent pipeline, which pulled some Stage C deliverables ahead of Stage B completion. This is deliberate and recorded — see `docs/19_roadmap/implementation_status.md` and `docs/19_roadmap/history/INDEX.md`. Do not assume stages complete strictly in order.
+> **Why stages overlap.** A product-owner reprioritization (2026-07-27) redirected work toward the shortest real path to a working multi-agent pipeline, which pulled some Stage C deliverables ahead of Stage B completion. This is deliberate and recorded — see `docs/19_roadmap/history/INDEX.md`. Do not assume stages complete strictly in order.
 
 ---
 

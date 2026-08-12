@@ -46,7 +46,7 @@ This document is subordinate to the Agent Architecture & Agent Contract and the 
 
 **Not built:** the other 12 agents (`technical-planner`, `backend-developer`, `frontend-developer`, `database`, `api-designer`, `devops`, `security`, `code-reviewer`, `release`, `refactoring`, `performance`, `existing-project-analyzer`). Also not built and assumed throughout this document: the Tool Invoker and any manifest-declared Tool (no `fs.read`, `fs.list`, `code.search`, `fs.apply_patch`, `build.run`, `git.diff` or `doc.parse` tool exists anywhere), the Quality Gate Engine (so no gate named in any section below is real), and the `ai-os-sdk` package that would supply `ArtifactRef`, `ContextItem`, `StepBudget` and `StructuredError` — `platform_sdk/` contains exactly one real file, `../../platform_sdk/schemas/manifest.schema.json`.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` (per-module completion table — rows 29–31 for this pack, row 18 for the Tool Invoker, row 15 for the Quality Gate Engine, row 27 for the SDK) and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` (per-module completion table — rows 29–31 for this pack, row 18 for the Tool Invoker, row 15 for the Quality Gate Engine, row 27 for the SDK). Build history: `../19_roadmap/history/INDEX.md`.
 
 ---
 

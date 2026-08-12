@@ -58,7 +58,7 @@ Everything else below remains unbuilt, as detailed next.
 
 **This is exactly why Capability Packs currently import Kernel internals directly.** The `software-engineering` pack — the platform's own flagship pack — imports `ai_os_kernel.*` in every agent module and in its pipeline composition, because there is no SDK package for it to depend on instead and it genuinely needs a real LLM Gateway, Prompt Engine, and database connection. That is a live, knowing violation of §2 rule 1, §10, and the Capability Pack Contract's "Direct Kernel access is prohibited", recorded as a dated exception in `../capability_framework/capability_pack_contract.md` § Platform Interaction Rules and in each affected module's own docstring. **Scaffolding this document into a real `ai-os-sdk` package is what closes it** — and closing it is the single highest-leverage item this document implies.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table — see rows 18, 27, and 44) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table — see rows 18, 27, and 44). Build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -755,5 +755,5 @@ Order of precedence:
 **Current state of the build**
 
 - `../../19_roadmap/feature_inventory.md` — rows 18 (`ToolInvoker`), 27 (`ai-os-sdk`), 28 (Manifest Schema), 44 (`AiOsError` hierarchy)
-- `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/history/INDEX.md`
 - `platform_sdk_v1_scope.md` — the concrete, evidence-based v1.0.0 build sequence for exactly this document's surface, scoped 2026-07-28

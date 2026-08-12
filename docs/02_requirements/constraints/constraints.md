@@ -34,7 +34,7 @@ Constraints are binding conditions, not features, so "built" here means *enforce
 - **CON-030–CON-038** are properties of the world and remain true; the platform absorbs CON-030, CON-031, CON-035 and CON-036 today (reproducibility framing, no sampling params in the request contract, retry/circuit-breaker/fallback, aliases-as-configuration). CON-032's capability matrix exists; CON-033 (prefix-stable prompt caching), CON-034 (provider token-counting endpoints) and CON-038 (egress controls) have no implementation.
 - **CON-025** is moot in practice: there is no SQLite development mode — Postgres-backed integration tests use `tests/integration/_postgres_fixture.py`, which skips cleanly when Docker is unavailable.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table). Build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -139,7 +139,7 @@ Order of precedence:
 
 **Live build status**
 - `../../19_roadmap/feature_inventory.md` — per-module completion table (the authority on which constraints are actually enforced by code)
-- `../../19_roadmap/implementation_status.md` — current stage and blockers
+- `../../19_roadmap/feature_inventory.md` — the authority on per-module completeness
 - `../../19_roadmap/history/INDEX.md` — build history
 
 **Architecture documents that enforce these constraints**

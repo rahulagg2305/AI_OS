@@ -43,7 +43,7 @@ to that rule, not as evidence it failed.
 | R-012 | Ticket dependency graph had no recorded edges | M | **Closed** 2026-07-31 | — |
 | R-013 | Two dependency edges were judgement calls | L | **Closed** 2026-07-31 | Both decided, no change |
 | R-014 | No CI job ever ran any Capability Pack's own `tests/` | M | **Closed** 2026-08-09 | — |
-| R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop concurrency margin) | L | **Closed** 2026-08-09; worker-loop timing half **partially remediated** 2026-08-11 (`P02-S01-M05-T16`) — a 4th occurrence in the *unremediated* sibling test, with a reliable local reproduction and clean-tree proof, recorded 2026-08-12 and **not** fixed | — |
+| R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop timing margins) | L | **Closed** 2026-08-09; both worker-loop timing tests remediated (`P02-S01-M05-T16` 2026-08-11, 4th occurrence 2026-08-12); two further real root causes — an unclosed asyncio subprocess transport and 19 HTTP handlers never draining the request body — found and fixed 2026-08-12 | — |
 | R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Open — real, undecided design question** | Product owner, 2026-08-10 |
 | R-017 | Manifest-declared Tools were unreachable in production — no caller ever passed a `ToolRegistry` | M | **Closed** 2026-08-11 (`P02-S05-M18-T04`) | — |
 | R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3 and 8 now closed; 5 further Kernel packages added 2026-08-11; item 8 added *and* closed 2026-08-12, and showed the sweep must measure per module, not per package) | M | **Open — partially ticketed** | Health audit, 2026-08-11 |
@@ -513,15 +513,135 @@ the flake is independent of any code change, and specifically *not*
 caused by the outbox insert that step added to the same completion path
 (the plausible suspect, ruled out by measurement rather than argument).
 
-**Not fixed here — deliberately, and this is the disclosed reason.** It
-is pre-existing, it is out of that step's approved scope (the Event Bus
-outbox writer), and it has passed every CI run since its single
-2026-08-10 CI occurrence, so the Ubuntu runner does not currently
-exhibit it. The fix itself is known and small — the same treatment its
-sibling already received: express the wait as named constants with real
-headroom over the two-tick minimum instead of a bare `0.05 * 8`. Worth
-its own small step; recorded here so the next person does not have to
-rediscover the reproduction recipe.
+**Fixed 2026-08-12** (remediation step, after being recorded above as
+deliberately deferred from `P02-S07-M17-T04`).
+
+**Root cause, measured over 12 real trials** against a real Postgres
+container on an idle machine: completion took min 0.209s, median 0.234s,
+max 0.282s against the bare 0.4s budget. The theoretical floor is 0.120s
+(2 ticks x 0.05s poll + 2 x 0.01s step), so the genuine fixed overhead —
+discovery query, lease acquire, advance, event-loop scheduling — is
+**~0.089s per completion**. The observed maximum therefore sat at
+**0.70x the bound on an unloaded machine**, leaving ~0.118s of headroom;
+the whole `tests/integration/workflow_engine` directory reliably crossed
+it. Identical pathology to the sibling: the margin did not dominate the
+fixed overhead.
+
+**Fix:** the blind `asyncio.sleep(0.05 * 8)`-then-assert-once was
+replaced with a real condition wait (`_wait_for_completion`, bounded by
+a named `_COMPLETION_TIMEOUT_SECONDS = 10.0` — ~35x the measured
+maximum — polling every 10ms), the same `_wait_until` shape
+`tests/integration/event_bus/test_outbox_relay.py` already establishes.
+This is strictly stronger than widening the number: it still fails if
+the loop genuinely never drives the instance to completion (the real
+regression the test exists to catch), it cannot fail merely because the
+machine was loaded, and it still finishes in ~0.23s because it returns
+the moment the condition holds. **No production code changed.**
+
+**Proven:** the test passes 5/5 consecutively, and
+`tests/integration/workflow_engine` — the directory that reproduced the
+failure on every prior attempt, including on a clean tree — now passes
+**133 passed, 6 skipped, 0 failed**.
+
+**Fifth occurrence family — two real root causes found and FIXED 2026-08-12.**
+The `test_local_adapter.py` flake was investigated as its own issue and
+turned out to be **two independent defects**, both real, both fixed —
+not the "environment-only, accept it" outcome first suspected.
+
+*Symptom.* Twice during full local Windows runs, an unrelated test in
+`tests/unit/kernel/llm_gateway/adapters/test_local_adapter.py` failed —
+a *different* test each time — with
+`ValueError: I/O operation on closed pipe` raised inside CPython's own
+`asyncio/windows_utils.py`. The file passes 27/27 in isolation.
+
+**Root cause 1: an asyncio subprocess transport was never closed.**
+Because an unraisable exception is raised during garbage collection,
+pytest attributes it to whichever test happens to be running during that
+GC pass — never to the code that created the handle, which is why it
+appeared to strike innocent tests at random. Captured verbatim from a
+real `tests/unit` run:
+
+    Exception ignored in: <function _ProactorBasePipeTransport.__del__>
+      File "asyncio/proactor_events.py", line 116, in __del__
+        _warn(f"unclosed transport {self!r}", ResourceWarning, source=self)
+      File "asyncio/proactor_events.py", line 80, in __repr__
+        info.append(f'fd={self._sock.fileno()}')
+      File "asyncio/windows_utils.py", line 102, in fileno
+        raise ValueError("I/O operation on closed pipe")
+    ValueError: I/O operation on closed pipe
+
+asyncio is stating the defect outright — *unclosed transport* — and then
+raising while formatting its own warning, because the pipe is already
+closed. pytest listed
+`tests/unit/kernel/sandbox/test_executor.py::test_execute_delivers_stdin_bytes_to_the_command`
+among the active tests: `ai_os_kernel.sandbox.executor` is the only
+production code that calls `asyncio.create_subprocess_exec`, and it never
+closed the transport. **Fix:** close it explicitly once the process is
+reaped (idempotent, exception-suppressed so a cleanup failure can never
+fail a genuinely successful command).
+
+*A disproved hypothesis, recorded so it is not retried.* A synthetic
+script reproduced the leak (15 kill-path runs → 4 unraisable exceptions,
+0 with an explicit close), but driving the **real** `LocalSubprocessSandbox`
+across timeout, cap-breach, clean and `stdin=PIPE` paths — 44 runs —
+produced 0 either way. That false negative briefly led to the fix being
+reverted as unjustified. The real suite, not the synthetic harness, is
+what settled it: the verbatim `unclosed transport` trace above came from
+an actual `tests/unit` run.
+
+**Root cause 2: every local HTTP test handler responded without draining
+the request body.** All 19 `do_POST` handlers across 9 test files wrote a
+response while the client's POST body still sat unread in the socket
+receive buffer. Closing a socket in that state makes Windows send a TCP
+**RST** rather than a graceful FIN, so the client can lose a response it
+had already been sent. The adapter then classifies a connection failure
+rather than the intended status — observed exactly as
+`assert 'llm.network' == 'llm.rate_limited'` and
+`assert <ErrorCategory.TRANSIENT> == <ErrorCategory.INFRASTRUCTURE>`.
+This is the same *class* as this entry's original missing-`server_close()`
+defect: a real protocol/resource bug in the fixtures, not ambient noise.
+**Fix:** `self.rfile.read(int(self.headers.get("Content-Length") or 0))`
+at the top of all 19 handlers — applied systemically across every
+affected file, exactly as the original 23-call-site `server_close()` fix
+was, not only to the tests seen failing.
+
+Corroboration that this is the right cause: **every** file that has
+flaked in this family appears in that list of 19 — `test_local_adapter.py`,
+`test_anthropic_adapter.py`, `test_multi_provider_routing.py` (named in
+this entry's own original 2026-08-09 investigation), and
+`test_delivery_pipeline_knowledge.py`, whose single unexplained failure
+earlier the same day had been recorded as an open observation.
+
+**Proven, the same bar the original fix used:** `tests/unit` run **3
+consecutive times** after both fixes — **1291 passed** every time, with
+**zero** unraisable exceptions and zero `closed pipe`/`unclosed transport`
+occurrences (warnings dropped 11 → 2). The two runs immediately before
+the fixes each failed, on different tests
+(`test_anthropic_adapter.py::…[401-…]` + `…[429-…]`, then
+`test_local_adapter.py::…[429-…]`).
+
+**One related observation, recorded and not fixed** (outside this step's
+scope, and only reproducible under an artificial slowdown):
+`test_anthropic_adapter.py::test_stream_delivers_real_events_incrementally_over_real_time`
+failed under `-X tracemalloc=15` with
+`assert (0.625 - 0.610) >= (0.05 * 3)` — streamed events arrived bunched
+rather than spread out. Same R-015 family: a wall-clock assertion whose
+margin does not dominate the environment's variability.
+
+**A second such observation, also recorded and not fixed:**
+`tests/integration/observability/test_compose_observability_profile.py::
+test_the_collector_genuinely_receives_and_forwards_real_telemetry`
+failed once with `httpx.ReadError: [WinError 10053]`, then again in
+isolation with `RemoteProtocolError: Server disconnected without sending
+a response`, and then passed twice in a row — once on a stashed clean
+tree and once with every change restored. That last pair is the point:
+it was briefly suspected of being a regression from this step, and the
+suspicion was settled by measurement rather than argument. It talks to a
+real OTel Collector **container**, not to any of the 19 in-process
+handlers fixed above, so the request-body drain does not apply to it;
+the most likely cause is Docker resource pressure after several
+container-heavy suite runs in succession. Recorded rather than left as
+unexplained noise.
 
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 

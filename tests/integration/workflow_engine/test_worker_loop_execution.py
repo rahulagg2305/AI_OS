@@ -69,6 +69,34 @@ _STEP_DURATION_SECONDS = 0.5
 _INSTANCE_COUNT = 3
 _CONCURRENCY_MARGIN = 0.7  # accept up to 0.7 x the fully-serialized tick time
 
+# Bounds for the *completion* proof below — the same R-015 pathology as
+# the concurrency bound above, in the one test `P02-S01-M05-T16` did not
+# touch, and the one that failed real CI once (run 31378794330,
+# `assert ...RUNNING... == ...COMPLETED...`).
+#
+# It used to blind-sleep `0.05 * 8` (0.4s) and then assert *once*.
+# Measured 2026-08-12 over 12 real trials against a real Postgres
+# container on an idle machine: min 0.209s, median 0.234s, max 0.282s.
+# The theoretical floor is 0.120s (2 ticks x 0.05s poll + 2 x 0.01s
+# step), so the genuine fixed overhead -- discovery query, lease
+# acquire, advance, event-loop scheduling -- is ~0.089s per completion.
+# That put the observed maximum at 0.70x the bound on an *unloaded*
+# machine, leaving ~0.118s of headroom; running the whole
+# `tests/integration/workflow_engine` directory reliably crossed it.
+# Same root cause as the sibling: the margin did not dominate the fixed
+# overhead.
+#
+# The fix removes the blind sleep entirely rather than just widening it.
+# Waiting on the real condition with a generous deadline is strictly
+# stronger: it still fails if the loop genuinely never drives the
+# instance to completion (the actual regression this test exists to
+# catch), it cannot fail merely because a loaded machine was slow, and
+# it still finishes in ~0.23s in practice because it stops the moment
+# the condition holds. The deadline is ~35x the measured maximum, so no
+# plausible load reaches it.
+_COMPLETION_TIMEOUT_SECONDS = 10.0
+_COMPLETION_POLL_SECONDS = 0.01
+
 
 @pytest.fixture(scope="module")
 def database_url() -> Generator[str, None, None]:
@@ -143,6 +171,28 @@ async def _create_running_instance(engine: AsyncEngine) -> str:
         workflow_id=created.workflow_id, reason="worker picked it up"
     )
     return created.workflow_id
+
+
+async def _wait_for_completion(repository: SqlWorkflowInstanceRepository, workflow_id: str) -> Any:
+    """Poll the real instance until it genuinely reaches ``completed``,
+    returning it — or ``None`` if it never does within
+    ``_COMPLETION_TIMEOUT_SECONDS``.
+
+    Deliberately a real condition wait, not a fixed sleep: the same
+    ``_wait_until`` shape ``tests/integration/event_bus/
+    test_outbox_relay.py`` already establishes for the identical "a real
+    background loop will get there, but not at a predictable instant"
+    problem. Returning ``None`` on timeout (rather than asserting here)
+    keeps the real assertion, and its failure message, at the call site.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _COMPLETION_TIMEOUT_SECONDS
+    while loop.time() < deadline:
+        instance = await repository.get_instance(workflow_id)
+        if instance is not None and instance.status == WorkflowInstanceStatus.COMPLETED:
+            return instance
+        await asyncio.sleep(_COMPLETION_POLL_SECONDS)
+    return None
 
 
 def _make_worker(
@@ -308,11 +358,15 @@ def test_run_worker_loop_genuinely_drives_a_real_instance_to_completion_on_its_o
             )
             try:
                 # A one-step definition needs two real ticks (do_work,
-                # then the completing tick) — well within several 0.05s
-                # polls of real wall-clock time.
-                await asyncio.sleep(0.05 * 8)
-                instance = await repository.get_instance(workflow_id)
-                assert instance is not None
+                # then the completing tick). Waited on as a real
+                # condition rather than a blind sleep — see
+                # `_COMPLETION_TIMEOUT_SECONDS`'s own comment for the
+                # measurements behind this (R-015, 4th occurrence).
+                instance = await _wait_for_completion(repository, workflow_id)
+                assert instance is not None, (
+                    "the worker loop never drove the instance to completion within "
+                    f"{_COMPLETION_TIMEOUT_SECONDS}s"
+                )
                 assert instance.status == WorkflowInstanceStatus.COMPLETED
             finally:
                 task.cancel()

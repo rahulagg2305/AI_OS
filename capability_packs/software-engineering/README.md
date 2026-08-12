@@ -43,7 +43,7 @@ And one real, declared workflow: **`se.delivery_pipeline`** ([`workflows/deliver
 - [`workflows.md`](../../docs/06_capability_packs/software_engineering/workflows.md) — the pack's intended workflows
 - [`tools_quality_gates.md`](../../docs/06_capability_packs/software_engineering/tools_quality_gates.md) — intended tools/gates (this pack declares none yet)
 - [`ADR-0016`](../../docs/18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md) — the sandboxing decision every agent here depends on
-- [`implementation_status.md`](../../docs/19_roadmap/implementation_status.md) · [`feature_inventory.md`](../../docs/19_roadmap/feature_inventory.md) — live build status
+- [`feature_inventory.md`](../../docs/19_roadmap/feature_inventory.md) — live build status
 
 ## Installation
 

@@ -90,6 +90,7 @@ What it does **not** provide — declared truthfully via
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import platform
 import sys
@@ -351,6 +352,40 @@ class LocalSubprocessSandbox:
             for task in pending:
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
+
+        # Close the child's transport deterministically instead of
+        # leaving it to garbage collection (R-015, 2026-08-12).
+        #
+        # `asyncio` never closes a subprocess transport for you. Left to
+        # GC, `_ProactorBasePipeTransport.__del__` on Windows emits an
+        # "unclosed transport" ResourceWarning, and formatting its own
+        # `repr()` for that warning calls `fileno()` on a pipe that is
+        # already closed, which raises. Because it happens in a
+        # finaliser it is an *unraisable* exception, so pytest attributes
+        # it to whichever unrelated test is running during that GC pass —
+        # which is why two innocent, unrelated tests in
+        # `tests/unit/kernel/llm_gateway/adapters/test_local_adapter.py`
+        # failed on separate full-suite runs while that file passes 27/27
+        # in isolation.
+        #
+        # Verbatim from a real `tests/unit` run, before this call:
+        #     Exception ignored in: <function
+        #       _ProactorBasePipeTransport.__del__>
+        #     ...  _warn(f"unclosed transport {self!r}", ResourceWarning)
+        #     ...  info.append(f'fd={self._sock.fileno()}')
+        #     ValueError: I/O operation on closed pipe
+        # pytest listed `test_execute_delivers_stdin_bytes_to_the_command`
+        # -- this executor's own stdin path -- among the active tests.
+        #
+        # `_transport` is private only because `asyncio.subprocess.Process`
+        # exposes no public equivalent; closing it is the documented
+        # remedy and is idempotent, so the clean path is covered too.
+        # Suppressed because failing to close a pipe must never turn a
+        # genuinely successful command into an error.
+        transport = getattr(process, "_transport", None)
+        if transport is not None:
+            with contextlib.suppress(Exception):
+                transport.close()
 
         if cap_exceeded:
             stdout_bytes, stdout_truncated = _finished_result(stdout_task, (b"", True))

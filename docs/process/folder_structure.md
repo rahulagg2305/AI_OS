@@ -54,6 +54,6 @@ Practical consequence: if you are working in a fresh clone and a document refere
 
 - `PROJECT_INDEX.md` (repository root) — the intended full layout, with a Status column mirroring this document
 - `../19_roadmap/feature_inventory.md` — per-module completion tracker; the authority on "how done is X"
-- `../19_roadmap/implementation_status.md` — short current-state summary, read first every session
+- `../19_roadmap/feature_inventory.md` — the authority on per-module completeness; read this for status, never `implementation_status.md` (**superseded**)
 - `files_to_read_first.md` — what to read, and when, for a given task
 - `standing_rules.md` — the documentation discipline that keeps this file accurate

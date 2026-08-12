@@ -32,7 +32,7 @@ This document is subordinate to:
 
 **§4 Mandatory Artifacts is satisfied by the real pack**: `capability_packs/software-engineering/` has `manifest.yaml`, `README.md`, `CHANGELOG.md`, agent implementations, workflow definitions, and tests — matching this checklist exactly.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` (module 27, Platform SDK; module 29, SE Pack) and `../19_roadmap/implementation_status.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` (module 27, Platform SDK; module 29, SE Pack).
 
 ---
 
@@ -163,4 +163,4 @@ Order of precedence:
 - [`../03_architecture/capability_framework/capability_pack_contract.md`](../03_architecture/capability_framework/capability_pack_contract.md) — the contract this guide operationalizes, and the Platform SDK growth gate's primary home
 - [`../process/standing_rules.md`](../process/standing_rules.md) — the hard blocker gating any new pack/agent this guide would otherwise help build
 - [`software_engineering/overview.md`](software_engineering/overview.md) · [`software_engineering/agents.md`](software_engineering/agents.md) · [`software_engineering/workflows.md`](software_engineering/workflows.md) — the one real pack built against this guide
-- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) — live build status

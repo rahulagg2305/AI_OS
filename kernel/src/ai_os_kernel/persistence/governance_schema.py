@@ -44,7 +44,7 @@ Workflow Engine, Configuration Manager, ...) is built out far enough to.
   hash-chain verification job (data_model.md §9.1: "A scheduled job
   verifies the chain and alerts on a break" — no worker process
   framework exists yet to run it in; see
-  docs/19_roadmap/implementation_status.md §4).
+  docs/19_roadmap/feature_inventory.md).
 - No foreign key: unlike ``workflow_steps``/``workflow_leases``/
   ``approvals``, §9.1 does not scope this table to workflow instances
   at all — ``resource_type``/``resource_id`` are a loose, polymorphic

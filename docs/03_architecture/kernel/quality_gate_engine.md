@@ -34,7 +34,7 @@
 
 The [ADR-0006](../../18_decision_log/adr/ADR-0006-quality-gates-are-mandatory.md) invariant that blocking gates cannot be skipped is therefore **enforced for three real, in-pipeline gate categories (Static Analysis/`se.build_lint_clean`, Testing/`se.build_tests_pass`, and Code Review/`se.code_review_clean`, added `P03-S03-M30-T03` — corrected 2026-08-08, found during a full pre-completion health audit: this line was never updated the day the third gate landed — each with a bounded retry, and now a genuinely complete audit trail of every attempt, successful or not) — still an architectural commitment rather than a general mechanism everywhere else.** Framework-level policy: `../quality/quality_gates_framework.md`.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
 ## 1. Purpose
 

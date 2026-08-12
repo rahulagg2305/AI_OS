@@ -25,7 +25,7 @@
 
 Consequence: AI_OS now has a real, runnable container image and a real, partial Helm chart proven against a genuine (if temporary, local) Kubernetes cluster, including a real, opt-in `NetworkPolicy` egress allowlist — but no real registry, no managed cluster, no Ingress/ExternalSecret, and no release pipeline. Treat this document as the Stage G target, not a description of a fully deployable production system.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

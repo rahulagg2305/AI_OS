@@ -16,7 +16,7 @@ AI_OS today runs only as a local development process against Compose-provided Po
 
 The two procedures with a real basis today are database migration (Alembic, run as a separate command) and local start-up via Docker Compose. Everything else has no operable target.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md`. Build history: `../19_roadmap/history/INDEX.md`.
 
 ## 1. Purpose
 

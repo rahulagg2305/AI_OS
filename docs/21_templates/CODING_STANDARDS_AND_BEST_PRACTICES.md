@@ -37,7 +37,7 @@ These standards apply equally to human developers, AI models, AI agents, Capabil
 - **`mypy --strict` runs only against `kernel/src`, `kernel/alembic`, and `tests`** (`ci.yml` line 65, matching `[tool.mypy]` in `pyproject.toml` exactly, per that step's own comment) — **`platform_sdk/` and any Capability Pack are not type-checked in CI at all today**, contradicting this document's own "Untyped function definitions in `kernel/`, `platform_sdk/`, `platform_services/` **[CI]**" scope, which implies `platform_sdk/` is covered. It is not, though the gap is currently low-stakes since `platform_sdk/` holds only a JSON Schema and no Python.
 - **"A Capability Pack importing `ai_os_kernel`... **[CI]**" is not mechanically enforced by anything.** No forbidden-import check exists anywhere in the Kernel or CI pipeline (confirmed by grep across `ci.yml`) — and the one real pack, `capability_packs/software-engineering/`, imports `ai_os_kernel` extensively and directly (`llm_gateway.adapters.anthropic_adapter`, `persistence.engine`, `persistence.settings`, and more), under the dated, now-hard-gated exception recorded in `../03_architecture/capability_framework/capability_pack_contract.md`. This rule is real *policy* — the exception is explicit and bounded by the Platform SDK gate — but it is not currently *enforced* by CI the way its `[CI]` tag claims; a second pack repeating the same import today would not be caught mechanically, only by review discipline and the standing-rules gate.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md`.
 
 ---
 
@@ -272,4 +272,4 @@ When multiple implementation approaches are possible, always choose the solution
 - [`../process/coding_standards.md`](../process/coding_standards.md) — the load-bearing subset applied day-to-day; this document remains the full authority
 - [`../03_architecture/capability_framework/capability_pack_contract.md`](../03_architecture/capability_framework/capability_pack_contract.md) — the dated, hard-gated exception to this document's "no `ai_os_kernel` import" rule
 - [`../09_security/security_architecture.md`](../09_security/security_architecture.md) §15 — the security-specific subset of these standards (`ruff S`, `pip-audit`, `gitleaks`)
-- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) — live build status

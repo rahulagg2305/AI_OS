@@ -33,7 +33,7 @@ This document is subordinate to:
 
 **Not built:** **No semantic validation at all.** The loader performs parse + schema-validate + extract and nothing else (its own module docstring says so). That means **none** of the 10 semantic rules (12–21) in `../capability_framework/manifest_schema.md` is enforced: no kernel-version compatibility check, no `sdkVersion` range check (unenforceable — no SDK package exists), no cross-pack global ID uniqueness, no reference resolution, no dependency resolution, no circular-dependency detection, and **no permission-subset checks** — so §3's "agent permissions are a subset of every workflow using them" and the platform's monotonic-narrowing rule are not verified at install time or at runtime. **No forbidden-import verification:** §3's "no provider SDK, no `ai_os_kernel`, no other pack" check does not run — the CI step that would enforce it is gated on `scripts/check_import_boundaries.py`, which does not exist. **No Component Registrar** — nothing writes `catalog.agents` / `catalog.tools` / `catalog.workflow_definitions` rows from a manifest, and nothing calls a pack's `entryPoint`; those rows are currently written directly by other code paths. **No Audit Logger** (`governance.audit_log` has no writer anywhere for this component), so §8's per-attempt record does not exist. Of §5's ten loading-flow steps, only 1–4 are real; steps 5–10 are unimplemented. Of §4's nine components, only Pack Discovery, Manifest Parser, Schema Validator and Error Reporter exist.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `001_project_bootstrap_and_configuration.md`).
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table). Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `001_project_bootstrap_and_configuration.md`).
 
 ---
 
@@ -192,4 +192,4 @@ Order of precedence:
 
 **Reference:**
 - `../../20_glossary/glossary.md`
-- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`

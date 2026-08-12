@@ -41,7 +41,7 @@ This document is subordinate to:
 - **Context Management:** of the five sources listed, only Workflow State is implemented (1 of 6 Context Manager sources) — no Knowledge Manager, Memory Manager, or Runtime Configuration resolver exists.
 - **Permissions are declared but not enforced** for agents; no monotonic-narrowing check runs at load or at runtime.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table — rows 5, 8, 18, 29) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table — rows 5, 8, 18, 29). Build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -326,4 +326,4 @@ Order of precedence:
 
 **Current state of the build**
 
-- `../../19_roadmap/feature_inventory.md` (rows 5, 8, 18, 29), `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md` (rows 5, 8, 18, 29), `../../19_roadmap/history/INDEX.md`

@@ -42,7 +42,7 @@ This document is subordinate to:
 - **Failure Handling (updated 2026-07-30):** `RetryPolicy` is declared on `WorkflowDefinition` (not `WorkflowStep` — a factual correction to this line's own prior claim) and validated at load time (bounded attempts + duration). It is now genuinely read for exactly one, narrow case: `WorkflowAdvanceRunner.run_to_completion` retries a failed, blocking `quality_gate` step, bounded by both `max_attempts` and `max_duration_seconds`, when a caller has configured a retry target for it (`se.delivery_pipeline` does; every other caller doesn't and keeps the prior "fails immediately" behavior). Every other kind of step failure (`AgentOutputValidationError`, etc.) is still not automatically retried. No rollback/compensation and no human escalation path exist.
 - **Observability**: Quality Gate results, human decisions, and token/cost metrics are not emitted (their producing subsystems don't exist); the rest of the documented telemetry is real.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 5, Workflow Engine) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/003_workflow_engine_core.md` and `history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 5, Workflow Engine). Build history: `../../19_roadmap/history/003_workflow_engine_core.md` and `history/INDEX.md`.
 
 ---
 
@@ -161,7 +161,7 @@ Rules:
 4. **Other step types declare none of these fields.** `decision`, `parallel`, `sub_workflow`, `quality_gate`, `human_approval`, and `foreach` steps each already have their own documented contract (the Decision Step Contract below for `decision`; `joinPolicy` for `parallel` — `workflow_engine.md` §7.1; the Sub-workflow Step Contract below for `sub_workflow`; the Human Approval Point Contract for `human_approval`; gate-id references for `quality_gate`; the Foreach Step Contract below for `foreach`) and are unaffected by this section.
 5. **These fields identify *what* to invoke, not *how*.** No templating, branching, or per-step scripting is introduced. Runtime selection of a prompt/model beyond this static declaration (config-driven defaults, experiment-forced overrides) remains the Prompt Engine's and LLM Gateway's own responsibility (`prompt_engine.md` §9, `llm_gateway.md`), not a workflow-level concern.
 
-This section defines the **declared** contract only. Resolving `agentId`/`toolId` to a runtime `Agent`/`Tool` implementation, and passing `promptId`/`promptVersion`/`modelAlias` through to an agent's own Prompt Engine/LLM Gateway calls, is implementation — deliberately not specified further here (see `19_roadmap/implementation_status.md` for what is actually built).
+This section defines the **declared** contract only. Resolving `agentId`/`toolId` to a runtime `Agent`/`Tool` implementation, and passing `promptId`/`promptVersion`/`modelAlias` through to an agent's own Prompt Engine/LLM Gateway calls, is implementation — deliberately not specified further here (see `19_roadmap/feature_inventory.md` for what is actually built).
 
 ---
 
@@ -433,4 +433,4 @@ Order of precedence:
 - [ADR-0022](../../18_decision_log/adr/ADR-0022-reproducibility-over-determinism.md) — the Objectives' reproducibility requirement
 - [ADR-0002](../../18_decision_log/adr/ADR-0002-llm-gateway-single-entry-point.md) — governs the Step Contract's `modelAlias` field
 - [`../../06_capability_packs/software_engineering/workflows.md`](../../06_capability_packs/software_engineering/workflows.md) — the one pack currently declaring real workflows against this contract
-- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) — live build status

@@ -16,7 +16,7 @@
 
 **Not built:** version *resolution* beyond exact-binding role lookup (nothing resolves "latest" or an experiment-pinned version), a persisted fragment catalog (fragments are supplied directly by the caller, not stored/versioned of their own accord), the LLM Gateway side of ADR-0025 §2 (nothing yet calls `render_with_cache_boundary()` from a real Gateway call path, or places a real provider cache breakpoint using its result), and a dedicated Observability writer. Note the interface path this document's own Current Status section once cited (`platform_sdk/contracts/prompts.py`) **does not exist** — there is no SDK package; the real code is `kernel/src/ai_os_kernel/prompt_engine/`.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
 ## 1. Purpose
 

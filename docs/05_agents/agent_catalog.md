@@ -46,7 +46,7 @@ Note that the real module filename for `qa-test` is `verification.py`, not `qa_t
 
 The only real workflow any of these agents participates in is `se.delivery_pipeline` (`../../capability_packs/software-engineering/workflows/delivery_pipeline.yaml`), which is narrower than any of the workflows named in `../06_capability_packs/software_engineering/workflows.md`.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` (per-module completion table — see rows 29–34) and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md` (per-module completion table — see rows 29–34). Build history: `../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -166,5 +166,5 @@ Order of precedence:
 **Requirements and status**
 - `../02_requirements/functional/functional_requirements.md` — FR-030–FR-045 (SE pack), FR-050–FR-059 (Project Intelligence)
 - `../19_roadmap/feature_inventory.md` — live completion status (rows 29–34)
-- `../19_roadmap/implementation_status.md` — current stage and blockers
+- `../19_roadmap/feature_inventory.md` — the authority on per-module completeness
 - `../20_glossary/glossary.md` — canonical definition of "Agent" and related terms

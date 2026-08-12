@@ -35,7 +35,7 @@ Order of precedence: 1) Project Constitution, 2) AI Governance Framework, 3) `pl
 - [`platform_sdk.md`](platform_sdk.md) — the specification this plan sequenced the build of
 - [`../capability_framework/capability_pack_contract.md`](../capability_framework/capability_pack_contract.md) — the growth gate this build closed
 - [`../../process/standing_rules.md`](../../process/standing_rules.md) — the growth gate and scope-discipline rules this plan satisfied
-- [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) §6 — the handoff this document answered
+- [`../../19_roadmap/history/INDEX.md`](../../19_roadmap/history/INDEX.md) — the handoff this document answered (previously cited `implementation_status.md` §6, **superseded** 2026-08-11)
 - [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) — module 27 (Platform SDK), module 29 (SE Pack — Agents)
 - [`../../19_roadmap/history/027_platform_sdk_v1_scope_plan.md`](../../19_roadmap/history/027_platform_sdk_v1_scope_plan.md) — the full, archived, step-by-step record (§2–§6s of the original document)
 - [`../../../capability_packs/software-engineering/`](../../../capability_packs/software-engineering/) — the one real pack this plan migrated

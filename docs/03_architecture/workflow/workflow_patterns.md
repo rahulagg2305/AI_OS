@@ -18,7 +18,7 @@
 
 A reader must not infer from a pattern being documented here that a workflow can use it today. Outstanding Stage B/C/D work.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
 ## 1. Purpose
 

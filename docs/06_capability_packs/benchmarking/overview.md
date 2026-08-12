@@ -14,7 +14,7 @@
 
 The Evaluation Engine that this pack depends on for all metric collection, run-manifest recording, and comparison statistics has its own first real code too (`ai_os_kernel.evaluation_engine.metrics_collector`, `P04-S01-M12-T04`) — though it likewise has no real production caller yet, for the identical reason (no real `experiment_runs` row exists in production). One Stage D prerequisite *has* landed early: a second real provider adapter (`LocalAdapter`), so multi-provider comparison is mechanically possible once submission/execution exist. Stage D deliverable.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

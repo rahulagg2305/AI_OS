@@ -11,7 +11,7 @@ on:
 #
 # `contract`, `security`, `build`, and `frontend` reference code paths
 # (tests/contract, tests/security, Dockerfile, dashboard/) that do not
-# exist yet, per docs/19_roadmap/implementation_status.md. Rather than
+# exist yet, per docs/19_roadmap/feature_inventory.md. Rather than
 # deleting those stages — which would silently drop the pipeline shape
 # ADR-0015 and test_strategy.md §6 document as the target — each
 # not-yet-existing step is individually gated on the path actually

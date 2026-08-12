@@ -31,7 +31,7 @@ This document is subordinate to:
 
 **Durability and recovery (§6) are real**: lease-based crash recovery (`SELECT ... FOR UPDATE SKIP LOCKED`, heartbeat renewal, an expiry reaper) lets another worker resume an instance after a crash, tested directly. **Not built**: the Context Manager relationship in §7 is only partly true — it reads a workflow's declared inputs and a named prior step's output, but has no first-class Filter/Ranker; the Evaluation Engine and Dashboard relationships are entirely unbuilt (both subsystems are 0%).
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 5, Workflow Engine) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/003_workflow_engine_core.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 5, Workflow Engine). Build history: `../../19_roadmap/history/003_workflow_engine_core.md`.
 
 ---
 
@@ -142,4 +142,4 @@ Order of precedence:
 - [`error_handling_retry.md`](error_handling_retry.md) — how retry counters and error history (§4.1) are meant to be populated
 - [ADR-0011](../../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) — the persistence/workflow-state decision this document's §9 now cites as settled
 - [`../../08_database/data_model.md`](../../08_database/data_model.md) §4 — the real `workflow.*` schema (`workflow_instances`, `workflow_events`, `workflow_steps`, `workflow_leases`)
-- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) — live build status

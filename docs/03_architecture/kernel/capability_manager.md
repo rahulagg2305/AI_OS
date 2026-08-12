@@ -32,7 +32,7 @@ This document is subordinate to:
 
 **Not built:** the `configured` and `uninstalled` transitions (2 of the 8 §4 states remain vocabulary only, with no write path — `failed` is now real). No component in §5 exists as its own dedicated unit apart from the Pack Registry / Lifecycle Controller / Activation Manager slice, plus a real slice of the **Health Monitor** (health_lifecycle.md's own diagram names the identical role "Pack Health Collector" — two documents, one real component, `health_poller.py`) and, as of `P02-S05-M13-T07`, a real slice of the **Upgrade Manager** (`SqlPackLifecycleRepository.upgrade()` — real version-comparison and catalog-row migration; see §9's own updated row for exactly what it does and does not decide): a `FAILED` pack still has no re-activation path today — `_ACTIVATABLE_FROM_STATES` deliberately excludes it, an explicit, deferred recovery-path gap, distinct from an upgrade (which only ever starts from `activated`). **No Status Reporter** beyond the single `GET /api/v1/packs/{id}` read (which does now surface real `health`, since `PackRecord` already carries it), and **no Audit Logger** (`catalog.pack_state_transitions` records actor/reason/timestamp, but `governance.audit_log` has no writer anywhere in the codebase, so §8's records exist only in the catalog schema, not the audit chain). Nothing calls a pack's own `CapabilityPack.activate()`/`.health()` methods — the real health check built this step deliberately checks agent resolvability directly (through the same real `AgentRegistry` a caller would use), not that Protocol method, which remains real but unwired (`SoftwareEngineeringPack.health()` still just returns a hardcoded `"healthy"`, per its own docstring). §4's human-approval requirement for behaviour-affecting activation ([ADR-0007](../../18_decision_log/adr/ADR-0007-human-governance-for-critical-decisions.md)) is **not enforced** — the `workflow.approvals` table exists with no writer, so there is no approval path to gate on. §7's Security-Manager permission check at activation time does not happen.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `010_capability_manager_pack_lifecycle.md`).
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table). Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `010_capability_manager_pack_lifecycle.md`).
 
 ---
 
@@ -197,4 +197,4 @@ Order of precedence:
 
 **Reference:**
 - `../../20_glossary/glossary.md`
-- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`

@@ -18,7 +18,7 @@
 
 What *is* real is the tiering principle: generated code executes only inside a genuine ADR-0016 Tier 1 sandbox (`DockerSandbox`, now the default and live-verified). Outstanding Stage B/C work.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
 ## 1. Purpose
 

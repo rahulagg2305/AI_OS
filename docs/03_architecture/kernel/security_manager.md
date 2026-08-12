@@ -28,7 +28,7 @@
 
 **Not built:** service-account API keys as a distinct mechanism (both principal types still authenticate via the same JWT/OIDC bearer-token path), **the remaining half of the [ADR-0023](../../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) monotonic-narrowing chain** (principal and workflow terms are now real at resolution; agent/tool declared-permission subsets are still never checked against `narrow_permissions`'s own full four-way call at real invocation time), the SDK's complete closed permission vocabulary, rate limiting, RFC 9457 error bodies, and a `governance.audit_log` writer for the *rest* of Security Manager's own authn/authz events (plain bearer-token authentication success/failure, route-level `require_permission()` denials — role administration alone now reaches the real audit path, the rest are still structlog-only). Outstanding Stage C/G work.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
 ## 1. Purpose
 

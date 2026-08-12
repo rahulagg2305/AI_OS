@@ -14,7 +14,7 @@
 
 **Not built:** no S3-compatible "prod" backend (no S3 client dependency, configuration, or endpoint exists anywhere in this codebase to build or test one against yet); no `Cache`-style `Protocol` over the store (a single real implementation exists; a second is documented intent, not yet real, ADR-0004); no real Kernel caller constructs this store yet — workflow artifacts remain plain files in per-agent temporary directories created by the Software Engineering pack's own agents, unchanged by this step. Stage B deliverable, still in progress.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

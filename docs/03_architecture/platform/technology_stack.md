@@ -34,7 +34,7 @@ This document is subordinate to:
 
 Nothing in §11 (Explicitly Rejected) has been reintroduced.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table). Build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -248,4 +248,4 @@ Order of precedence:
 
 **Current state of the build**
 
-- `../../19_roadmap/implementation_status.md`, `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`

@@ -32,7 +32,7 @@ This document is subordinate to:
 
 **Not yet wired into any specific consumer** (LLM Gateway, Git Integration Service, ...) — the Access Broker, cache, and leak scan all exist as composable building blocks but nothing in the codebase calls them yet.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md`.
 
 ---
 
@@ -156,4 +156,4 @@ Order of precedence:
 - [`security_architecture.md`](security_architecture.md) §7 — the security-relevant invariants this document is the detail behind
 - [`authentication_authorization.md`](authentication_authorization.md) — the identity/permission system that governs who may request a secret
 - [ADR-0024](../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — the backend decision this document implements (`env`, `file`, and `vault` real; cloud secret managers not yet built)
-- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) — live build status

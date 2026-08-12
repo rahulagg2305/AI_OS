@@ -31,7 +31,7 @@ This document is subordinate to:
 
 **§7's "must not call LLM providers directly or bypass the Workflow Engine" is upheld** — all 6 real agents are invoked exclusively through the Workflow Engine's `AgentStepExecutor`, and the 4 `PromptedAgent`-backed ones (`qa-test`/`lint` are the exceptions, making no LLM call at all) go through the real LLM Gateway.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 29) and `../../19_roadmap/implementation_status.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 29).
 
 ---
 
@@ -158,4 +158,4 @@ Order of precedence:
 - [`agents.md`](agents.md) · [`workflows.md`](workflows.md) — the detailed catalogs, each with its own "Currently Implemented Subset" section
 - [`../../03_architecture/capability_framework/capability_pack_contract.md`](../../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK growth gate that used to block this pack's further expansion, now lifted (this pack is fully SDK-compliant, step 14)
 - [`../../process/standing_rules.md`](../../process/standing_rules.md) — the standing rule recording the gate's lift
-- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) — live build status

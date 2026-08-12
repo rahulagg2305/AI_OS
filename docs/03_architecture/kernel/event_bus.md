@@ -193,4 +193,4 @@ Order of precedence:
 **Reference:**
 - `../../02_requirements/non_functional/nfr.md` — NFR-023, relay lag budget
 - `../../20_glossary/glossary.md`
-- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`

@@ -191,6 +191,6 @@ Add a term here whenever a new concept enters the architecture. If two documents
 
 ## 11. Related Documents
 
-- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — per-module build status for the concepts defined here
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) — per-module build status for the concepts defined here
 - [`../09_security/security_architecture.md`](../09_security/security_architecture.md) · [`../09_security/authentication_authorization.md`](../09_security/authentication_authorization.md) — the real gap behind §6's "Monotonic narrowing" and §3's "Trust tag"
 - [`../03_architecture/capability_framework/capability_pack_contract.md`](../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK gate behind §2's "Platform SDK" entry

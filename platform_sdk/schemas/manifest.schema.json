@@ -146,7 +146,7 @@
           "modelAlias": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9-]*$",
-            "description": "Model ALIAS only. A literal provider model id fails validation (ADR-0002). Required only when this agent's own permissions declare 'llm:invoke' — an agent that genuinely makes no LLM call (e.g. one whose entire job is running an already-written command and reporting its real exit code) declares no permissions requiring one and needs none here either (fixed 2026-07-28; see implementation_status.md for the discovered gap this closes)."
+            "description": "Model ALIAS only. A literal provider model id fails validation (ADR-0002). Required only when this agent's own permissions declare 'llm:invoke' — an agent that genuinely makes no LLM call (e.g. one whose entire job is running an already-written command and reporting its real exit code) declares no permissions requiring one and needs none here either (fixed 2026-07-28; see docs/19_roadmap/history/INDEX.md for the discovered gap this closes)."
           },
           "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] },
           "requiredTools": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },

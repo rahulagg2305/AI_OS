@@ -22,7 +22,7 @@
 
 **Not built — no HTTP endpoint exists yet, disclosed rather than faked** (every command below is still discoverable via `--help`, and fails with the real, specific reason when run): `workflow retry` (needs a real "retry from where" design decision — no operator-triggered mechanism exists), `experiment` (Benchmarking Pack still 0% built), `logs` (no log-query route), `health detail` (no distinct endpoint — `ready` already returns full per-component detail).
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

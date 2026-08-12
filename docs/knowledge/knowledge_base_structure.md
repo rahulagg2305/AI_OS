@@ -14,7 +14,7 @@
 
 Neither of the components that would populate or read it exists: the **Knowledge Manager** and **Memory Manager** are both docstring-only stub packages. A real document/chunk writer and a keyword searcher do exist one layer down in `kernel/src/ai_os_kernel/persistence/`, but nothing calls them and no Context Manager resolver reads from them.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

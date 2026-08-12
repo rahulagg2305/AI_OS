@@ -15,7 +15,7 @@
 > It was written *before implementation began*, and its §4 and §8 sign-off ("approved for implementation from Stage A") have since been acted on: Stage A is process-complete, Stage B is well underway, and parts of Stage C have landed. It still serves two live purposes — it is the record of *why* the baseline was re-issued (§2), and it is where the accepted documentation gaps are listed (§5). Nothing else in it is current.
 >
 > **For current state, read instead:**
-> - [`implementation_status.md`](implementation_status.md) — current stage, what exists, blockers, next step
+> - [`feature_inventory.md`](feature_inventory.md) — the authority on per-module completeness
 > - [`feature_inventory.md`](feature_inventory.md) — per-module completion percentages
 > - [`implementation_roadmap.md`](implementation_roadmap.md) — the Stage A–H sequence with per-deliverable delivery status
 > - [`history/INDEX.md`](history/INDEX.md) — full chronological build history
@@ -117,7 +117,7 @@ There is now **one** sequence: the lettered **Stages A–H** in `implementation_
 
 The documentation baseline is **approved for implementation from Stage A**, with the gaps in §5 accepted and tracked.
 
-> **Annotation (2026-07-28).** This sign-off has been acted on. Implementation started, Stage A is process-complete (its remaining exit criteria are OTLP export and the Compose observability profile), Stage B is well underway, and a real Software Engineering pack plus a real ADR-0016 Tier 1 sandbox have landed from Stage C. This section is retained as the record of the authorisation, not as a statement of where work stands — see [`implementation_status.md`](implementation_status.md).
+> **Annotation (2026-07-28).** This sign-off has been acted on. Implementation started, Stage A is process-complete (its remaining exit criteria are OTLP export and the Compose observability profile), Stage B is well underway, and a real Software Engineering pack plus a real ADR-0016 Tier 1 sandbox have landed from Stage C. This section is retained as the record of the authorisation, not as a statement of where work stands — see [`feature_inventory.md`](feature_inventory.md).
 
 ---
 

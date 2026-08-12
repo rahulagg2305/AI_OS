@@ -18,7 +18,7 @@
 
 Consequence: the "Traceability by Design" principle now has one real, automated recording path (a delivery-pipeline run's own produced-documentation link) **and a real read path over it** (impact/coverage HTTP routes), no longer zero on either side — but it is still one link type from one workflow, not yet the full requirement→architecture→module→test chain the model describes. Stage D deliverable.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

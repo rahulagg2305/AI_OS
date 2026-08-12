@@ -228,7 +228,7 @@ This section is an additive navigation aid. Under Article 10 the articles above 
 - [`../03_architecture/quality/quality_gates_framework.md`](../03_architecture/quality/quality_gates_framework.md) — the "Quality Gates are Mandatory" principle in concrete form
 
 **What actually exists today** (this Constitution states principles; these state delivery)
-- [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — current stage, what exists, current blockers
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) — the authority on per-module completeness
 - [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) — per-module completion, the authority on "how much of X is built"
 - [`../19_roadmap/implementation_roadmap.md`](../19_roadmap/implementation_roadmap.md) — the Stage A–H delivery sequence
 

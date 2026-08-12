@@ -20,7 +20,7 @@
 
 Two deliberate deferrals pending a real embedding-model decision this codebase has not made: `embeddings.embedding` has **no fixed dimension**, and its documented HNSW cosine index **does not exist**. Any step that starts generating embeddings must choose a model and dimension, then add that index in an additive migration. Outstanding Stage B deliverable.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
 ## 1. Purpose
 

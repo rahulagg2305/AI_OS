@@ -44,7 +44,7 @@
 
 Deliberate documented divergences in what *is* built: `POST /api/v1/workflows` returns `200` with a reduced body rather than `202` with `definition_id`; pack activate/deactivate return `200` not `202`; `POST /api/v1/packs` is not in this document's endpoint list at all (a reasoned addition). **Four further real routes exist entirely outside this document's originally-documented 45, found by this audit and not previously disclosed here at all**: `GET /api/v1/evaluation/cost-and-quality` (`P06-S03-M39-T03`, FR-094/FR-095 — the Dashboard's own real cost/quality report, `ai_os_kernel.routes.evaluation`); `POST`/`DELETE /api/v1/security/role-grants` (`P03-S05-M14-T08` — grant/revoke an `approver:<class>` role, `ai_os_kernel.routes.role_administration`, authenticated but deliberately not flat-permission-gated, since the target service already enforces the real `admin`-only rule a flat check would only duplicate); `GET /api/v1/version` (build/version metadata, `ai_os_kernel.routes.health`); `POST /api/v1/workflows/se.delivery_pipeline` (the Software Engineering pack's own dedicated trigger for its one real production workflow, distinct from the generic `POST /workflows`). Stage B/F deliverable.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

@@ -14,7 +14,7 @@
 
 **Not built:** nothing runs the `observability` Compose profile automatically — it is opt-in, local-development tooling, not part of any deployment; every metric in `../../16_observability/observability_stack.md` §3.1 beyond `aios.http.requests` — no workflow, LLM, gate, or sandbox metrics; alerting and dashboards beyond the one real panel provisioned so far. Outstanding Stage A/G work.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md`. Build history: `../../19_roadmap/history/INDEX.md`.
 
 ## Purpose
 

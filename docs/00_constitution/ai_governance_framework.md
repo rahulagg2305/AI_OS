@@ -311,7 +311,7 @@ Per-module detail: [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_
 - [`../16_observability/observability_stack.md`](../16_observability/observability_stack.md)
 
 **What exists today**
-- [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) · [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_roadmap.md`](../19_roadmap/implementation_roadmap.md)
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_roadmap.md`](../19_roadmap/implementation_roadmap.md)
 - [`../DOCUMENTATION_INDEX.md`](../DOCUMENTATION_INDEX.md) — master index
 
 ---

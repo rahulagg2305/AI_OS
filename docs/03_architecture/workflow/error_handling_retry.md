@@ -42,7 +42,7 @@ This document is subordinate to:
 
 Consequence: this document's "single platform error taxonomy" is, in practice, three things now — a real, narrower taxonomy inside the Gateway; a real, general, but not-yet-adopted-anywhere `AiOsError` hierarchy in `ai-os-sdk`; and a still-unpopulated `error_code` catalogue. The Workflow Engine's own retry ownership is real for exactly one category and one trigger, not yet the general mechanism §4/§9 describe.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 6, LLM Gateway; module 44, `AiOsError` hierarchy) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/006_llm_gateway_and_prompt_engine_foundation.md`, `history/011_llm_gateway_advanced_router_retry_budget.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (module 6, LLM Gateway; module 44, `AiOsError` hierarchy). Build history: `../../19_roadmap/history/006_llm_gateway_and_prompt_engine_foundation.md`, `history/011_llm_gateway_advanced_router_retry_budget.md`.
 
 ---
 
@@ -187,4 +187,4 @@ Order of precedence:
 - [`../platform/platform_sdk.md`](../platform/platform_sdk.md) §4.4 — the `AiOsError` hierarchy specification, now implemented in `ai-os-sdk` (`P02-S07-M44-T01`)
 - [`../quality/quality_gates_framework.md`](../quality/quality_gates_framework.md) — the `quality` category's intended (unbuilt) producer
 - [`../../09_security/security_architecture.md`](../../09_security/security_architecture.md) — the `security` category's intended producer
-- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) — live build status

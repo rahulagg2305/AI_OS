@@ -245,6 +245,12 @@ class _AuthenticationErrorHandler(http.server.BaseHTTPRequestHandler):
     )
 
     def do_POST(self) -> None:
+        # Drain the request body before responding. Closing a socket
+        # with unread data in its receive buffer makes Windows send a
+        # TCP RST instead of a graceful FIN, so the client can lose a
+        # response it had already been sent and surface a connection
+        # error instead (R-015, 2026-08-12).
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
         self.send_response(401)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(self._body)))
@@ -304,6 +310,12 @@ class _SuccessfulMessageHandler(http.server.BaseHTTPRequestHandler):
     )
 
     def do_POST(self) -> None:
+        # Drain the request body before responding. Closing a socket
+        # with unread data in its receive buffer makes Windows send a
+        # TCP RST instead of a graceful FIN, so the client can lose a
+        # response it had already been sent and surface a connection
+        # error instead (R-015, 2026-08-12).
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(self._body)))
@@ -366,6 +378,12 @@ class _StatusErrorHandler(http.server.BaseHTTPRequestHandler):
     _body = b'{"type":"error","error":{"type":"error","message":"synthetic"}}'
 
     def do_POST(self) -> None:
+        # Drain the request body before responding. Closing a socket
+        # with unread data in its receive buffer makes Windows send a
+        # TCP RST instead of a graceful FIN, so the client can lose a
+        # response it had already been sent and surface a connection
+        # error instead (R-015, 2026-08-12).
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
         self.send_response(self.status_code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(self._body)))
@@ -460,6 +478,12 @@ class _SuccessfulCountTokensHandler(http.server.BaseHTTPRequestHandler):
     _body = b'{"input_tokens":37}'
 
     def do_POST(self) -> None:
+        # Drain the request body before responding. Closing a socket
+        # with unread data in its receive buffer makes Windows send a
+        # TCP RST instead of a graceful FIN, so the client can lose a
+        # response it had already been sent and surface a connection
+        # error instead (R-015, 2026-08-12).
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(self._body)))
@@ -589,6 +613,12 @@ class _StreamingHandler(http.server.BaseHTTPRequestHandler):
     one buffered response an eager client could read all at once."""
 
     def do_POST(self) -> None:
+        # Drain the request body before responding. Closing a socket
+        # with unread data in its receive buffer makes Windows send a
+        # TCP RST instead of a graceful FIN, so the client can lose a
+        # response it had already been sent and surface a connection
+        # error instead (R-015, 2026-08-12).
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
@@ -725,6 +755,12 @@ class _UnsupportedContentBlockHandler(http.server.BaseHTTPRequestHandler):
     )
 
     def do_POST(self) -> None:
+        # Drain the request body before responding. Closing a socket
+        # with unread data in its receive buffer makes Windows send a
+        # TCP RST instead of a graceful FIN, so the client can lose a
+        # response it had already been sent and surface a connection
+        # error instead (R-015, 2026-08-12).
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()

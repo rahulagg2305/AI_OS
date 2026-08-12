@@ -14,7 +14,7 @@
 
 **Everything upstream of "an already-recognized intent" is still not built**: §4.1 Wake Word Engine, §4.2 Speech-to-Text (the platform Speech Gateway itself is real as of `P06-S06-M25-T01` but has no real provider — only a deterministic echo adapter, `ai_os_kernel.speech_gateway`'s own module docstring), §4.3 Intent Recognition (needs the LLM Gateway per §4.8 — not wired), §4.4 Voice Session Manager, and the §4.7 Text-to-Speech output half (`SpeechGateway.synthesize()` is reachable directly now that this also lives in the Kernel, but not wired this step). Stage F deliverable, partially real.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

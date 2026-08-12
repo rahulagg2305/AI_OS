@@ -1,5 +1,5 @@
 """The Workflow Engine's own first real executor for a ``quality_gate``
-step — closing the one gap `implementation_status.md`'s own tracking
+step — closing the one gap this project's own status tracking then
 named as the most-referenced open gap across this project's docs
 (module 15, Quality Gate Engine, 0% built): "the `quality_gate` workflow
 step type completes as a no-op via `NoOpStepExecutor`."

@@ -45,7 +45,7 @@ Step type vocabulary: `agent`, `tool`, `decision`, `parallel`, `foreach`, `sub_w
 
 *(This is this document's `## Implementation Status` section — kept under its established name rather than renamed, because the exact phrase "Currently Implemented Subset" is a cross-reference target from several other live documents. Formally recorded as a permitted variant in `docs/process/standing_rules.md`.)*
 
-§§3–9 below describe this pack's full, intended workflow design. As of this date, exactly **three** real, declared workflows exist — `se.delivery_pipeline`, built under a separate product-owner reprioritization toward "the shortest real path to a working multi-agent software-engineering pipeline" (see `docs/19_roadmap/implementation_status.md`'s own header); a real, buildable **7-of-14-step prefix** of §3's own `se.product_creation` below (`P08-S02-M30-T01`); and, as of `P08-S02-M30-T02`, a real, complete (though intentionally reshaped) implementation of §4's own `se.implement_task` below. `se.delivery_pipeline` is **not** an implementation of `se.implement_task` (§4) — that document was checked directly against the real, shipped shape below during this reconciliation, and the two diverge on purpose, structure, and even which agents participate. This section records the real shape here, rather than force-renaming it into a fork of `se.implement_task` or leaving it undocumented.
+§§3–9 below describe this pack's full, intended workflow design. As of this date, exactly **three** real, declared workflows exist — `se.delivery_pipeline`, built under a separate product-owner reprioritization toward "the shortest real path to a working multi-agent software-engineering pipeline" (see `docs/19_roadmap/history/INDEX.md`); a real, buildable **7-of-14-step prefix** of §3's own `se.product_creation` below (`P08-S02-M30-T01`); and, as of `P08-S02-M30-T02`, a real, complete (though intentionally reshaped) implementation of §4's own `se.implement_task` below. `se.delivery_pipeline` is **not** an implementation of `se.implement_task` (§4) — that document was checked directly against the real, shipped shape below during this reconciliation, and the two diverge on purpose, structure, and even which agents participate. This section records the real shape here, rather than force-renaming it into a fork of `se.implement_task` or leaving it undocumented.
 
 ### `se.delivery_pipeline` — Reprioritization Proof-of-Concept Pipeline
 
@@ -73,7 +73,7 @@ Both are real, intentional, differently-shaped things — `se.delivery_pipeline`
 
 **Step-output hand-off:** each step's genuine, persisted output reaches the next step's genuine input through `ai_os_kernel.context_manager.resolvers.WorkflowStepOutputResolver` (a Context Manager resolver, not a new orchestration mechanism — see `context_manager.md` §4 and `workflow_architecture.md`'s own Context Management section, both updated alongside this document to record it).
 
-**No Quality Gates, Human Approval Points, or declared Tools** — deliberately out of scope for this proof-of-concept slice; see `implementation_status.md` for the recommended next steps that would add them.
+**No Quality Gates, Human Approval Points, or declared Tools** — deliberately out of scope for this proof-of-concept slice; see `../../19_roadmap/STATUS.md`'s ready list for the Tasks that would add them.
 
 ### `se.product_creation` — Real, Buildable Prefix (7 of 14 steps, `P08-S02-M30-T01`)
 
@@ -360,4 +360,4 @@ Order of precedence:
 - [`tools_quality_gates.md`](tools_quality_gates.md) — the gate definitions referenced in §10, none of which `se.delivery_pipeline` currently declares
 - [`../../03_architecture/workflow/workflow_architecture.md`](../../03_architecture/workflow/workflow_architecture.md) · [`../../03_architecture/kernel/workflow_engine.md`](../../03_architecture/kernel/workflow_engine.md) — the platform engine executing `se.delivery_pipeline`, including which of the 9 step types it actually runs
 - [`../../03_architecture/kernel/context_manager.md`](../../03_architecture/kernel/context_manager.md) — `WorkflowStepOutputResolver`, the real step-output hand-off mechanism cited in the Currently Implemented Subset section
-- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) · [`../../19_roadmap/implementation_status.md`](../../19_roadmap/implementation_status.md) — live build status
+- [`../../19_roadmap/feature_inventory.md`](../../19_roadmap/feature_inventory.md) — live build status

@@ -40,7 +40,7 @@ This document is subordinate to:
 - **Secrets backend (§7, detailed in `secrets_management.md`): only the `env` backend exists**, not the four this document's threat table assumes are interchangeable.
 - **§6's provenance tagging (T2's #2 primary control) does not exist.** `context_manager/models.py`'s `ContextItem`/`SourceRef` has no `trust` field at all — only `source_type` (an enum with exactly one real value, `workflow_state`) and `identifier`. There is no `trusted`/`untrusted` label anywhere in the Context Manager today. This is lower-risk than it sounds only because no ingestion resolver exists yet either (`KNOWLEDGE`, `AI_CONTEXT_PACK`, and the others are explicitly not built, per that enum's own comment) — so no untrusted content currently reaches an agent's context to be mislabeled. The moment a repository- or document-ingesting resolver is built, this becomes a real, live gap, not a latent one.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md`.
 
 ---
 
@@ -310,4 +310,4 @@ Order of precedence:
 - [`../03_architecture/kernel/context_manager.md`](../03_architecture/kernel/context_manager.md) — the §6 provenance-tagging component, with no `trust` field yet
 - [`../03_architecture/capability_framework/capability_pack_contract.md`](../03_architecture/capability_framework/capability_pack_contract.md) — the Platform SDK gate underlying the missing §8 contract suite
 - [ADR-0016](../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md) · [ADR-0023](../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) · [ADR-0024](../18_decision_log/adr/ADR-0024-secrets-management-backend.md) — the three decisions this document implements
-- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) — live build status

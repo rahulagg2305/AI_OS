@@ -69,6 +69,12 @@ class _TogglableOutageHandler(http.server.BaseHTTPRequestHandler):
     request_count = 0
 
     def do_POST(self) -> None:
+        # Drain the request body before responding. Closing a socket
+        # with unread data in its receive buffer makes Windows send a
+        # TCP RST instead of a graceful FIN, so the client can lose a
+        # response it had already been sent and surface a connection
+        # error instead (R-015, 2026-08-12).
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
         type(self).request_count += 1
         if type(self).failing:
             body = _FAILURE_BODY

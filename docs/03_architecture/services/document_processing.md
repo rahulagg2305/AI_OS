@@ -16,7 +16,7 @@
 
 **Updated 2026-08-09 (`P05-S01-M26-T02`): the Chunking Engine box is real — reused, not duplicated.** Investigation found `ai_os_kernel.knowledge_manager.indexing`'s own `chunk_content()`/`IndexingService` (built earlier at `P02-S04-M09-T03`, module 9) already implements real, tested, versioned fixed-size chunking feeding `SqlKnowledgeWriter` — but had zero real production callers anywhere. Rather than build a second, parallel chunker (this project's own repeated "no parallel mechanism" discipline), `ai_os_kernel.document_processing.indexing.index_document_file()` is new, real glue: it parses a file via this package's own `parse_document()`, maps its format to a real MIME-style `media_type`, and calls the existing, unchanged `IndexingService` — becoming its first real production caller. Proven by 4 real Postgres-backed tests: a real multi-chunk Markdown write, a code file indexed with a `text/x-source` media type, an unchanged re-index genuinely skipped (the existing archive-and-replace policy, reused as-is), and a deferred PDF refused before any write. The one adjacent real component, `kernel/src/ai_os_kernel/persistence/knowledge_writer.py`, is now reachable from a real document on disk end to end. Its main intended consumer, the Project Intelligence pack, is still 0% built.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

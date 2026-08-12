@@ -14,7 +14,7 @@
 
 **Built: the pack now exists, with one real Tool.** `capability_packs/project_intelligence/` was scaffolded (the Capability Pack growth gate is lifted, per CLAUDE.md) with one real, manifest-declarable Tool, `repository.ingest` (FR-050): walks a real repository directory inside a real, ephemeral `tier1_sandboxed` container and returns a real file/module inventory. ADR-0016's own Decision text is unconditional that repository-content-processing tools are Tier 1 — an early, incorrect Tier-2 framing was caught and corrected via `AskUserQuestion` before any code was written. Proven end to end against a real Docker daemon. Not yet manifest-declared or wired into any agent/workflow — a real, disclosed, deferred step, not an oversight. The `project-intelligence/existing-project-analyzer` agent still does not exist, nor do any of the five documented workflows. The Document Processing service this pack depends on for ingestion is now 40% built (Markdown/Plain Text/Code parsers real; PDF/DOCX deferred).
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

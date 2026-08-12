@@ -34,7 +34,7 @@ Layers 1-5 deep-merge and validate into one frozen `PlatformConfig`; layer 6 (bo
 
 **Not built:** No standalone Feature Flag Manager component or Experiment Manager service — both layer-6 mechanisms exist and are proven, but nothing yet calls `ExperimentOverrideStore.set_override` or passes a real `pinned_conditions` mapping from an experiment-running component, because no such component exists yet (the Benchmarking Pack, `P04-S03-M34`, has no manifest/submission path). No Configuration API — the `PATCH /api/v1/config` route and `aios config` CLI that would call `RuntimeOverrideStore.apply` do not exist yet (§6's "writer, then route" ordering: the writer exists now; the route is what remains). Discovering *which* packs are activated (Manifest Loader integration) is not wired into layer 2 either — `load`'s `pack_manifests` argument takes already-discovered manifests as plain input. Layer 7 resolves references passed to it but nothing yet calls `load_with_secrets_resolved` from a real startup path, and no `PlatformConfig` field is secret-shaped yet — the layer exists for the day one is. The property tests §4 requires for precedence verification now cover all seven layers, including both layer-6 halves. Of §5's seven components, only Configuration Loader, Layer Merger and Schema Validator are real.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `001_project_bootstrap_and_configuration.md`).
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table). Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `001_project_bootstrap_and_configuration.md`).
 
 ---
 
@@ -190,4 +190,4 @@ Order of precedence:
 
 **Reference:**
 - `../../20_glossary/glossary.md`
-- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`

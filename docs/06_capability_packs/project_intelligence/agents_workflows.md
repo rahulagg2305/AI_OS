@@ -14,7 +14,7 @@
 
 Note also that most of the *supporting* agents these workflows invoke from the Software Engineering pack (`security`, `performance`, `refactoring`, `code-reviewer`) are themselves **not built** — see `../software_engineering/agents.md`'s "Currently Implemented Subset".
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

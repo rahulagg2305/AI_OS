@@ -8,7 +8,7 @@ logic lives in Capability Packs (`../capability_packs/`).
 
 | For | Read |
 |---|---|
-| What is built right now, and what is not | [`../docs/19_roadmap/implementation_status.md`](../docs/19_roadmap/implementation_status.md) |
+| What is built right now, and what is not | [`../docs/19_roadmap/feature_inventory.md`](../docs/19_roadmap/feature_inventory.md) |
 | Per-module completion percentages | [`../docs/19_roadmap/feature_inventory.md`](../docs/19_roadmap/feature_inventory.md) |
 | How to work in this repository | [`../CLAUDE.md`](../CLAUDE.md) |
 | Everything else | [`../docs/DOCUMENTATION_INDEX.md`](../docs/DOCUMENTATION_INDEX.md) |
@@ -23,7 +23,7 @@ no longer a skeleton — a four-agent software-engineering delivery pipeline run
 through the real Workflow Engine, calling a real LLM Gateway and executing generated code
 inside a real ADR-0016 Tier 1 Docker sandbox.
 
-`implementation_status.md` and `feature_inventory.md` above are the authoritative,
+`feature_inventory.md` above is the authoritative,
 maintained views. As a rough orientation only:
 
 **Real, working subsystems** — `workflow_engine` (definition loading and validation,

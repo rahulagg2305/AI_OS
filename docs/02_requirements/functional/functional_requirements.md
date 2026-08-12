@@ -240,7 +240,7 @@ Order of precedence:
 
 **Live build status (read these before assuming anything here exists)**
 - `../../19_roadmap/feature_inventory.md` — per-module completion table; the authority on "% done"
-- `../../19_roadmap/implementation_status.md` — current stage, blockers, next step
+- `../../19_roadmap/feature_inventory.md` — the authority on per-module completeness
 - `../../19_roadmap/history/INDEX.md` — chronological build history
 - `../../19_roadmap/implementation_roadmap.md` — Stage A–H sequence and exit criteria referenced by the `Stage` column
 

@@ -14,7 +14,7 @@
 
 Additionally, the experiment-comparison half of this document depends on the **Evaluation Engine and Benchmarking pack, both 0% built** — there are no experiments, no run manifests, and no comparison statistics to display. Stage D must land before these views have anything to show.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

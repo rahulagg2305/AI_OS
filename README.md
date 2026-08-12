@@ -68,7 +68,7 @@ uv run uvicorn ai_os_kernel.entrypoints.api:app --reload
 
 **The three live-status documents** — read these rather than this summary for current state:
 
-- `docs/19_roadmap/implementation_status.md` — **read first, every session.** Short: current stage, what exists, blockers, next step.
+- `docs/19_roadmap/feature_inventory.md` — **read first.** The authority on per-module completeness: what exists per module, and what does not.
 - `docs/19_roadmap/feature_inventory.md` — per-module completion tracker; the authority on "how done is X."
 - `docs/19_roadmap/history/INDEX.md` — full build history by milestone.
 
@@ -112,7 +112,7 @@ Before making any change, read in this order:
 1. `README.md`
 2. `PROJECT_INDEX.md`
 3. **`CLAUDE.md`** — the working process: approval workflow, standing rules, known environment quirks
-4. **`docs/19_roadmap/implementation_status.md`** — what actually exists right now (short by design)
+4. **`docs/19_roadmap/feature_inventory.md`** — what actually exists right now, per module (the authority on per-module completeness)
 5. `docs/00_constitution/` — Constitution and Governance Framework
 6. `docs/20_glossary/glossary.md` — the vocabulary is precise
 7. `docs/18_decision_log/README.md` — all 25 ADRs

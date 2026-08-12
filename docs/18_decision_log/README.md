@@ -12,7 +12,7 @@ This is the central index of every Architecture Decision Record for AI_OS. Only 
 
 Process and template: `adr/adr_process_and_templates.md`.
 
-**Decided ≠ built.** Every ADR below is Accepted, which records the decision, not its delivery. Each ADR file now ends with an appended *Implementation Status* note (dated 2026-07-28, explicitly outside the Accepted decision) stating what exists in code and what does not. The `In code` column here summarises those notes; the authoritative live views are [`feature_inventory.md`](../19_roadmap/feature_inventory.md) (per-module percentages) and [`implementation_status.md`](../19_roadmap/implementation_status.md) (current stage and blockers).
+**Decided ≠ built.** Every ADR below is Accepted, which records the decision, not its delivery. Each ADR file now ends with an appended *Implementation Status* note (dated 2026-07-28, explicitly outside the Accepted decision) stating what exists in code and what does not. The `In code` column here summarises those notes; the authoritative live views are [`feature_inventory.md`](../19_roadmap/feature_inventory.md) (the authority on per-module completeness).
 
 ---
 

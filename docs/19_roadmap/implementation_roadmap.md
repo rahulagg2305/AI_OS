@@ -33,7 +33,7 @@ The implementation sequence for AI_OS. Version 2.0 adds concrete deliverables, e
 
 **How to read the stage lists.** Every deliverable in every stage below carries a delivery marker (✅ built · ◐ partially built, with a qualifier naming what is missing · ⬜ not built), and every stage ends with an explicit **Exit status** line, so a fresh reader can see the real boundary between what exists and what does not without cross-referencing another document.
 
-Markers are *annotations, not changes*: no deliverable wording, no exit criterion, and no stage boundary below has been altered. They are a snapshot verified against the source tree on 2026-07-28 and will drift — [`feature_inventory.md`](feature_inventory.md) remains the authority on "how much of X is built", and [`implementation_status.md`](implementation_status.md) on the current stage. **Stages do not complete in order** (see §6), so a ✅ in a later stage is not evidence an earlier stage is finished.
+Markers are *annotations, not changes*: no deliverable wording, no exit criterion, and no stage boundary below has been altered. They are a snapshot verified against the source tree on 2026-07-28 and will drift — [`feature_inventory.md`](feature_inventory.md) remains the authority on "how much of X is built" and on current status generally (`implementation_status.md`, which this line previously named for the current stage, has been **superseded** since 2026-08-11). **Stages do not complete in order** (see §6), so a ✅ in a later stage is not evidence an earlier stage is finished.
 
 ### Stage A — Platform Skeleton
 
@@ -78,7 +78,7 @@ Deliverables (delivery markers verified 2026-07-28):
 **Goal:** one meaningful software-engineering workflow, end to end, with sandboxing and human approval.
 
 Deliverables (delivery markers verified 2026-07-28):
-- ◐ Software Engineering pack: manifest, three agents (`requirements-analyst`, `backend-developer`, `code-reviewer`), and the reduced `se.product_creation` plus `se.implement_task` (`../06_capability_packs/software_engineering/workflows.md` §13) — **a real pack exists with five agents, but a deliberately different set and workflow than planned here.** Built: `requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`, chained (four of the five) into a new workflow `se.delivery_pipeline`. `backend-developer` and `code-reviewer` are **not** built; neither `se.product_creation` nor `se.implement_task` exists. This divergence is deliberate and recorded — see the 2026-07-27 reprioritization in `implementation_status.md` and `../06_capability_packs/software_engineering/agents.md`'s "Currently Implemented Subset".
+- ◐ Software Engineering pack: manifest, three agents (`requirements-analyst`, `backend-developer`, `code-reviewer`), and the reduced `se.product_creation` plus `se.implement_task` (`../06_capability_packs/software_engineering/workflows.md` §13) — **a real pack exists with five agents, but a deliberately different set and workflow than planned here.** Built: `requirements-analyst`, `architecture`, `build`, `qa-test`, `documentation`, chained (four of the five) into a new workflow `se.delivery_pipeline`. `backend-developer` and `code-reviewer` are **not** built; neither `se.product_creation` nor `se.implement_task` exists. This divergence is deliberate and recorded — see the 2026-07-27 reprioritization in `history/INDEX.md` and `../06_capability_packs/software_engineering/agents.md`'s "Currently Implemented Subset".
 - ✅ **Tier 1 sandbox: ephemeral containers, no network, no secrets, resource limits** ([ADR-0016](../18_decision_log/adr/ADR-0016-tool-execution-sandboxing.md)) — `DockerSandbox` is real, is the config-driven default, and has been **verified live against a real daemon**, including network isolation and filesystem containment proven against code the pipeline itself generated
 - ⬜ Tools: file read/write/patch, build, test — correctly tiered — **no manifest-declared Tool exists.** `SandboxedCommandTool` is used internally by three agents but is not a declared, registry-resolvable Tool.
 - ⬜ Quality gates: build, unit tests, lint, type check — **not built** (blocked on the Quality Gate Engine, Stage B)
@@ -195,7 +195,7 @@ Recorded explicitly, because these are the items most commonly postponed and mos
 
 **The live, authoritative views** — read these rather than this section for anything decision-relevant:
 
-- `implementation_status.md` — short: current stage, what exists, blockers, next step
+- `feature_inventory.md` — the authority on per-module completeness
 - `feature_inventory.md` — per-module completion percentages and status categories
 - `history/INDEX.md` — full chronological build history
 

@@ -29,7 +29,7 @@ This document is subordinate to:
 
 **Not built:** 7 of the 17 components are empty stubs — a docstring-only `__init__.py` and zero other `.py` files: Knowledge Manager, Memory Manager, Retrieval, Evaluation Engine, Quality Gate Engine, Traceability Engine, Event Bus. The build order below is therefore accurate as a *plan*, not as a description: Stage A's Configuration Manager / Observability / Health & Lifecycle / Manifest Loader all exist at partial scope, but Stage B's Quality Gate Engine and Event Bus do not exist at all, and Stage D's two components do not exist at all. The Platform SDK boundary described under "Capability Pack Interaction" is **specified but not built** — `platform_sdk/` currently contains exactly one real file (`platform_sdk/schemas/manifest.schema.json`); there is no `ai-os-sdk` package, so packs presently import Kernel internals directly as a documented, dated, temporary compromise (see `../capability_framework/capability_pack_contract.md`). Of the five horizontal-scaling mechanisms listed under "Scalability", (1) Postgres-resident state, (2) `SKIP LOCKED` leasing, (3) idempotency-keyed steps and (5) per-step stateless sandboxing are real; (4) the transactional outbox is a table (`platform.event_outbox`) with no relay or publisher.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table). Detailed build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -273,4 +273,4 @@ Order of precedence:
 - `../../20_glossary/glossary.md`
 
 **Status and history:**
-- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/implementation_roadmap.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_roadmap.md`, `../../19_roadmap/history/INDEX.md`

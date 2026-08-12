@@ -24,7 +24,7 @@ Governing decisions: [ADR-0011](../18_decision_log/adr/ADR-0011-persistence-and-
 - **§13's SQLite development mode is not real.** A repo-wide, case-insensitive search for `sqlite` inside `kernel/` returns **zero matches** — there is no SQLite dialect wiring, no conditional repository implementation, and no test fixture using it anywhere. Every real repository and every integration test targets PostgreSQL only (via `tests/integration/_postgres_fixture.py`). This section's capability-gap table is accurate in spirit (Postgres-only features would indeed be absent) but the premise — that SQLite is "supported... through the same repository interfaces" today — is not true; it describes a target, not a working mode.
 - **§11 Retention is policy only, exactly as its own text says** ("Retention values are configuration, not code") — but no archival or pruning job exists for any listed table yet (`workflow_events`, `audit_log`, `llm_calls`, etc. all grow unbounded today); this is a documented future capability, not a gap this document was overstating.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md`.
 
 ---
 
@@ -341,4 +341,4 @@ Order of precedence:
 - [`../03_architecture/workflow/state_management.md`](../03_architecture/workflow/state_management.md) — the §4 workflow-state design this table set implements; only 3 of the 9 `status` values are ever written
 - [`../03_architecture/kernel/knowledge_manager.md`](../03_architecture/kernel/knowledge_manager.md) — the intended owner of §7's tables, currently an untouched stub
 - [ADR-0011](../18_decision_log/adr/ADR-0011-persistence-and-workflow-state.md) · [ADR-0013](../18_decision_log/adr/ADR-0013-search-and-vector-store.md) · [ADR-0017](../18_decision_log/adr/ADR-0017-observability-stack.md) — the three decisions this document implements
-- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) — live build status

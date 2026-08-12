@@ -20,7 +20,7 @@ One recorded exception to this strategy's own "real fakes, never mocks" rule: `t
 
 **A known flake family worth knowing about:** tests that stand up a real local HTTP server (`test_local_adapter.py`, `test_multi_provider_routing.py`, and `test_anthropic_adapter.py`'s error-classification cases) occasionally fail under full-suite load and pass in isolation. Three instances have been observed. Re-run in isolation before treating one as a regression.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md`. Build history: `../19_roadmap/history/INDEX.md`.
 
 ## 1. Purpose
 

@@ -14,7 +14,7 @@
 
 A reader should also note the Dashboard is specified as a pure client of the HTTP API and its WebSocket stream: **only 9 of ~45 documented endpoints exist, and the `/api/v1/stream` WebSocket route does not exist at all** (see `../07_api/api_architecture.md`). Most views specified here have no data source yet.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

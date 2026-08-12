@@ -30,7 +30,7 @@ This document operates under the authority of the Project Constitution and the A
 
 **Not built:** the **entire Platform SDK layer** — `platform_sdk/` contains only `schemas/manifest.schema.json`, there is no `ai-os-sdk` package, and consequently the "only pack-facing surface" is not yet enforceable (see `platform_sdk.md`). The **entire Platform Services layer** — Storage, Search & Vector Search (keyword search only, one layer down in `persistence/knowledge_keyword_search.py`), Document Processing, Git Integration, Notification, Caching (Redis is provisioned in `../../../infra/docker-compose.yml` but no Kernel code uses it), Speech Gateway, and Workspace are all 0%. In the Kernel: Knowledge Manager, Memory Manager, Evaluation Engine, Quality Gate Engine, Traceability Engine, Event Bus, and Retrieval are docstring-only stub packages with no implementation. In the User Interface Layer: Dashboard, CLI, and the WebSocket `/api/v1/stream` transport are all 0%. Of the four Capability Packs named in the diagram, only Software Engineering exists; `capability_packs/project_intelligence/`, `voice_jarvis/`, and `benchmarking/` are empty directories.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table). Build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -275,4 +275,4 @@ Order of precedence:
 
 **Current state of the build**
 
-- `../../19_roadmap/implementation_status.md`, `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`

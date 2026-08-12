@@ -44,7 +44,7 @@ This document is subordinate to:
 
 **Not built:** of §6's six elements, the Health Aggregator, the Readiness/Liveness Interface, a real slice of the Pack Health Collector, and now the Shutdown Coordinator exist. There is **no Kernel Lifecycle Controller**: §4's six states (`Starting`, `Ready`, `Degraded`, `Stopping`, `Stopped`, `Failed`) are documented vocabulary with no state machine and no persistence — `ready`, `degraded`, and `not_ready` are the only three `ReadinessReport.status` values ever produced, and `/health/ready` genuinely returns HTTP 503 for `not_ready` (a real hard dependency, the database, justifies refusing traffic) and HTTP 200 for the other two. There is **no Observability Hook**: no health metric, no event, and no log line on a state transition (poll results are logged, but not emitted as a metric/event) — the Event Bus this would publish to is itself an empty stub. §5's "ability to accept new workflows" is not reported.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `001_project_bootstrap_and_configuration.md` and `004_stage_a_cross_cutting_infrastructure.md`).
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table). Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `001_project_bootstrap_and_configuration.md` and `004_stage_a_cross_cutting_infrastructure.md`).
 
 ---
 
@@ -191,4 +191,4 @@ Order of precedence:
 **Reference:**
 - `../../02_requirements/non_functional/nfr.md` — startup-time and readiness targets
 - `../../20_glossary/glossary.md`
-- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`

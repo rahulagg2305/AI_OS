@@ -32,7 +32,7 @@ This document is subordinate to:
 
 **§6 Data Passing Rules are real**: inter-agent data travels through Workflow State (`workflow_steps.outputs`) and is made visible via the Context Manager, exactly as specified — this is the same real mechanism cited above. **§7 Error and Retry Coordination is not built**: see `../workflow/error_handling_retry.md`'s own Implementation Status — the Workflow Engine does not yet act on a step failure per any policy; there is no retry, compensate, or escalate decision made anywhere today, only an unhandled exception.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/019_delivery_pipeline.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md`. Build history: `../../19_roadmap/history/019_delivery_pipeline.md`.
 
 ---
 

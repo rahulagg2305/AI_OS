@@ -34,7 +34,7 @@ Version 2.0 adds the tool-calling, structured-output, streaming, capability-nego
 
 **One enforcement claim in §2 is currently false and is flagged there:** the import-boundary check is present in `.github/workflows/ci.yml` but **gated off** — it runs only `if hashFiles('scripts/check_import_boundaries.py') != ''`, and that script does not exist. The adapter-only import rule is therefore convention today, not enforcement.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `006_llm_gateway_and_prompt_engine_foundation.md`, `008_first_real_llm_integration_and_prompted_agent.md`, `011_llm_gateway_advanced_router_retry_budget.md`).
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table). Detailed build history: `../../19_roadmap/history/INDEX.md` (specifically `006_llm_gateway_and_prompt_engine_foundation.md`, `008_first_real_llm_integration_and_prompted_agent.md`, `011_llm_gateway_advanced_router_retry_budget.md`).
 
 ---
 
@@ -317,7 +317,7 @@ No change to any agent, pack, or workflow. That property is the point of the who
 
 This document specifies the Gateway contract for v1.
 
-**Corrected reference (2026-07-28):** this section previously said concrete signatures "live in `platform_sdk/contracts/llm.py`" — that file does not exist; `platform_sdk/` currently contains only `schemas/manifest.schema.json` (confirmed by direct inspection during a documentation-reconciliation pass). The real, concrete signatures for everything this document specifies live in `kernel/src/ai_os_kernel/llm_gateway/` (`models.py`, `gateway.py`, `router.py`, `capability_negotiator.py`, `error_taxonomy.py`, `circuit_breaker.py`, `backoff.py`, `budget_enforcer.py`) — this document governs those, until a real `platform_sdk` contracts package is built to hold a Platform-SDK-facing copy of them (tracked in `docs/19_roadmap/implementation_status.md`, alongside the pack-facing `ai-os-sdk` package this same document's own capability-pack-facing gap refers to).
+**Corrected reference (2026-07-28):** this section previously said concrete signatures "live in `platform_sdk/contracts/llm.py`" — that file does not exist; `platform_sdk/` currently contains only `schemas/manifest.schema.json` (confirmed by direct inspection during a documentation-reconciliation pass). The real, concrete signatures for everything this document specifies live in `kernel/src/ai_os_kernel/llm_gateway/` (`models.py`, `gateway.py`, `router.py`, `capability_negotiator.py`, `error_taxonomy.py`, `circuit_breaker.py`, `backoff.py`, `budget_enforcer.py`) — this document governs those, until a real `platform_sdk` contracts package is built to hold a Platform-SDK-facing copy of them (tracked in alongside the pack-facing `ai-os-sdk` package this same document's own capability-pack-facing gap refers to).
 
 ---
 
@@ -371,4 +371,4 @@ Order of precedence:
 **Reference:**
 - `../../02_requirements/non_functional/nfr.md` — NFR-043 (cache hit-rate alerting), NFR-101 (provider substitution without pack changes)
 - `../../20_glossary/glossary.md`
-- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/implementation_status.md`, `../../19_roadmap/history/INDEX.md`
+- `../../19_roadmap/feature_inventory.md`, `../../19_roadmap/history/INDEX.md`

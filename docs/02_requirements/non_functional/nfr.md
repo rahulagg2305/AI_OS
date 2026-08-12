@@ -28,7 +28,7 @@ Requirement IDs are `NFR-###` and are traceable from tests and architecture elem
 
 Section 13's verification paths reference `tests/performance/` (now real, see above), `tests/benchmarks/` and `tests/security/` (the latter is real too, `P01-S06-M42-T04`-era — this line was stale; `tests/benchmarks/` remains an empty directory). `tests/unit/` and `tests/integration/` are real and substantial.
 
-Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table) and `../../19_roadmap/implementation_status.md`. Build history: `../../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../../19_roadmap/feature_inventory.md` (per-module completion table). Build history: `../../19_roadmap/history/INDEX.md`.
 
 ---
 
@@ -240,7 +240,7 @@ Order of precedence:
 
 **Live build status**
 - `../../19_roadmap/feature_inventory.md` — per-module completion table
-- `../../19_roadmap/implementation_status.md` — current stage and blockers
+- `../../19_roadmap/feature_inventory.md` — the authority on per-module completeness
 - `../../19_roadmap/history/INDEX.md` — build history
 
 **Architecture documents that own these targets**

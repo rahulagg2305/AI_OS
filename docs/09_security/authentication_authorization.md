@@ -44,7 +44,7 @@ This document is subordinate to:
 
 **§4.3 Permission Model's closed vocabulary is real**: `platform_sdk/schemas/manifest.schema.json` does enumerate and validate the permission strings a manifest may request.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md`.
 
 ---
 
@@ -182,4 +182,4 @@ Order of precedence:
 - [`security_architecture.md`](security_architecture.md) §9 — restates the same monotonic-narrowing chain as an already-mitigated threat control (T5); read alongside this document's Implementation Status for the real gap
 - [`secrets_management.md`](secrets_management.md) — the secret-access authorization this system is meant to gate
 - [ADR-0023](../18_decision_log/adr/ADR-0023-identity-roles-and-permissions.md) — the decision this document implements
-- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) · [`../19_roadmap/implementation_status.md`](../19_roadmap/implementation_status.md) — live build status
+- [`../19_roadmap/feature_inventory.md`](../19_roadmap/feature_inventory.md) — live build status

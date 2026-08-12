@@ -14,7 +14,7 @@
 
 Its intended runtime consumer is also absent: the Context Manager has **no AI Context Pack resolver** (it implements 2 of 6 documented sources). Until packs exist and a resolver is built, this strategy has no effect on any agent invocation. Structure specification: `context_pack_structure.md`.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

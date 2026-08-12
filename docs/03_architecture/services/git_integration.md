@@ -22,7 +22,7 @@
 
 Consequence for the threat model: the T11 ("Git history or branch destruction") controls in `../../09_security/security_architecture.md` §14 — force-push prohibition, protected-branch policy, credentials never entering a sandbox — are now real, not merely satisfied by absence. See that document's own Implementation Status.
 
-Authoritative, always-current status: the per-module completion table in `feature_inventory.md` and `implementation_status.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
+Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
 ## 1. Purpose
 

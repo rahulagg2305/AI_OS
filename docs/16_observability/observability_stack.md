@@ -14,7 +14,7 @@
 
 **Not built:** nothing runs the `observability` Compose profile automatically — opt-in, local-development tooling only, not part of any deployment. Loki genuinely has no log producer wired to it yet: the Kernel emits structured logs to its own stdout and is not containerised (no Dockerfile exists), so there is no real log-shipping path (a Promtail sidecar scraping container stdout is the standard one) — disclosed in `infra/observability/loki-config.yaml`'s own header, not papered over. Of the metrics named in the metric-catalogue section, **only `aios.http.requests` exists** — none of the workflow, LLM, gate, sandbox, outbox, or authz metrics do. No alerting and only one real dashboard panel. UPDATE/DELETE revocation for a dedicated application database role is not applied (no such role exists yet) and there is no offsite audit-log export.
 
-Authoritative, always-current status: `../19_roadmap/feature_inventory.md` and `../19_roadmap/implementation_status.md`. Build history: `../19_roadmap/history/INDEX.md`.
+Authoritative, always-current status: `../19_roadmap/feature_inventory.md`. Build history: `../19_roadmap/history/INDEX.md`.
 
 ## 1. Purpose
 
