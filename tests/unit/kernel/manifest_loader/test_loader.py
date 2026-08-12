@@ -247,10 +247,16 @@ def test_a_signed_pack_with_no_trust_anchor_is_refused_when_required(tmp_path: P
     assert "unverifiable" in report.failed[0].error
 
 
-def test_the_three_real_committed_packs_are_unsigned_and_still_load() -> None:
+def test_every_real_committed_pack_is_unsigned_and_still_loads() -> None:
     """Zero regression against the real repository, not a fixture: the
     committed packs are unsigned today and must keep loading under the
-    default posture."""
+    default posture.
+
+    Renamed 2026-08-12 (`P04-S03-M34-T05`): this said "three" until the
+    Benchmarking pack's own manifest made it four. The assertion was
+    always over *every* discovered pack, never a count, so the test
+    stayed correct — but the name had stopped being true.
+    """
     loader = ManifestLoader(pack_dirs=["capability_packs"], schema_path=SCHEMA_PATH)
 
     report = loader.scan()

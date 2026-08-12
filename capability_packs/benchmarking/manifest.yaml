@@ -1,0 +1,78 @@
+# Benchmarking Capability Pack manifest (P04-S03-M34-T05).
+#
+# Validated against platform_sdk/schemas/manifest.schema.json by
+# ai_os_kernel.manifest_loader.ManifestLoader. Filed by the 2026-08-11
+# health audit (risk register R-018, Risk A): `P04-S03-M34-T01`'s own
+# body said "No manifest.yaml yet ... (later ticket's scope)", and that
+# later ticket was never filed, so the gap went invisible. Without this
+# file the Manifest Loader could never discover this pack at all — it
+# was absent from `scan()`, from health and status reporting, and could
+# never become a `catalog.packs` row.
+#
+# **What this manifest deliberately does NOT do, stated plainly.** It
+# makes this pack *discoverable*, not *invocable*. Unlike the Project
+# Intelligence pack — whose manifest declares five real Tool
+# entrypoints, each resolvable through the real SqlToolRegistry — this
+# pack exposes no agent, no tool and no workflow. Its four modules are a
+# library of pure validation and planning functions
+# (`enforce_cost_ceiling`, `plan_replicates`, `ExperimentDefinition`
+# validation, prompt-adaptation recording) that the Kernel's own tests
+# already import directly. Declaring them as Tools would mean building
+# Tool entrypoints, input/output schema models and trust-tier
+# declarations that do not exist — new capability, not this ticket's
+# scope, whose Output is "a schema-valid manifest.yaml the real Manifest
+# Loader loads". The ticket says so itself.
+#
+# **No `entryPoint`, and that is the schema's rule rather than an
+# omission.** manifest.schema.json's own `allOf` requires `entryPoint`
+# (a pack.py CapabilityPack class) only when `agents` or `workflows` has
+# an entry. This pack declares neither, so no pack.py exists or is
+# needed — the identical reasoning the Project Intelligence pack's own
+# manifest records. A stub CapabilityPack nothing would ever call would
+# be speculative code.
+#
+# **No `permissions` block**, because the pack genuinely needs none: no
+# sandbox execution, no network, no LLM call, no filesystem or database
+# access. Every function here is a deterministic computation over its
+# own arguments. Declaring a permission "just in case" would violate the
+# platform's deny-by-default posture, under which absence of a
+# permission is denial.
+#
+# **`dependencies.sdkVersion` is a compatibility declaration, not an
+# import claim.** The schema requires the field of every pack. This
+# pack's own pyproject.toml depends on pydantic alone and imports
+# nothing from `ai-os-sdk` today; the range states which SDK versions it
+# is compatible with, and the Manifest Loader's rule 13 checks the
+# running SDK falls inside it.
+#
+# **Unsigned, like every other committed pack.** FR-117
+# (`P01-S03-M28-T02`) added detached Ed25519 verification the previous
+# day, config-gated and off by default, so this manifest loads and is
+# recorded as `unsigned`. Adding a `manifest.yaml.sig` requires a real
+# private key, which is deliberately absent from this repository.
+
+apiVersion: ai-os/v1
+kind: CapabilityPack
+
+metadata:
+  id: benchmarking
+  name: Benchmarking Pack
+  version: 0.1.0
+  description: >-
+    Multi-LLM experimentation support: validates an experiment definition
+    against overview.md §7's own real rules (at least three replicates, at
+    least two variants, no duplicate variant keys, no sampling-parameter
+    variables, and a pinned workflow that genuinely exists), plans the
+    per-variant replicate runs, records prompt adaptations against the
+    variant that caused them, and enforces a projected cost ceiling before
+    an experiment is allowed to run. Pure, deterministic library code — no
+    LLM call, no I/O, no sandbox — consumed today by the Kernel's own
+    Evaluation Engine tests rather than through an agent or tool.
+  owner: platform-team
+  license: UNLICENSED
+
+compatibility:
+  minKernelVersion: 0.1.0
+
+dependencies:
+  sdkVersion: ">=0.1.0,<1.0.0"

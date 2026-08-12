@@ -803,6 +803,41 @@ scheme and would not have held for HMAC.
 and human-approved activation both remain in force; signature
 verification is added alongside them.
 
+**The ready list is now empty — recorded 2026-08-12
+(`P04-S03-M34-T05`).** With this ticket `done`, the roadmap contains
+**zero `todo` Tasks**: 237 `done`, 19 `partial`, 2 `blocked`, 0 `todo`.
+`STATUS.md`'s "Ready to start" section reads `0 Task(s)`.
+
+This is not a problem, but it is a genuine change in how the next step
+must be chosen, and it will surprise anyone who has been reading the
+ready list as the queue. Until now there was always at least one Task
+whose Definition of Ready was mechanically satisfiable. From here every
+remaining candidate needs a human decision first:
+
+- **19 `partial` Tasks.** Each already meets its own stated
+  Goal/Input/Output; what remains is scope — "more complete" is not
+  defined by the ticket, so advancing one means the product owner
+  deciding what the next increment *is*. That is Definition of Ready
+  item 5 territory, which is exactly why they are not `todo`.
+- **2 `blocked` Tasks** (`P02-S03-M08-T14`, `P02-S04-M10-T03`), both
+  verified genuinely blocked on 2026-08-12 and both waiting on
+  product-owner decisions, not on engineering work.
+
+**The practical consequence:** the generator can no longer answer "what
+is next" on its own. Recommending a next Task now requires either
+converting a `partial` into a newly-filed, concretely-scoped Task, or
+resolving one of the two blockers. Filing new Tasks from the `partial`
+set is the normal path and needs no new mechanism — but it is a
+product-owner scoping act, and this entry exists so that is not
+mistaken for the roadmap having stalled.
+
+**Also worth recording: the completion figure moved for the first time
+in many steps**, 95% → 96% (246.5 of 258). The full-project audit
+established that the plateau was arithmetic rather than stagnation —
+each new `done` ticket adds roughly 0.02pp against a growing
+denominator, so the headline only moves when rounding tips. It tipped
+here. Nothing about the rate of work changed.
+
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 
 Found `P05-S02-M32-T01`, closed `P05-S02-M32-T02` (2026-08-09).
@@ -1042,10 +1077,24 @@ Genuine instances, worst first:
    recover`, `documentation.generate`) needed a real `inputSchema`
    Pydantic model added to be declarable at all (the schema requires
    one per tool); those were added, matching the existing 3-tool
-   precedent, `execute` unchanged.** Benchmarking (`P04-S03-M34-T05`)
-   remains open, and near-hollow by comparison: it declares no
-   agent/tool/workflow, so a manifest there only registers a
-   `catalog.packs` row. A correction the audit
+   precedent, `execute` unchanged.** **Benchmarking is now closed too
+   (`P04-S03-M34-T05`, 2026-08-12), and the honest framing matters: it
+   is a *discoverability* fix, not an invocability one.** A real,
+   schema-valid `manifest.yaml` means `ManifestLoader.scan()` finds this
+   pack for the first time — it was previously absent from discovery,
+   from health and status reporting, and could never become a
+   `catalog.packs` row. But the pack still declares no agent, tool or
+   workflow, because it genuinely has none: its four modules are pure
+   validation and planning functions the Kernel's own tests import
+   directly, not Tool entrypoints. Declaring them would have meant
+   building entrypoints, input/output models and trust tiers that do
+   not exist — new capability, not this ticket's scope. So unlike
+   Project Intelligence, **nothing became invocable**, and the
+   near-hollowness this entry predicted is real and is recorded in the
+   manifest's own header rather than quietly glossed. No `pack.py`
+   either: `manifest.schema.json`'s `allOf` requires `entryPoint` only
+   alongside `agents`/`workflows`, proven by a test that adds an agent
+   and watches the schema reject the manifest. A correction the audit
    itself made while filing: its first claim that this blocks
    `api_architecture.md` §6.3 (Experiments) is **wrong** —
    `evaluation.experiments`, `SqlExperimentRunRecorder` and

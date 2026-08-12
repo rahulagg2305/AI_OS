@@ -10,7 +10,7 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 95%** (245.5 of 258 Task-equivalents complete)
+**Overall: 96%** (246.5 of 258 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -36,7 +36,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S06 Threat Controls | 2 | 2 | 0 | 0 | 100% |
 | P04 (D) | S01 Evaluation Engine | 15 | 15 | 0 | 0 | 100% |
 | P04 (D) | S02 Traceability Engine | 5 | 5 | 0 | 0 | 100% |
-| P04 (D) | S03 Benchmarking Pack | 5 | 4 | 0 | 1 | 80% |
+| P04 (D) | S03 Benchmarking Pack | 5 | 5 | 0 | 0 | 100% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 2 | 0 | 50% |
 | P05 (E) | S02 Project Intelligence Pack | 7 | 1 | 6 | 0 | 57% |
 | P06 (F) | S01 API Completion and Published Contract | 4 | 3 | 1 | 0 | 88% |
@@ -59,7 +59,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (Stage A) - Platform Skeleton | 47 | 47 | 100% |
 | P02 (Stage B) - Minimum Viable Kernel | 104 | 102 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
-| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 25 | 24 | 96% |
+| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 25 | 25 | 100% |
 | P05 (Stage E) - Project Intelligence | 9 | 1 | 56% |
 | P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 7 | 77% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 75% |
@@ -68,9 +68,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-1 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+0 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
-- `P04-S03-M34-T05` Declare the Benchmarking pack in a real manifest and entry point
 
 ## Blocked
 
