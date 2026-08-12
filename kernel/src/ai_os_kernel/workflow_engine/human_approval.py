@@ -112,6 +112,7 @@ import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_os_kernel.event_bus.outbox_writer import write_outbox_event
 from ai_os_kernel.observability import get_logger
 from ai_os_kernel.persistence.schema import approvals, workflow_events, workflow_instances
 from ai_os_kernel.security_manager.approval_authorization import is_authorized_to_decide_approval
@@ -135,6 +136,16 @@ from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 
 _STATE_TRANSITIONED_EVENT_TYPE = "state.transitioned"
 _STATE_TRANSITIONED_SCHEMA_VERSION = 1
+
+# Outboxed Event Bus event types (`P02-S07-M17-T05`). The `approval.`
+# prefix is not incidental: `notification.service._notification_type_for`
+# classifies on exactly that prefix, and `event_bus.md` §5's own decision
+# table assigns "approvals" to the **transactional outbox**, not the
+# loss-tolerable in-process bus — so both are written through
+# `write_outbox_event` inside the very transaction that records the
+# approval, never published directly.
+_APPROVAL_REQUESTED_EVENT_TYPE = "approval.requested"
+_APPROVAL_DECIDED_EVENT_TYPE = "approval.decided"
 
 logger = get_logger("ai_os_kernel.security_manager")
 
@@ -345,6 +356,33 @@ class SqlApprovalRepository:
                     .returning(*approvals.columns)
                 )
                 row = result.mappings().one()
+                # A human is now the blocking dependency of this run, and
+                # until this step nothing told anyone (`P02-S07-M17-T05`).
+                # Written inside the same transaction as the `pending` row
+                # itself, so ADR-0012's guarantee holds both ways: a
+                # committed request always produces a notification, and a
+                # rolled-back one never announces an approval nobody can
+                # actually find.
+                #
+                # `workflow_id`/`step_id` travel in the payload because
+                # `platform.event_outbox` has no such columns, so the
+                # relay rebuilds every `Event.workflow_id` as `None` — a
+                # real, pre-existing schema limitation `outbox_relay`'s
+                # own docstring documents. `expires_at` is stringified
+                # because the column is JSONB and a `datetime` is not
+                # JSON-serialisable.
+                await write_outbox_event(
+                    connection,
+                    event_type=_APPROVAL_REQUESTED_EVENT_TYPE,
+                    payload={
+                        "approval_id": approval_id,
+                        "workflow_id": workflow_id,
+                        "step_id": step_id,
+                        "approval_class": point.id,
+                        "title": point.name,
+                        "expires_at": expires_at.isoformat() if expires_at is not None else None,
+                    },
+                )
         except sa.exc.SQLAlchemyError as exc:
             raise WorkflowInstanceCreationError(
                 f"failed to create a pending approval for workflow instance "
@@ -435,6 +473,27 @@ class SqlApprovalRepository:
                         },
                         occurred_at=decided_at,
                     )
+                )
+                # The other half of the pair: whoever was told a decision
+                # was needed is now told it was made, and by whom
+                # (`P02-S07-M17-T05`). Same transaction as both the
+                # decision and the resume above, so this event can never
+                # describe a decision that did not commit — the exact
+                # failure mode ADR-0012 exists to prevent, and one that
+                # matters more here than anywhere else in the platform:
+                # R-001 makes attributable human approval a permanent
+                # hard rule, so an announced-but-uncommitted decision
+                # would be a governance defect, not merely a stale
+                # notification.
+                await write_outbox_event(
+                    connection,
+                    event_type=_APPROVAL_DECIDED_EVENT_TYPE,
+                    payload={
+                        "approval_id": approval_id,
+                        "workflow_id": workflow_id,
+                        "decision": decision,
+                        "decided_by": principal_id,
+                    },
                 )
         except sa.exc.SQLAlchemyError as exc:
             raise WorkflowInstanceCreationError(

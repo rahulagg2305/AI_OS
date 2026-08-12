@@ -643,6 +643,38 @@ the most likely cause is Docker resource pressure after several
 container-heavy suite runs in succession. Recorded rather than left as
 unexplained noise.
 
+**Local `tests/performance` NFR thresholds under sustained load — observed
+2026-08-12 (`P02-S07-M17-T05`), not a regression, recorded for the next
+person who trips over it.** Four absolute-threshold tests failed on this
+project's own Windows machine after several hours of continuous
+container-heavy suite runs: `test_nfr010_api_read_endpoint_latency`
+(`614.9 < 500`), `test_nfr018_workflow_state_write_latency`
+(`61.8 < 50`), `test_nfr020_worker_loop_step_completion_throughput`
+(`9.5 >= 20`) and `test_nfr021_api_read_throughput` (`100.9 >= 200`).
+
+*Ruled out as a regression by measurement, not argument.* `git stash
+push -u` to a genuinely clean tree reproduced **the same four failures,
+identical counts (4 failed, 7 passed)**, so neither this step nor the
+outbox writes it added are the cause. The variance across consecutive
+runs is itself the tell: `test_nfr021` returned 147.1 then 100.9 within
+minutes — roughly 50% spread on a supposedly fixed threshold.
+
+*Why this does not gate anything today.* `tests/performance` is
+deliberately **not** part of the per-push `ci.yml` gate; it runs as its
+own nightly workflow (`performance.yml`, `cron: 0 3 * * *`), and every
+recent nightly has been green — 2026-08-08 through 2026-08-12, the last
+on `39ef010`. These thresholds are calibrated for an idle Ubuntu runner,
+not a Windows laptop that has just executed the full suite repeatedly.
+
+*What would make this real.* If a **nightly** run fails, that is a
+genuine signal and should be investigated as one. Worth noting for that
+day: `P02-S07-M17-T04` added an outbox INSERT inside
+`advance_workflow`'s terminal transaction, and `P02-S07-M17-T05` added
+two more inside the approval transactions — all three are on write paths
+`test_nfr018_workflow_state_write_latency` measures, and no nightly has
+yet run against them (the last green nightly predates both). Not a
+suspicion, just the first place to look.
+
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 
 Found `P05-S02-M32-T01`, closed `P05-S02-M32-T02` (2026-08-09).
