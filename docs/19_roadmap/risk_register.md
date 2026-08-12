@@ -628,283 +628,76 @@ failed under `-X tracemalloc=15` with
 rather than spread out. Same R-015 family: a wall-clock assertion whose
 margin does not dominate the environment's variability.
 
-**A second such observation, also recorded and not fixed:**
-`tests/integration/observability/test_compose_observability_profile.py::
-test_the_collector_genuinely_receives_and_forwards_real_telemetry`
-failed once with `httpx.ReadError: [WinError 10053]`, then again in
-isolation with `RemoteProtocolError: Server disconnected without sending
-a response`, and then passed twice in a row — once on a stashed clean
-tree and once with every change restored. That last pair is the point:
-it was briefly suspected of being a regression from this step, and the
-suspicion was settled by measurement rather than argument. It talks to a
-real OTel Collector **container**, not to any of the 19 in-process
-handlers fixed above, so the request-body drain does not apply to it.
-The explanation offered here was "Docker resource pressure after
-several container-heavy suite runs in succession".
+**The OTel compose-profile flake — root-caused and FIXED 2026-08-12.**
+Worth reading as a correction: this entry previously offered two wrong
+explanations before the real one was measured.
 
-**Escalated 2026-08-12 (`P06-S01-M36-T04`): it has now failed on real
-CI, and that explanation no longer suffices.** CI run `31624893187`
-(Integration tests) failed with `httpx.ReadError: [Errno 104] Connection
-reset by peer` on a **fresh Ubuntu runner** — not a laptop that had
-just run the suite repeatedly. A `gh run rerun --failed` with no code
-change passed clean, all 8 jobs. This is the first CI occurrence; the
-seven runs before it were green.
+*What it was blamed on, and why both were wrong.* First recorded as
+"Docker resource pressure after several container-heavy suite runs in
+succession" — a local-laptop theory, which died when it failed on a
+fresh Ubuntu CI runner (`31624893187`). Then escalated as an unexplained
+CI-observable flake in the collector. **Also wrong: the collector was
+never involved.** The CI log names the failing line outright:
 
-*Ruled out as a regression structurally, not statistically.* The test
-imports exactly two things from this codebase — `_build_metric_exporter`
-and `_build_span_exporter` — and never constructs the Kernel app. The
-step it failed under added an HTTP route, a SQL view module and
-bootstrap wiring, none of which is on that import path; no `infra/`,
-`docker-compose` or observability file was touched. It could not have
-caused this.
+    >   grafana_health = httpx.get(f"http://localhost:{grafana_port}/api/health", timeout=5.0)
+    E   httpx.ReadError: [Errno 104] Connection reset by peer
 
-*What this changes.* The flake is no longer local-only, so the "Windows
-laptop under load" framing is retired. Two CI-observable symptoms are
-now recorded — `[Errno 104] Connection reset by peer` on Linux,
-`[WinError 10053]` locally — both consistent with the collector
-container resetting the connection mid-read rather than with anything
-in the test's own logic. **Still not fixed, and deliberately not
-papered over**: a retry wrapper around the assertion would hide a real
-collector startup or readiness problem, which is the more likely root
-cause and is worth finding. Recommended as its own investigation —
-the first thing to check is whether the test waits for the collector
-to be genuinely ready rather than merely started, since
-`wait_container_is_ready` appears in the failure output.
+*The real root cause, in two parts.* **(1) No observability service
+declared a healthcheck.** `postgres` and `redis` do; `otel-collector`,
+`prometheus`, `tempo`, `loki` and `grafana` did not.
+`testcontainers.compose.DockerCompose.start()` already passes
+`--wait` — but `docker compose up --wait` only gates on services that
+*declare* a healthcheck, and treats one without as satisfied the moment
+its container is *running*. So startup returned before Grafana was
+serving. **(2) Proof #3 was the only assertion in the file left as a
+one-shot read.** Proofs #1 and #2 poll, and the comment above proof #1
+records this exact bug class being discovered and fixed *there* — the
+fix was simply never applied to the third. Docker publishes the port
+immediately, so the proxy accepts a connection and the connection then
+dies because nothing is listening behind it yet.
 
-**Local `tests/performance` NFR thresholds under sustained load — observed
-2026-08-12 (`P02-S07-M17-T05`), not a regression, recorded for the next
-person who trips over it.** Four absolute-threshold tests failed on this
-project's own Windows machine after several hours of continuous
-container-heavy suite runs: `test_nfr010_api_read_endpoint_latency`
-(`614.9 < 500`), `test_nfr018_workflow_state_write_latency`
-(`61.8 < 50`), `test_nfr020_worker_loop_step_completion_throughput`
-(`9.5 >= 20`) and `test_nfr021_api_read_throughput` (`100.9 >= 200`).
+*Measured, not argued.* Starting the profile without a readiness gate
+and probing Grafana's published port immediately: the first probe fails
+(`RemoteProtocolError: Server disconnected without sending a response`)
+and Grafana becomes ready only after **11.9 seconds** — a real ~12s
+window on an *idle* machine, wider on a loaded runner. That also
+explains why two different exception spellings were observed
+(`[Errno 104]` on Linux, `[WinError 10053]` locally,
+`RemoteProtocolError` here): all three are the same transport-level
+event, which is why the fix catches `httpx.HTTPError` rather than one
+subclass.
 
-*Ruled out as a regression by measurement, not argument.* `git stash
-push -u` to a genuinely clean tree reproduced **the same four failures,
-identical counts (4 failed, 7 passed)**, so neither this step nor the
-outbox writes it added are the cause. The variance across consecutive
-runs is itself the tell: `test_nfr021` returned 147.1 then 100.9 within
-minutes — roughly 50% spread on a supposedly fixed threshold.
+*The fix, at both levels.* **Root cause:** `infra/docker-compose.yml`
+now gives `grafana` a real healthcheck against `/api/health`
+(`start_period: 15s`, since Grafana runs database migrations before
+serving), so `docker compose up --wait` genuinely gates on readiness —
+for this test *and* for any operator or orchestrator. **Second layer:**
+proof #3 now polls with `_wait_until`, consistent with proofs #1 and #2.
+The assertion itself is unchanged and still real (`database == "ok"`);
+it simply no longer treats a startup window as a failure. **This is not
+a longer sleep and not a retry wrapper around a broken assertion** — the
+window is closed at its source, and the poll is defence in depth.
 
-*Why this does not gate anything today.* `tests/performance` is
-deliberately **not** part of the per-push `ci.yml` gate; it runs as its
-own nightly workflow (`performance.yml`, `cron: 0 3 * * *`), and every
-recent nightly has been green — 2026-08-08 through 2026-08-12, the last
-on `39ef010`. These thresholds are calibrated for an idle Ubuntu runner,
-not a Windows laptop that has just executed the full suite repeatedly.
+*Proof, both directions.* Without the gate: immediate probe fails, ready
+after 11.9s. With it, from a genuinely cold start (volumes removed):
+`up --wait` blocks **19.2s** until `grafana ... (healthy)`, and the
+**first-attempt** probe returns `200 database=ok` with no retry. The
+test itself passes **5/5 consecutive cold-start runs**, and the whole
+`tests/integration/observability` directory passes.
 
-*What would make this real.* If a **nightly** run fails, that is a
-genuine signal and should be investigated as one. Worth noting for that
-day: `P02-S07-M17-T04` added an outbox INSERT inside
-`advance_workflow`'s terminal transaction, and `P02-S07-M17-T05` added
-two more inside the approval transactions — all three are on write paths
-`test_nfr018_workflow_state_write_latency` measures, and no nightly has
-yet run against them (the last green nightly predates both). Not a
-suspicion, just the first place to look.
+*A methodological note worth keeping.* The first attempt at proving the
+fix was invalid and was caught before publication: a `docker compose
+down` ran from the wrong working directory, failed silently under a
+redirect, and left the stack running — so `up --wait` "returned in 1.2s"
+against an already-healthy stack. The 19.2s figure above is from a
+verified-clean teardown. A proof that cannot fail is not a proof.
 
-**Roadmap reconciliation of the three `blocked` Tasks — 2026-08-12.**
-Recorded because the *reason* they looked wrong is a reusable trap, and
-because one genuine ceiling on completion has never been written down.
-
-*The false alarm.* The prior step reported these three as "blocked
-although their dependencies are all `done` — the status may be stale".
-That reading was wrong, and the ad-hoc script that produced it was
-wrong: `depends_on` and `status: blocked` express different things.
-A blocked Task's blocker is Definition of Ready **item 5** — an
-unresolved decision no other Task owns — which is deliberately *not*
-modelled as a dependency edge. The dependency checker therefore can
-never contradict a `blocked` status, and its silence is not evidence.
-`generate.py`'s ready list has always been `status == "todo"` **and**
-dependencies met, so it never claimed these were ready either.
-
-*Why it went unnoticed.* `STATUS.md` did not mention blocked Tasks at
-all. They appeared in no list, while still occupying a slot in every
-denominator on the page. Closed this step: the generator now emits a
-**Blocked** section, and `test_every_blocked_ticket_is_visible_in_status`
-fails if a blocked ticket ever becomes invisible again (verified by
-reverting the generator change and watching the test fail).
-`ticket_templates.md`'s Definition of Ready item 2 — which claimed the
-ready list "is computed from exactly this", meaning dependencies alone —
-was the specific sentence that licensed the misreading, and is corrected.
-
-*Verified blocker state, each against current code, not against the
-ticket's own claim:*
-
-- **`P01-S03-M28-T02` (Signed-manifest fields) — genuinely blocked,
-  permanently.** "Signed manifests" is listed verbatim in
-  `functional_requirements.md` §10 *Out of Scope for v1*. Nothing can
-  unblock it inside v1; it is not waiting on work.
-- **`P02-S03-M08-T14` (Wire AIContextPackResolver) — genuinely blocked,
-  every claim still true.** `ai_context/` does not exist and has zero
-  tracked files; `AIContextPackResolver` is constructed nowhere in
-  production; `pack_references` is a constructor parameter only, with no
-  configuration surface, in contrast to the real
-  `PlatformConfig.capability_pack_dirs` the ticket cites.
-- **`P02-S04-M10-T03` (Promotion logic) — genuinely blocked, but its
-  stated blocker was partly stale.** Two of the three named
-  prerequisites hold (no memory permission in ADR-0023 or
-  `permissions.py`; `write_memory` takes no principal). The third — "no
-  audit destination (`governance.audit_log` has no writer)" — is false:
-  `SqlAuditLogWriter` shipped in `P01-S05-M04-T05`/`T06` and is wired in
-  `bootstrap.py` with real production callers. A fourth prerequisite the
-  architecture document never named also holds:
-  `knowledge.memory_items` has no `promoted_by`/`reason` column.
-  Corrected in the ticket, in `P02-S04-M10-T02` (which repeated it), and
-  in `memory_manager.md` §9.
-
-**A real completion ceiling, recorded here for the first time.**
-`P01-S03-M28-T02` is permanently out of v1 scope, yet it counts in the
-denominator with zero weight (`generate.py`: `blocked` contributes to
-`total`, not to `done`). Literal 100% is therefore unreachable while it
-is counted, independent of how much work is finished. This is a
-**product-owner decision, not an engineering one** — the options are to
-leave it (accepting a permanent ceiling and an honest denominator), to
-exclude out-of-v1-scope Tasks from the percentage the way retired module
-M35 is already excluded from `feature_inventory.md`'s weighted total, or
-to introduce a distinct status for "descoped" rather than overloading
-`blocked`. **Not decided or changed unilaterally.**
-
-**Signed manifests moved into v1 scope and were built — 2026-08-12,
-`P01-S03-M28-T02` (FR-117).** Recorded here because this entry's own
-"permanent completion ceiling" note, added the previous step, is now
-partly obsolete, and because the security posture genuinely changed.
-
-*What changed.* A product-owner decision removed "Signed manifests" from
-`functional_requirements.md` §10's *Out of Scope for v1* list and added
-it as **FR-117**, a MUST. `security_architecture.md` §8 and
-`manifest_schema.md`'s "Not in v1" section, which had both recorded it
-as a *known accepted gap*, are corrected. `P01-S03-M28-T02` — the ticket
-the previous step verified as "genuinely blocked, permanently" — was
-blocked *only* by that scope exclusion, so removing it made the ticket
-real work, and it was delivered the same day.
-
-*Effect on the completion ceiling.* The previous step recorded that this
-ticket, permanently out of scope yet counted in the denominator, made
-literal 100% unreachable. That specific instance is gone: the ticket is
-now `done`, contributing to the numerator like any other. **The
-structural question it raised is not settled** — the roadmap still has
-no way to express "descoped", so if any future Task is parked as out of
-scope the same ceiling reappears. That remains an open product-owner
-decision, not something this step resolved.
-
-*Three design decisions, each put to the product owner rather than
-guessed, because no document had ever specified them:*
-
-- **Ed25519 detached signatures.** Asymmetric, so a verifying node holds
-  only public keys and cannot forge what it can check — the property an
-  HMAC shared secret cannot provide, and the reason "provenance" means
-  anything here. No new dependency (`cryptography` is already present
-  via `pyjwt[crypto]`). Sigstore was rejected: it requires network
-  reachability and OIDC infrastructure at verify time, contradicting
-  this platform's deny-by-default egress posture.
-- **A PEM trust-store directory**, path from
-  `PlatformConfig.manifest_trust_store_dir`, mirroring
-  `capability_pack_dirs`. A public key is not a secret, so anchors are
-  committed and reviewed in git and rotating a signer is a visible diff.
-  Routing them through the Secrets Manager was rejected as a category
-  error — it would emit secret-access audit rows for publishable data.
-- **Config-gated enforcement, default off.** All three committed packs
-  (`_template`, `project_intelligence`, `software-engineering`) are
-  unsigned. Fail-closed would have broken every one of them on day one
-  and made private-key material an operational prerequisite for running
-  the test suite at all. `require_signed_manifests` defaults to `false`,
-  so behaviour is byte-identical to before; turning it on refuses
-  anything not `signed_and_valid` at load, before installation.
-
-*A security property worth stating plainly.* Verification reports four
-outcomes, not two: `signed_and_valid`, `unsigned`, `invalid`, and
-**`unverifiable`** — a signature is present but no trust anchor exists
-to check it. Collapsing that fourth case into `unsigned` would make a
-misconfigured deployment indistinguishable from a clean one, so it is
-kept distinct and is refused as firmly as `invalid` under enforcement.
-Absence of proof is not proof. This follows `SandboxGuarantees`' own
-"report what is actually enforced, never what is merely intended"
-pattern.
-
-*No key material is in this repository.* Only public anchors are ever
-deployed; every private key in the test suite is generated at runtime
-and discarded. That is a direct consequence of choosing an asymmetric
-scheme and would not have held for HMAC.
-
-*Signing does not replace the existing controls.* Install-path control
-and human-approved activation both remain in force; signature
-verification is added alongside them.
-
-**The ready list is now empty — recorded 2026-08-12
-(`P04-S03-M34-T05`).** With this ticket `done`, the roadmap contains
-**zero `todo` Tasks**: 237 `done`, 19 `partial`, 2 `blocked`, 0 `todo`.
-`STATUS.md`'s "Ready to start" section reads `0 Task(s)`.
-
-This is not a problem, but it is a genuine change in how the next step
-must be chosen, and it will surprise anyone who has been reading the
-ready list as the queue. Until now there was always at least one Task
-whose Definition of Ready was mechanically satisfiable. From here every
-remaining candidate needs a human decision first:
-
-- **19 `partial` Tasks.** Each already meets its own stated
-  Goal/Input/Output; what remains is scope — "more complete" is not
-  defined by the ticket, so advancing one means the product owner
-  deciding what the next increment *is*. That is Definition of Ready
-  item 5 territory, which is exactly why they are not `todo`.
-- **2 `blocked` Tasks** (`P02-S03-M08-T14`, `P02-S04-M10-T03`), both
-  verified genuinely blocked on 2026-08-12 and both waiting on
-  product-owner decisions, not on engineering work.
-
-**The practical consequence:** the generator can no longer answer "what
-is next" on its own. Recommending a next Task now requires either
-converting a `partial` into a newly-filed, concretely-scoped Task, or
-resolving one of the two blockers. Filing new Tasks from the `partial`
-set is the normal path and needs no new mechanism — but it is a
-product-owner scoping act, and this entry exists so that is not
-mistaken for the roadmap having stalled.
-
-**Also worth recording: the completion figure moved for the first time
-in many steps**, 95% → 96% (246.5 of 258). The full-project audit
-established that the plateau was arithmetic rather than stagnation —
-each new `done` ticket adds roughly 0.02pp against a growing
-denominator, so the headline only moves when rounding tips. It tipped
-here. Nothing about the rate of work changed.
-
-**A "write-only data" instance closed, and a duplicate-surface trap
-avoided — 2026-08-12 (`P06-S01-M36-T04`).** Recorded because both halves
-are the R-018 family in a form the package-level and module-level sweeps
-would both have missed: the code here was never idle, only the *data*
-was.
-
-*Closed.* `evaluation.llm_calls` has recorded `cache_read_tokens` and
-`cache_write_tokens` on every real LLM call since the table existed, and
-no reader anywhere surfaced either column. The existing cost report
-(`CostBreakdownEntry`) carries input tokens, output tokens and cost —
-and no cache columns at all. So prompt-cache effectiveness, a real
-cost-control question, was unanswerable from data the platform had been
-diligently writing all along. `GET /api/v1/usage/tokens` now reads it.
-
-*Avoided.* The same investigation found `GET /usage/cost` — documented
-in `api_architecture.md` §6.4 and listed there as unbuilt — is in fact
-**already satisfied** by `GET /api/v1/evaluation/cost-and-quality`
-(`P06-S03-M39-T03`, FR-095) over the identical `llm_calls` data.
-Building the documented path would have produced a second endpoint
-returning the same aggregation: duplicate surface counted as progress.
-It was deliberately not built, and the divergence is disclosed in
-`api_architecture.md` for a product-owner decision — alias the
-documented path, or amend the document. **This is the more useful
-finding of the two**: "documented but not built" is not the same as "not
-built", and a route-by-route diff of documentation against the live
-OpenAPI schema will report both identically.
-
-*Method worth reusing.* Comparing every route `api_architecture.md`
-documents against the live `openapi.json` surfaced 11 apparently
-unbuilt endpoints. Three were false positives or reasoned non-gaps
-(`approvals/{id}/decision` and `workflows/se` exist at documented
-different shapes; `health/detail` is a recorded deliberate decision),
-four carry genuine design forks (`gates/trends` — `gate_results` has no
-timestamp column; `traceability/query` — response shape undecided;
-`logs`/`traces` — no query surface exists at all), one is blocked by
-R-016 (`workflows/{id}/retry`), and one was already-satisfied-elsewhere
-(`usage/cost`). Only `usage/tokens` and `openapi` were genuinely
-buildable without a new decision. A raw count of "11 missing routes"
-would have been badly misleading as a measure of remaining work.
+*Still true, and deliberately not changed:* the other four observability
+services still declare no healthcheck. They are not currently a problem
+— every assertion against them polls — but an operator running
+`docker compose up --wait` gets no readiness guarantee for them either.
+Recorded as a real, known, unfixed gap rather than silently widened
+here.
 
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 

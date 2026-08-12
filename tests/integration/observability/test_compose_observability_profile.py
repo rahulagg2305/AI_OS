@@ -147,6 +147,31 @@ def test_the_collector_genuinely_receives_and_forwards_real_telemetry(
     # Real proof #3: Grafana itself is up and reachable, genuinely
     # provisioned against these same real datasources (dashboard
     # rendering itself is not meaningfully assertable from a test).
-    grafana_health = httpx.get(f"http://localhost:{grafana_port}/api/health", timeout=5.0)
-    assert grafana_health.status_code == 200
-    assert grafana_health.json()["database"] == "ok"
+    #
+    # Polled, for the identical reason proofs #1 and #2 above already
+    # are — and this was the one assertion in this file left as a
+    # one-shot read. That inconsistency is exactly what failed CI run
+    # `31624893187`: `httpx.ReadError: [Errno 104] Connection reset by
+    # peer`, on this precise line. Docker publishes Grafana's port the
+    # moment the container starts, so the docker-proxy accepts a
+    # connection and then resets it until Grafana's own HTTP server is
+    # listening (it runs database migrations first). The root cause is
+    # fixed in `infra/docker-compose.yml` — Grafana now declares a real
+    # healthcheck, so `docker compose up --wait` genuinely gates on
+    # readiness instead of returning as soon as the container is
+    # running. This poll is the second layer: the assertion itself is
+    # unchanged and still real (`database == "ok"`), it simply no longer
+    # treats a startup window as a failure.
+    def _grafana_is_healthy() -> bool:
+        try:
+            response = httpx.get(f"http://localhost:{grafana_port}/api/health", timeout=5.0)
+        except httpx.HTTPError:
+            # A connection refused or reset here is "not ready yet",
+            # never "broken" — the distinction the one-shot read could
+            # not make.
+            return False
+        return response.status_code == 200 and response.json().get("database") == "ok"
+
+    assert _wait_until(
+        _grafana_is_healthy, timeout=_STARTUP_TIMEOUT_SECONDS, interval=_POLL_INTERVAL_SECONDS
+    ), "Grafana never became healthy with a real, provisioned database"

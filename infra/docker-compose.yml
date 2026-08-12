@@ -120,6 +120,28 @@ services:
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "${AIOS_GRAFANA_PORT:-3000}:3000"
+    # Readiness gate, not decoration (2026-08-12). `docker compose up
+    # --wait` — which `testcontainers.compose.DockerCompose.start()`
+    # already passes — only waits for services that declare a
+    # healthcheck; for one that does not, it returns as soon as the
+    # container is *running*. Docker publishes this port immediately, so
+    # the docker-proxy accepts a connection and then resets it until
+    # Grafana's own HTTP server is genuinely listening. That window is
+    # what failed CI run 31624893187 with `[Errno 104] Connection reset
+    # by peer`, and the same window locally as `[WinError 10053]` — one
+    # cause, two platform spellings. `/api/health` is the endpoint
+    # Grafana itself documents as its readiness signal, and the one the
+    # compose-profile test asserts on.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      # Failures inside this window do not count toward `retries` —
+      # Grafana runs its own database migrations before serving, and a
+      # cold start on a loaded runner genuinely takes longer than one
+      # interval.
+      start_period: 15s
     depends_on:
       - prometheus
       - tempo
