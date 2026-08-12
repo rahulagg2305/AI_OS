@@ -675,6 +675,68 @@ two more inside the approval transactions — all three are on write paths
 yet run against them (the last green nightly predates both). Not a
 suspicion, just the first place to look.
 
+**Roadmap reconciliation of the three `blocked` Tasks — 2026-08-12.**
+Recorded because the *reason* they looked wrong is a reusable trap, and
+because one genuine ceiling on completion has never been written down.
+
+*The false alarm.* The prior step reported these three as "blocked
+although their dependencies are all `done` — the status may be stale".
+That reading was wrong, and the ad-hoc script that produced it was
+wrong: `depends_on` and `status: blocked` express different things.
+A blocked Task's blocker is Definition of Ready **item 5** — an
+unresolved decision no other Task owns — which is deliberately *not*
+modelled as a dependency edge. The dependency checker therefore can
+never contradict a `blocked` status, and its silence is not evidence.
+`generate.py`'s ready list has always been `status == "todo"` **and**
+dependencies met, so it never claimed these were ready either.
+
+*Why it went unnoticed.* `STATUS.md` did not mention blocked Tasks at
+all. They appeared in no list, while still occupying a slot in every
+denominator on the page. Closed this step: the generator now emits a
+**Blocked** section, and `test_every_blocked_ticket_is_visible_in_status`
+fails if a blocked ticket ever becomes invisible again (verified by
+reverting the generator change and watching the test fail).
+`ticket_templates.md`'s Definition of Ready item 2 — which claimed the
+ready list "is computed from exactly this", meaning dependencies alone —
+was the specific sentence that licensed the misreading, and is corrected.
+
+*Verified blocker state, each against current code, not against the
+ticket's own claim:*
+
+- **`P01-S03-M28-T02` (Signed-manifest fields) — genuinely blocked,
+  permanently.** "Signed manifests" is listed verbatim in
+  `functional_requirements.md` §10 *Out of Scope for v1*. Nothing can
+  unblock it inside v1; it is not waiting on work.
+- **`P02-S03-M08-T14` (Wire AIContextPackResolver) — genuinely blocked,
+  every claim still true.** `ai_context/` does not exist and has zero
+  tracked files; `AIContextPackResolver` is constructed nowhere in
+  production; `pack_references` is a constructor parameter only, with no
+  configuration surface, in contrast to the real
+  `PlatformConfig.capability_pack_dirs` the ticket cites.
+- **`P02-S04-M10-T03` (Promotion logic) — genuinely blocked, but its
+  stated blocker was partly stale.** Two of the three named
+  prerequisites hold (no memory permission in ADR-0023 or
+  `permissions.py`; `write_memory` takes no principal). The third — "no
+  audit destination (`governance.audit_log` has no writer)" — is false:
+  `SqlAuditLogWriter` shipped in `P01-S05-M04-T05`/`T06` and is wired in
+  `bootstrap.py` with real production callers. A fourth prerequisite the
+  architecture document never named also holds:
+  `knowledge.memory_items` has no `promoted_by`/`reason` column.
+  Corrected in the ticket, in `P02-S04-M10-T02` (which repeated it), and
+  in `memory_manager.md` §9.
+
+**A real completion ceiling, recorded here for the first time.**
+`P01-S03-M28-T02` is permanently out of v1 scope, yet it counts in the
+denominator with zero weight (`generate.py`: `blocked` contributes to
+`total`, not to `done`). Literal 100% is therefore unreachable while it
+is counted, independent of how much work is finished. This is a
+**product-owner decision, not an engineering one** — the options are to
+leave it (accepting a permanent ceiling and an honest denominator), to
+exclude out-of-v1-scope Tasks from the percentage the way retired module
+M35 is already excluded from `feature_inventory.md`'s weighted total, or
+to introduce a distinct status for "descoped" rather than overloading
+`blocked`. **Not decided or changed unilaterally.**
+
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 
 Found `P05-S02-M32-T01`, closed `P05-S02-M32-T02` (2026-08-09).

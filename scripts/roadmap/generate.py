@@ -110,6 +110,32 @@ def render_status(tickets: list[Ticket]) -> str:
     if len(ready) > 25:
         lines.append(f"- ... and {len(ready) - 25} more")
 
+    # `blocked` Tasks were invisible in this document until 2026-08-12,
+    # which is exactly how they came to be misreported. The "Ready to
+    # start" list above deliberately shows only `todo` Tasks whose
+    # dependencies are met, so a `blocked` Task appears nowhere — yet it
+    # still occupies a slot in every denominator on this page. A reader
+    # comparing "1 ready" against 23 not-done Tasks had no way to learn
+    # that three of them are blocked, or why.
+    #
+    # A blocked Task's blocker is deliberately *not* a `depends_on` edge:
+    # it is an unresolved decision or a missing prerequisite that no
+    # other Task owns (Definition of Ready item 5). That is why the
+    # dependency checker never contradicts this status, and why the
+    # reason lives in the ticket's own body rather than in metadata.
+    blocked = sorted((t for t in tickets if t.status == "blocked"), key=lambda x: x.id)
+    lines += [
+        "",
+        "## Blocked",
+        "",
+        f"{len(blocked)} Task(s) with a real blocker that is **not** a `depends_on` edge — an "
+        "unresolved decision or a missing prerequisite no other Task owns (Definition of Ready "
+        "item 5). Their dependencies may well all be `done`; that does not make them ready. "
+        "Each ticket's own body states its blocker:",
+        "",
+    ]
+    lines += [f"- `{t.id}` {t.title}" for t in blocked]
+
     # A review signal, never a gate — see suspicious_empty_dependencies'
     # own docstring for why this is advisory.
     flagged = suspicious_empty_dependencies(tickets)

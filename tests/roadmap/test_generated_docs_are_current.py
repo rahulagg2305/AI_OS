@@ -101,6 +101,32 @@ def test_the_suspicious_empty_dependency_signal_is_computable() -> None:
     assert len(flagged) <= sum(1 for t in tickets if t.status == "todo")
 
 
+def test_every_blocked_ticket_is_visible_in_status() -> None:
+    """A `blocked` Task must appear in `STATUS.md`.
+
+    Until 2026-08-12 it did not, and that is precisely how the three
+    blocked Tasks came to be misreported as "blocked although their
+    dependencies are done, so the status is probably stale". The "Ready
+    to start" list shows only `todo` Tasks, so a blocked Task appeared
+    nowhere at all — while still occupying a slot in every denominator
+    on the page.
+
+    A blocked Task's blocker is deliberately not a `depends_on` edge (it
+    is an unresolved decision no other Task owns, Definition of Ready
+    item 5), so the dependency checker can never surface it either. This
+    test is the guard that it stays visible somewhere.
+    """
+    tickets = load_all(TICKETS_ROOT)
+    blocked = [t for t in tickets if t.status == "blocked"]
+    status_text = STATUS_OUT.read_text(encoding="utf-8")
+    assert "## Blocked" in status_text, "STATUS.md has lost its Blocked section"
+    for ticket in blocked:
+        assert ticket.id in status_text, (
+            f"blocked ticket {ticket.id} is invisible in STATUS.md — a reader cannot "
+            "learn it exists, let alone why it is blocked"
+        )
+
+
 def test_generated_docs_are_current() -> None:
     """Guard 2: a hand edit to a generated rollup fails the build."""
     assert main(["--check"]) == 0, (

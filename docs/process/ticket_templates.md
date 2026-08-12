@@ -56,8 +56,15 @@ write the next Task instead.
 A Task may be started only when all of these hold:
 
 1. **Frontmatter is complete and valid** — the generator parses it.
-2. **Every `depends_on` ticket is `done` or `partial`.** The generated
-   "Ready to start" list in `STATUS.md` is computed from exactly this.
+2. **Every `depends_on` ticket is `done` or `partial`.** Necessary, but
+   **not sufficient** — corrected 2026-08-12 after this line caused a
+   real misreading. The generated "Ready to start" list in `STATUS.md`
+   is `status == "todo"` **and** dependencies met
+   (`scripts/roadmap/generate.py`), so a `blocked` Task never appears
+   there however satisfied its dependencies are. A blocked Task's
+   blocker is item 5 below, not a `depends_on` edge — the dependency
+   checker cannot see it and will never contradict the status.
+   `STATUS.md`'s own "Blocked" section lists them.
 3. **Goal / Input / Output are each one concrete sentence.** If the
    Output is not observable, the Task is not ready — split it.
 4. **It fits one approved step.** If it needs more than one round of

@@ -72,6 +72,14 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 - `P04-S03-M34-T05` Declare the Benchmarking pack in a real manifest and entry point
 
+## Blocked
+
+3 Task(s) with a real blocker that is **not** a `depends_on` edge — an unresolved decision or a missing prerequisite no other Task owns (Definition of Ready item 5). Their dependencies may well all be `done`; that does not make them ready. Each ticket's own body states its blocker:
+
+- `P01-S03-M28-T02` Signed-manifest fields
+- `P02-S03-M08-T14` Wire AIContextPackResolver into a production composition
+- `P02-S04-M10-T03` Promotion logic
+
 ## Dependency review signal
 
 0 `todo` Task(s) record no dependency although an earlier Task in the same module is unfinished. **Advisory only** — some Tasks genuinely start from nothing. Review when touching that module.
