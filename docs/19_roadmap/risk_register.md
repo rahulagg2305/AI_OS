@@ -10,15 +10,19 @@ change its status field, or add a new entry.
 Severity: **H** (can cause real harm or data loss) · **M** (can cause
 significant rework) · **L** (contained).
 
+**R-019 opened 2026-08-13** — the roadmap had 0 ready tickets while the
+module table said 40% of the system did not exist; partly addressed the
+same day (Ready-to-start 0 → 5), Stage B still entirely unticketed.
 **R-006 re-measured 2026-08-13 (36 of 60 → 3 of 61 MUST untouched) after
 a document-only audit found it 13 days stale.** Reviewed 2026-07-31
 (R1–R4 final closeout); R-008 and R-009 closed 2026-08-01; R-014 opened and closed 2026-08-09; R-015 opened and closed
 2026-08-09; R-016 opened 2026-08-10 and closed 2026-08-13; R-017 opened
-and closed 2026-08-11; R-018 opened 2026-08-11.** 15 closed, 2 open
-(R-006, an accepted baseline whose count has now been genuinely recounted
-rather than carried forward; R-018, the "proven but
-idle" sweep, now partly closed and — for its remaining five packages —
-machine-checked rather than re-swept by hand) plus R-001 (a permanent
+and closed 2026-08-11; R-018 opened 2026-08-11; R-019 opened
+2026-08-13.** 15 closed, **3 open** (R-006, an accepted baseline whose
+count has now been genuinely recounted rather than carried forward;
+R-018, the "proven but idle" sweep, now partly closed and — for its
+remaining five packages — machine-checked rather than re-swept by hand;
+R-019, the roadmap having run out of ready work, partly addressed) plus R-001 (a permanent
 standing rule, not a risk pending closure).
 
 **R-017 and R-018 both came from one whole-project health audit
@@ -49,6 +53,7 @@ to that rule, not as evidence it failed.
 | R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop timing margins) | L | **Closed** 2026-08-09; both worker-loop timing tests remediated (`P02-S01-M05-T16` 2026-08-11, 4th occurrence 2026-08-12); two further real root causes — an unclosed asyncio subprocess transport and 19 HTTP handlers never draining the request body — found and fixed 2026-08-12 | — |
 | R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Closed** 2026-08-13 (`P02-S01-M05-T17`) — bounded by a platform-default `RetryPolicy`, `failed` now genuinely written | Product owner, 2026-08-10 |
 | R-017 | Manifest-declared Tools were unreachable in production — no caller ever passed a `ToolRegistry` | M | **Closed** 2026-08-11 (`P02-S05-M18-T04`) | — |
+| R-019 | The roadmap ran out of work while the system was 60% built — 0 `todo` tickets across all 264, and the biggest real block (Stage B, 626 module-points) had none | M | **Open — partly addressed 2026-08-13** (19 partials re-verified: 11 closed, 8 kept, 5 new `todo` created; Ready-to-start 0 → 5). Stage B remains entirely unticketed | Partial-ticket re-verification, 2026-08-13 |
 | R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3, 5 and 8 now closed; 5 further Kernel packages added 2026-08-11; item 8 added *and* closed 2026-08-12, and showed the sweep must measure per module, not per package) | M | **Open — items 4, 6 and 7 formally accepted as disclosed gaps; item 7's five packages re-verified 2026-08-13 and now enforced by `tests/contract/test_production_reachability.py`, which fails in both directions** | Health audit, 2026-08-11 |
 
 ---
@@ -1353,6 +1358,42 @@ It therefore *structurally cannot* surface "this module is complete but
 nothing calls it," because that fact lives between modules. Periodic
 whole-project audits are the intended counterweight, not a sign the
 process failed.
+
+---
+
+## R-019 — The roadmap ran out of work while the system was 60% built
+
+Opened **2026-08-13** by the partial-ticket re-verification. **Open.**
+
+**The finding.** All 264 tickets were `done`, `partial` or `blocked` —
+**zero `todo`**. `STATUS.md`'s own Ready-to-start section read
+"0 Task(s)". No module in the project had a ready ticket, and Stage B —
+the 626 unticketed module-percentage-points that the 2026-08-13
+document-only audit identified as the single biggest remaining block —
+had nothing open at all except two product-owner-gated `blocked`
+tickets. The ticket system said the work was finished; the module table
+said 40% of the system did not exist.
+
+**Why this is a risk and not just an empty queue.** A roadmap with no
+ready work cannot be picked up. Every subsequent step would have had to
+either invent scope on the spot or re-derive the backlog from scratch,
+and the previous step's audit showed exactly how that goes: numbers get
+carried forward instead of recounted. This is the tracking analogue of
+R-018 — real work that no instrument could see.
+
+**Partly addressed the same day.** Re-verifying all 19 `partial`
+tickets closed 11 whose stated gaps were provably stale or formally
+deferred, kept 8 with real unresolved gaps, and re-scoped the genuine
+remainder into 5 new `todo` tickets. Ready-to-start is **0 → 5**.
+
+**Not closed, and this is the substantive half.** Those 5 cover the
+Project Intelligence agent, multi-language dependency extraction,
+`GET /gates/trends`, the CLI's last two gaps, and the gVisor
+RuntimeClass. **None of them is in Stage B.** The Kernel modules with
+the largest real gaps — Memory Manager 18%, Storage Service 25%,
+Caching 30%, Knowledge Manager 40%, Quality Gate Engine 40% — still
+have **no ticket of any status**. That work has never been planned,
+only measured. Closing this risk means planning it.
 
 ---
 

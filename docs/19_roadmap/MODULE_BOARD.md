@@ -34,26 +34,26 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M19 | Secrets Manager | P01+P07 | 7 | 7 | 100% |
 | M20 | Sandbox / SandboxExecutor | P03 | 5 | 4 | 90% |
 | M21 | Storage Service | P02 | 1 | 1 | 100% |
-| M22 | Notification Service | P06 | 2 | 0 | 50% |
+| M22 | Notification Service | P06 | 2 | 2 | 100% |
 | M23 | Caching (Redis) | P02 | 2 | 2 | 100% |
 | M24 | Git Integration Service | P03 | 3 | 3 | 100% |
 | M25 | Speech Gateway | P06 | 1 | 0 | 50% |
-| M26 | Document Processing | P05 | 2 | 0 | 50% |
+| M26 | Document Processing | P05 | 2 | 2 | 100% |
 | M27 | Platform SDK (ai-os-sdk package) | P02 | 8 | 8 | 100% |
 | M28 | Manifest Schema (JSON Schema) | P01 | 2 | 2 | 100% |
 | M29 | SE Pack - Agents | P03+P08 | 15 | 15 | 100% |
 | M30 | SE Pack - Workflows | P03+P08 | 8 | 8 | 100% |
 | M31 | SE Pack - Tools & Quality Gates | P03 | 4 | 4 | 100% |
-| M32 | Project Intelligence Pack | P05 | 7 | 1 | 57% |
+| M32 | Project Intelligence Pack | P05 | 9 | 7 | 78% |
 | M33 | Voice (Jarvis) Pack | P06 | 2 | 1 | 75% |
 | M34 | Benchmarking Pack | P04 | 5 | 5 | 100% |
-| M36 | API (HTTP surface) | P02+P06 | 9 | 8 | 94% |
+| M36 | API (HTTP surface) | P02+P06 | 10 | 8 | 85% |
 | M37 | WebSocket stream | P06 | 1 | 1 | 100% |
-| M38 | CLI (aios) | P06 | 1 | 0 | 50% |
+| M38 | CLI (aios) | P06 | 2 | 0 | 25% |
 | M39 | Dashboard | P06 | 3 | 3 | 100% |
-| M40 | Deployment & Infrastructure | P01+P07 | 8 | 6 | 88% |
+| M40 | Deployment & Infrastructure | P01+P07 | 9 | 6 | 78% |
 | M41 | Threat Controls (T1-T12) | P03 | 2 | 2 | 100% |
-| M42 | Testing Infrastructure | P01+P07 | 7 | 5 | 86% |
+| M42 | Testing Infrastructure | P01+P07 | 7 | 6 | 93% |
 | M43 | CI Pipeline | P01 | 5 | 5 | 100% |
 | M44 | Platform-wide AiOsError hierarchy | P02 | 1 | 1 | 100% |
 | M45 | Roadmap & Process System | P09 | 5 | 5 | 100% |

@@ -7,11 +7,11 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-08-13 from 264 Task tickets.
+**Generated:** 2026-08-13 from 269 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Ticket-weighted completion: 96%** (252.5 of 264 Task-equivalents complete) — the share of *currently ticketed* work that is done. A `partial` Task counts half. This number moves very little late in a project: each newly discovered Task adds to the denominator as well as, eventually, the numerator.
+**Ticket-weighted completion: 96%** (258 of 269 Task-equivalents complete) — the share of *currently ticketed* work that is done. A `partial` Task counts half. This number moves very little late in a project: each newly discovered Task adds to the denominator as well as, eventually, the numerator.
 
 **Module-average completion: 60%** (2659 points across 44 modules, unweighted mean; 1741 points remain to 100%) — the share of the *system itself* that exists, from `feature_inventory.md`'s per-module table. A module reaches 100% only when the subsystem is genuinely complete, so this is the harder and more honest of the two.
 
@@ -42,17 +42,17 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P04 (D) | S01 Evaluation Engine | 16 | 16 | 0 | 0 | 100% |
 | P04 (D) | S02 Traceability Engine | 5 | 5 | 0 | 0 | 100% |
 | P04 (D) | S03 Benchmarking Pack | 5 | 5 | 0 | 0 | 100% |
-| P05 (E) | S01 Document Processing | 2 | 0 | 2 | 0 | 50% |
-| P05 (E) | S02 Project Intelligence Pack | 7 | 1 | 6 | 0 | 57% |
-| P06 (F) | S01 API Completion and Published Contract | 5 | 4 | 1 | 0 | 90% |
+| P05 (E) | S01 Document Processing | 2 | 2 | 0 | 0 | 100% |
+| P05 (E) | S02 Project Intelligence Pack | 9 | 7 | 0 | 2 | 78% |
+| P06 (F) | S01 API Completion and Published Contract | 6 | 4 | 1 | 1 | 75% |
 | P06 (F) | S02 Realtime Stream | 1 | 1 | 0 | 0 | 100% |
 | P06 (F) | S03 Dashboard | 3 | 3 | 0 | 0 | 100% |
-| P06 (F) | S04 Command Line Interface | 1 | 0 | 1 | 0 | 50% |
-| P06 (F) | S05 Notifications | 2 | 0 | 2 | 0 | 50% |
+| P06 (F) | S04 Command Line Interface | 2 | 0 | 1 | 1 | 25% |
+| P06 (F) | S05 Notifications | 2 | 2 | 0 | 0 | 100% |
 | P06 (F) | S06 Voice | 3 | 1 | 2 | 0 | 67% |
-| P07 (G) | S01 Deployment and Infrastructure | 3 | 1 | 2 | 0 | 67% |
+| P07 (G) | S01 Deployment and Infrastructure | 4 | 1 | 2 | 1 | 50% |
 | P07 (G) | S02 Security Hardening | 3 | 3 | 0 | 0 | 100% |
-| P07 (G) | S03 Performance, Chaos and Coverage | 2 | 0 | 2 | 0 | 50% |
+| P07 (G) | S03 Performance, Chaos and Coverage | 2 | 1 | 1 | 0 | 75% |
 | P08 (H) | S01 Remaining Pack Agents | 7 | 7 | 0 | 0 | 100% |
 | P08 (H) | S02 Remaining Pack Workflows | 2 | 2 | 0 | 0 | 100% |
 | P09 (-) | S01 Roadmap System Restructuring (R1-R4) | 5 | 5 | 0 | 0 | 100% |
@@ -65,16 +65,21 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (Stage B) - Minimum Viable Kernel | 106 | 104 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 26 | 26 | 100% |
-| P05 (Stage E) - Project Intelligence | 9 | 1 | 56% |
-| P06 (Stage F) - Dashboard, Voice, Notifications | 15 | 9 | 80% |
-| P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 75% |
+| P05 (Stage E) - Project Intelligence | 11 | 9 | 82% |
+| P06 (Stage F) - Dashboard, Voice, Notifications | 17 | 11 | 76% |
+| P07 (Stage G) - Hardening and Production Readiness | 9 | 5 | 72% |
 | P08 (Stage H) - Expansion | 9 | 9 | 100% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |
 
 ## Ready to start
 
-0 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+5 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
+- `P05-S02-M32-T08` Project Intelligence agent over the five real Tools
+- `P05-S02-M32-T09` Multi-language dependency extraction
+- `P06-S01-M36-T06` GET /gates/trends
+- `P06-S04-M38-T02` aios workflow retry, and the logs command group
+- `P07-S01-M40-T04` gVisor RuntimeClass in the Helm chart
 
 ## Blocked
 
