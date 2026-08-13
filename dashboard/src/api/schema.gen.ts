@@ -480,6 +480,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/voice/intent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Handle Voice Intent */
+        post: operations["handle_voice_intent_api_v1_voice_intent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workflow_definitions": {
         parameters: {
             query?: never;
@@ -1668,6 +1685,48 @@ export interface components {
             variant_key: string;
         };
         /**
+         * VoiceActionResult
+         * @description The real platform action taken, plus a real, natural-language
+         *     response derived from the real underlying result — never a
+         *     fabricated summary.
+         */
+        VoiceActionResult: {
+            /** Intent Type */
+            intent_type: string;
+            /** Platform Action */
+            platform_action: string;
+            /** Raw Response */
+            raw_response: {
+                [key: string]: unknown;
+            };
+            /** Response Text */
+            response_text: string;
+        };
+        /**
+         * VoiceIntent
+         * @description An already-recognized, structured intent — never raw audio or
+         *     free text (real speech-to-intent recognition is separate, unbuilt
+         *     work; see this module's own package docstring). Fields beyond
+         *     ``intent_type`` are optional here and validated per-type by
+         *     :class:`~ai_os_kernel.voice_jarvis.intent_router.PlatformIntentRouter`,
+         *     the identical "declared optional, required together" shape
+         *     :mod:`ai_os_kernel.llm_gateway.call_recorder` already establishes
+         *     for ``agent_id``/``prompt_id``/``prompt_version``.
+         */
+        VoiceIntent: {
+            /** Approval Id */
+            approval_id?: string | null;
+            /** Decision */
+            decision?: string | null;
+            /**
+             * Intent Type
+             * @enum {string}
+             */
+            intent_type: "check_health" | "list_workflows" | "get_workflow_status" | "decide_approval";
+            /** Workflow Id */
+            workflow_id?: string | null;
+        };
+        /**
          * WorkflowDefinition
          * @description The Workflow Contract, as loaded from one definition file.
          */
@@ -2684,6 +2743,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    handle_voice_intent_api_v1_voice_intent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceIntent"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

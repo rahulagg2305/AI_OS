@@ -2398,6 +2398,12 @@ def test_evaluation_gate_results_matches_the_documented_columns(
         "metrics",
         "messages",
         "duration_ms",
+        # `0038_gate_results_created_at` (2026-08-13). This table had no
+        # timestamp at all, which is what blocked `GET /gates/trends`
+        # ("pass/fail over time") — there was nothing to bucket by.
+        # Server-defaulted and indexed, exactly as `0035` added one to
+        # `llm_calls` for the identical gap.
+        "created_at",
     }
     assert pk_columns == ["result_id"]
 
