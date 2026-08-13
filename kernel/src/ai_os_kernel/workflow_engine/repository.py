@@ -151,6 +151,8 @@ class WorkflowInstanceRepository(Protocol):
 
     async def mark_failed(self, *, workflow_id: str, reason: str) -> WorkflowInstance: ...
 
+    async def retry(self, *, workflow_id: str, reason: str) -> WorkflowInstance: ...
+
     async def step_failure_stats(
         self, *, workflow_id: str, step_name: str
     ) -> tuple[int, datetime | None]: ...
@@ -993,18 +995,45 @@ class SqlWorkflowInstanceRepository:
         back out of ``workflow_steps``, where ``record_failed_attempt``
         has been writing them since ``P02-S01-M05-T06`` — no new column
         and no migration, because the data was already there.
+
+        **Bounded by the retry epoch since ``P06-S01-M36-T05``.** An
+        operator retry (``POST /workflows/{id}/retry``) stamps
+        ``workflow_instances.retried_at``, and only failures at or after
+        it count. Without that filter a retry would be nearly useless:
+        a ``failed`` instance has already spent both bounds, so the very
+        first new failure would re-fail it immediately regardless of the
+        declared ``retryPolicy``.
+
+        The epoch is read here by **joining** ``workflow_instances``
+        rather than by taking it as an argument. That is deliberate: the
+        Protocol signature stays unchanged, so no caller — and no test
+        fake — can silently forget to pass it and quietly resurrect the
+        old, unbounded-by-epoch behaviour. ``retried_at IS NULL`` (every
+        row that predates the retry route) means "count every failure",
+        exactly as before.
         """
         async with self._engine.connect() as connection:
             row = (
                 (
                     await connection.execute(
                         sa.select(
-                            sa.func.count().label("failure_count"),
+                            sa.func.count(workflow_steps.c.step_id).label("failure_count"),
                             sa.func.min(workflow_steps.c.started_at).label("first_failed_at"),
-                        ).where(
+                        )
+                        .select_from(
+                            workflow_steps.join(
+                                workflow_instances,
+                                workflow_instances.c.workflow_id == workflow_steps.c.workflow_id,
+                            )
+                        )
+                        .where(
                             workflow_steps.c.workflow_id == workflow_id,
                             workflow_steps.c.step_name == step_name,
                             workflow_steps.c.status == _STEP_STATUS_FAILED,
+                            sa.or_(
+                                workflow_instances.c.retried_at.is_(None),
+                                workflow_steps.c.started_at >= workflow_instances.c.retried_at,
+                            ),
                         )
                     )
                 )
@@ -1119,6 +1148,107 @@ class SqlWorkflowInstanceRepository:
                 connection,
                 event_type=_WORKFLOW_FAILED_EVENT_TYPE,
                 payload={"workflow_id": workflow_id, "reason": reason},
+            )
+        return WorkflowInstance.model_validate(dict(instance_row))
+
+    async def retry(self, *, workflow_id: str, reason: str) -> WorkflowInstance:
+        """``api_architecture.md`` §6.1's "Retry from last failure" —
+        put a permanently-failed instance back to work from the step
+        that failed.
+
+        Until ``P02-S01-M05-T17`` this method could not have existed:
+        nothing ever wrote ``failed``, so there was no permanently-failed
+        instance for an operator to act on. Closing R-016 created the
+        state *and* the dead end — a workflow could fail for good and
+        nobody could do anything about it. This is the way out.
+
+        **"From last failure" needs no interpretation and gets none.**
+        ``current_step_id`` already points at the step that failed, so
+        this deliberately does *not* touch it: the worker loop resumes
+        exactly where it stopped. Rewinding further is what
+        :meth:`reset_current_step` is for, and that is a different
+        operation with a different caller.
+
+        **The retry epoch is the load-bearing part.** Stamping
+        ``retried_at`` is what makes the retry meaningful rather than
+        cosmetic. ``_fail_if_retries_exhausted`` bounds a step by
+        attempts *and* elapsed time, and a ``failed`` instance has spent
+        both — so without the epoch the first new failure would re-fail
+        it immediately, no matter what the definition declares.
+        :meth:`step_failure_stats` counts only failures at or after this
+        moment, so the definition's own ``retryPolicy`` applies again in
+        full (product-owner decision, 2026-08-13).
+
+        ``error`` and ``completed_at`` are cleared for the same reason:
+        both describe a run that is no longer over, and leaving them
+        would make a running instance read as failed to every consumer
+        of ``GET /workflows/{id}``. The previous failure is not lost —
+        it stays in ``workflow_steps`` and in the event log below.
+
+        Identical guarded-CAS shape to :meth:`cancel` and
+        :meth:`mark_failed`: an update matching zero rows is refused
+        rather than silently doing nothing, so two operators racing to
+        retry the same instance produce exactly one transition and one
+        epoch. Only ``failed`` is a legal source — retrying a running,
+        completed or cancelled instance is a real conflict, not a no-op.
+
+        Straight to ``running`` rather than through the declared-but-
+        unreached ``waiting_for_retry`` (product-owner decision, same
+        day): ``running`` is non-terminal, so the existing
+        ``list_runnable_instances`` filter rediscovers the instance on
+        the next poll with no change to the worker loop at all.
+        """
+        async with self._engine.begin() as connection:
+            current = (
+                await connection.execute(
+                    sa.select(workflow_instances.c.status).where(
+                        workflow_instances.c.workflow_id == workflow_id
+                    )
+                )
+            ).scalar_one_or_none()
+
+            result = await connection.execute(
+                sa.update(workflow_instances)
+                .where(
+                    workflow_instances.c.workflow_id == workflow_id,
+                    workflow_instances.c.status == WorkflowInstanceStatus.FAILED.value,
+                )
+                .values(
+                    status=WorkflowInstanceStatus.RUNNING.value,
+                    last_event_seq=workflow_instances.c.last_event_seq + 1,
+                    retried_at=sa.func.now(),
+                    error=None,
+                    completed_at=None,
+                    updated_at=sa.func.now(),
+                )
+                .returning(*workflow_instances.columns)
+            )
+            instance_row = result.mappings().one_or_none()
+
+            if instance_row is None:
+                if current is None:
+                    raise WorkflowInvalidTransitionError(
+                        f"workflow instance '{workflow_id}' does not exist"
+                    )
+                raise WorkflowInvalidTransitionError(
+                    f"workflow instance '{workflow_id}' cannot be retried from its "
+                    f"current status '{current}' — only a failed instance can be retried"
+                )
+
+            await connection.execute(
+                sa.insert(workflow_events).values(
+                    event_id=new_event_id(),
+                    workflow_id=workflow_id,
+                    seq=instance_row["last_event_seq"],
+                    event_type=_STATE_TRANSITIONED_EVENT_TYPE,
+                    schema_version=_STATE_TRANSITIONED_SCHEMA_VERSION,
+                    payload={
+                        "previousStatus": current,
+                        "newStatus": WorkflowInstanceStatus.RUNNING.value,
+                        "reason": reason,
+                    },
+                    occurred_at=datetime.now(UTC),
+                )
             )
         return WorkflowInstance.model_validate(dict(instance_row))
 

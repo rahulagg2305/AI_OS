@@ -59,6 +59,10 @@ class WorkflowInstance(BaseModel):
     # no scheduled start was requested; a real timestamp means "start
     # no earlier than this" (P02-S01-M05-T13).
     scheduled_at: datetime | None
+    # The retry epoch (`P06-S01-M36-T05`). None means this instance has
+    # never been retried by an operator; a real timestamp means only
+    # step failures at or after it count against the retry budget.
+    retried_at: datetime | None
     last_event_seq: int
     error: dict[str, Any] | None
     total_cost_usd: Decimal

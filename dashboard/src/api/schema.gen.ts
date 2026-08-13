@@ -645,6 +645,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workflows/{workflow_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Workflow
+         * @description api_architecture.md §6.1's own documented ``POST
+         *     /api/v1/workflows/{id}/retry`` ("Retry from last failure") — the last
+         *     of §6.1's named routes to be built, and the one that closes the dead
+         *     end R-016's fix created: before this, a workflow could reach the
+         *     terminal ``failed`` state and no operator had any way to act on it.
+         *
+         *     Gated by ``WORKFLOW_CONTROL``, not a new permission:
+         *     authentication_authorization.md §4.2's own table names "start /
+         *     cancel / retry workflows" together for the same role, and
+         *     ``POST /workflows/{id}/cancel`` already uses exactly this gate.
+         *
+         *     ``202``, matching the documented status and `cancel`'s own shape —
+         *     the retry is genuinely accepted rather than completed here. The
+         *     instance goes back to ``running`` and the worker loop picks it up on
+         *     its next poll; nothing in this request re-executes the step.
+         *
+         *     ``404`` if the workflow never existed; ``409`` if it exists but is
+         *     not ``failed`` (already running, completed or cancelled) — two
+         *     distinct, honestly-reported cases, never conflated. See
+         *     :meth:`~ai_os_kernel.workflow_engine.repository.
+         *     SqlWorkflowInstanceRepository.retry` for why the retry epoch, not
+         *     the status flip, is the load-bearing part.
+         */
+        post: operations["retry_workflow_api_v1_workflows__workflow_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workflows/{workflow_id}/run_manifest": {
         parameters: {
             query?: never;
@@ -1382,6 +1423,16 @@ export interface components {
             maxDurationSeconds: number;
         };
         /**
+         * RetryWorkflowRequest
+         * @description The same optional-reason body ``CancelWorkflowRequest`` uses, for
+         *     the same purpose: an operator acting on a stuck workflow should be
+         *     able to say why, and that reason lands in the real event log.
+         */
+        RetryWorkflowRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
          * RevokeRoleRequest
          * @description Mirrors :meth:`RoleAdministrationService.revoke`'s own keyword
          *     arguments exactly — no parallel request shape.
@@ -1845,6 +1896,8 @@ export interface components {
             principal_id: string;
             /** Principal Permissions */
             principal_permissions: string[] | null;
+            /** Retried At */
+            retried_at: string | null;
             /** Run Manifest Id */
             run_manifest_id: string | null;
             /** Scheduled At */
@@ -3018,6 +3071,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkflowEventRecord"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_workflow_api_v1_workflows__workflow_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryWorkflowRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowInstance"];
                 };
             };
             /** @description Validation Error */

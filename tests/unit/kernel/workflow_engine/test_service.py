@@ -152,6 +152,7 @@ def _instance(
         principal_id="user-42",
         principal_permissions=None,
         scheduled_at=None,
+        retried_at=None,
         last_event_seq=last_event_seq,
         error=None,
         total_cost_usd=Decimal("0"),
@@ -326,6 +327,9 @@ class _FakeRepository:
         raise NotImplementedError("not exercised by these tests")
 
     async def mark_failed(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def retry(self, **kwargs: Any) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
     async def step_failure_stats(self, **kwargs: Any) -> tuple[int, datetime | None]:

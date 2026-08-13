@@ -6,11 +6,11 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-08-13 from 263 Task tickets.
+**Generated:** 2026-08-13 from 264 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 96%** (251.5 of 263 Task-equivalents complete)
+**Overall: 96%** (252.5 of 264 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -39,7 +39,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P04 (D) | S03 Benchmarking Pack | 5 | 5 | 0 | 0 | 100% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 2 | 0 | 50% |
 | P05 (E) | S02 Project Intelligence Pack | 7 | 1 | 6 | 0 | 57% |
-| P06 (F) | S01 API Completion and Published Contract | 4 | 3 | 1 | 0 | 88% |
+| P06 (F) | S01 API Completion and Published Contract | 5 | 4 | 1 | 0 | 90% |
 | P06 (F) | S02 Realtime Stream | 1 | 1 | 0 | 0 | 100% |
 | P06 (F) | S03 Dashboard | 3 | 3 | 0 | 0 | 100% |
 | P06 (F) | S04 Command Line Interface | 1 | 0 | 1 | 0 | 50% |
@@ -61,7 +61,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 26 | 26 | 100% |
 | P05 (Stage E) - Project Intelligence | 9 | 1 | 56% |
-| P06 (Stage F) - Dashboard, Voice, Notifications | 14 | 8 | 79% |
+| P06 (Stage F) - Dashboard, Voice, Notifications | 15 | 9 | 80% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 75% |
 | P08 (Stage H) - Expansion | 9 | 9 | 100% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |

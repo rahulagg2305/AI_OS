@@ -222,6 +222,11 @@ def test_workflow_instances_matches_the_documented_columns(
         "principal_id",
         "principal_permissions",
         "scheduled_at",
+        # `0039_instances_retried_at` (2026-08-13) — the retry epoch
+        # `POST /workflows/{id}/retry` stamps, and the only reason that
+        # route grants a genuinely fresh retry budget rather than one
+        # grudging extra attempt. See `data_model.md`'s own row.
+        "retried_at",
         "last_event_seq",
         "error",
         "total_cost_usd",

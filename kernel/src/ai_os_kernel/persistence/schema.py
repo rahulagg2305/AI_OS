@@ -177,6 +177,13 @@ workflow_instances = sa.Table(
     # immediately," which would be indistinguishable from a genuine,
     # very-soon-due schedule. WorkflowScheduler is the one real reader.
     sa.Column("scheduled_at", sa.TIMESTAMP(timezone=True), nullable=True),
+    # The retry epoch (`0039`). NULL means "never retried" — the honest
+    # state of every row that predates the retry route, and the value
+    # that makes `step_failure_stats` count every failure, exactly as it
+    # did before. A real timestamp means an operator granted this
+    # instance a fresh retry budget at that moment, and only failures at
+    # or after it count against the definition's `retryPolicy`.
+    sa.Column("retried_at", sa.TIMESTAMP(timezone=True), nullable=True),
     sa.Column("last_event_seq", sa.BigInteger, nullable=False),
     sa.Column("error", JSONB, nullable=True),
     sa.Column("total_cost_usd", sa.Numeric(14, 6), nullable=False, server_default="0"),

@@ -964,10 +964,19 @@ check could never catch: `bootstrap.py`'s demo definition declared the
 key as `on_error`, not `onError`, and 32 test fixtures declared the
 unimplemented `escalate`.
 
-**What this unblocks.** `POST /workflows/{id}/retry` and the CLI's
-`workflow retry` now have a real, persisted "permanently failed"
-instance to act on. **Neither is built**; the blocker is removed, not
-the work done. `NotificationService`'s `failure` category is no longer
+**What this unblocked, and what has since been built.** `POST
+/workflows/{id}/retry` is **built as of 2026-08-13
+(`P06-S01-M36-T05`)** — closing R-016 made `failed` real and, in the
+same stroke, created a dead end where a workflow could fail for good
+with no operator recourse. That route is the way out, and it needed one
+thing this entry did not anticipate: a **retry epoch**
+(`workflow_instances.retried_at`, migration `0039`). A `failed` instance
+has by definition already spent both bounds this entry introduced, so a
+retry that merely flipped the status would have granted exactly one
+further attempt regardless of the declared `retryPolicy`. The epoch
+makes `step_failure_stats` count only failures after the retry, so the
+policy applies again in full. The CLI's `workflow retry` is **still not
+built** — the route it needs now exists. `NotificationService`'s `failure` category is no longer
 merely "available" — as of 2026-08-13 (`P02-S01-M05-T18`) `mark_failed`
 writes a real `workflow.failed` row to `platform.event_outbox` inside
 its own transaction, mirroring `workflow.completed` exactly, so that

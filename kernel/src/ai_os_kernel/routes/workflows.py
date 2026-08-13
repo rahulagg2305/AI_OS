@@ -318,6 +318,55 @@ async def cancel_workflow(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+class RetryWorkflowRequest(BaseModel):
+    """The same optional-reason body ``CancelWorkflowRequest`` uses, for
+    the same purpose: an operator acting on a stuck workflow should be
+    able to say why, and that reason lands in the real event log."""
+
+    reason: str | None = None
+
+
+@router.post("/workflows/{workflow_id}/retry", response_model=WorkflowInstance, status_code=202)
+async def retry_workflow(
+    workflow_id: str,
+    body: RetryWorkflowRequest,
+    # Declared before `repository`, the identical ordering every other
+    # route here establishes.
+    _security_context: SecurityContext = Depends(require_permission(WORKFLOW_CONTROL)),  # noqa: B008
+    repository: WorkflowInstanceRepository = Depends(_get_repository),  # noqa: B008
+) -> WorkflowInstance:
+    """api_architecture.md §6.1's own documented ``POST
+    /api/v1/workflows/{id}/retry`` ("Retry from last failure") — the last
+    of §6.1's named routes to be built, and the one that closes the dead
+    end R-016's fix created: before this, a workflow could reach the
+    terminal ``failed`` state and no operator had any way to act on it.
+
+    Gated by ``WORKFLOW_CONTROL``, not a new permission:
+    authentication_authorization.md §4.2's own table names "start /
+    cancel / retry workflows" together for the same role, and
+    ``POST /workflows/{id}/cancel`` already uses exactly this gate.
+
+    ``202``, matching the documented status and `cancel`'s own shape —
+    the retry is genuinely accepted rather than completed here. The
+    instance goes back to ``running`` and the worker loop picks it up on
+    its next poll; nothing in this request re-executes the step.
+
+    ``404`` if the workflow never existed; ``409`` if it exists but is
+    not ``failed`` (already running, completed or cancelled) — two
+    distinct, honestly-reported cases, never conflated. See
+    :meth:`~ai_os_kernel.workflow_engine.repository.
+    SqlWorkflowInstanceRepository.retry` for why the retry epoch, not
+    the status flip, is the load-bearing part.
+    """
+    await _get_instance_or_404(repository, workflow_id)
+    try:
+        return await repository.retry(
+            workflow_id=workflow_id, reason=body.reason or "retried via API"
+        )
+    except WorkflowInvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.get("/workflows/{workflow_id}", response_model=WorkflowInstance)
 async def get_workflow(
     workflow_id: str,

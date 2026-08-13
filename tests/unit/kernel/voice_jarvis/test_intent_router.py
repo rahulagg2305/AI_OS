@@ -86,6 +86,7 @@ def _instance(workflow_id: str, *, current_step_id: str | None = "step_1") -> Wo
         principal_id="user_test",
         principal_permissions=None,
         scheduled_at=None,
+        retried_at=None,
         last_event_seq=0,
         error=None,
         total_cost_usd=Decimal("0"),

@@ -1442,6 +1442,24 @@
         "title": "RetryPolicy",
         "type": "object"
       },
+      "RetryWorkflowRequest": {
+        "description": "The same optional-reason body ``CancelWorkflowRequest`` uses, for\nthe same purpose: an operator acting on a stuck workflow should be\nable to say why, and that reason lands in the real event log.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "RetryWorkflowRequest",
+        "type": "object"
+      },
       "RevokeRoleRequest": {
         "description": "Mirrors :meth:`RoleAdministrationService.revoke`'s own keyword\narguments exactly \u2014 no parallel request shape.",
         "properties": {
@@ -2502,6 +2520,18 @@
             ],
             "title": "Principal Permissions"
           },
+          "retried_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retried At"
+          },
           "run_manifest_id": {
             "anyOf": [
               {
@@ -2560,6 +2590,7 @@
           "principal_id",
           "principal_permissions",
           "scheduled_at",
+          "retried_at",
           "last_event_seq",
           "error",
           "total_cost_usd",
@@ -4542,6 +4573,64 @@
           }
         ],
         "summary": "Get Workflow Events",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workflows/{workflow_id}/retry": {
+      "post": {
+        "description": "api_architecture.md \u00a76.1's own documented ``POST\n/api/v1/workflows/{id}/retry`` (\"Retry from last failure\") \u2014 the last\nof \u00a76.1's named routes to be built, and the one that closes the dead\nend R-016's fix created: before this, a workflow could reach the\nterminal ``failed`` state and no operator had any way to act on it.\n\nGated by ``WORKFLOW_CONTROL``, not a new permission:\nauthentication_authorization.md \u00a74.2's own table names \"start /\ncancel / retry workflows\" together for the same role, and\n``POST /workflows/{id}/cancel`` already uses exactly this gate.\n\n``202``, matching the documented status and `cancel`'s own shape \u2014\nthe retry is genuinely accepted rather than completed here. The\ninstance goes back to ``running`` and the worker loop picks it up on\nits next poll; nothing in this request re-executes the step.\n\n``404`` if the workflow never existed; ``409`` if it exists but is\nnot ``failed`` (already running, completed or cancelled) \u2014 two\ndistinct, honestly-reported cases, never conflated. See\n:meth:`~ai_os_kernel.workflow_engine.repository.\nSqlWorkflowInstanceRepository.retry` for why the retry epoch, not\nthe status flip, is the load-bearing part.",
+        "operationId": "retry_workflow_api_v1_workflows__workflow_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowInstance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retry Workflow",
         "tags": [
           "workflows"
         ]

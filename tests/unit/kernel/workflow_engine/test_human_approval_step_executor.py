@@ -81,6 +81,7 @@ def _instance() -> WorkflowInstance:
         principal_id="user-42",
         principal_permissions=None,
         scheduled_at=None,
+        retried_at=None,
         last_event_seq=2,
         error=None,
         total_cost_usd=Decimal("0"),

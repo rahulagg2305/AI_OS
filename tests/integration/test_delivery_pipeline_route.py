@@ -162,6 +162,7 @@ def _completed_documentation_instance(workflow_id: str) -> WorkflowInstance:
         principal_id="integration-test-user",
         principal_permissions=None,
         scheduled_at=None,
+        retried_at=None,
         last_event_seq=9,
         error=None,
         total_cost_usd=Decimal("0"),

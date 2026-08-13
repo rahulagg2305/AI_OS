@@ -77,6 +77,7 @@ def _instance(
         principal_id=_PRINCIPAL_ID,
         principal_permissions=None,
         scheduled_at=None,
+        retried_at=None,
         last_event_seq=1,
         error=None,
         total_cost_usd=Decimal("0"),
