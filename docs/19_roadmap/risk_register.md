@@ -699,6 +699,50 @@ services still declare no healthcheck. They are not currently a problem
 Recorded as a real, known, unfixed gap rather than silently widened
 here.
 
+**R-014 recurred in a second location — found and fixed 2026-08-13
+(`P06-S04-M38-T01`).** The entry below records that
+`capability_packs/*/tests/**` sat outside root `pyproject.toml`'s
+`testpaths = ["tests"]` and no CI step ever named it, so those tests had
+never run. **The identical defect existed for `tools/aios/tests`, and
+was missed when R-014 was closed** — the fix added a step for pack tests
+and stopped there, rather than asking what *else* lives outside
+`testpaths`.
+
+*Real impact.* The CLI's own suite — **49 tests** at the time of
+discovery, covering pure logic, a real local uvicorn server, and one
+real Postgres end-to-end pack lifecycle driven entirely through the CLI
+— had never executed in CI. Any regression in `aios` would have gone
+undetected by every green build.
+
+*Fixed the same way R-014 was*, deliberately: a `pytest tools/aios/tests`
+step in the `unit` job, guarded by the same
+`hashFiles(...) != ''` condition, added directly beneath the pack-tests
+step so the two are read together. Proven before adding: all 49 collect
+and pass through that exact entry point.
+
+*The generalisable lesson, worth more than the fix.* Closing a
+"tests exist but never run" finding for one directory does not close it
+for the repository. Anything outside `testpaths` is invisible by
+default, and nothing warns you. The remaining directories were checked
+at the same time — `tests/**` (the root suite), `capability_packs/*/tests`
+and `tools/aios/tests` are now the complete set of test locations, and
+all three are named by a CI step.
+
+**A documented CLI convention that has never been implemented —
+recorded 2026-08-13, not fixed.** `cli_design.md` §4's conventions table
+states that destructive commands "require `--yes` or an interactive
+confirmation". **No command in the real CLI implements it**, including
+`workflow cancel`, `pack deactivate`, and now `experiment run` — which
+synchronously executes one real workflow per variant × replicate, each
+making real, billable LLM calls. Implementing it for `experiment run`
+alone was considered and rejected: it would make the convention
+arbitrary, teaching a user that running an experiment needs confirmation
+while cancelling a workflow does not. The command's real cost is stated
+in its own help text instead. Closing this properly means deciding which
+commands are "destructive" and applying `--yes` to all of them
+consistently — a small, coherent piece of work, and a product-owner call
+on scope rather than something to infer.
+
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 
 Found `P05-S02-M32-T01`, closed `P05-S02-M32-T02` (2026-08-09).

@@ -39,11 +39,15 @@ def test_logout_then_whoami_is_a_real_authorization_denial() -> None:
 
 
 def test_every_documented_but_not_built_command_fails_clearly_not_silently() -> None:
+    """The `experiment` group left this list on 2026-08-13
+    (`P06-S04-M38-T01`): its stated blocker — "no /api/v1/experiments
+    route exists in production" — stopped being true once
+    api_architecture.md §6.3 became fully real, so all four subcommands
+    are now genuinely built and covered by their own tests below and in
+    `test_cli_live.py`. What remains here is genuinely blocked:
+    `logs` has no query route at all, and `workflow retry` is blocked by
+    R-016 (no production code ever persists a workflow as `failed`)."""
     for args in (
-        ["experiment", "create"],
-        ["experiment", "run", "exp-1"],
-        ["experiment", "show", "exp-1"],
-        ["experiment", "compare", "exp-1"],
         ["logs", "tail"],
         ["logs", "search", "query"],
         ["workflow", "retry", "wf-1"],
@@ -65,3 +69,25 @@ def test_an_invalid_decision_value_is_a_real_usage_error() -> None:
     result = invoke(["approve", "decide", "wf-1", "appr-1", "maybe"])
     assert result.exit_code == EXIT_USAGE_ERROR
     assert result.error_message is not None and "approved" in result.error_message
+
+
+def test_a_malformed_experiment_definition_is_a_real_usage_error() -> None:
+    """`experiment create` parses `--definition` as JSON before any
+    network call, the identical shape `workflow start --inputs` uses —
+    so a typo is a usage error (exit 2), never a confusing request
+    failure against the Kernel."""
+    result = invoke(["experiment", "create", "--definition", "not-json"])
+    assert result.exit_code == EXIT_USAGE_ERROR
+    assert result.error_message is not None and "not valid JSON" in result.error_message
+
+
+def test_every_documented_experiment_subcommand_is_discoverable() -> None:
+    """`cli_design.md` §4's command tree names exactly four subcommands
+    for this group — and deliberately no `list`, even though
+    `GET /api/v1/experiments` is real, because adding an undocumented
+    command would be inventing CLI surface."""
+    result = invoke(["experiment", "--help"])
+    assert result.exit_code == 0
+    for subcommand in ("create", "run", "show", "compare"):
+        assert subcommand in result.output, f"'{subcommand}' is not discoverable"
+    assert "list" not in result.output.split("Commands")[-1]

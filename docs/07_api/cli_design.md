@@ -20,7 +20,7 @@
 
 **Prior update: `approve list`/`show` are real.** The blocker disclosed here through `P06-S04-M38-T01` (`ApprovalRepository` had no method that lists approvals) closed at `P06-S03-M39-T02` (Dashboard's Pending Approvals view: `list_pending()`/`GET /api/v1/approvals`) — wired `approve list` onto that same route and added the one further real route `approve show` needed, `GET /api/v1/approvals/{approval_id}`, over the already-existing `SqlApprovalRepository.get_by_id` read.
 
-**Not built — no HTTP endpoint exists yet, disclosed rather than faked** (every command below is still discoverable via `--help`, and fails with the real, specific reason when run): `workflow retry` (needs a real "retry from where" design decision — no operator-triggered mechanism exists), `experiment` (Benchmarking Pack still 0% built), `logs` (no log-query route), `health detail` (no distinct endpoint — `ready` already returns full per-component detail).
+**Not built — no HTTP endpoint exists yet, disclosed rather than faked** (every command below is still discoverable via `--help`, and fails with the real, specific reason when run): `workflow retry` (needs a real "retry from where" design decision — no operator-triggered mechanism exists), `logs` (no log-query route), `health detail` (no distinct endpoint — `ready` already returns full per-component detail). **`experiment` left this list on 2026-08-13 (`P06-S04-M38-T01`) and all four of its documented subcommands are real.** Its stated blocker — "Benchmarking Pack still 0% built", later phrased in code as "no `/api/v1/experiments` route exists in production" — stopped being true once api_architecture.md §6.3 became fully real (`P04-S01-M12-T12`/`T13`/`T14`/`T15`); `create`/`run`/`show`/`compare` now call `POST /experiments`, `POST /experiments/{id}/run`, `GET /experiments/{id}` and `GET /experiments/{id}/comparison` respectively. Deliberately **no `experiment list`**, even though `GET /api/v1/experiments` is real: §4's own command tree names four subcommands, and adding a fifth would be inventing undocumented CLI surface. `--definition` takes a JSON object, matching `workflow start --inputs`'s own established shape rather than introducing a file-path convention this CLI has nowhere else.
 
 Authoritative, always-current status: the per-module completion table in `feature_inventory.md`; build history in `history/INDEX.md` (all under `docs/19_roadmap/`).
 
@@ -85,7 +85,7 @@ aios
 |---|---|
 | Output | `--output human` (Rich, default when a TTY) or `--output json` (default when piped) |
 | Exit codes | `0` success · `1` general error · `2` usage error · `3` authorization denied · `4` resource not found · `5` operation failed a gate · `6` timeout |
-| Destructive commands | Require `--yes` or an interactive confirmation |
+| Destructive commands | Require `--yes` or an interactive confirmation. **Not implemented anywhere in the real CLI as of 2026-08-13** — `workflow cancel`, `pack deactivate` and `experiment run` (which spends real money on billable LLM calls) all execute without confirmation. Recorded when `experiment run` was built rather than implemented for that one command alone, which would have made the convention arbitrary. |
 | Long operations | Return immediately with an ID; `--wait` opts into following the WebSocket stream |
 | Correlation | `--trace-id` is printed on every mutating command, so a CLI action is traceable to a platform trace |
 | Configuration | `~/.config/aios/config.toml` plus `AIOS_*` environment variables |

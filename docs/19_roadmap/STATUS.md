@@ -6,7 +6,7 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-08-12 from 258 Task tickets.
+**Generated:** 2026-08-13 from 258 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 

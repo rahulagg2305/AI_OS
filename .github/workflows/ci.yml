@@ -117,6 +117,17 @@ jobs:
         if: hashFiles('capability_packs/*/tests/**') != ''
         run: uv run pytest capability_packs/*/tests -v
 
+      # The identical R-014 defect, found 2026-08-13 in a second place
+      # and fixed the same way. `tools/aios/tests/**` sits outside root
+      # `pyproject.toml`'s `testpaths = ["tests"]`, and no step here ever
+      # named it — so the CLI's own suite had never run in CI at all,
+      # exactly as `capability_packs/*/tests` had not before R-014.
+      # Proven locally at the time of adding: 49 tests collect and pass
+      # through this exact entry point.
+      - name: pytest tools/aios (CLI-local tests)
+        if: hashFiles('tools/aios/tests/**') != ''
+        run: uv run pytest tools/aios/tests -v
+
   contract:
     name: Contract tests
     runs-on: ubuntu-latest

@@ -177,3 +177,87 @@ def test_workflow_cancel_authorized_reaches_the_real_workflow_engine_unavailable
     result = invoke(["workflow", "cancel", "wf-1"])
     assert result.exit_code == EXIT_GENERAL_ERROR
     assert result.error_message == "workflow engine is not available"
+
+
+# --- `aios experiment` (P06-S04-M38-T01, 2026-08-13) -------------------
+#
+# This group was a deliberate stub until api_architecture.md §6.3 became
+# fully real. These prove the four documented subcommands genuinely reach
+# the real Kernel routes: the security boundary refuses correctly, and an
+# authorized call gets the real "no database" degrade rather than a
+# client-side error — the same shape the `approve` tests above establish.
+
+
+def test_experiment_show_without_a_real_bearer_token_is_a_real_authorization_denial(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+
+    result = invoke(["experiment", "show", "exp-1"])
+    assert result.exit_code == EXIT_AUTHORIZATION_DENIED
+
+
+def test_experiment_create_lacking_experiment_run_is_a_real_authorization_denial(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+    # `experiment:run` is granted to operator/maintainer/admin
+    # (permissions.py) — `viewer` has the read half only.
+    monkeypatch.setenv("AIOS_TOKEN", _token(["viewer"]))
+
+    result = invoke(["experiment", "create", "--definition", '{"name": "x"}'])
+    assert result.exit_code == EXIT_AUTHORIZATION_DENIED
+
+
+def test_experiment_run_lacking_experiment_run_is_a_real_authorization_denial(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+    monkeypatch.setenv("AIOS_TOKEN", _token(["viewer"]))
+
+    result = invoke(["experiment", "run", "exp-1"])
+    assert result.exit_code == EXIT_AUTHORIZATION_DENIED
+
+
+def test_experiment_show_authorized_reaches_the_real_evaluation_engine_degrade(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+    monkeypatch.setenv("AIOS_TOKEN", _token(["viewer"]))
+
+    result = invoke(["experiment", "show", "exp-1"])
+    # Authentication and authorization both passed — the failure is the
+    # real, honest "no database" degrade from the route itself.
+    assert result.exit_code == EXIT_GENERAL_ERROR
+    assert result.error_message == "evaluation engine is not available"
+
+
+def test_experiment_compare_authorized_reaches_the_real_evaluation_engine_degrade(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+    monkeypatch.setenv("AIOS_TOKEN", _token(["viewer"]))
+
+    result = invoke(["experiment", "compare", "exp-1"])
+    assert result.exit_code == EXIT_GENERAL_ERROR
+    assert result.error_message == "evaluation engine is not available"
+
+
+def test_experiment_create_authorized_reaches_the_real_evaluation_engine_degrade(
+    live_kernel_no_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
+    monkeypatch.setenv("AIOS_TOKEN", _token(["operator"]))
+
+    result = invoke(
+        [
+            "experiment",
+            "create",
+            "--definition",
+            '{"name": "n", "description": "d", "definition_id": "se.x", '
+            '"definition_version": "1.0.0", "variables": {"model": ["a", "b"]}, '
+            '"runs_per_variant": 3}',
+        ]
+    )
+    assert result.exit_code == EXIT_GENERAL_ERROR
+    assert result.error_message == "evaluation engine is not available"
