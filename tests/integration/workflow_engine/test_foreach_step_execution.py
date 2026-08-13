@@ -136,7 +136,7 @@ def _child_definition(definition_id: str = _CHILD_DEFINITION_ID) -> WorkflowDefi
             "inputs": {"type": "object"},
             "outputs": {"type": "object"},
             "steps": [{"id": "do_the_work", "type": "agent", "agentId": _WORKER_AGENT_ID}],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 
@@ -163,7 +163,7 @@ def _parent_definition(sub_workflow_id: str, *, max_fan_out: int = 5) -> Workflo
                     },
                 },
             ],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 

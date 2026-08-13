@@ -6,11 +6,11 @@
 
 # AI_OS - Roadmap Status
 
-**Generated:** 2026-08-13 from 260 Task tickets.
+**Generated:** 2026-08-13 from 263 Task tickets.
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 96%** (248.5 of 260 Task-equivalents complete)
+**Overall: 96%** (251.5 of 263 Task-equivalents complete)
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|
@@ -20,7 +20,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P01 (A) | S04 Health and Lifecycle | 6 | 6 | 0 | 0 | 100% |
 | P01 (A) | S05 Observability and Audit | 7 | 7 | 0 | 0 | 100% |
 | P01 (A) | S06 CI and Test Infrastructure | 10 | 10 | 0 | 0 | 100% |
-| P02 (B) | S01 Workflow Execution Core | 17 | 17 | 0 | 0 | 100% |
+| P02 (B) | S01 Workflow Execution Core | 18 | 18 | 0 | 0 | 100% |
 | P02 (B) | S02 LLM Gateway | 12 | 12 | 0 | 0 | 100% |
 | P02 (B) | S03 Prompt and Context Assembly | 20 | 19 | 0 | 1 | 95% |
 | P02 (B) | S04 Knowledge, Memory and Retrieval | 14 | 13 | 0 | 1 | 93% |
@@ -34,7 +34,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P03 (C) | S04 Pack Tools and Declared Quality Gates | 4 | 4 | 0 | 0 | 100% |
 | P03 (C) | S05 Security and Human Approval | 10 | 10 | 0 | 0 | 100% |
 | P03 (C) | S06 Threat Controls | 2 | 2 | 0 | 0 | 100% |
-| P04 (D) | S01 Evaluation Engine | 15 | 15 | 0 | 0 | 100% |
+| P04 (D) | S01 Evaluation Engine | 16 | 16 | 0 | 0 | 100% |
 | P04 (D) | S02 Traceability Engine | 5 | 5 | 0 | 0 | 100% |
 | P04 (D) | S03 Benchmarking Pack | 5 | 5 | 0 | 0 | 100% |
 | P05 (E) | S01 Document Processing | 2 | 0 | 2 | 0 | 50% |
@@ -44,7 +44,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P06 (F) | S03 Dashboard | 3 | 3 | 0 | 0 | 100% |
 | P06 (F) | S04 Command Line Interface | 1 | 0 | 1 | 0 | 50% |
 | P06 (F) | S05 Notifications | 2 | 0 | 2 | 0 | 50% |
-| P06 (F) | S06 Voice | 2 | 0 | 2 | 0 | 50% |
+| P06 (F) | S06 Voice | 3 | 1 | 2 | 0 | 67% |
 | P07 (G) | S01 Deployment and Infrastructure | 3 | 1 | 2 | 0 | 67% |
 | P07 (G) | S02 Security Hardening | 3 | 3 | 0 | 0 | 100% |
 | P07 (G) | S03 Performance, Chaos and Coverage | 2 | 0 | 2 | 0 | 50% |
@@ -57,11 +57,11 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 48 | 48 | 100% |
-| P02 (Stage B) - Minimum Viable Kernel | 105 | 103 | 98% |
+| P02 (Stage B) - Minimum Viable Kernel | 106 | 104 | 98% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
-| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 25 | 25 | 100% |
+| P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 26 | 26 | 100% |
 | P05 (Stage E) - Project Intelligence | 9 | 1 | 56% |
-| P06 (Stage F) - Dashboard, Voice, Notifications | 13 | 7 | 77% |
+| P06 (Stage F) - Dashboard, Voice, Notifications | 14 | 8 | 79% |
 | P07 (Stage G) - Hardening and Production Readiness | 8 | 4 | 75% |
 | P08 (Stage H) - Expansion | 9 | 9 | 100% |
 | P09 (Stage -) - Roadmap System and Process | 5 | 5 | 100% |

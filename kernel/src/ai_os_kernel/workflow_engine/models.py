@@ -83,6 +83,11 @@ _ID_PATTERN = r"^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)*$"
 # Mirrors platform_sdk/schemas/manifest.schema.json `workflows[].version`.
 _VERSION_PATTERN = r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"
 
+# The only `failureHandling.onError` value the engine actually
+# implements — see `WorkflowDefinition._failure_handling_is_declared`
+# for why `escalate` is rejected here rather than silently accepted.
+_IMPLEMENTED_ON_ERROR = "halt"
+
 
 class _CamelModel(BaseModel):
     """Base for definition-file models: camelCase on disk, snake_case in
@@ -495,8 +500,42 @@ class WorkflowDefinition(_CamelModel):
     @field_validator("failure_handling")
     @classmethod
     def _failure_handling_is_declared(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """``failureHandling`` must declare an ``onError`` this engine
+        genuinely implements.
+
+        Until 2026-08-13 this checked only that the dict was non-empty,
+        so the field was **required of every definition and read by
+        nothing** — the gap disclosed alongside R-016. The concrete
+        hazard was not the absence of a feature but a silent lie: a
+        definition could declare ``onError: escalate`` and get plain
+        ``halt`` behaviour, with no error, no warning, and no way for
+        its author to discover the difference. Two real definitions were
+        in exactly that state (``bootstrap.py``'s demo, which also
+        misspelled the key as ``on_error``, and 32 test fixtures).
+
+        ``halt`` is the only value accepted because it is the only
+        behaviour that exists: retry exhaustion writes the terminal
+        ``failed`` state (``P02-S01-M05-T17``) and stops. ``escalate``
+        is deliberately **rejected rather than implemented** — product
+        owner decision, 2026-08-13. No document anywhere defines what it
+        should do, ``error_handling_retry.md`` §7 states human
+        escalation does not exist, and inventing semantics for it here
+        would be exactly the unilateral design that disclosure existed
+        to prevent. Every one of the three real pack workflows already
+        declares ``halt``, so no real production definition changes
+        meaning; widening this vocabulary later is additive and cheap,
+        whereas silently accepting an unimplemented value is not.
+        """
         if not value:
             raise ValueError("failureHandling must not be empty")
+        on_error = value.get("onError")
+        if on_error != _IMPLEMENTED_ON_ERROR:
+            raise ValueError(
+                f"failureHandling.onError must be '{_IMPLEMENTED_ON_ERROR}' "
+                f"(got {on_error!r}) — the only behaviour the Workflow Engine "
+                "implements. 'escalate' is defined by no specification and "
+                "honoured by no code; declaring it would silently get 'halt'."
+            )
         return value
 
     @model_validator(mode="after")

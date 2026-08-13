@@ -86,7 +86,7 @@ def _definition_with_an_agent_step_a_tool_step_and_a_human_approval_step() -> Wo
                     "options": ["approve", "reject"],
                 }
             ],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 

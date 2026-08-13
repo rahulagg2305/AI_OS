@@ -16,14 +16,14 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M02 | Manifest Loader (+ Schema) | P01 | 4 | 4 | 100% |
 | M03 | Health & Lifecycle | P01 | 6 | 6 | 100% |
 | M04 | Observability & Audit | P01 | 7 | 7 | 100% |
-| M05 | Workflow Engine | P02 | 17 | 17 | 100% |
+| M05 | Workflow Engine | P02 | 18 | 18 | 100% |
 | M06 | LLM Gateway | P02 | 12 | 12 | 100% |
 | M07 | Prompt Engine | P02 | 6 | 6 | 100% |
 | M08 | Context Manager | P02 | 14 | 13 | 93% |
 | M09 | Knowledge Manager | P02 | 5 | 5 | 100% |
 | M10 | Memory Manager | P02 | 3 | 2 | 67% |
 | M11 | Retrieval / Search & Vector Search | P02 | 6 | 6 | 100% |
-| M12 | Evaluation Engine | P04 | 15 | 15 | 100% |
+| M12 | Evaluation Engine | P04 | 16 | 16 | 100% |
 | M13 | Capability Manager | P02 | 8 | 8 | 100% |
 | M14 | Security Manager | P03+P07 | 12 | 12 | 100% |
 | M15 | Quality Gate Engine | P02 | 9 | 9 | 100% |
@@ -44,7 +44,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M30 | SE Pack - Workflows | P03+P08 | 8 | 8 | 100% |
 | M31 | SE Pack - Tools & Quality Gates | P03 | 4 | 4 | 100% |
 | M32 | Project Intelligence Pack | P05 | 7 | 1 | 57% |
-| M33 | Voice (Jarvis) Pack | P06 | 1 | 0 | 50% |
+| M33 | Voice (Jarvis) Pack | P06 | 2 | 1 | 75% |
 | M34 | Benchmarking Pack | P04 | 5 | 5 | 100% |
 | M36 | API (HTTP surface) | P02+P06 | 8 | 7 | 94% |
 | M37 | WebSocket stream | P06 | 1 | 1 | 100% |

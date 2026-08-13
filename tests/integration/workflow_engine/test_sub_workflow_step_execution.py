@@ -77,7 +77,7 @@ def _child_definition(definition_id: str = _CHILD_DEFINITION_ID) -> WorkflowDefi
             "inputs": {"type": "object"},
             "outputs": {"type": "object"},
             "steps": [{"id": "do_the_work", "type": "agent", "agentId": _AGENT_ID}],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 
@@ -94,7 +94,7 @@ def _parent_definition(sub_workflow_id: str) -> WorkflowDefinition:
             "steps": [
                 {"id": "invoke_child", "type": "sub_workflow", "subWorkflowId": sub_workflow_id}
             ],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 

@@ -62,7 +62,7 @@ def _minimal_workflow_definition() -> WorkflowDefinition:
             "steps": [
                 {"id": "noop", "type": "agent", "agentId": "se.software_engineering/analyst"}
             ],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 

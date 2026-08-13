@@ -91,7 +91,7 @@ def _one_step_definition() -> WorkflowDefinition:
             "inputs": {"type": "object"},
             "outputs": {"type": "object"},
             "steps": [{"id": "do_work", "type": "agent", "agentId": f"{_PACK_ID}/analyst"}],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 

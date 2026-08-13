@@ -40,7 +40,7 @@ _VALID_DEFINITION: dict[str, Any] = {
     ],
     "agents": ["requirements-analyst", "backend-developer"],
     "qualityGates": ["se.build"],
-    "failureHandling": {"onError": "escalate"},
+    "failureHandling": {"onError": "halt"},
 }
 
 
@@ -507,6 +507,48 @@ def test_empty_failure_handling_fails_clearly(tmp_path: Path) -> None:
 
     with pytest.raises(WorkflowDefinitionError, match="failureHandling"):
         loader.load(path)
+
+
+def test_an_unimplemented_on_error_is_refused_at_load_time(tmp_path: Path) -> None:
+    """The 2026-08-13 product-owner decision, enforced: ``escalate`` is
+    rejected rather than silently treated as ``halt``.
+
+    This is the whole point of closing the vocabulary. Before it, this
+    definition loaded cleanly and then behaved as ``halt`` anyway, with
+    nothing anywhere telling its author the declared value had no
+    effect. The error must also *name* the offending value, so the
+    author can see what was rejected."""
+    content = {**_VALID_DEFINITION, "failureHandling": {"onError": "escalate"}}
+    path = _write_definition(tmp_path / "escalate.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="escalate"):
+        loader.load(path)
+
+
+def test_failure_handling_without_an_on_error_key_fails_clearly(tmp_path: Path) -> None:
+    """A non-empty ``failureHandling`` that never declares ``onError``
+    used to pass the old "must not be empty" check untouched — including
+    the real, previously-shipped misspelling ``on_error``, which is what
+    ``bootstrap.py``'s own demo definition actually carried."""
+    content = {**_VALID_DEFINITION, "failureHandling": {"on_error": "halt"}}
+    path = _write_definition(tmp_path / "snake_case_key.yaml", content)
+    loader = WorkflowDefinitionLoader()
+
+    with pytest.raises(WorkflowDefinitionError, match="onError"):
+        loader.load(path)
+
+
+def test_the_implemented_on_error_still_loads(tmp_path: Path) -> None:
+    """The other direction: the value every real pack workflow actually
+    declares must keep working, or this rule would have broken
+    production rather than tightened it."""
+    content = {**_VALID_DEFINITION, "failureHandling": {"onError": "halt"}}
+    path = _write_definition(tmp_path / "halt.yaml", content)
+
+    definition = WorkflowDefinitionLoader().load(path)
+
+    assert definition.failure_handling == {"onError": "halt"}
 
 
 def test_human_approval_point_without_options_fails_clearly(tmp_path: Path) -> None:

@@ -91,7 +91,7 @@ def _definition(version: str) -> WorkflowDefinition:
                     "options": ["approve", "reject"],
                 }
             ],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 

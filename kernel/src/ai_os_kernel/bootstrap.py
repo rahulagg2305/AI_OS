@@ -531,6 +531,7 @@ from ai_os_kernel.routes.role_administration import router as role_administratio
 from ai_os_kernel.routes.stream import router as stream_router
 from ai_os_kernel.routes.traceability import router as traceability_router
 from ai_os_kernel.routes.usage import router as usage_router
+from ai_os_kernel.routes.voice import router as voice_router
 from ai_os_kernel.routes.workflows import router as workflows_router
 from ai_os_kernel.sandbox.default_executor import build_default_sandbox_executor
 from ai_os_kernel.secrets_manager.backend_selection import (
@@ -796,7 +797,7 @@ def _build_demo_workflow_definition() -> WorkflowDefinition:
                 model_alias=_DEMO_WORKFLOW_MODEL_ALIAS,
             )
         ],
-        failure_handling={"on_error": "escalate"},
+        failure_handling={"onError": "halt"},
     )
 
 
@@ -2330,6 +2331,7 @@ def build_app(config: PlatformConfig | None = None) -> FastAPI:
     app.include_router(stream_router)
     app.include_router(evaluation_router)
     app.include_router(usage_router)
+    app.include_router(voice_router)
 
     logger.info("kernel.bootstrap.complete")
     return app

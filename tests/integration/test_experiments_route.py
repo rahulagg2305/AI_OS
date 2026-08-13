@@ -101,7 +101,7 @@ def _register_workflow_definition(database_url: str) -> None:
                         "steps": [
                             {"id": "noop", "type": "agent", "agentId": "se.software_engineering/x"}
                         ],
-                        "failureHandling": {"onError": "escalate"},
+                        "failureHandling": {"onError": "halt"},
                     }
                 ),
                 pack_id=_PACK_ID,

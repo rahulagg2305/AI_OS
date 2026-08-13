@@ -26,7 +26,7 @@ _DEFINITION_RAW: dict[str, Any] = {
             "agentId": "se.software_engineering/analyst",
         }
     ],
-    "failureHandling": {"onError": "escalate"},
+    "failureHandling": {"onError": "halt"},
 }
 
 _DEFINITION = WorkflowDefinition.model_validate(_DEFINITION_RAW)

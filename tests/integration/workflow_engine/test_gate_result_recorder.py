@@ -158,3 +158,74 @@ def test_list_all_paginates_newest_first_with_a_real_keyset_cursor(database_url:
             await engine.dispose()
 
     asyncio.run(_run())
+
+
+def test_every_gate_result_gets_a_real_server_side_timestamp(database_url: str) -> None:
+    """`0038_gate_results_created_at`: the column `GET /gates/trends` was
+    blocked on is real, populated, and populated *by the database* —
+    the insert above supplies no `created_at` at all."""
+
+    async def _run() -> None:
+        workflow_id = await _create_real_instance(database_url)
+        result_id = await _seed_gate_result(database_url, workflow_id=workflow_id)
+
+        engine = build_engine(database_url)
+        try:
+            async with engine.connect() as connection:
+                row = (
+                    await connection.execute(
+                        sa.select(gate_results.c.created_at).where(
+                            gate_results.c.result_id == result_id
+                        )
+                    )
+                ).one()
+            assert row.created_at is not None
+            assert row.created_at.tzinfo is not None, "the trend axis must be timezone-aware"
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_gate_results_are_genuinely_bucketable_by_time_in_sql(database_url: str) -> None:
+    """The decisive proof that the blocker is actually gone.
+
+    `GET /gates/trends` is "pass/fail over time", so what had to be
+    established is not that a timestamp exists but that the database can
+    *group by* it — the exact capability the two rejected alternatives
+    could not deliver (a `workflow_instances` join yields NULL for the
+    halted runs a failing gate produces; decoding the ULID in
+    `result_id` cannot be expressed in SQL at all). This runs the real
+    aggregation a trend view would run.
+    """
+
+    async def _run() -> None:
+        workflow_id = await _create_real_instance(database_url)
+        await _seed_gate_result(database_url, workflow_id=workflow_id, status="completed")
+        await _seed_gate_result(database_url, workflow_id=workflow_id, status="completed")
+        await _seed_gate_result(database_url, workflow_id=workflow_id, status="failed")
+
+        engine = build_engine(database_url)
+        try:
+            bucket = sa.func.date_trunc("day", gate_results.c.created_at).label("bucket")
+            async with engine.connect() as connection:
+                rows = (
+                    (
+                        await connection.execute(
+                            sa.select(bucket, gate_results.c.status, sa.func.count())
+                            .where(gate_results.c.workflow_id == workflow_id)
+                            .group_by(bucket, gate_results.c.status)
+                            .order_by(gate_results.c.status)
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+
+            counts = {row["status"]: row["count"] for row in rows}
+            assert counts == {"completed": 2, "failed": 1}
+            assert all(row["bucket"] is not None for row in rows)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())

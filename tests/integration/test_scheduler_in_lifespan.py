@@ -110,7 +110,7 @@ def _one_step_definition() -> WorkflowDefinition:
                     "options": ["approve", "reject"],
                 }
             ],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 

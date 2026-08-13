@@ -64,7 +64,7 @@ def _definition(
                     "agentId": "se.software_engineering/analyst",
                 }
             ],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 

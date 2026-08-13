@@ -59,6 +59,10 @@ class WorkflowListCursor(BaseModel):
 
 _WORKFLOW_STARTED_EVENT_TYPE = "workflow.started"
 _WORKFLOW_COMPLETED_EVENT_TYPE = "workflow.completed"
+# The literal `NotificationService._FAILURE_EVENT_TYPE` already
+# classifies as its "failure" category — that subscriber has existed
+# since it was built and had no producer until `mark_failed` below.
+_WORKFLOW_FAILED_EVENT_TYPE = "workflow.failed"
 _WORKFLOW_EVENT_SCHEMA_VERSION = 1
 
 _STATE_TRANSITIONED_EVENT_TYPE = "state.transitioned"
@@ -1080,6 +1084,41 @@ class SqlWorkflowInstanceRepository:
                     },
                     occurred_at=datetime.now(UTC),
                 )
+            )
+
+            # The terminal *failure* fact, additionally written to the
+            # transactional outbox — the exact mirror of the
+            # `workflow.completed` write in :meth:`advance_workflow`,
+            # for the exact same reason. The `state.transitioned` row
+            # above is this engine's own event-sourcing log, read only
+            # by `list_events`/`GET /workflows/{id}/events`; nothing
+            # subscribes to it. `platform.event_outbox` is ADR-0012's
+            # cross-component delivery path, drained by `OutboxRelay`
+            # into the real `InProcessEventBus`.
+            #
+            # `event_bus.md` §5's own decision table lists "workflow
+            # lifecycle" under **Transactional outbox**, so a direct
+            # `InProcessEventBus.publish` here would be wrong: a
+            # committed failure whose notification was lost to a crash
+            # is precisely what ADR-0012 exists to prevent. Writing it
+            # inside this *already open* transaction is what makes the
+            # guarantee real — a rollback takes the outbox row with it.
+            #
+            # This gives `NotificationService`'s `workflow.failed`
+            # category (`_FAILURE_EVENT_TYPE`, subscribed since that
+            # service was built) its first real producer. It was
+            # unreachable not because the subscriber was missing but
+            # because nothing had ever emitted the event.
+            #
+            # `workflow_id` travels in the payload because
+            # `platform.event_outbox` has no such column and the relay
+            # therefore always rebuilds `Event.workflow_id` as `None` —
+            # a real, pre-existing schema limitation `outbox_relay`'s
+            # own docstring documents, not something introduced here.
+            await write_outbox_event(
+                connection,
+                event_type=_WORKFLOW_FAILED_EVENT_TYPE,
+                payload={"workflow_id": workflow_id, "reason": reason},
             )
         return WorkflowInstance.model_validate(dict(instance_row))
 

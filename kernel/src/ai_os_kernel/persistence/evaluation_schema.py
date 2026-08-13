@@ -398,9 +398,21 @@ gate_results = sa.Table(
     sa.Column("metrics", JSONB, nullable=False),
     sa.Column("messages", JSONB, nullable=False),
     sa.Column("duration_ms", sa.Integer, nullable=False),
+    # `0038_gate_results_created_at`. Server-defaulted rather than
+    # caller-supplied: the database's own clock is the one honest source
+    # for "when did this gate resolve", and no writer should be able to
+    # backdate a trend point. Mirrors `llm_calls.created_at`, added for
+    # the identical reason by `0035`.
+    sa.Column(
+        "created_at",
+        sa.TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=sa.func.now(),
+    ),
 )
 
 sa.Index("ix_gate_results_workflow_id", gate_results.c.workflow_id)
+sa.Index("ix_gate_results_created_at", gate_results.c.created_at)
 sa.Index("ix_gate_results_status", gate_results.c.status)
 
 metrics = sa.Table(

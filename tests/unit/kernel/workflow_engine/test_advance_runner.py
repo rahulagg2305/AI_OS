@@ -46,7 +46,7 @@ _DEFINITION = WorkflowDefinition.model_validate(
                 "agentId": "se.software_engineering/analyst",
             }
         ],
-        "failureHandling": {"onError": "escalate"},
+        "failureHandling": {"onError": "halt"},
     }
 )
 
@@ -62,7 +62,7 @@ _TWO_STEP_DEFINITION = WorkflowDefinition.model_validate(
             {"id": "step_a", "type": "agent", "agentId": "se.software_engineering/analyst"},
             {"id": "step_b", "type": "agent", "agentId": "se.software_engineering/analyst"},
         ],
-        "failureHandling": {"onError": "escalate"},
+        "failureHandling": {"onError": "halt"},
     }
 )
 

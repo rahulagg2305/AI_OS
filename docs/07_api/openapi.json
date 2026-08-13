@@ -2116,6 +2116,89 @@
         "title": "VariantComparison",
         "type": "object"
       },
+      "VoiceActionResult": {
+        "description": "The real platform action taken, plus a real, natural-language\nresponse derived from the real underlying result \u2014 never a\nfabricated summary.",
+        "properties": {
+          "intent_type": {
+            "title": "Intent Type",
+            "type": "string"
+          },
+          "platform_action": {
+            "title": "Platform Action",
+            "type": "string"
+          },
+          "raw_response": {
+            "additionalProperties": true,
+            "title": "Raw Response",
+            "type": "object"
+          },
+          "response_text": {
+            "title": "Response Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_type",
+          "platform_action",
+          "response_text",
+          "raw_response"
+        ],
+        "title": "VoiceActionResult",
+        "type": "object"
+      },
+      "VoiceIntent": {
+        "description": "An already-recognized, structured intent \u2014 never raw audio or\nfree text (real speech-to-intent recognition is separate, unbuilt\nwork; see this module's own package docstring). Fields beyond\n``intent_type`` are optional here and validated per-type by\n:class:`~ai_os_kernel.voice_jarvis.intent_router.PlatformIntentRouter`,\nthe identical \"declared optional, required together\" shape\n:mod:`ai_os_kernel.llm_gateway.call_recorder` already establishes\nfor ``agent_id``/``prompt_id``/``prompt_version``.",
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "intent_type": {
+            "enum": [
+              "check_health",
+              "list_workflows",
+              "get_workflow_status",
+              "decide_approval"
+            ],
+            "title": "Intent Type",
+            "type": "string"
+          },
+          "workflow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Id"
+          }
+        },
+        "required": [
+          "intent_type"
+        ],
+        "title": "VoiceIntent",
+        "type": "object"
+      },
       "WorkflowDefinition": {
         "additionalProperties": false,
         "description": "The Workflow Contract, as loaded from one definition file.",
@@ -4006,6 +4089,52 @@
         "summary": "Get Version",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/api/v1/voice/intent": {
+      "post": {
+        "operationId": "handle_voice_intent_api_v1_voice_intent_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceIntent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Handle Voice Intent",
+        "tags": [
+          "voice"
         ]
       }
     },

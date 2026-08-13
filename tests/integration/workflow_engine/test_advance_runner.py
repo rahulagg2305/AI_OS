@@ -79,7 +79,7 @@ def _minimal_definition(definition_id: str = _DEFINITION_ID) -> WorkflowDefiniti
                     "agentId": "se.software_engineering/analyst",
                 }
             ],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 
@@ -101,7 +101,7 @@ def _two_step_definition(definition_id: str = _DEFINITION_ID) -> WorkflowDefinit
                 {"id": "step_a", "type": "agent", "agentId": "se.software_engineering/analyst"},
                 {"id": "step_b", "type": "agent", "agentId": "se.software_engineering/analyst"},
             ],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 

@@ -71,7 +71,7 @@ def _minimal_definition() -> WorkflowDefinition:
                 },
                 {"id": "implement", "type": "agent", "agentId": "se.software_engineering/analyst"},
             ],
-            "failureHandling": {"onError": "escalate"},
+            "failureHandling": {"onError": "halt"},
         }
     )
 

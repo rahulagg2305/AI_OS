@@ -12,11 +12,12 @@ significant rework) · **L** (contained).
 
 **Reviewed 2026-07-31 (R1–R4 final closeout); R-008 and R-009 closed
 2026-08-01; R-014 opened and closed 2026-08-09; R-015 opened and closed
-2026-08-09; R-016 opened 2026-08-10; R-017 opened and closed 2026-08-11;
-R-018 opened 2026-08-11.** 14 closed, 3 open (R-006, an accepted
-baseline, not pending action; R-016, a real, unaddressed Workflow Engine
-design gap; R-018, the "proven but idle" sweep, partially ticketed) plus
-R-001 (a permanent standing rule, not a risk pending closure).
+2026-08-09; R-016 opened 2026-08-10 and closed 2026-08-13; R-017 opened
+and closed 2026-08-11; R-018 opened 2026-08-11.** 15 closed, 2 open
+(R-006, an accepted baseline, not pending action; R-018, the "proven but
+idle" sweep, now partly closed and — for its remaining five packages —
+machine-checked rather than re-swept by hand) plus R-001 (a permanent
+standing rule, not a risk pending closure).
 
 **R-017 and R-018 both came from one whole-project health audit
 (2026-08-11), not from normal step-by-step work — and could not have.**
@@ -46,7 +47,7 @@ to that rule, not as evidence it failed.
 | R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop timing margins) | L | **Closed** 2026-08-09; both worker-loop timing tests remediated (`P02-S01-M05-T16` 2026-08-11, 4th occurrence 2026-08-12); two further real root causes — an unclosed asyncio subprocess transport and 19 HTTP handlers never draining the request body — found and fixed 2026-08-12 | — |
 | R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Closed** 2026-08-13 (`P02-S01-M05-T17`) — bounded by a platform-default `RetryPolicy`, `failed` now genuinely written | Product owner, 2026-08-10 |
 | R-017 | Manifest-declared Tools were unreachable in production — no caller ever passed a `ToolRegistry` | M | **Closed** 2026-08-11 (`P02-S05-M18-T04`) | — |
-| R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3 and 8 now closed; 5 further Kernel packages added 2026-08-11; item 8 added *and* closed 2026-08-12, and showed the sweep must measure per module, not per package) | M | **Open — partially ticketed** | Health audit, 2026-08-11 |
+| R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3, 5 and 8 now closed; 5 further Kernel packages added 2026-08-11; item 8 added *and* closed 2026-08-12, and showed the sweep must measure per module, not per package) | M | **Open — items 4, 6 and 7 formally accepted as disclosed gaps; item 7's five packages re-verified 2026-08-13 and now enforced by `tests/contract/test_production_reachability.py`, which fails in both directions** | Health audit, 2026-08-11 |
 
 ---
 
@@ -942,17 +943,37 @@ questions, neither derivable from source:
    meaning and inventing one would be exactly the unilateral design this
    finding existed to prevent.
 
-**Still true, and now recorded as its own gap:** `failureHandling.onError`
-remains declared-but-unread. Every definition must supply it, and
-nothing consults it. That is a smaller, separate finding than R-016 was,
-and it is disclosed rather than silently absorbed.
+**`failureHandling.onError` — the gap this entry disclosed rather than
+absorbed — is now itself CLOSED (2026-08-13, `P02-S01-M05-T18`).** It
+was a required field on every definition that no code had ever read, so
+a definition could declare `escalate` and silently get `halt`, with no
+error, no warning and no way for its author to find out. Product-owner
+decision: close the vocabulary to `halt`, the only behaviour that
+exists, and **reject `escalate` at load time rather than implement it**.
+No document anywhere defines what `escalate` should do,
+`error_handling_retry.md` §7 states human escalation does not exist, and
+inventing semantics would have been exactly the unilateral design this
+disclosure existed to prevent. Two alternatives were put up and declined:
+tagging the outbox payload with an escalation discriminator (invents a
+routing semantic), and transitioning to `waiting_for_human` (materially
+larger, and non-terminal — it would have reopened the very rediscovery
+loop R-016 closed). All three real pack workflows already declared
+`halt`, so no production definition changed meaning. The sweep also
+found a real, previously-invisible defect the old "must not be empty"
+check could never catch: `bootstrap.py`'s demo definition declared the
+key as `on_error`, not `onError`, and 32 test fixtures declared the
+unimplemented `escalate`.
 
 **What this unblocks.** `POST /workflows/{id}/retry` and the CLI's
 `workflow retry` now have a real, persisted "permanently failed"
-instance to act on, and `NotificationService`'s `failure` category has a
-real `workflow.failed` condition available to it — the three things this
-entry blocked. **None of them is built by this step**; the blocker is
-removed, not the work done.
+instance to act on. **Neither is built**; the blocker is removed, not
+the work done. `NotificationService`'s `failure` category is no longer
+merely "available" — as of 2026-08-13 (`P02-S01-M05-T18`) `mark_failed`
+writes a real `workflow.failed` row to `platform.event_outbox` inside
+its own transaction, mirroring `workflow.completed` exactly, so that
+category has a real producer for the first time and the whole ADR-0012
+chain is proven end to end from the real worker loop's own retry
+exhaustion.
 
 ---
 
@@ -1114,8 +1135,27 @@ Genuine instances, worst first:
    production construction; `parallel`/`sub_workflow` used by 0 of 27
    real workflow steps. (`ForeachStepExecutor` **is** wired.) Accepted:
    ADR-0021 step types built ahead of a consumer, already disclosed.
-5. **`voice_jarvis`** — zero production importers outside its own
-   package, no route, no entry point. Consistent with M25/M33 `partial`.
+5. **`voice_jarvis` — CLOSED 2026-08-13 (`P06-S06-M33-T02`).** When
+   this entry opened it had zero production importers outside its own
+   package, no route and no entry point: a whole subsystem, real and
+   tested, unreachable from any running process. `POST
+   /api/v1/voice/intent` is now its first real production entry point —
+   a thin route assembling the already-real `PlatformIntentRouter` from
+   already-bootstrapped collaborators, proven end to end through the
+   real `build_app()` composition against real Postgres (5 tests), with
+   a real `check_health` request genuinely returning the real
+   `HealthService`'s own readiness report. `routes/voice.py` is now a
+   real production importer, machine-checked by
+   `tests/contract/test_production_reachability.py`.
+   **The contract was invented, and that is disclosed, not glossed:**
+   no document — not `voice_architecture.md`, not `api_architecture.md`
+   §6 — specifies any voice endpoint, so path, request shape and status
+   mapping were product-owner decisions (2026-08-13), each reusing an
+   existing route precedent rather than inventing a second convention.
+   **`speech_gateway` is deliberately *not* closed by this** and stays
+   in item 7's table: the route accepts an already-structured intent,
+   never audio. Wake word, STT and TTS remain genuinely unbuilt, so
+   M25 stays `partial` for real reasons.
 6. **7 of 16 Software Engineering agents** are referenced by no real
    workflow (`api-designer`, `database`, `frontend-developer`,
    `performance`, `refactoring`, `release`, `security-analysis`).
@@ -1143,6 +1183,36 @@ Genuine instances, worst first:
    | `speech_gateway` | 5 files, 14 classes | **0** | module 25: "no real caller exists" |
    | `storage_service` | 3 files (`LocalFilesystemArtifactStore`) | **0** | module 21: "nothing in a real Kernel composition constructs this store yet" |
    | `memory_manager` | 1 file, **0 classes** — a docstring-only `__init__.py`; the real store is `persistence/memory_writer.py`'s `SqlMemoryStore` | **0** | `memory_manager.md`: "`memory_manager/` itself is still a docstring-only `__init__.py`" |
+
+   **Re-verified 2026-08-13, and no longer only in prose.** All five
+   were re-swept with an `ast`-based importer analysis (not `grep`: every
+   apparent hit in the earlier sweeps was a docstring cross-reference
+   like ``:class:`~ai_os_kernel.caching.response_cache.ResponseCache```,
+   which a regular expression cannot distinguish from a real import).
+   Result: **0 real production importers each**, unchanged. Control
+   measurements from the same sweep, to show the detector detects:
+   `workflow_engine` 35, `event_bus` 6, `notification` 1, and
+   `voice_jarvis` 1 — that last one being item 5, closed the same day.
+
+   That sweep is now a **checked invariant**, not a claim:
+   `tests/contract/test_production_reachability.py` re-executes it on
+   every CI run and fails in *both* directions. Wiring one of these five
+   is good news and still fails the test, because the documentation here
+   would then be wrong and must be updated in the same step. This
+   directly addresses why R-018 kept needing rediscovery: three hand
+   sweeps in two days, one of which (2026-08-11) got the answer wrong by
+   measuring per package instead of per module, and every result living
+   only in prose that no build could falsify.
+
+   **Each of the five is formally re-affirmed as a disclosed, accepted
+   gap — none can be wired without new feature development**, which is
+   why none was wired here: `caching` needs `ResponseCache` in the
+   `llm_gateway` call path, a behaviour and cost change requiring Redis;
+   `storage_service` and `document_processing` both need an ingestion
+   caller that does not exist; `speech_gateway` needs STT/TTS (see item
+   5); and `memory_manager` is a docstring-only `__init__.py` with no
+   classes at all — "wiring" it would mean building promotion logic,
+   which `feature_inventory.md` already tracks as separately unbuilt.
 
    `bootstrap.py`'s apparent mentions of `caching` and `memory_manager`
    are **comments only**, not wirings. One package the same sweep flagged
@@ -1194,3 +1264,61 @@ It therefore *structurally cannot* surface "this module is complete but
 nothing calls it," because that fact lives between modules. Periodic
 whole-project audits are the intended counterweight, not a sign the
 process failed.
+
+---
+
+## Decisions taken and gaps formally deferred — 2026-08-13
+
+A single step (product-owner directed) went through every open issue on
+record and forced each to a real outcome, so that none stays in the
+half-state — "known, unresolved, rediscovered every few sessions" — that
+made R-016 and R-018 cost as much as they did. Recorded here because
+four of these are decisions, not code, and a decision that lives only in
+a commit message is a decision that will be re-litigated.
+
+**Resolved.**
+
+- **`failureHandling.onError`** → vocabulary closed to `halt`;
+  `escalate` rejected at load time rather than implemented. Full
+  reasoning and the two declined alternatives: R-016 above.
+  (`P02-S01-M05-T18`.)
+- **`workflow.failed` was durable but not outboxed** → `mark_failed`
+  now writes the domain event in its own transaction, giving
+  `NotificationService`'s long-subscribed `failure` category its first
+  real producer. (`P02-S01-M05-T18`.)
+- **`GET /usage/cost` duplicate surface** → the documentation is
+  amended, not the code. The row is removed from `api_architecture.md`'s
+  endpoint list and points at the already-real
+  `GET /api/v1/evaluation/cost-and-quality`, which serves that exact
+  capability over the identical `llm_calls` data. Building an alias was
+  declined as duplicate surface; renaming the existing route was
+  declined because it would break a path the Dashboard already consumes
+  for no capability gain. **The documented endpoint count drops by one**
+  — a real, deliberate contraction of the published contract.
+- **`GET /gates/trends` timestamp** → `evaluation.gate_results` gained a
+  server-defaulted, indexed `created_at` (migration
+  `0038_gate_results_created_at`), exactly as `0035` did for `llm_calls`
+  with the identical gap. Two no-migration alternatives were measured
+  against real code and declined: joining `workflow_instances` yields
+  `NULL` for precisely the runs a blocking gate halted, and decoding the
+  ULID already inside `result_id` gives the true time but cannot be
+  grouped in SQL at all. **The route itself is deliberately not built**
+  — the blocker is removed, the work is not done. (`P04-S01-M12-T16`.)
+- **Voice entry point** → built; see R-018 item 5. (`P06-S06-M33-T02`.)
+
+**Formally deferred, with reasoning.**
+
+- **PDF and DOCX parsing.** Both need a real new third-party runtime
+  dependency (`pypdf`, `python-docx` or equivalent). Declined for now on
+  one concrete ground, not general caution: `document_processing` has
+  **zero production importers** (R-018 item 7, re-verified 2026-08-13
+  and now machine-checked), so adding two supply-chain dependencies
+  would extend the platform's licence and vulnerability surface for code
+  no running process can reach. Routing extraction through the existing
+  Docker sandbox was also considered and declined as far larger than an
+  adapter — it needs an image, an I/O contract, and would make document
+  parsing depend on Docker being available. The honest
+  `UnsupportedDocumentFormatError` naming both formats stays, and the
+  `DocumentParser` Protocol already exists so an adapter can slot in
+  unchanged. **Revisit when a real ingestion caller exists** — at which
+  point the dependency buys something reachable.
