@@ -5,6 +5,7 @@ fails before any HTTP call is ever made."""
 from __future__ import annotations
 
 import jwt
+import pytest
 from cli_helpers import invoke
 
 from ai_os_cli.errors import EXIT_GENERAL_ERROR, EXIT_USAGE_ERROR
@@ -91,3 +92,66 @@ def test_every_documented_experiment_subcommand_is_discoverable() -> None:
     for subcommand in ("create", "run", "show", "compare"):
         assert subcommand in result.output, f"'{subcommand}' is not discoverable"
     assert "list" not in result.output.split("Commands")[-1]
+
+
+# --- The `--yes` confirmation gate (P06-S04-M38-T01, 2026-08-13) -------
+#
+# `cli_design.md` §4's conventions table required this from the start and
+# nothing implemented it, which was found when `experiment run` shipped
+# able to spend real money with no prompt. Which commands are gated was a
+# product-owner decision (irreversible or costly); these prove the gate
+# itself, not the choice.
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["workflow", "cancel", "wf-1"],
+        ["pack", "deactivate", "pack-1", "--reason", "r"],
+        ["approve", "decide", "wf-1", "appr-1", "approved"],
+        ["experiment", "run", "exp-1"],
+    ],
+)
+def test_a_destructive_command_without_yes_refuses_rather_than_hanging(
+    args: list[str],
+) -> None:
+    """The scriptability requirement, proven rather than assumed: pytest
+    runs with a non-TTY stdin, so a prompt here would block forever. Each
+    gated command must instead fail immediately with the documented usage
+    exit code and name the flag to pass.
+
+    This test would hang, not fail, if `require_confirmation` ever called
+    `typer.confirm` unconditionally — which is exactly the regression it
+    exists to catch.
+    """
+    result = invoke(args)
+    assert result.exit_code == EXIT_USAGE_ERROR, f"{args} did not refuse"
+    assert result.error_message is not None
+    assert "--yes" in result.error_message, f"{args} did not name the flag to pass"
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["workflow", "cancel", "wf-1", "--yes"],
+        ["pack", "deactivate", "pack-1", "--reason", "r", "--yes"],
+        ["approve", "decide", "wf-1", "appr-1", "approved", "--yes"],
+        ["experiment", "run", "exp-1", "--yes"],
+    ],
+)
+def test_yes_bypasses_the_gate_and_the_command_proceeds(args: list[str]) -> None:
+    """With `--yes` the gate is passed and the command genuinely runs —
+    reaching a real connection failure against a Kernel that is not
+    running here, never the usage error the gate produces. Proving the
+    flag *works* matters as much as proving the gate blocks: a gate that
+    could not be bypassed would break every script."""
+    result = invoke(args)
+    assert result.exit_code != EXIT_USAGE_ERROR, f"{args} was still blocked by the gate"
+
+
+def test_an_invalid_decision_is_rejected_before_the_confirmation_prompt() -> None:
+    """Ordering matters: a usage error must surface immediately, not
+    after asking the operator to confirm something the CLI was always
+    going to refuse."""
+    result = invoke(["approve", "decide", "wf-1", "appr-1", "maybe"])
+    assert result.error_message is not None and "approved" in result.error_message

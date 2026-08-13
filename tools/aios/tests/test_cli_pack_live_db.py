@@ -78,7 +78,7 @@ def test_the_real_pack_lifecycle_is_driven_entirely_through_the_cli(
     assert '"state": "activated"' in activate_result.output
 
     deactivate_result = invoke(
-        ["--output", "json", "pack", "deactivate", pack_id, "--reason", "real cli test"]
+        ["--output", "json", "pack", "deactivate", pack_id, "--reason", "real cli test", "--yes"]
     )
     assert deactivate_result.exit_code == 0
     assert '"state": "deactivated"' in deactivate_result.output
@@ -87,6 +87,6 @@ def test_the_real_pack_lifecycle_is_driven_entirely_through_the_cli(
     # too — the real repository's own state machine, not a CLI-side
     # shortcut: deactivating an already-deactivated pack is a real 409.
     second_deactivate = invoke(
-        ["--output", "json", "pack", "deactivate", pack_id, "--reason", "should fail"]
+        ["--output", "json", "pack", "deactivate", pack_id, "--reason", "should fail", "--yes"]
     )
     assert second_deactivate.exit_code == 5

@@ -152,7 +152,7 @@ def test_workflow_cancel_without_a_real_bearer_token_is_a_real_authorization_den
 ) -> None:
     monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
 
-    result = invoke(["workflow", "cancel", "wf-1"])
+    result = invoke(["workflow", "cancel", "wf-1", "--yes"])
     assert result.exit_code == EXIT_AUTHORIZATION_DENIED
 
 
@@ -164,7 +164,7 @@ def test_workflow_cancel_lacking_workflow_control_is_a_real_authorization_denial
     # (permissions.py's own role table) — viewer/approver do not have it.
     monkeypatch.setenv("AIOS_TOKEN", _token(["viewer"]))
 
-    result = invoke(["workflow", "cancel", "wf-1"])
+    result = invoke(["workflow", "cancel", "wf-1", "--yes"])
     assert result.exit_code == EXIT_AUTHORIZATION_DENIED
 
 
@@ -174,7 +174,7 @@ def test_workflow_cancel_authorized_reaches_the_real_workflow_engine_unavailable
     monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
     monkeypatch.setenv("AIOS_TOKEN", _token(["operator"]))
 
-    result = invoke(["workflow", "cancel", "wf-1"])
+    result = invoke(["workflow", "cancel", "wf-1", "--yes"])
     assert result.exit_code == EXIT_GENERAL_ERROR
     assert result.error_message == "workflow engine is not available"
 
@@ -215,7 +215,7 @@ def test_experiment_run_lacking_experiment_run_is_a_real_authorization_denial(
     monkeypatch.setenv("AIOS_API_URL", live_kernel_no_db)
     monkeypatch.setenv("AIOS_TOKEN", _token(["viewer"]))
 
-    result = invoke(["experiment", "run", "exp-1"])
+    result = invoke(["experiment", "run", "exp-1", "--yes"])
     assert result.exit_code == EXIT_AUTHORIZATION_DENIED
 
 

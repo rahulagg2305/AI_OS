@@ -13,6 +13,7 @@ import typer
 
 from ai_os_cli.client import AiosClient
 from ai_os_cli.config import load_config
+from ai_os_cli.confirm import require_confirmation
 from ai_os_cli.errors import EXIT_USAGE_ERROR, CliError
 from ai_os_cli.output import render
 
@@ -28,13 +29,24 @@ def decide(
     approval_id: str,
     decision: str,
     comment: str | None = typer.Option(None, "--comment"),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
 ) -> None:
+    """Record a Human Approval decision. Irreversible: `decide()` is
+    guarded by `WHERE status = 'pending'`, so a second attempt is
+    refused — and under R-001 an attributable human decision is a
+    permanent governance record. Gated by `cli_design.md` §4's
+    confirmation convention."""
     if decision not in _VALID_DECISIONS:
         raise CliError(
             f"decision must be one of {sorted(_VALID_DECISIONS)}, got '{decision}'",
             exit_code=EXIT_USAGE_ERROR,
         )
 
+    require_confirmation(
+        f"Record '{decision}' on approval '{approval_id}' — a permanent, "
+        "attributable governance decision that cannot be changed",
+        yes=yes,
+    )
     client = AiosClient(load_config())
     try:
         response = client.post(

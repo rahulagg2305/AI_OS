@@ -728,20 +728,59 @@ at the same time — `tests/**` (the root suite), `capability_packs/*/tests`
 and `tools/aios/tests` are now the complete set of test locations, and
 all three are named by a CI step.
 
-**A documented CLI convention that has never been implemented —
-recorded 2026-08-13, not fixed.** `cli_design.md` §4's conventions table
-states that destructive commands "require `--yes` or an interactive
-confirmation". **No command in the real CLI implements it**, including
-`workflow cancel`, `pack deactivate`, and now `experiment run` — which
-synchronously executes one real workflow per variant × replicate, each
-making real, billable LLM calls. Implementing it for `experiment run`
-alone was considered and rejected: it would make the convention
-arbitrary, teaching a user that running an experiment needs confirmation
-while cancelling a workflow does not. The command's real cost is stated
-in its own help text instead. Closing this properly means deciding which
-commands are "destructive" and applying `--yes` to all of them
-consistently — a small, coherent piece of work, and a product-owner call
-on scope rather than something to infer.
+**A documented CLI convention that had never been implemented —
+recorded and then FIXED 2026-08-13 (`P06-S04-M38-T01`).**
+`cli_design.md` §4's conventions table has always stated that
+destructive commands "require `--yes` or an interactive confirmation".
+**No command in the real CLI implemented it**, which surfaced when
+`aios experiment run` shipped able to synchronously execute one real
+workflow per variant × replicate — every one a real, billable LLM call —
+with no prompt whatsoever.
+
+*Why it was not fixed in the same step that found it.* Gating
+`experiment run` alone would have made the convention arbitrary: a user
+would learn that running an experiment needs confirmation while
+cancelling a workflow does not. The whole set had to be decided at once.
+
+*The decision was the product owner's, and deliberately so.* What the
+codebase settles is that exactly **eight** commands mutate server state
+(POST/PATCH) — `approve decide`, `config set`, `experiment create`,
+`experiment run`, `pack activate`, `pack deactivate`, `workflow start`,
+`workflow cancel`. Which of those count as "destructive or high-impact"
+is a judgement about users, not a fact derivable from source, so three
+real options were presented (irreversible-or-costly / anything that
+changes the platform / every mutating command) and the product owner
+chose **irreversible or costly**:
+
+| Gated | Why |
+|---|---|
+| `workflow cancel` | one-way terminal transition |
+| `pack deactivate` | removes a live capability |
+| `approve decide` | permanent, attributable, governance-critical (R-001) |
+| `experiment run` | spends real money, synchronously |
+
+**A disclosed consequence of that line, accepted explicitly rather than
+discovered later:** `workflow start` triggers real agents making real
+LLM calls, so one money-spending path remains unprompted. It was
+excluded as the CLI's primary verb, where a prompt on every invocation
+is friction that teaches users to reflexively pass `--yes`.
+
+*Scriptability was the sharp edge.* This CLI exists to compose in
+scripts, so a prompt on a pipe or in CI would block forever on stdin
+that never answers. A non-TTY without `--yes` is therefore a real usage
+error (exit 2) that names the flag, never a prompt. The test that proves
+this **would hang rather than fail** if the gate ever called
+`typer.confirm` unconditionally — which is precisely the regression it
+exists to catch.
+
+*Proven both ways.* Adding the gate immediately broke five existing
+tests that drive these commands (`assert 2 == 3`, `assert 2 == 0`),
+including the real end-to-end Postgres pack-lifecycle test — real
+evidence the gate genuinely intercepts, not merely that it compiles.
+Those now pass `--yes`. Nine new tests cover the gate itself, and
+disabling `require_confirmation` was verified to fail all four
+"refuses rather than hanging" cases before restoring it. 58 CLI tests
+pass.
 
 ### R-014 — No CI job ever ran any Capability Pack's own tests *(closed)*
 

@@ -15,6 +15,7 @@ import typer
 
 from ai_os_cli.client import AiosClient
 from ai_os_cli.config import load_config
+from ai_os_cli.confirm import require_confirmation
 from ai_os_cli.errors import EXIT_USAGE_ERROR, CliError
 from ai_os_cli.not_built import not_yet_implemented
 from ai_os_cli.output import render
@@ -83,7 +84,15 @@ def cancel(
     ctx: typer.Context,
     workflow_id: str,
     reason: str | None = typer.Option(None, "--reason"),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
 ) -> None:
+    """Cancel a workflow. A one-way terminal transition — the instance
+    can never be discovered by a worker again, so this is gated by
+    `cli_design.md` §4's confirmation convention."""
+    require_confirmation(
+        f"Cancel workflow '{workflow_id}' — this is a one-way terminal transition",
+        yes=yes,
+    )
     client = AiosClient(load_config())
     try:
         response = client.post(f"/api/v1/workflows/{workflow_id}/cancel", json={"reason": reason})

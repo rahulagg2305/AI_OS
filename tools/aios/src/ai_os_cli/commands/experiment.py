@@ -51,6 +51,7 @@ import typer
 
 from ai_os_cli.client import AiosClient
 from ai_os_cli.config import load_config
+from ai_os_cli.confirm import require_confirmation
 from ai_os_cli.errors import EXIT_USAGE_ERROR, CliError
 from ai_os_cli.output import render
 
@@ -87,14 +88,23 @@ def create(
 
 
 @app.command()
-def run(ctx: typer.Context, experiment_id: str) -> None:
+def run(
+    ctx: typer.Context,
+    experiment_id: str,
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+) -> None:
     """Run a defined experiment (`POST /api/v1/experiments/{id}/run`).
 
     Runs synchronously and costs real money: one real workflow per
-    variant x replicate, each making real, billable LLM calls. There is
-    no confirmation prompt — see this module's own docstring for why
-    that is a disclosed CLI-wide gap rather than an oversight here.
+    variant x replicate, each making real, billable LLM calls — which is
+    why this is one of the four commands `cli_design.md` §4's own
+    convention gates behind a confirmation.
     """
+    require_confirmation(
+        f"Run experiment '{experiment_id}' — this executes real workflows "
+        "and makes real, billable LLM calls",
+        yes=yes,
+    )
     client = AiosClient(load_config())
     try:
         response = client.post(f"/api/v1/experiments/{experiment_id}/run")
