@@ -1,5 +1,6 @@
 <!-- GENERATED FILE - DO NOT EDIT BY HAND.
      Source of truth: docs/19_roadmap/tickets/**.md
+                      + docs/19_roadmap/feature_inventory.md (module %)
      Regenerate:      python -m scripts.roadmap.generate
      Verified by:     tests/roadmap/test_generated_docs_are_current.py
      Hand edits are overwritten and fail CI. -->

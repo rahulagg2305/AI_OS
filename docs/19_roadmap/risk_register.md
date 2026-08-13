@@ -10,11 +10,13 @@ change its status field, or add a new entry.
 Severity: **H** (can cause real harm or data loss) · **M** (can cause
 significant rework) · **L** (contained).
 
-**Reviewed 2026-07-31 (R1–R4 final closeout); R-008 and R-009 closed
-2026-08-01; R-014 opened and closed 2026-08-09; R-015 opened and closed
+**R-006 re-measured 2026-08-13 (36 of 60 → 3 of 61 MUST untouched) after
+a document-only audit found it 13 days stale.** Reviewed 2026-07-31
+(R1–R4 final closeout); R-008 and R-009 closed 2026-08-01; R-014 opened and closed 2026-08-09; R-015 opened and closed
 2026-08-09; R-016 opened 2026-08-10 and closed 2026-08-13; R-017 opened
 and closed 2026-08-11; R-018 opened 2026-08-11.** 15 closed, 2 open
-(R-006, an accepted baseline, not pending action; R-018, the "proven but
+(R-006, an accepted baseline whose count has now been genuinely recounted
+rather than carried forward; R-018, the "proven but
 idle" sweep, now partly closed and — for its remaining five packages —
 machine-checked rather than re-swept by hand) plus R-001 (a permanent
 standing rule, not a risk pending closure).
@@ -35,7 +37,7 @@ to that rule, not as evidence it failed.
 | R-003 | CI integration job red on Linux, green locally | M | **Closed** 2026-07-31 | — |
 | R-004 | `gh` CLI unauthenticated — CI logs unreadable | M | **Closed** 2026-07-31 | Product owner ran `gh auth login` |
 | R-005 | Generated-doc staleness not gated in CI | M | **Closed** 2026-07-31 | — |
-| R-006 | 36 of 60 MUST requirements untouched | H | **Open — accepted baseline** | Product owner, 2026-07-31 |
+| R-006 | MUST requirements untouched — **re-measured 2026-08-13: 3 of 61, down from the 36 of 60 baseline** (A=0, B=0, C=0, D=1, E=1, F=1). Note "untouched" is a floor, not completeness: the honest figure is the 60% module-average now published in `STATUS.md` | H | **Open — substantially reduced, not closed**; FR-114 (replay), FR-058 (knowledge write-back — structurally blocked, no SDK Protocol), FR-097 (UI authorization gating) remain | Product owner, 2026-07-31; recounted 2026-08-13 |
 | R-007 | `functional_requirements.md` status block drifts from reality | M | **Closed** 2026-07-31 | — |
 | R-008 | No `AiOsError` hierarchy; error contract is per-module | M | **Closed** 2026-08-01 | — |
 | R-009 | Audit log is schema-only — no writer, no hash chain | H | **Closed** 2026-08-01 | — |
@@ -237,11 +239,89 @@ Closed 2026-07-31. Product owner ran `gh auth login` (account
 `rahulagg2305`); `gh auth status` now confirms an active, keyring-backed
 session. This is what made the real R-003 root cause readable at all.
 
-### R-006 — 36 of 60 MUST requirements untouched
+### R-006 — MUST requirements untouched — **RE-MEASURED 2026-08-13: 3 of 61, down from 36 of 60**
 
-Accepted as the real backlog baseline (product owner, 2026-07-31). By
-phase: B=1, C=8, D=11, E=7, F=9. Tracked as Tasks; visible in
-`STATUS.md`.
+Accepted as the real backlog baseline (product owner, 2026-07-31):
+**36 of 60 MUST untouched, by stage A=0, B=1, C=8, D=11, E=7, F=9.**
+
+**This entry sat unrevised for 13 days while dozens of Tasks closed.** A
+document-only audit on 2026-08-13 flagged that as its own defect — a
+severity-H risk whose headline count is 13 days stale is being stored,
+not tracked — so it has now been genuinely recounted, not re-dated.
+
+**Methodology, identical to the baseline's so the comparison is fair.**
+Every MUST row in `functional_requirements.md` was re-read and
+classified against current source, using that document's own `Stage`
+column for the phase split. **"Untouched" means what it meant in 2026-07-31:
+no real code anywhere implements any part of the requirement.** That is
+also the exact test the 2026-08-11 audit applied when it reclassified
+all of §5 and §6 from "untouched" to "partially built" on the strength
+of backend code alone, with no UI in existence.
+
+| Stage | Baseline 2026-07-31 | Now 2026-08-13 | Change |
+|---|---|---|---:|
+| A | 0 of 3 | **0 of 4** | 0 |
+| B | 1 of 14 | **0 of 14** | −1 |
+| C | 8 of 16 | **0 of 16** | −8 |
+| D | 11 of 11 | **1 of 11** | −10 |
+| E | 7 of 7 | **1 of 7** | −6 |
+| F | 9 of 9 | **1 of 9** | −8 |
+| **Total** | **36 of 60 (60.0%)** | **3 of 61 (4.9%)** | **−33** |
+
+**The denominator moved too, and that is real, not a rounding trick:**
+FR-117 (signed manifests) was added 2026-08-12 at Stage A, so there are
+now **61** MUST requirements, not 60. `functional_requirements.md`'s own
+header still says "60 MUST" and is stale by exactly that one row.
+
+**The three still genuinely untouched, with what is missing:**
+
+- **FR-114 (D) — workflow replay from the event log.** No replay
+  mechanism exists anywhere. The run manifest it would replay *from* is
+  real (`SqlRunManifestRecorder`); nothing consumes it to re-execute.
+- **FR-058 (E) — write recovered knowledge back into the knowledge base
+  with provenance.** Both halves exist separately and are not connected:
+  the Project Intelligence pack has real provenance tagging
+  (`provenance.py`, `P05-S02-M32-T06`) and the Kernel has a real
+  knowledge writer (`persistence/knowledge_writer.py`), but no PI tool
+  writes to it. A pack cannot import `ai_os_kernel`, and no SDK Protocol
+  for knowledge write-back exists — a real structural blocker, not an
+  oversight.
+- **FR-097 (F) — show only actions the principal is authorized to
+  perform.** No UI code gates actions anywhere in `dashboard/src`. The
+  API enforces authorization on every route (`require_permission`), but
+  that is enforcement, not presentation, and this requirement is a
+  presentation requirement.
+
+**Two marginal calls, disclosed rather than buried**, both resolved as
+*touched* by the stated rule (real code implements part of it) with the
+missing half named: **FR-093** (experiment comparison views) — the
+comparison and per-run drill-down are real over HTTP
+(`GET /experiments/{id}/comparison`, `.../runs`), no Dashboard view
+exists; **FR-096** (stream live updates) — the WebSocket server is real
+(`routes/stream.py`), the Dashboard does not consume it. If the product
+owner prefers "presentation requirements need presentation code", both
+become untouched and the total is **5 of 61**, not 3.
+
+**A citation defect found while recounting, and fixed.** The 2026-08-11
+correction table cited `replicate_management.py`, `cost_ceiling.py` and
+`prompt_adaptation.py` under `evaluation_engine/`. Those three files do
+not exist at that path — they are real, but live in
+`capability_packs/benchmarking/src/ai_os_pack_benchmarking/`. The claims
+were true, the paths were wrong; corrected in that table.
+
+**What this number does NOT mean, stated plainly because it invites
+exactly one misreading.** "4.9% untouched" is not "95% built". Untouched
+is a floor — it asks only whether any code exists, not whether the
+requirement is met. The honest completeness figure is the **60%
+module-average** now published in `STATUS.md` alongside the
+ticket-weighted 96%. R-006 measured whether the backlog had been
+*started*; it has been. It never measured whether it is finished.
+
+**Status: remains Open.** Three MUST requirements are still untouched
+and the majority of the touched ones are partial, so the risk this entry
+names — real v1 scope outstanding — has shrunk substantially but has not
+gone. Re-measure at the same time as any future full-project audit,
+using this same methodology.
 
 ### R-005 — Generated-doc staleness not gated in CI *(closed)*
 

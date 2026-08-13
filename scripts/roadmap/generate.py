@@ -18,6 +18,7 @@ ever reaches a generated file.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -30,18 +31,72 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TICKETS_ROOT = REPO_ROOT / "docs" / "19_roadmap" / "tickets"
 STATUS_OUT = REPO_ROOT / "docs" / "19_roadmap" / "STATUS.md"
 BOARD_OUT = REPO_ROOT / "docs" / "19_roadmap" / "MODULE_BOARD.md"
+# Read, never written: the authority for per-module completion.
+FEATURE_INVENTORY = REPO_ROOT / "docs" / "19_roadmap" / "feature_inventory.md"
 
 BANNER = (
     "<!-- GENERATED FILE - DO NOT EDIT BY HAND.\n"
     "     Source of truth: docs/19_roadmap/tickets/**.md\n"
+    "                      + docs/19_roadmap/feature_inventory.md (module %)\n"
     "     Regenerate:      python -m scripts.roadmap.generate\n"
     "     Verified by:     tests/roadmap/test_generated_docs_are_current.py\n"
     "     Hand edits are overwritten and fail CI. -->\n"
 )
 
 
+MODULE_PCT_ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|\s*[^|]*\|\s*(\d+)%\s*\|")
+
+
 def _pct(done: float, total: float) -> int:
     return 0 if total == 0 else round(100 * done / total)
+
+
+def load_module_percentages() -> dict[int, int]:
+    """The per-module completion percentages from
+    ``feature_inventory.md``'s own table.
+
+    **Why the generator reads a second file at all.** A document-only
+    audit on 2026-08-13 found the two headline numbers this project
+    publishes had drifted **35 points apart** — ticket-weighted
+    completion read 96% while the mean of these module percentages read
+    60.4% — and only the flattering one was ever surfaced. They measure
+    genuinely different things (see :func:`render_status`), so the fix
+    is to publish both, always, from one command.
+
+    ``feature_inventory.md`` remains the source of truth for module
+    percentages: every process document already names it as *the*
+    authority for "how complete is this module", and it is updated in
+    the same step as the code it describes. This function only reads it.
+
+    The cross-check against :data:`MODULES` is the load-bearing part.
+    Silently skipping an unparsed row would understate the denominator
+    and quietly inflate the average — exactly the class of error this
+    whole change exists to prevent — so a mismatch raises instead.
+    """
+    text = FEATURE_INVENTORY.read_text(encoding="utf-8")
+    found: dict[int, int] = {}
+    for line in text.split("\n"):
+        match = MODULE_PCT_ROW.match(line)
+        if match is None:
+            continue
+        module_id = int(match.group(1))
+        if module_id not in MODULES or module_id in found:
+            # Not the completion table (the file has other numbered
+            # tables), or a row already seen. Either way, not a new
+            # data point — the identity check below is what catches a
+            # genuinely missing module.
+            continue
+        found[module_id] = int(match.group(3))
+
+    missing = sorted(set(MODULES) - set(found))
+    if missing:
+        raise ValueError(
+            f"{FEATURE_INVENTORY.name} has no completion percentage for module(s) "
+            f"{missing}. Every module in scripts/roadmap/stages.py MODULES must appear "
+            "in the completion table with a '<n>%' cell, or the module-average "
+            "published in STATUS.md would be computed over an incomplete set."
+        )
+    return found
 
 
 def _weight(t: Ticket) -> float:
@@ -56,6 +111,9 @@ def render_status(tickets: list[Ticket]) -> str:
         by_phase[t.phase].append(t)
 
     done = sum(_weight(t) for t in tickets)
+    module_pcts = load_module_percentages()
+    module_total = sum(module_pcts.values())
+    module_remaining = 100 * len(module_pcts) - module_total
     lines: list[str] = [
         BANNER,
         "# AI_OS - Roadmap Status",
@@ -66,8 +124,36 @@ def render_status(tickets: list[Ticket]) -> str:
         "(`docs/process/standing_rules.md`): read only your own Task ticket and "
         "its direct dependencies.",
         "",
-        f"**Overall: {_pct(done, len(tickets))}%** "
-        f"({done:g} of {len(tickets)} Task-equivalents complete)",
+        # BOTH numbers, always, side by side. Publishing only the
+        # ticket-weighted one let a 35-point gap open unnoticed
+        # (document-only audit, 2026-08-13). They are not two estimates
+        # of the same quantity: one measures how much of the *currently
+        # known* work is ticketed and closed, the other how complete the
+        # subsystems themselves are. The first can sit still while real
+        # work lands, because discovering new work grows its denominator
+        # in lockstep with its numerator; the second cannot.
+        f"**Ticket-weighted completion: {_pct(done, len(tickets))}%** "
+        f"({done:g} of {len(tickets)} Task-equivalents complete) — "
+        "the share of *currently ticketed* work that is done. A `partial` "
+        "Task counts half. This number moves very little late in a project: "
+        "each newly discovered Task adds to the denominator as well as, "
+        "eventually, the numerator.",
+        "",
+        # NOT `_pct`: that helper takes a ratio and multiplies by 100,
+        # and these values are already percentages. Passing them to it
+        # printed "6043%" on the first real run — caught by executing
+        # the generator, not by reading it.
+        f"**Module-average completion: {round(module_total / len(module_pcts))}%** "
+        f"({module_total} points across {len(module_pcts)} modules, "
+        f"unweighted mean; {module_remaining} points remain to 100%) — "
+        "the share of the *system itself* that exists, from "
+        "`feature_inventory.md`'s per-module table. A module reaches 100% "
+        "only when the subsystem is genuinely complete, so this is the "
+        "harder and more honest of the two.",
+        "",
+        "**Neither number alone is the answer, and the gap between them is "
+        "the point.** Report both, every time "
+        "(`docs/process/reporting_format.md`).",
         "",
         "| Phase | Stage | Tasks | Done | Partial | Todo | % |",
         "|---|---|---:|---:|---:|---:|---:|",

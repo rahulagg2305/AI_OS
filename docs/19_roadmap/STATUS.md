@@ -1,5 +1,6 @@
 <!-- GENERATED FILE - DO NOT EDIT BY HAND.
      Source of truth: docs/19_roadmap/tickets/**.md
+                      + docs/19_roadmap/feature_inventory.md (module %)
      Regenerate:      python -m scripts.roadmap.generate
      Verified by:     tests/roadmap/test_generated_docs_are_current.py
      Hand edits are overwritten and fail CI. -->
@@ -10,7 +11,11 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Overall: 96%** (252.5 of 264 Task-equivalents complete)
+**Ticket-weighted completion: 96%** (252.5 of 264 Task-equivalents complete) — the share of *currently ticketed* work that is done. A `partial` Task counts half. This number moves very little late in a project: each newly discovered Task adds to the denominator as well as, eventually, the numerator.
+
+**Module-average completion: 60%** (2659 points across 44 modules, unweighted mean; 1741 points remain to 100%) — the share of the *system itself* that exists, from `feature_inventory.md`'s per-module table. A module reaches 100% only when the subsystem is genuinely complete, so this is the harder and more honest of the two.
+
+**Neither number alone is the answer, and the gap between them is the point.** Report both, every time (`docs/process/reporting_format.md`).
 
 | Phase | Stage | Tasks | Done | Partial | Todo | % |
 |---|---|---:|---:|---:|---:|---:|

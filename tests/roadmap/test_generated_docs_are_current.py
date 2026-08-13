@@ -21,10 +21,18 @@ Three independent guards, each of which fails CI on its own:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
-from scripts.roadmap.generate import BANNER, BOARD_OUT, STATUS_OUT, main
+from scripts.roadmap import generate
+from scripts.roadmap.generate import (
+    BANNER,
+    BOARD_OUT,
+    STATUS_OUT,
+    load_module_percentages,
+    main,
+)
 from scripts.roadmap.model import (
     MAX_LINE_CHARS,
     MAX_TICKET_LINES,
@@ -151,3 +159,52 @@ def test_generated_docs_have_no_oversized_lines(path: Path) -> None:
         f"{path.name} has a {longest}-char line — the generator has grown a "
         "narrative field, which is exactly what Phase R2 removed."
     )
+
+
+def test_status_publishes_both_completion_numbers() -> None:
+    """Guard 4: STATUS.md must always carry **both** headline numbers.
+
+    A document-only audit on 2026-08-13 found the ticket-weighted figure
+    (96%) and the module-average (60.4%) had drifted 35 points apart
+    while only the flattering one was ever published. Nothing prevented
+    that, so nothing stopped it recurring. This is that prevention: drop
+    either number from the generator and the build fails.
+    """
+    text = STATUS_OUT.read_text(encoding="utf-8")
+    for label in ("**Ticket-weighted completion:", "**Module-average completion:"):
+        assert label in text, (
+            f"STATUS.md no longer publishes {label!r}. Both numbers are mandatory — "
+            "they measure different things and the gap between them is the point."
+        )
+
+
+def test_the_module_average_is_the_unweighted_mean_of_every_real_module() -> None:
+    """The published module-average must be exactly what it claims to be.
+
+    Recomputed here independently of the generator's own arithmetic, so
+    a change to that arithmetic cannot silently redefine a published
+    number. `_pct` was genuinely misused on the first implementation and
+    printed "6043%" — caught by running it; this keeps it caught.
+    """
+    percentages = load_module_percentages()
+
+    assert set(percentages) == set(MODULES), (
+        "the module-average is computed over a different set of modules than "
+        "scripts/roadmap/stages.py declares"
+    )
+    expected = round(sum(percentages.values()) / len(percentages))
+    assert 0 <= expected <= 100, f"module-average {expected} is not a percentage"
+    assert f"**Module-average completion: {expected}%**" in STATUS_OUT.read_text(
+        encoding="utf-8"
+    ), f"STATUS.md does not publish the real unweighted mean ({expected}%)"
+
+
+def test_a_module_missing_its_percentage_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Silently skipping a module would shrink the denominator and
+    inflate the average — the exact failure mode this whole mechanism
+    exists to prevent. Prove it raises instead of guessing."""
+    monkeypatch.setattr(
+        generate, "MODULE_PCT_ROW", re.compile(r"^\|\s*(999)\s*\|\s*([^|]+?)\s*\|[^|]*\|\s*(\d+)%")
+    )
+    with pytest.raises(ValueError, match="no completion percentage for module"):
+        generate.load_module_percentages()
