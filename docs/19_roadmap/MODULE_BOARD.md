@@ -21,21 +21,21 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M06 | LLM Gateway | P02 | 12 | 12 | 100% |
 | M07 | Prompt Engine | P02 | 6 | 6 | 100% |
 | M08 | Context Manager | P02 | 14 | 13 | 93% |
-| M09 | Knowledge Manager | P02 | 5 | 5 | 100% |
-| M10 | Memory Manager | P02 | 3 | 2 | 67% |
+| M09 | Knowledge Manager | P02 | 9 | 5 | 56% |
+| M10 | Memory Manager | P02 | 5 | 2 | 40% |
 | M11 | Retrieval / Search & Vector Search | P02 | 6 | 6 | 100% |
 | M12 | Evaluation Engine | P04 | 16 | 16 | 100% |
 | M13 | Capability Manager | P02 | 8 | 8 | 100% |
 | M14 | Security Manager | P03+P07 | 12 | 12 | 100% |
-| M15 | Quality Gate Engine | P02 | 9 | 9 | 100% |
+| M15 | Quality Gate Engine | P02 | 11 | 9 | 82% |
 | M16 | Traceability Engine | P04 | 5 | 5 | 100% |
 | M17 | Event Bus | P02 | 5 | 5 | 100% |
 | M18 | Tool Invoker (SDK interface) | P02 | 4 | 4 | 100% |
 | M19 | Secrets Manager | P01+P07 | 7 | 7 | 100% |
 | M20 | Sandbox / SandboxExecutor | P03 | 5 | 4 | 90% |
-| M21 | Storage Service | P02 | 1 | 1 | 100% |
+| M21 | Storage Service | P02 | 3 | 1 | 33% |
 | M22 | Notification Service | P06 | 2 | 2 | 100% |
-| M23 | Caching (Redis) | P02 | 2 | 2 | 100% |
+| M23 | Caching (Redis) | P02 | 4 | 2 | 50% |
 | M24 | Git Integration Service | P03 | 3 | 3 | 100% |
 | M25 | Speech Gateway | P06 | 1 | 0 | 50% |
 | M26 | Document Processing | P05 | 2 | 2 | 100% |
@@ -53,7 +53,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M39 | Dashboard | P06 | 3 | 3 | 100% |
 | M40 | Deployment & Infrastructure | P01+P07 | 9 | 6 | 78% |
 | M41 | Threat Controls (T1-T12) | P03 | 2 | 2 | 100% |
-| M42 | Testing Infrastructure | P01+P07 | 7 | 6 | 93% |
+| M42 | Testing Infrastructure | P01+P07 | 8 | 6 | 81% |
 | M43 | CI Pipeline | P01 | 5 | 5 | 100% |
 | M44 | Platform-wide AiOsError hierarchy | P02 | 1 | 1 | 100% |
 | M45 | Roadmap & Process System | P09 | 5 | 5 | 100% |

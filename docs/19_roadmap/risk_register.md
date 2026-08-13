@@ -11,8 +11,9 @@ Severity: **H** (can cause real harm or data loss) · **M** (can cause
 significant rework) · **L** (contained).
 
 **R-019 opened 2026-08-13** — the roadmap had 0 ready tickets while the
-module table said 40% of the system did not exist; partly addressed the
-same day (Ready-to-start 0 → 5), Stage B still entirely unticketed.
+module table said 40% of the system did not exist. Substantially
+addressed the same day: 19 partials re-verified, then Stage B planned
+for its five deepest modules. **Ready-to-start 0 → 14.**
 **R-006 re-measured 2026-08-13 (36 of 60 → 3 of 61 MUST untouched) after
 a document-only audit found it 13 days stale.** Reviewed 2026-07-31
 (R1–R4 final closeout); R-008 and R-009 closed 2026-08-01; R-014 opened and closed 2026-08-09; R-015 opened and closed
@@ -22,7 +23,8 @@ and closed 2026-08-11; R-018 opened 2026-08-11; R-019 opened
 count has now been genuinely recounted rather than carried forward;
 R-018, the "proven but idle" sweep, now partly closed and — for its
 remaining five packages — machine-checked rather than re-swept by hand;
-R-019, the roadmap having run out of ready work, partly addressed) plus R-001 (a permanent
+R-019, the roadmap having run out of ready work, substantially addressed
+by the 2026-08-13 Stage B planning step but not closed) plus R-001 (a permanent
 standing rule, not a risk pending closure).
 
 **R-017 and R-018 both came from one whole-project health audit
@@ -50,10 +52,10 @@ to that rule, not as evidence it failed.
 | R-012 | Ticket dependency graph had no recorded edges | M | **Closed** 2026-07-31 | — |
 | R-013 | Two dependency edges were judgement calls | L | **Closed** 2026-07-31 | Both decided, no change |
 | R-014 | No CI job ever ran any Capability Pack's own `tests/` | M | **Closed** 2026-08-09 | — |
-| R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop timing margins) | L | **Closed** 2026-08-09; both worker-loop timing tests remediated (`P02-S01-M05-T16` 2026-08-11, 4th occurrence 2026-08-12); two further real root causes — an unclosed asyncio subprocess transport and 19 HTTP handlers never draining the request body — found and fixed 2026-08-12 | — |
+| R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop timing margins) | L | **Reopened 2026-08-13 — 5th occurrence**, ticketed as `P07-S03-M42-T03`: `test_real_failure_and_completion_events_both_genuinely_notify` gives **two** sequential webhook deliveries a 2.0s deadline while `WebhookChannel`'s own per-delivery timeout is **5.0s**, so the assertion can fail while every component behaves as designed. 5/5 pass idle, fails under concurrent load. Previously **Closed** 2026-08-09; both worker-loop timing tests remediated (`P02-S01-M05-T16` 2026-08-11, 4th occurrence 2026-08-12); two further real root causes — an unclosed asyncio subprocess transport and 19 HTTP handlers never draining the request body — found and fixed 2026-08-12 | — |
 | R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Closed** 2026-08-13 (`P02-S01-M05-T17`) — bounded by a platform-default `RetryPolicy`, `failed` now genuinely written | Product owner, 2026-08-10 |
 | R-017 | Manifest-declared Tools were unreachable in production — no caller ever passed a `ToolRegistry` | M | **Closed** 2026-08-11 (`P02-S05-M18-T04`) | — |
-| R-019 | The roadmap ran out of work while the system was 60% built — 0 `todo` tickets across all 264, and the biggest real block (Stage B, 626 module-points) had none | M | **Open — partly addressed 2026-08-13** (19 partials re-verified: 11 closed, 8 kept, 5 new `todo` created; Ready-to-start 0 → 5). Stage B remains entirely unticketed | Partial-ticket re-verification, 2026-08-13 |
+| R-019 | The roadmap ran out of work while the system was 60% built — 0 `todo` tickets across all 264, and the biggest real block (Stage B, 626 module-points) had none | M | **Open — substantially addressed 2026-08-13**: 19 partials re-verified (11 closed, 8 kept, 5 new `todo`), then Stage B planned for its five deepest modules (12 new `todo`, ~347 of 626 points, 7 flagged "expect a design fork"). Ready-to-start 0 → 14; ticket-weighted 96% → 92% as invisible work became counted. Closes when Stage B is planned in full — ~279 points across 11 further modules remain unticketed | Partial-ticket re-verification, 2026-08-13 |
 | R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3, 5 and 8 now closed; 5 further Kernel packages added 2026-08-11; item 8 added *and* closed 2026-08-12, and showed the sweep must measure per module, not per package) | M | **Open — items 4, 6 and 7 formally accepted as disclosed gaps; item 7's five packages re-verified 2026-08-13 and now enforced by `tests/contract/test_production_reachability.py`, which fails in both directions** | Health audit, 2026-08-11 |
 
 ---
@@ -1386,14 +1388,39 @@ tickets closed 11 whose stated gaps were provably stale or formally
 deferred, kept 8 with real unresolved gaps, and re-scoped the genuine
 remainder into 5 new `todo` tickets. Ready-to-start is **0 → 5**.
 
-**Not closed, and this is the substantive half.** Those 5 cover the
-Project Intelligence agent, multi-language dependency extraction,
-`GET /gates/trends`, the CLI's last two gaps, and the gVisor
-RuntimeClass. **None of them is in Stage B.** The Kernel modules with
-the largest real gaps — Memory Manager 18%, Storage Service 25%,
-Caching 30%, Knowledge Manager 40%, Quality Gate Engine 40% — still
-have **no ticket of any status**. That work has never been planned,
-only measured. Closing this risk means planning it.
+**Stage B planning done 2026-08-13 — the substantive half is now
+addressed.** The five deepest Kernel gaps had no ticket of any status;
+each module's real code and its own architecture document were read to
+establish what is genuinely missing, and the result is **12 new
+executable `todo` tickets**:
+
+| Module | New tickets | Verified gap they close |
+|---|---|---|
+| Memory Manager 18% | `M10-T04`, `T05` | The package is one 18-line docstring-only `__init__.py` with zero classes; `MemoryService.write()` (§6's only mediated write path) does not exist; `provenance` is write-through, never computed |
+| Storage Service 25% | `M21-T02`, `T03` | No `StorageService` Protocol; zero production importers; no S3 adapter |
+| Caching 30% | `M23-T03`, `T04` | No `Cache` Protocol, no in-memory adapter; `ResponseCache` never called by production |
+| Knowledge Manager 40% | `M09-T06`–`T09` | `IndexingService` produces no embeddings; `index_document_file` has no production caller; no Access/Filter Layer; no Version Manager |
+| Quality Gate Engine 40% | `M15-T10`, `T11` | The package emits zero logs/metrics/spans (§5's Observability Hook); `gate_results.duration_ms` is honestly always `0` |
+
+Ready-to-start went **5 → 14**. **Ticket-weighted completion fell 96% →
+92%** (258 of 269 → 258 of 281) — planning real work lowers that
+number, because it converts invisible work into counted work. The
+module-average stayed at 60%, correctly: nothing was built.
+
+**Seven of the twelve carry an explicit "expect a design fork" warning**
+in the ticket itself, so a batch-execution step stops and asks instead
+of inventing scope: `M09-T06` (embedding cost/latency), `M09-T07`
+(what triggers ingestion), `M09-T08` (no knowledge permission exists),
+`M09-T09` (what a new index generation means — the largest),
+`M10-T04` (Kernel-local vs SDK Protocol), `M21-T02` (which producer
+writes artifacts), `M21-T03` and `M23-T04` (a new dependency; caching
+changes billing).
+
+**Still open, deliberately.** These 12 cover the five deepest modules,
+roughly 347 of Stage B's 626 remaining module-points. The other ~279
+points across the remaining 11 Stage B modules are still unticketed,
+and the two `blocked` tickets remain product-owner-gated. This risk
+closes when Stage B is planned in full, not when it is planned in part.
 
 ---
 
