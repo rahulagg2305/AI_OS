@@ -325,6 +325,12 @@ class _FakeRepository:
     async def cancel(self, **kwargs: Any) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
+    async def mark_failed(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def step_failure_stats(self, **kwargs: Any) -> tuple[int, datetime | None]:
+        raise NotImplementedError("not exercised by these tests")
+
     async def record_failed_attempt(
         self,
         *,

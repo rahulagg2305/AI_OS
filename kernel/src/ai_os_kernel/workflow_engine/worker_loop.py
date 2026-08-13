@@ -87,6 +87,7 @@ with an empty-result query every event-loop tick.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -96,6 +97,7 @@ from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner
 from ai_os_kernel.workflow_engine.definition_catalog import WorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.errors import WorkflowLeaseUnavailableError
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance
+from ai_os_kernel.workflow_engine.models import RetryPolicy, WorkflowDefinition
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 
 _logger = get_logger(__name__)
@@ -103,6 +105,27 @@ _logger = get_logger(__name__)
 WORKER_POLL_INTERVAL_SECONDS = 5.0
 WORKER_BATCH_LIMIT = 100
 WORKER_LEASE_DURATION_SECONDS = 30
+
+# The retry budget applied to a definition that declares no
+# `retryPolicy` of its own (R-016, `P02-S01-M05-T17`).
+#
+# **Why a default exists at all.** `error_handling_retry.md` §2 requires
+# the engine to "protect against infinite loops" and §4 that "retries
+# must be bounded (maximum attempts + maximum duration)" — both, not
+# either. `WorkflowDefinition.retry_policy` is optional, and 2 of the 3
+# real definitions declare none, so honouring only declared policies
+# would have left those two retrying forever: the violation R-016 names.
+#
+# **Why these numbers.** Chosen by the product owner rather than
+# inferred, and deliberately mirroring the one real policy any
+# definition actually declares today (`se.delivery_pipeline`:
+# `maxAttempts: 2`, `maxDurationSeconds: 60.0`) instead of inventing a
+# different figure. A retry is a real, billable LLM call, so the bound
+# is also a cost ceiling. A definition that declares its own policy
+# overrides this entirely — the same "real, decided policy constant with
+# an explicit override" shape `WORKER_POLL_INTERVAL_SECONDS` above and
+# `PlatformConfig`'s own interval fields already establish.
+DEFAULT_RETRY_POLICY = RetryPolicy(max_attempts=2, max_duration_seconds=60.0)
 
 _Outcome = Literal["advanced", "lease_unavailable", "no_definition", "failed"]
 
@@ -238,7 +261,92 @@ class WorkflowWorkerLoop:
                 workflow_id=instance.workflow_id,
                 error=str(exc),
             )
+            await self._fail_if_retries_exhausted(instance, definition=definition, exc=exc)
             return "failed"
+
+    async def _fail_if_retries_exhausted(
+        self, instance: WorkflowInstance, *, definition: WorkflowDefinition, exc: Exception
+    ) -> None:
+        """End the retry loop when the budget is spent (R-016).
+
+        Before this existed, the handler above logged and returned, the
+        lease was released, the instance's status was still ``running``,
+        and the very next poll rediscovered and retried it — forever, for
+        the life of the Kernel process, with no persisted attempt count
+        and no terminal state.
+
+        The bound is evaluated exactly as
+        ``WorkflowAdvanceRunner._maybe_retry_failed_step`` already
+        evaluates it for the synchronous path — attempts *and* duration,
+        exhausted when **either** is spent (``error_handling_retry.md``
+        §4: "bounded (maximum attempts + maximum duration)"). The one
+        real difference is where the counters live: that path keeps them
+        in per-call dicts, which is useless here because every poll is a
+        fresh call. These come from ``workflow_steps``, where
+        ``record_failed_attempt`` has been writing them all along.
+
+        Deliberately best-effort: a failure to record the terminal state
+        is logged and swallowed, never raised. This runs inside the
+        handler for an exception that already happened, and turning a
+        bookkeeping problem into a second exception would lose the
+        original failure and take down the tick for every other instance
+        in the batch.
+        """
+        step_id = getattr(exc, "step_id", None)
+        if not isinstance(step_id, str):
+            # `WorkflowInstanceService.advance` attaches `step_id` to
+            # every exception raised from a step. One without it did not
+            # come from a step at all (a lease/database problem, say), so
+            # there is no per-step budget to judge it against and no
+            # persisted attempt row to count — retrying it is correct.
+            return
+
+        policy = definition.retry_policy or DEFAULT_RETRY_POLICY
+        failure_count, first_failed_at = await self._repository.step_failure_stats(
+            workflow_id=instance.workflow_id, step_name=step_id
+        )
+        if first_failed_at is None:
+            return
+
+        within_attempts = failure_count < policy.max_attempts
+        elapsed = (datetime.now(UTC) - first_failed_at).total_seconds()
+        within_duration = elapsed < policy.max_duration_seconds
+        if within_attempts and within_duration:
+            return
+
+        reason = (
+            f"step '{step_id}' exhausted its retry budget after {failure_count} "
+            f"attempt(s) over {elapsed:.1f}s "
+            f"(max_attempts={policy.max_attempts}, "
+            f"max_duration_seconds={policy.max_duration_seconds})"
+        )
+        try:
+            await self._repository.mark_failed(workflow_id=instance.workflow_id, reason=reason)
+        except Exception as mark_exc:  # noqa: BLE001 - see the docstring above
+            # A lost race with `cancel`, or any other write problem: the
+            # instance is already terminal or unreachable, which is not
+            # this loop's problem to solve.
+            _logger.warning(
+                "workflow_worker_loop.mark_failed_refused",
+                workflow_id=instance.workflow_id,
+                error=str(mark_exc),
+            )
+            return
+
+        # §4's "Every retry and final failure must be observable" — a
+        # distinct line, not folded into the generic advance_failed
+        # above, because "failed again, will retry" and "permanently
+        # failed, will never be retried" are different operational facts.
+        _logger.error(
+            "workflow_worker_loop.retry_exhausted",
+            workflow_id=instance.workflow_id,
+            step_id=step_id,
+            failure_count=failure_count,
+            elapsed_seconds=round(elapsed, 1),
+            max_attempts=policy.max_attempts,
+            max_duration_seconds=policy.max_duration_seconds,
+            policy_source="definition" if definition.retry_policy else "platform_default",
+        )
 
 
 async def run_worker_loop(

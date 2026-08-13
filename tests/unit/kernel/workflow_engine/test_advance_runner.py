@@ -193,6 +193,12 @@ class _FakeInstanceRepository:
     async def cancel(self, **kwargs: Any) -> WorkflowInstance:
         raise NotImplementedError("not exercised by these tests")
 
+    async def mark_failed(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def step_failure_stats(self, **kwargs: Any) -> tuple[int, datetime | None]:
+        raise NotImplementedError("not exercised by these tests")
+
     async def record_failed_attempt(self, **kwargs: Any) -> None:
         raise NotImplementedError("not exercised by these tests")
 
@@ -315,6 +321,12 @@ class _StatefulInstanceRepository:
         raise NotImplementedError("not exercised by these tests")
 
     async def cancel(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def mark_failed(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def step_failure_stats(self, **kwargs: Any) -> tuple[int, datetime | None]:
         raise NotImplementedError("not exercised by these tests")
 
     async def record_failed_attempt(self, **kwargs: Any) -> None:
@@ -444,6 +456,12 @@ class _GateRetryInstanceRepository:
         raise NotImplementedError("not exercised by these tests")
 
     async def cancel(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def mark_failed(self, **kwargs: Any) -> WorkflowInstance:
+        raise NotImplementedError("not exercised by these tests")
+
+    async def step_failure_stats(self, **kwargs: Any) -> tuple[int, datetime | None]:
         raise NotImplementedError("not exercised by these tests")
 
     async def record_failed_attempt(

@@ -44,7 +44,7 @@ to that rule, not as evidence it failed.
 | R-013 | Two dependency edges were judgement calls | L | **Closed** 2026-07-31 | Both decided, no change |
 | R-014 | No CI job ever ran any Capability Pack's own `tests/` | M | **Closed** 2026-08-09 | — |
 | R-015 | Timing/scheduling test flakiness under real runners (local HTTP servers; worker-loop timing margins) | L | **Closed** 2026-08-09; both worker-loop timing tests remediated (`P02-S01-M05-T16` 2026-08-11, 4th occurrence 2026-08-12); two further real root causes — an unclosed asyncio subprocess transport and 19 HTTP handlers never draining the request body — found and fixed 2026-08-12 | — |
-| R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Open — real, undecided design question** | Product owner, 2026-08-10 |
+| R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Closed** 2026-08-13 (`P02-S01-M05-T17`) — bounded by a platform-default `RetryPolicy`, `failed` now genuinely written | Product owner, 2026-08-10 |
 | R-017 | Manifest-declared Tools were unreachable in production — no caller ever passed a `ToolRegistry` | M | **Closed** 2026-08-11 (`P02-S05-M18-T04`) | — |
 | R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3 and 8 now closed; 5 further Kernel packages added 2026-08-11; item 8 added *and* closed 2026-08-12, and showed the sweep must measure per module, not per package) | M | **Open — partially ticketed** | Health audit, 2026-08-11 |
 
@@ -847,7 +847,9 @@ real Kernel process (`P01-S04-M03-T06`, via
 (`P01-S02-M19-T04`) is a real, audited consumer. FR-110
 ("tamper-evident audit log") is genuinely implemented.
 
-### R-016 — No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever
+### R-016 — No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever *(closed)*
+
+**CLOSED 2026-08-13 (`P02-S01-M05-T17`).** The worker loop is now bounded and `failed` is genuinely written; the history below is preserved unchanged, and the resolution follows it.
 
 Opened 2026-08-10, `P06-S01-M36-T04`, while investigating
 `POST /api/v1/workflows/{id}/retry` ("retry from where" — the doc's own
@@ -903,14 +905,54 @@ result gets persisted) is invented unilaterally — a decision with no
 existing documentation to answer it, materially larger than "add the
 remaining routes" (this ticket's own literal scope).
 
-**Not closed — this is a real, open, unaddressed gap**, not an
-accepted baseline like R-006. `POST /workflows/{id}/retry` stays
-disclosed, unbuilt in `api_architecture.md`/`cli_design.md`. Closing
-this needs its own, later, dedicated design step: decide a real
-retry-exhaustion policy for the worker loop (bound, persistence,
-whether "retry forever" is in fact an intentional resilience choice
-that should stay undisturbed), before `/retry` itself can be built
-against something real.
+**Resolved 2026-08-13 (`P02-S01-M05-T17`) — the dedicated design step
+this paragraph called for.** The paragraph above read "Not closed — this
+is a real, open, unaddressed gap… closing this needs its own, later,
+dedicated design step"; that step happened, and its findings are worth
+recording because two of them narrowed the question substantially before
+any decision was needed.
+
+**What the investigation found already decided.** The framing this
+finding had acquired — "bounded attempts vs a time budget vs an
+operator-only transition" — was **already settled by documentation**:
+`error_handling_retry.md` §4 requires retries to be "bounded (maximum
+attempts + maximum duration)", both and not either, and `RetryPolicy`
+has modelled exactly that from the start and is already honoured by
+`run_to_completion`. The shape was never open. It also found that the
+data needed to enforce a bound *across polls* already existed:
+`workflow_steps` carries `attempt` and `started_at`, and
+`record_failed_attempt` has been writing failed rows since
+`P02-S01-M05-T06`. **No schema change and no migration were required** —
+which is why this closed in one step rather than the larger one feared.
+
+**What was genuinely open, and went to the product owner.** Two
+questions, neither derivable from source:
+
+1. *What bounds a definition that declares no `retryPolicy`?* It is
+   optional and **2 of the 3 real definitions declare none** — exactly
+   the ones looping forever. Chosen: a **platform default** (2 attempts
+   / 60s), overridable per definition, deliberately mirroring the one
+   real policy any definition actually declares (`se.delivery_pipeline`)
+   rather than inventing a figure. A retry is a billable LLM call, so
+   the bound is also a cost ceiling.
+2. *What does exhaustion produce?* Chosen: always `failed`. The
+   alternative — honouring `failureHandling.onError` (`halt`/`escalate`),
+   a **required field on every definition that no code has ever read** —
+   was rejected as materially wider, since `escalate` has no defined
+   meaning and inventing one would be exactly the unilateral design this
+   finding existed to prevent.
+
+**Still true, and now recorded as its own gap:** `failureHandling.onError`
+remains declared-but-unread. Every definition must supply it, and
+nothing consults it. That is a smaller, separate finding than R-016 was,
+and it is disclosed rather than silently absorbed.
+
+**What this unblocks.** `POST /workflows/{id}/retry` and the CLI's
+`workflow retry` now have a real, persisted "permanently failed"
+instance to act on, and `NotificationService`'s `failure` category has a
+real `workflow.failed` condition available to it — the three things this
+entry blocked. **None of them is built by this step**; the blocker is
+removed, not the work done.
 
 ---
 

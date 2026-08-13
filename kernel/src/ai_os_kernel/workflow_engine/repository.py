@@ -145,6 +145,12 @@ class WorkflowInstanceRepository(Protocol):
 
     async def cancel(self, *, workflow_id: str, reason: str) -> WorkflowInstance: ...
 
+    async def mark_failed(self, *, workflow_id: str, reason: str) -> WorkflowInstance: ...
+
+    async def step_failure_stats(
+        self, *, workflow_id: str, step_name: str
+    ) -> tuple[int, datetime | None]: ...
+
     async def record_failed_attempt(
         self,
         *,
@@ -964,6 +970,117 @@ class SqlWorkflowInstanceRepository:
                 )
             )
 
+        return WorkflowInstance.model_validate(dict(instance_row))
+
+    async def step_failure_stats(
+        self, *, workflow_id: str, step_name: str
+    ) -> tuple[int, datetime | None]:
+        """How many times ``step_name`` has genuinely failed, and when it
+        first did — the *persisted* equivalent of
+        :meth:`~ai_os_kernel.workflow_engine.advance_runner.
+        WorkflowAdvanceRunner._maybe_retry_failed_step`'s own in-memory
+        ``step_failure_counts``/``step_retry_deadlines`` dicts.
+
+        Those dicts work for a single ``run_to_completion`` call, which
+        holds them for its own lifetime. The multi-instance worker loop
+        cannot use them at all: each poll is a fresh ``run_once`` with no
+        memory of the last, which is exactly why a permanently-failing
+        step retried forever there (R-016). This reads the same facts
+        back out of ``workflow_steps``, where ``record_failed_attempt``
+        has been writing them since ``P02-S01-M05-T06`` — no new column
+        and no migration, because the data was already there.
+        """
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        sa.select(
+                            sa.func.count().label("failure_count"),
+                            sa.func.min(workflow_steps.c.started_at).label("first_failed_at"),
+                        ).where(
+                            workflow_steps.c.workflow_id == workflow_id,
+                            workflow_steps.c.step_name == step_name,
+                            workflow_steps.c.status == _STEP_STATUS_FAILED,
+                        )
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        return int(row["failure_count"]), row["first_failed_at"]
+
+    async def mark_failed(self, *, workflow_id: str, reason: str) -> WorkflowInstance:
+        """Write ``workflow_engine.md`` §7's ``failed`` state — declared
+        in the nine-state list from the beginning and, until now, never
+        reached by any real writer anywhere (R-016).
+
+        Identical guarded-CAS shape to :meth:`cancel`: an update matching
+        zero rows is refused rather than silently doing nothing, so two
+        workers racing to fail the same instance produce exactly one
+        transition. Only ``running`` is a legal source — an instance is
+        only ever advanced, and therefore only ever fails, from
+        ``running``; ``created`` has not started, and the remaining
+        states are either terminal or genuinely never written today, so
+        guarding against them would be speculative.
+
+        Being terminal, this also ends the retry loop:
+        ``list_runnable_instances``/``list_startable_instances`` both
+        already filter on a non-terminal status, so the instance stops
+        being rediscovered the moment this commits — the same "prevents
+        re-discovery, does not interrupt an in-flight step" limit
+        :meth:`cancel` documents.
+        """
+        async with self._engine.begin() as connection:
+            current = (
+                await connection.execute(
+                    sa.select(workflow_instances.c.status).where(
+                        workflow_instances.c.workflow_id == workflow_id
+                    )
+                )
+            ).scalar_one_or_none()
+
+            result = await connection.execute(
+                sa.update(workflow_instances)
+                .where(
+                    workflow_instances.c.workflow_id == workflow_id,
+                    workflow_instances.c.status == WorkflowInstanceStatus.RUNNING.value,
+                )
+                .values(
+                    status=WorkflowInstanceStatus.FAILED.value,
+                    last_event_seq=workflow_instances.c.last_event_seq + 1,
+                    error={"reason": reason},
+                    updated_at=sa.func.now(),
+                    completed_at=sa.func.now(),
+                )
+                .returning(*workflow_instances.columns)
+            )
+            instance_row = result.mappings().one_or_none()
+
+            if instance_row is None:
+                if current is None:
+                    raise WorkflowInvalidTransitionError(
+                        f"workflow instance '{workflow_id}' does not exist"
+                    )
+                raise WorkflowInvalidTransitionError(
+                    f"workflow instance '{workflow_id}' cannot be failed from its "
+                    f"current status '{current}'"
+                )
+
+            await connection.execute(
+                sa.insert(workflow_events).values(
+                    event_id=new_event_id(),
+                    workflow_id=workflow_id,
+                    seq=instance_row["last_event_seq"],
+                    event_type=_STATE_TRANSITIONED_EVENT_TYPE,
+                    schema_version=_STATE_TRANSITIONED_SCHEMA_VERSION,
+                    payload={
+                        "previousStatus": current,
+                        "newStatus": WorkflowInstanceStatus.FAILED.value,
+                        "reason": reason,
+                    },
+                    occurred_at=datetime.now(UTC),
+                )
+            )
         return WorkflowInstance.model_validate(dict(instance_row))
 
     async def record_failed_attempt(
