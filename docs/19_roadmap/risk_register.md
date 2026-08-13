@@ -692,12 +692,19 @@ redirect, and left the stack running — so `up --wait` "returned in 1.2s"
 against an already-healthy stack. The 19.2s figure above is from a
 verified-clean teardown. A proof that cannot fail is not a proof.
 
-*Still true, and deliberately not changed:* the other four observability
-services still declare no healthcheck. They are not currently a problem
-— every assertion against them polls — but an operator running
-`docker compose up --wait` gets no readiness guarantee for them either.
-Recorded as a real, known, unfixed gap rather than silently widened
-here.
+*The gap this left was closed the next day* (`P01-S05-M04-T07`,
+2026-08-13). Prometheus, Tempo and Loki now declare healthchecks against
+their own documented readiness endpoints, so `up --wait` gates on the
+whole profile. **One service genuinely cannot**: `otel-collector`'s
+image is distroless — no shell, no `wget`/`curl`/`nc`, verified by
+inspecting the image — so no probe can execute inside it at all. That is
+a real constraint, recorded in the compose file where a reader will look
+for the missing healthcheck, not an oversight. Each command was checked
+against its own image rather than copied: Loki ships busybox at
+`/busybox/wget` rather than on `PATH`, and a copied command would have
+marked it permanently unhealthy and hung `up --wait` — the exact failure
+mode a careless systemic fix would have introduced while claiming to
+prevent one.
 
 **R-014 recurred in a second location — found and fixed 2026-08-13
 (`P06-S04-M38-T01`).** The entry below records that

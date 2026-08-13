@@ -58,6 +58,15 @@ services:
   # one's own header comment for what it does and, for Loki specifically,
   # the real gap it discloses (no log producer wired to it yet).
 
+  # No healthcheck, and this is a real constraint rather than an
+  # omission: this image is distroless — it has no shell and no wget,
+  # curl or nc (verified by inspecting the image, not assumed), so
+  # neither a `CMD-SHELL` nor an exec-form `CMD` health probe can run
+  # inside it. The Collector's own `health_check` extension would expose
+  # an endpoint, but nothing in the container could call it. Every other
+  # service in this profile is gated; this one is left ungated
+  # deliberately, and callers that need its readiness must poll from
+  # outside (as `test_compose_observability_profile.py` does).
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.110.0
     profiles: ["observability", "full"]
@@ -80,6 +89,17 @@ services:
       - aios_prometheus_data:/prometheus
     ports:
       - "${AIOS_PROMETHEUS_PORT:-9090}:9090"
+    # See grafana's own healthcheck below for why these exist at all.
+    # `/-/healthy` is Prometheus's own documented readiness endpoint;
+    # `wget` verified present in this image (/bin/wget) rather than
+    # assumed — a healthcheck whose command does not exist would mark
+    # the container permanently unhealthy and hang `up --wait`.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
   tempo:
     image: grafana/tempo:2.6.1
@@ -90,6 +110,14 @@ services:
       - aios_tempo_data:/var/tempo
     ports:
       - "${AIOS_TEMPO_HTTP_PORT:-3200}:3200"
+    # `/ready` is Tempo's own documented readiness endpoint; `wget`
+    # verified present (/usr/bin/wget).
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3200/ready || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
   loki:
     image: grafana/loki:3.2.1
@@ -100,6 +128,17 @@ services:
       - aios_loki_data:/loki
     ports:
       - "${AIOS_LOKI_PORT:-3100}:3100"
+    # `/ready` is Loki's own documented readiness endpoint. Note the
+    # unusual binary path: this image ships busybox at `/busybox/wget`,
+    # not on `PATH` as a bare `wget` — verified by inspecting the image,
+    # which is precisely why each of these commands was checked against
+    # its own image rather than copied between them.
+    healthcheck:
+      test: ["CMD-SHELL", "/busybox/wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
   grafana:
     image: grafana/grafana:11.3.1

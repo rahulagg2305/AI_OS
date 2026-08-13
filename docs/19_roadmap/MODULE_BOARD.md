@@ -15,7 +15,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M01 | Configuration Manager | P01 | 8 | 8 | 100% |
 | M02 | Manifest Loader (+ Schema) | P01 | 4 | 4 | 100% |
 | M03 | Health & Lifecycle | P01 | 6 | 6 | 100% |
-| M04 | Observability & Audit | P01 | 6 | 6 | 100% |
+| M04 | Observability & Audit | P01 | 7 | 7 | 100% |
 | M05 | Workflow Engine | P02 | 16 | 16 | 100% |
 | M06 | LLM Gateway | P02 | 12 | 12 | 100% |
 | M07 | Prompt Engine | P02 | 6 | 6 | 100% |
