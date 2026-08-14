@@ -202,7 +202,13 @@ async def run_experiment(
     orchestrator = _get_run_orchestrator(request)
     try:
         return await orchestrator.run(
-            experiment_id, principal_id=security_context.principal.principal_id
+            experiment_id,
+            principal_id=security_context.principal.principal_id,
+            # R-021: carry the *permissions*, not just the id. This route
+            # is authenticated, so a real SecurityContext exists here;
+            # dropping its permissions made every experiment-created
+            # instance persist NULL and bypass the knowledge gate.
+            principal_permissions=security_context.permissions,
         )
     except ExperimentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

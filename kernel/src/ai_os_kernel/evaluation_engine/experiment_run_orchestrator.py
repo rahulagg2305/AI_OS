@@ -187,7 +187,27 @@ class ExperimentRunOrchestrator:
         self._router = router
         self._run_recorder = run_recorder
 
-    async def run(self, experiment_id: str, *, principal_id: str) -> ExperimentRunSummary:
+    async def run(
+        self,
+        experiment_id: str,
+        *,
+        principal_id: str,
+        principal_permissions: frozenset[str] | None = None,
+    ) -> ExperimentRunSummary:
+        """``principal_permissions`` is carried onto every instance this
+        run creates (`R-021`, 2026-08-14).
+
+        Before that, this orchestrator took the principal's *id* but not
+        their permissions, so every experiment-created instance persisted
+        ``principal_permissions = NULL`` — and since that column is what
+        reaches `AgentStepExecutor` and therefore the knowledge Access /
+        Filter Layer, an authenticated experiment run bypassed the
+        `knowledge:read` gate entirely. The permissions were available at
+        the route the whole time (`routes/experiments.py` authenticates
+        with ``require_permission(EXPERIMENT_RUN)``); they were simply
+        dropped one call short, the identical shape of the defect
+        `P02-S04-M09-T08` found in ``AgentStepExecutor`` itself.
+        """
         experiment = await self._experiment_repository.get(experiment_id)
         if experiment is None:
             raise ExperimentNotFoundError(f"no experiment {experiment_id!r} to run")
@@ -222,6 +242,7 @@ class ExperimentRunOrchestrator:
                     definition_version=experiment.definition_version,
                     inputs=dict(experiment.pinned_conditions),
                     principal_id=principal_id,
+                    principal_permissions=principal_permissions,
                 )
                 await self._instance_repository.transition_to_running(
                     workflow_id=instance.workflow_id,

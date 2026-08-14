@@ -137,22 +137,41 @@ def knowledge_access_predicate(
     ``NULL`` for every document — so there is no principal-to-project
     binding to filter on that would not have to be invented.
 
-    **``None`` means unenforced, not denied.** ADR-0023 says "absence of
-    a permission is denial, never a default-allow", and that governs a
-    principal who *is* known: supply a real permission set without
-    ``knowledge:read`` and this denies. But no principal reaches most
-    retrieval paths yet, so treating "no identity supplied" as denial
-    would silently stop `se.delivery_pipeline`'s already-running
-    `requirements-analyst` step from retrieving anything — a behaviour
-    change to working code rather than a new control. ``None`` therefore
-    means "this path does not carry identity yet", the identical shape
-    ``principal_permissions=None`` already has throughout the Workflow
-    Engine. Product-owner decision, 2026-08-14, recorded in the risk
-    register as a disclosed gap: the control is genuinely off wherever
-    identity is not threaded, which is most paths today.
+    **``None`` denies — this gate fails closed (R-021, 2026-08-14).**
+
+    It did not originally. ``None`` first meant "this path does not
+    carry identity yet, so do not enforce", on the reasoning that no
+    principal reached most retrieval paths and denying would change the
+    behaviour of already-running code. A targeted R-021 investigation
+    then found that reasoning rested on a false premise: identity *was*
+    reaching the retrieval path on every route that mattered, and the
+    one exception was a **real, authenticated bypass** —
+    ``ExperimentRunOrchestrator.run`` took the principal's id but not
+    their permissions, so every instance created by
+    ``POST /experiments/{id}/run`` persisted
+    ``principal_permissions = NULL`` and retrieved knowledge with the
+    gate switched off. That bypass is fixed at its source, but it proved
+    the failure mode is real rather than theoretical: with a fail-open
+    default, any future creation path is one forgotten argument away
+    from silently disabling a security control, and nothing fails.
+
+    Failing closed inverts that. A forgotten argument now degrades the
+    prompt — :class:`~ai_os_kernel.context_manager.resolvers.
+    KnowledgeResolver` contributes no items and the agent still runs —
+    which is visible and safe, rather than invisible and permissive.
+    That asymmetry is what makes ADR-0023's "absence of a permission is
+    denial, never a default-allow" affordable here: the cost of denying
+    wrongly is a thinner context, not a failed workflow.
+
+    Every real caller supplies permissions: ``routes/workflows.py`` and
+    ``routes/experiments.py`` both pass ``security_context.permissions``,
+    and both triggers forward them onto the instance. A caller that
+    genuinely has no principal — a background composition, a test —
+    must now say so by passing an explicit empty ``frozenset()``, which
+    denies, or a real permission set, which does not.
     """
     if principal_permissions is None:
-        return sa.true()
+        return sa.false()
     if KNOWLEDGE_READ in principal_permissions:
         return sa.true()
     return sa.false()

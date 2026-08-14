@@ -43,7 +43,9 @@ from ai_os_kernel.llm_gateway.errors import LLMProviderError
 from ai_os_kernel.llm_gateway.router import RoutingDecision, StaticRouter
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.persistence.evaluation_schema import experiment_runs
+from ai_os_kernel.persistence.schema import workflow_instances
 from ai_os_kernel.sdk_adapters.experiment_run_recorder_adapter import SqlExperimentRunRecorder
+from ai_os_kernel.security_manager.permissions import KNOWLEDGE_READ
 from ai_os_kernel.workflow_engine.advance_runner import WorkflowAdvanceRunner
 from ai_os_kernel.workflow_engine.definition_catalog import SqlWorkflowDefinitionCatalog
 from ai_os_kernel.workflow_engine.lease import SqlWorkflowLeaseRepository, WorkflowLeaseService
@@ -282,6 +284,62 @@ def test_a_full_run_materialises_one_experiment_run_row_per_variant_and_replicat
                 f"model_alias={_ALIAS_ONE}",
                 f"model_alias={_ALIAS_TWO}",
             }
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def test_the_runners_permissions_reach_every_instance_this_run_creates(
+    database_url: str,
+) -> None:
+    """R-021 regression, proven against the real committed column.
+
+    This orchestrator took the principal's *id* but not their
+    permissions, so every instance it created persisted
+    `principal_permissions = NULL`. That column is what reaches
+    `AgentStepExecutor` and therefore the knowledge Access / Filter
+    Layer, so an authenticated `POST /experiments/{id}/run` retrieved
+    knowledge with the gate switched off — the permissions were
+    available at the route the whole time and were dropped one call
+    short.
+    """
+
+    async def _run() -> None:
+        engine = build_engine(database_url)
+        try:
+            experiment_id = await _create_experiment(
+                engine, variables={"model_alias": [_ALIAS_ONE, _ALIAS_TWO]}, runs_per_variant=3
+            )
+
+            # A principal id unique to this test: the module-scoped
+            # database is shared, and other tests in this file run as
+            # "runner-1" without permissions, so a broader query would
+            # pick up their rows and prove nothing.
+            await _build_orchestrator(engine).run(
+                experiment_id,
+                principal_id="runner-with-permissions",
+                principal_permissions=frozenset({KNOWLEDGE_READ}),
+            )
+
+            async with engine.connect() as connection:
+                stored = (
+                    (
+                        await connection.execute(
+                            sa.select(workflow_instances.c.principal_permissions).where(
+                                workflow_instances.c.principal_id == "runner-with-permissions"
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+
+            assert stored, "precondition failed: the run created no instances"
+            # Every one of them, not merely the first.
+            for permissions in stored:
+                assert permissions is not None
+                assert KNOWLEDGE_READ in permissions
         finally:
             await engine.dispose()
 

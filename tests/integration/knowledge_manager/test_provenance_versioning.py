@@ -31,7 +31,14 @@ from ai_os_kernel.persistence.knowledge_writer import SqlKnowledgeWriter
 from ai_os_kernel.retrieval.embedding_writer import SqlEmbeddingWriter
 from ai_os_kernel.retrieval.retrieval_service import RetrievalRequest, RetrievalService
 from ai_os_kernel.retrieval.vector_search import SqlVectorSearcher
+from ai_os_kernel.security_manager.permissions import KNOWLEDGE_READ
 from tests.integration._postgres_fixture import postgres_container
+
+# A real, permitted principal. The knowledge gate fails closed (R-021),
+# so a query with no identity retrieves nothing — these tests are about
+# provenance mechanics, not authorization, and a real caller carries
+# permissions.
+_PERMITTED = frozenset({KNOWLEDGE_READ})
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
@@ -120,7 +127,8 @@ def test_every_result_carries_a_real_chunk_strategy_version_and_matching_embeddi
                     embedding_model_id=model_id,
                     embedding_model_version="v1",
                     limit=10,
-                )
+                ),
+                principal_permissions=_PERMITTED,
             )
 
             assert len(results) == 1
@@ -163,7 +171,8 @@ def test_a_keyword_only_hit_has_no_fabricated_embedding_provenance(database_url:
                     embedding_model_id=model_id,
                     embedding_model_version="v1",
                     limit=10,
-                )
+                ),
+                principal_permissions=_PERMITTED,
             )
 
             assert len(results) == 1
@@ -234,7 +243,8 @@ def test_the_highest_index_generation_wins_deterministically(database_url: str) 
                     embedding_model_id=model_id,
                     embedding_model_version="v1",
                     limit=10,
-                )
+                ),
+                principal_permissions=_PERMITTED,
             )
 
             assert len(results) == 1

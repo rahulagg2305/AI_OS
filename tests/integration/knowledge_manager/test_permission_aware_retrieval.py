@@ -155,10 +155,18 @@ def test_a_denied_principal_is_trimmed_in_sql_not_after_ranking(database_url: st
     asyncio.run(_run())
 
 
-def test_no_principal_is_unenforced_not_denied(database_url: str) -> None:
-    """Zero regression, and the disclosed gap made explicit. `None`
-    means "this path does not carry identity yet", so every existing
-    caller behaves exactly as before this step."""
+def test_no_principal_is_denied_because_the_gate_fails_closed(database_url: str) -> None:
+    """R-021, 2026-08-14: this gate fails closed.
+
+    It first treated `None` as "unenforced", on the reasoning that no
+    principal reached most retrieval paths. The R-021 investigation
+    disproved that premise by finding a real, authenticated bypass
+    (`ExperimentRunOrchestrator` took the principal's id but not their
+    permissions), so a forgotten argument silently disabled a security
+    control. Failing closed makes the same mistake produce a thinner
+    context instead — visible and safe rather than invisible and
+    permissive.
+    """
 
     async def _run() -> None:
         engine = build_engine(database_url)
@@ -168,10 +176,17 @@ def test_no_principal_is_unenforced_not_denied(database_url: str) -> None:
                 source_uri="https://example.com/perm-unenforced.md",
                 content="the numbat inspected the lease reaper",
             )
+            # The content is genuinely retrievable with a real principal…
+            permitted = await _query_engine(engine).query(
+                _query("numbat"), principal_permissions=_PERMITTED
+            )
+            assert len(permitted) == 1
+
+            # …and genuinely denied without one.
             results = await _query_engine(engine).query(
                 _query("numbat"), principal_permissions=None
             )
-            assert len(results) == 1
+            assert results == []
         finally:
             await engine.dispose()
 

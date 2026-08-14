@@ -44,6 +44,7 @@ from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.retrieval.retrieval_service import RetrievalService
 from ai_os_kernel.retrieval.vector_search import SqlVectorSearcher
 from ai_os_kernel.sdk_adapters.pack_context import build_pack_context
+from ai_os_kernel.security_manager.permissions import KNOWLEDGE_READ
 from ai_os_kernel.workflow_engine.delivery_pipeline import build_pipeline_trigger
 from ai_os_kernel.workflow_engine.registry import InMemoryAgentRegistry
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
@@ -186,7 +187,16 @@ def test_real_indexed_knowledge_reaches_requirements_analyst_through_production_
                 knowledge_resolver=knowledge_resolver,
             )
 
-            result = await trigger({"requirement": "narwhal migration standard"}, "test-principal")
+            # A real principal, carrying real permissions — exactly what
+            # `routes/workflows.py` passes from its authenticated
+            # `SecurityContext`. Required since R-021 made the knowledge
+            # gate fail closed: a trigger with no identity now retrieves
+            # nothing, which the companion test below proves.
+            result = await trigger(
+                {"requirement": "narwhal migration standard"},
+                "test-principal",
+                principal_permissions=frozenset({KNOWLEDGE_READ}),
+            )
 
             steps = await SqlWorkflowInstanceRepository(engine).list_steps(
                 result.last_instance.workflow_id  # type: ignore[union-attr]
@@ -209,6 +219,28 @@ def test_real_indexed_knowledge_reaches_requirements_analyst_through_production_
             # own real query ("narwhal") already establishes.
             assert "narwhal migration standard" in analysis
             assert narwhal_chunk.content in analysis
+
+            # R-021, end to end through the identical production wiring:
+            # the same trigger, the same indexed content, the same real
+            # resolver — only the identity differs. A run carrying no
+            # principal must not reach the knowledge, because the gate
+            # fails closed. This is the assertion that would have failed
+            # while `ExperimentRunOrchestrator` was silently creating
+            # instances with `principal_permissions = NULL`.
+            unidentified = await trigger(
+                {"requirement": "narwhal migration standard"}, "test-principal"
+            )
+            unidentified_steps = await SqlWorkflowInstanceRepository(engine).list_steps(
+                unidentified.last_instance.workflow_id  # type: ignore[union-attr]
+            )
+            unidentified_analysis = next(
+                s.outputs for s in unidentified_steps if s.step_name == "requirements-analyst"
+            )
+            assert unidentified_analysis is not None
+            # The raw requirement still arrives (WorkflowStateResolver is
+            # unaffected) — only the knowledge is withheld.
+            assert "narwhal migration standard" in unidentified_analysis["analysis"]
+            assert narwhal_chunk.content not in unidentified_analysis["analysis"]
         finally:
             await engine.dispose()
 

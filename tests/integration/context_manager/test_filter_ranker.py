@@ -36,8 +36,14 @@ from ai_os_kernel.persistence.knowledge_keyword_search import SqlKeywordSearcher
 from ai_os_kernel.persistence.knowledge_writer import SqlKnowledgeWriter
 from ai_os_kernel.retrieval.retrieval_service import RetrievalService
 from ai_os_kernel.retrieval.vector_search import SqlVectorSearcher
+from ai_os_kernel.security_manager.permissions import KNOWLEDGE_READ
 from ai_os_kernel.workflow_engine.repository import SqlWorkflowInstanceRepository
 from tests.integration._postgres_fixture import postgres_container
+
+# A real, permitted principal. The knowledge gate fails closed
+# (R-021), so an assembly with no identity retrieves no knowledge —
+# these tests are about assembly and ranking, not authorization.
+_PERMITTED = frozenset({KNOWLEDGE_READ})
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
@@ -182,6 +188,7 @@ def test_real_cross_source_ranking_and_budget_trimming(
                 workflow_id=instance.workflow_id,
                 step_id="investigate",
                 knowledge_query="pangolin",
+                principal_permissions=_PERMITTED,
             )
             assembled = await manager.assemble(request)
 
@@ -215,6 +222,7 @@ def test_real_cross_source_ranking_and_budget_trimming(
                     step_id="investigate",
                     knowledge_query="pangolin",
                     token_budget=tight_budget,
+                    principal_permissions=_PERMITTED,
                 )
             )
             assert len(trimmed.items) == 1

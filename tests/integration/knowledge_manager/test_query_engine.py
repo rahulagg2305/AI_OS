@@ -26,7 +26,13 @@ from ai_os_kernel.persistence.knowledge_keyword_search import SqlKeywordSearcher
 from ai_os_kernel.persistence.knowledge_writer import SqlKnowledgeWriter
 from ai_os_kernel.retrieval.retrieval_service import RetrievalRequest, RetrievalService
 from ai_os_kernel.retrieval.vector_search import SqlVectorSearcher
+from ai_os_kernel.security_manager.permissions import KNOWLEDGE_READ
 from tests.integration._postgres_fixture import postgres_container
+
+# A real, permitted principal. The knowledge gate fails closed (R-021),
+# so a query with no identity retrieves nothing — these tests are about
+# query mechanics, not authorization.
+_PERMITTED = frozenset({KNOWLEDGE_READ})
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
@@ -81,7 +87,7 @@ def test_query_returns_real_provenance_for_a_fresh_document(database_url: str) -
                     vector_searcher=SqlVectorSearcher(engine),
                 ),
             )
-            results = await query_engine.query(_query("wallaby"))
+            results = await query_engine.query(_query("wallaby"), principal_permissions=_PERMITTED)
 
             assert len(results) == 1
             result = results[0]
@@ -133,7 +139,9 @@ def test_query_excludes_a_superseded_chunk_that_the_raw_searcher_still_returns(
                     vector_searcher=SqlVectorSearcher(engine),
                 ),
             )
-            enriched_results = await query_engine.query(_query("pangolin"))
+            enriched_results = await query_engine.query(
+                _query("pangolin"), principal_permissions=_PERMITTED
+            )
             assert enriched_results == []
 
             # The disclosed, narrower scope: bypassing QueryEngine, the
