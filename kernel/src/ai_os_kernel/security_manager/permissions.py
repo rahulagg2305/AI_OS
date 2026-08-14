@@ -120,6 +120,22 @@ APPROVAL_READ = "approval:read"
 # (viewer/approver read only) — reusing §5's documented vocabulary
 # rather than inventing a third string.
 EXPERIMENT_RUN = "experiment:run"
+# `knowledge:read` is **not invented here** — it is already in the
+# closed permission vocabulary ADR-0023 requires be "published in the
+# SDK": `platform_sdk/schemas/manifest.schema.json` has listed
+# `knowledge:read`/`knowledge:write` since the schema was written, so a
+# pack could already declare it while nothing Kernel-side could enforce
+# it. Added (`P02-S04-M09-T08`) the moment a real caller — the Access /
+# Filter Layer in `knowledge_manager.query_engine` — first needs to
+# enforce it, the identical "no constant until a real enforcement point
+# exists" discipline every permission above already follows.
+#
+# Only the read half is modelled: nothing in this codebase writes
+# knowledge on behalf of a principal (ingestion is a platform startup
+# scan with no principal at all), so a `knowledge:write` constant would
+# be a permission with no enforcement point — exactly what the rule
+# above exists to prevent.
+KNOWLEDGE_READ = "knowledge:read"
 
 # authentication_authorization.md §4.2's role table, reduced to the
 # permissions modelled above. Unknown roles grant nothing (deny by
@@ -132,12 +148,31 @@ EXPERIMENT_RUN = "experiment:run"
 # implicitly `admin` ("All") — neither viewer, operator, nor approver's
 # own documented grants say anything about configuration, the identical
 # reasoning already applied to packs.
+#
+# KNOWLEDGE_READ (`P02-S04-M09-T08`) is granted to **every** role, which
+# is a deliberate departure from the "nothing documented, no grant"
+# discipline above and is documented rather than silent: §4.2's role
+# table says nothing about knowledge at all, so that discipline offers
+# no answer here. Knowledge is the platform's own approved
+# documentation — `knowledge_manager.md` §3 puts its authority at
+# "Highest" and §6 calls repository documentation "the primary source of
+# truth" — and no document anywhere suggests reading it is privileged or
+# ranks it against workflow/evaluation reads. Product-owner decision,
+# 2026-08-14. The gate therefore bites on unauthenticated and
+# unpermissioned callers, not on ordinary roles.
 _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
-    "viewer": frozenset({WORKFLOW_READ, EVALUATION_READ}),
+    "viewer": frozenset({WORKFLOW_READ, EVALUATION_READ, KNOWLEDGE_READ}),
     "operator": frozenset(
-        {WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ, EXPERIMENT_RUN}
+        {
+            WORKFLOW_READ,
+            WORKFLOW_START,
+            WORKFLOW_CONTROL,
+            EVALUATION_READ,
+            EXPERIMENT_RUN,
+            KNOWLEDGE_READ,
+        }
     ),
-    "approver": frozenset({WORKFLOW_READ, EVALUATION_READ, APPROVAL_READ}),
+    "approver": frozenset({WORKFLOW_READ, EVALUATION_READ, APPROVAL_READ, KNOWLEDGE_READ}),
     "maintainer": frozenset(
         {
             WORKFLOW_READ,
@@ -149,6 +184,7 @@ _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             CONFIG_MANAGE,
             EVALUATION_READ,
             EXPERIMENT_RUN,
+            KNOWLEDGE_READ,
         }
     ),
     "admin": frozenset(
@@ -164,6 +200,7 @@ _ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             EVALUATION_READ,
             APPROVAL_READ,
             EXPERIMENT_RUN,
+            KNOWLEDGE_READ,
         }
     ),
 }

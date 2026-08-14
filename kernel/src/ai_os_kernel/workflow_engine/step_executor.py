@@ -241,13 +241,19 @@ class AgentStepExecutor:
             principal_permissions=principal_permissions,
             workflow_permissions=workflow_permissions,
         )
-        inputs = await self._invocation_inputs(step, workflow_id)
+        inputs = await self._invocation_inputs(
+            step, workflow_id, principal_permissions=principal_permissions
+        )
         outputs = await agent.execute(inputs)
         self._validate_output(agent, outputs)
         return outputs
 
     async def _invocation_inputs(
-        self, step: WorkflowStep, workflow_id: str | None
+        self,
+        step: WorkflowStep,
+        workflow_id: str | None,
+        *,
+        principal_permissions: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         inputs: dict[str, Any] = {"stepId": step.id, "agentId": step.agent_id}
         if workflow_id is not None:
@@ -259,8 +265,19 @@ class AgentStepExecutor:
         if step.model_alias is not None:
             inputs["modelAlias"] = step.model_alias
         if self._context_manager is not None and workflow_id is not None:
+            # `principal_permissions` is carried into the context request
+            # (`P02-S04-M09-T08`) so §5's Access / Filter Layer can bind
+            # inside `QueryEngine`. This method already had the real
+            # permissions in scope and simply dropped them here, which is
+            # why knowledge reached a real LLM prompt with no
+            # authorization step anywhere in the path.
             inputs["context"] = await self._context_manager.assemble(
-                ContextRequest(workflow_id=workflow_id, step_id=step.id, agent_id=step.agent_id)
+                ContextRequest(
+                    workflow_id=workflow_id,
+                    step_id=step.id,
+                    agent_id=step.agent_id,
+                    principal_permissions=principal_permissions,
+                )
             )
         return inputs
 

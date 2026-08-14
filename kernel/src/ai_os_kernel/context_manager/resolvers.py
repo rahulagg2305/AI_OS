@@ -299,6 +299,12 @@ class KnowledgeResolver:
             )
         )
 
+        # `P02-S04-M09-T08`: the requesting principal's own permissions
+        # reach §5's Access / Filter Layer here. This resolver applies no
+        # filtering of its own — the control is a SQL predicate inside
+        # `QueryEngine`, so it cannot leak through ranking (ADR-0013),
+        # and a resolver-side filter would be exactly the post-filtering
+        # search_vector_search.md §4 rules out.
         results = await self._query_engine.query(
             RetrievalRequest(
                 query_text=request.knowledge_query,
@@ -306,7 +312,8 @@ class KnowledgeResolver:
                 embedding_model_id=embedding_response.model_id,
                 embedding_model_version=embedding_response.model_version,
                 limit=self._limit,
-            )
+            ),
+            principal_permissions=request.principal_permissions,
         )
 
         return [

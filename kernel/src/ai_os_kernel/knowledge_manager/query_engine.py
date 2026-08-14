@@ -77,6 +77,7 @@ from ai_os_kernel.persistence.knowledge_schema import chunks as chunks_table
 from ai_os_kernel.persistence.knowledge_schema import documents as documents_table
 from ai_os_kernel.persistence.knowledge_schema import embeddings as embeddings_table
 from ai_os_kernel.retrieval.retrieval_service import RetrievalRequest, RetrievalService
+from ai_os_kernel.security_manager.permissions import KNOWLEDGE_READ
 
 
 class QueryError(Exception):
@@ -108,6 +109,55 @@ class KnowledgeQueryResult(BaseModel):
     index_generation: int | None
 
 
+def knowledge_access_predicate(
+    principal_permissions: frozenset[str] | None,
+) -> sa.ColumnElement[bool]:
+    """§5's **Access / Filter Layer** (`P02-S04-M09-T08`), as a real SQL
+    predicate.
+
+    **A predicate, not a post-filter, and that is a requirement rather
+    than a style choice.** search_vector_search.md §4 specifies "Access
+    Control — applied AS SQL PREDICATES, not post-filtering", and
+    ADR-0013 chose pgvector partly for "permission trimming that cannot
+    leak through ranking". Returning ``sa.false()`` keeps the trimming
+    inside the same statement that resolves provenance and ordering, so
+    a denied principal's rows are never materialised, never ranked, and
+    never counted — none of which a Python-side filter could promise.
+
+    **Binary today, and honestly so.** ``knowledge.documents`` carries
+    ``source_uri``, ``trust``, ``project_id`` and ``archived_at`` — no
+    owner or classification column — so there is nothing to discriminate
+    *between* documents on. A permitted principal sees every
+    non-archived document. ``project_id`` scoping is the real documented
+    next step (`knowledge/knowledge_base_structure.md` §3: keeping
+    project trees separate "prevents one project's content from being
+    retrieved into another's context") and is **not implementable
+    today**: ``workflow_instances`` has no ``project_id``, nothing in
+    the Workflow Engine carries one, and the ingestion scan writes
+    ``NULL`` for every document — so there is no principal-to-project
+    binding to filter on that would not have to be invented.
+
+    **``None`` means unenforced, not denied.** ADR-0023 says "absence of
+    a permission is denial, never a default-allow", and that governs a
+    principal who *is* known: supply a real permission set without
+    ``knowledge:read`` and this denies. But no principal reaches most
+    retrieval paths yet, so treating "no identity supplied" as denial
+    would silently stop `se.delivery_pipeline`'s already-running
+    `requirements-analyst` step from retrieving anything — a behaviour
+    change to working code rather than a new control. ``None`` therefore
+    means "this path does not carry identity yet", the identical shape
+    ``principal_permissions=None`` already has throughout the Workflow
+    Engine. Product-owner decision, 2026-08-14, recorded in the risk
+    register as a disclosed gap: the control is genuinely off wherever
+    identity is not threaded, which is most paths today.
+    """
+    if principal_permissions is None:
+        return sa.true()
+    if KNOWLEDGE_READ in principal_permissions:
+        return sa.true()
+    return sa.false()
+
+
 class QueryEngine:
     """Composes the real :class:`RetrievalService` with a real
     provenance join — the one interface this ticket's own Goal names."""
@@ -116,7 +166,12 @@ class QueryEngine:
         self._engine = engine
         self._retrieval_service = retrieval_service
 
-    async def query(self, request: RetrievalRequest) -> list[KnowledgeQueryResult]:
+    async def query(
+        self,
+        request: RetrievalRequest,
+        *,
+        principal_permissions: frozenset[str] | None = None,
+    ) -> list[KnowledgeQueryResult]:
         fused_results = await self._retrieval_service.search(request)
         if not fused_results:
             return []
@@ -156,6 +211,10 @@ class QueryEngine:
                             )
                             .where(chunks_table.c.chunk_id.in_(chunk_ids))
                             .where(documents_table.c.archived_at.is_(None))
+                            # §5's Access / Filter Layer, in the same
+                            # statement that resolves provenance and
+                            # ordering — see `knowledge_access_predicate`.
+                            .where(knowledge_access_predicate(principal_permissions))
                             # Deterministic (ADR-0022) even in the
                             # currently-unreachable case of more than one
                             # embedding row for the same chunk under this

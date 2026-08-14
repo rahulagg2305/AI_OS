@@ -142,6 +142,16 @@ class ContextRequest(BaseModel):
     # source contributing nothing is not a failure" shape every other
     # resolver in this package already establishes, not an error.
     knowledge_query: str | None = None
+    # Added at P02-S04-M09-T08: the real principal's own permissions,
+    # carried so §5's Access / Filter Layer can bind as a SQL predicate
+    # inside `QueryEngine`. `AgentStepExecutor` already receives these
+    # (`P03-S05-M14-T09`) and simply dropped them when building this
+    # request. `None` means "this path does not carry identity yet" —
+    # unenforced, not denied — the identical meaning
+    # `principal_permissions=None` already has throughout the Workflow
+    # Engine; see `knowledge_access_predicate` for why, and for the
+    # disclosed gap that creates.
+    principal_permissions: frozenset[str] | None = None
 
 
 class AssembledContext(BaseModel):

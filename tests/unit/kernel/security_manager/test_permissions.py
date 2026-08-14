@@ -8,6 +8,7 @@ from ai_os_kernel.security_manager.permissions import (
     CONFIG_READ,
     EVALUATION_READ,
     EXPERIMENT_RUN,
+    KNOWLEDGE_READ,
     PACK_MANAGE,
     PACK_READ,
     SECRET_ACCESS,
@@ -21,21 +22,28 @@ from ai_os_kernel.security_manager.permissions import (
 def test_viewer_can_read_but_not_start_workflows() -> None:
     permissions = permissions_for_roles(["viewer"])
 
-    assert permissions == frozenset({WORKFLOW_READ, EVALUATION_READ})
+    assert permissions == frozenset({WORKFLOW_READ, EVALUATION_READ, KNOWLEDGE_READ})
 
 
 def test_operator_can_read_start_and_control_workflows() -> None:
     permissions = permissions_for_roles(["operator"])
 
     assert permissions == frozenset(
-        {WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ, EXPERIMENT_RUN}
+        {
+            WORKFLOW_READ,
+            WORKFLOW_START,
+            WORKFLOW_CONTROL,
+            EVALUATION_READ,
+            EXPERIMENT_RUN,
+            KNOWLEDGE_READ,
+        }
     )
 
 
 def test_approver_can_read_but_not_start_workflows() -> None:
     permissions = permissions_for_roles(["approver"])
 
-    assert permissions == frozenset({WORKFLOW_READ, EVALUATION_READ, APPROVAL_READ})
+    assert permissions == frozenset({WORKFLOW_READ, EVALUATION_READ, APPROVAL_READ, KNOWLEDGE_READ})
 
 
 def test_maintainer_and_admin_can_read_start_and_control_workflows() -> None:
@@ -50,6 +58,7 @@ def test_maintainer_and_admin_can_read_start_and_control_workflows() -> None:
             CONFIG_MANAGE,
             EVALUATION_READ,
             EXPERIMENT_RUN,
+            KNOWLEDGE_READ,
         }
     )
     assert permissions_for_roles(["admin"]) == frozenset(
@@ -65,6 +74,7 @@ def test_maintainer_and_admin_can_read_start_and_control_workflows() -> None:
             EVALUATION_READ,
             APPROVAL_READ,
             EXPERIMENT_RUN,
+            KNOWLEDGE_READ,
         }
     )
 
@@ -139,7 +149,14 @@ def test_multiple_roles_union_their_permissions() -> None:
     permissions = permissions_for_roles(["viewer", "operator"])
 
     assert permissions == frozenset(
-        {WORKFLOW_READ, WORKFLOW_START, WORKFLOW_CONTROL, EVALUATION_READ, EXPERIMENT_RUN}
+        {
+            WORKFLOW_READ,
+            WORKFLOW_START,
+            WORKFLOW_CONTROL,
+            EVALUATION_READ,
+            EXPERIMENT_RUN,
+            KNOWLEDGE_READ,
+        }
     )
 
 
