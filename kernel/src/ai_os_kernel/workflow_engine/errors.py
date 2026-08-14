@@ -334,15 +334,29 @@ class QualityGateFailedError(Exception):
     structured outcome — the identical "structured, not re-parsed from
     the message" shape :class:`ParallelStepFailedError.results` already
     establishes. ``None`` (the default) for every single-gate failure
-    from before this step — genuinely unaffected."""
+    from before this step — genuinely unaffected.
+
+    ``duration_ms`` (added ``P02-S06-M15-T11``) is how long the gate
+    genuinely took before it failed. Carried on the exception because a
+    blocking failure never reaches the outputs dict — the raise happens
+    first — so this is the only path by which a *failed* gate's real
+    duration can reach ``evaluation.gate_results``. ``None`` for any
+    caller that does not measure, which keeps every existing raise site
+    valid and unchanged."""
 
     def __init__(
-        self, message: str, *, gate_step_id: str, results: list[dict[str, Any]] | None = None
+        self,
+        message: str,
+        *,
+        gate_step_id: str,
+        results: list[dict[str, Any]] | None = None,
+        duration_ms: int | None = None,
     ) -> None:
         super().__init__(message)
         self.gate_step_id = gate_step_id
         self.retriable = True
         self.results = results
+        self.duration_ms = duration_ms
 
 
 class WorkflowLeaseUnavailableError(Exception):

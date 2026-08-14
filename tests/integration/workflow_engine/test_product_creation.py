@@ -392,7 +392,10 @@ async def test_the_eight_step_workflow_genuinely_runs_to_completion(
         child_gate = next(
             s.outputs for s in child_steps if s.step_name == "quality-gate-tests-pass"
         )
-        assert child_gate == {
+        assert child_gate is not None
+        # `durationMs` excluded: `P02-S06-M15-T11` made it a real
+        # measurement, so equality on it would be time-dependent.
+        assert {k: v for k, v in child_gate.items() if k != "durationMs"} == {
             "gateId": "quality-gate-tests-pass",
             "sourceStepId": "qa-test",
             "passed": True,

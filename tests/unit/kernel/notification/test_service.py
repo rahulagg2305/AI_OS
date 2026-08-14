@@ -18,6 +18,9 @@ from ai_os_kernel.event_bus.bus import InProcessEventBus
 from ai_os_kernel.event_bus.models import Event
 from ai_os_kernel.notification.models import Notification
 from ai_os_kernel.notification.service import NotificationService
+from ai_os_kernel.notification.webhook import (
+    _DEFAULT_TIMEOUT_SECONDS as _DEFAULT_WEBHOOK_TIMEOUT_SECONDS,
+)
 from ai_os_kernel.notification.webhook import WebhookChannel
 
 
@@ -39,7 +42,24 @@ class _FakeNotificationDeliveryRecorder:
 # own per-subscriber queue + consumer task, `event_bus/bus.py`'s own
 # docstring) — a short, bounded real wait for the real HTTP POST to
 # land, not a fixed sleep guessing at timing.
-_POLL_TIMEOUT_SECONDS = 2.0
+#
+# **Derived from the channel's own timeout, never hand-picked
+# (`P07-S03-M42-T03`, R-015's 5th occurrence).** This was a flat `2.0`
+# while `WebhookChannel`'s own per-delivery budget is `5.0`, so a test
+# awaiting *two* sequential deliveries could give up after 2s while
+# every component was still behaving exactly as designed — the
+# assertion failed for a reason that had nothing to do with the code
+# under test. It passed 5/5 on an idle machine and failed only under
+# concurrent load, which is precisely why it survived so long.
+#
+# The fix is the link, not a bigger number: the deadline is now
+# computed from the real production constant, so raising or lowering
+# that timeout can never again silently outrun this file's patience.
+_MAX_SEQUENTIAL_DELIVERIES_AWAITED = 2
+_POLL_GRACE_SECONDS = 1.0
+_POLL_TIMEOUT_SECONDS = (
+    _DEFAULT_WEBHOOK_TIMEOUT_SECONDS * _MAX_SEQUENTIAL_DELIVERIES_AWAITED + _POLL_GRACE_SECONDS
+)
 _POLL_INTERVAL_SECONDS = 0.02
 
 

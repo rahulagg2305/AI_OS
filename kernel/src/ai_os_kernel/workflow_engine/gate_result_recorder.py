@@ -125,6 +125,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ai_os_kernel.persistence.evaluation_schema import gate_results
 from ai_os_kernel.workflow_engine.errors import GateResultRecordingError
 from ai_os_kernel.workflow_engine.ids import new_gate_result_id
+from ai_os_kernel.workflow_engine.quality_gate import _DURATION_MS_FIELD
 from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
 
 _SEVERITY_BLOCKING = "blocking"
@@ -151,6 +152,35 @@ class GateResultRecord(BaseModel):
     duration_ms: int
 
 
+def _resolve_duration_ms(step: WorkflowStepRecord) -> int:
+    """The gate's own measured duration, falling back to the step
+    timestamps.
+
+    **Why a fallback exists at all.** Deriving this from
+    ``completed_at - started_at`` was the only source until
+    ``P02-S06-M15-T11``, and it was structurally always ``0``: both real
+    write paths stamp those two columns in the same statement. So
+    `QualityGateStepExecutor` now measures itself and publishes
+    ``durationMs`` — in ``outputs`` when the gate resolves, and on the
+    raised ``QualityGateFailedError`` (hence in ``error``) when a
+    blocking gate fails before any outputs exist.
+
+    The timestamp derivation is kept as the last resort rather than
+    deleted, because a gate recorded by some future path that does not
+    measure itself should degrade to the old, honest behaviour instead
+    of raising.
+    """
+    for source in (step.outputs, step.error):
+        if not source:
+            continue
+        measured = source.get(_DURATION_MS_FIELD)
+        if isinstance(measured, int) and not isinstance(measured, bool) and measured >= 0:
+            return measured
+    if step.completed_at is None:
+        return 0
+    return max(0, int((step.completed_at - step.started_at).total_seconds() * 1000))
+
+
 class GateResultRecorder(Protocol):
     """Persistence boundary for recording one resolved ``quality_gate``
     step's real outcome — the seam a fake implementation substitutes in
@@ -171,11 +201,7 @@ class SqlGateResultRecorder:
     async def record(
         self, *, workflow_id: str, gate_version: str, step: WorkflowStepRecord
     ) -> None:
-        duration_ms = (
-            int((step.completed_at - step.started_at).total_seconds() * 1000)
-            if step.completed_at is not None
-            else 0
-        )
+        duration_ms = _resolve_duration_ms(step)
         messages: list[Any] = [step.error["message"]] if step.error is not None else []
         severity = (step.outputs or {}).get("severity", _SEVERITY_BLOCKING)
 

@@ -89,9 +89,11 @@ the Gate Registry itself was built under, `P02-S06-M15-T05`).
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple
 
+from ai_os_kernel.quality_gate_engine.observability import gate_span, record_gate_resolution
 from ai_os_kernel.quality_gate_engine.registry import GateRegistry
 from ai_os_kernel.workflow_engine.errors import QualityGateFailedError
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowStep
@@ -100,6 +102,24 @@ from ai_os_kernel.workflow_engine.step_record import WorkflowStepRecord
 
 _SEVERITY_BLOCKING = "blocking"
 _SEVERITY_WARNING = "warning"
+
+# The key this executor publishes its own measured duration under,
+# read back by `SqlGateResultRecorder` (`P02-S06-M15-T11`).
+# camelCase to match every other key in this dict (`gateId`,
+# `sourceStepId`, `gateVersion`), which is the shape already
+# persisted in `workflow_steps.outputs`.
+_DURATION_MS_FIELD = "durationMs"
+
+
+def _elapsed_ms(started: float) -> int:
+    """Whole milliseconds since ``started``, never negative.
+
+    Rounded rather than truncated so a real sub-millisecond gate
+    records ``0`` honestly instead of a fabricated ``1`` — and so a
+    genuinely fast gate is distinguishable from the old,
+    structurally-always-zero value only by the rest of the pipeline
+    now being real."""
+    return max(0, round((time.perf_counter() - started) * 1000))
 
 
 class GateCheck(NamedTuple):
@@ -228,6 +248,23 @@ class QualityGateStepExecutor:
                 f"'{step.type.value}' — it only handles quality_gate steps"
             )
 
+        # `P02-S06-M15-T11`: the gate times itself. `duration_ms` used
+        # to be derived in `SqlGateResultRecorder` from
+        # `workflow_steps.completed_at - started_at`, but both real
+        # write paths stamp those two columns in the same statement, so
+        # the subtraction was structurally always zero — a real,
+        # disclosed hole in quality_gate_engine.md §9's own
+        # "every gate execution must record ... " requirement.
+        # `perf_counter` because this is an elapsed-time measurement,
+        # not a wall-clock timestamp.
+        started = time.perf_counter()
+
+        with gate_span(step.id):
+            return await self._execute_within_span(step, workflow_id, started=started)
+
+    async def _execute_within_span(
+        self, step: WorkflowStep, workflow_id: str | None, *, started: float
+    ) -> dict[str, Any]:
         checks = self._gate_checks.get(step.id)
         if checks is not None:
             if workflow_id is None:
@@ -235,7 +272,7 @@ class QualityGateStepExecutor:
                     f"quality gate step '{step.id}' requires a real workflow_id to read "
                     "its declared checks' own source steps' persisted output"
                 )
-            return await self._execute_concurrent_checks(step, checks, workflow_id)
+            return await self._execute_concurrent_checks(step, checks, workflow_id, started=started)
 
         source_step_id = self._gate_sources.get(step.id)
         if source_step_id is None:
@@ -270,9 +307,19 @@ class QualityGateStepExecutor:
             )
 
         if not passed and severity == _SEVERITY_BLOCKING:
+            record_gate_resolution(
+                step_id=step.id,
+                gate_id=gate_id,
+                gate_version=gate_version,
+                passed=False,
+                severity=severity,
+                duration_ms=_elapsed_ms(started),
+                blocked=True,
+            )
             raise QualityGateFailedError(
                 f"quality gate step '{step.id}' blocked progression: {failure_detail}",
                 gate_step_id=step.id,
+                duration_ms=_elapsed_ms(started),
             )
 
         outputs: dict[str, Any] = {
@@ -287,10 +334,25 @@ class QualityGateStepExecutor:
             # raised above) — genuinely recorded, never blocks
             # progression. See this class's own docstring.
             outputs["severity"] = _SEVERITY_WARNING
+        duration_ms = _elapsed_ms(started)
+        outputs[_DURATION_MS_FIELD] = duration_ms
+        record_gate_resolution(
+            step_id=step.id,
+            gate_id=gate_id,
+            gate_version=gate_version,
+            passed=passed,
+            severity=severity,
+            duration_ms=duration_ms,
+        )
         return outputs
 
     async def _execute_concurrent_checks(
-        self, step: WorkflowStep, checks: Sequence[GateCheck], workflow_id: str
+        self,
+        step: WorkflowStep,
+        checks: Sequence[GateCheck],
+        workflow_id: str,
+        *,
+        started: float,
     ) -> dict[str, Any]:
         # execute() already refused a None gate_registry before this is
         # ever called -- narrowed to a local so each concurrent check
@@ -316,9 +378,14 @@ class QualityGateStepExecutor:
                 f"{len(blocking_failures)} of {len(results)} declared gates failed",
                 gate_step_id=step.id,
                 results=list(results),
+                duration_ms=_elapsed_ms(started),
             )
 
-        return {"gates": list(results), self._success_field: True}
+        return {
+            "gates": list(results),
+            self._success_field: True,
+            _DURATION_MS_FIELD: _elapsed_ms(started),
+        }
 
     async def _evaluate_one_check(
         self, check: GateCheck, steps: Sequence[WorkflowStepRecord], gate_registry: GateRegistry

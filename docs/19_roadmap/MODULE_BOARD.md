@@ -7,7 +7,7 @@
 
 # AI_OS - Module Board
 
-**Generated:** 2026-08-13. Replaces `feature_inventory.md` §5's hand-maintained completion table.
+**Generated:** 2026-08-14. Replaces `feature_inventory.md` §5's hand-maintained completion table.
 
 Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retired and never reused.
 
@@ -27,7 +27,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M12 | Evaluation Engine | P04 | 16 | 16 | 100% |
 | M13 | Capability Manager | P02 | 8 | 8 | 100% |
 | M14 | Security Manager | P03+P07 | 12 | 12 | 100% |
-| M15 | Quality Gate Engine | P02 | 11 | 9 | 82% |
+| M15 | Quality Gate Engine | P02 | 11 | 11 | 100% |
 | M16 | Traceability Engine | P04 | 5 | 5 | 100% |
 | M17 | Event Bus | P02 | 5 | 5 | 100% |
 | M18 | Tool Invoker (SDK interface) | P02 | 4 | 4 | 100% |
@@ -35,7 +35,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M20 | Sandbox / SandboxExecutor | P03 | 5 | 4 | 90% |
 | M21 | Storage Service | P02 | 3 | 1 | 33% |
 | M22 | Notification Service | P06 | 2 | 2 | 100% |
-| M23 | Caching (Redis) | P02 | 4 | 2 | 50% |
+| M23 | Caching (Redis) | P02 | 4 | 3 | 75% |
 | M24 | Git Integration Service | P03 | 3 | 3 | 100% |
 | M25 | Speech Gateway | P06 | 1 | 0 | 50% |
 | M26 | Document Processing | P05 | 2 | 2 | 100% |
@@ -53,7 +53,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M39 | Dashboard | P06 | 3 | 3 | 100% |
 | M40 | Deployment & Infrastructure | P01+P07 | 9 | 6 | 78% |
 | M41 | Threat Controls (T1-T12) | P03 | 2 | 2 | 100% |
-| M42 | Testing Infrastructure | P01+P07 | 8 | 6 | 81% |
+| M42 | Testing Infrastructure | P01+P07 | 8 | 7 | 94% |
 | M43 | CI Pipeline | P01 | 5 | 5 | 100% |
 | M44 | Platform-wide AiOsError hierarchy | P02 | 1 | 1 | 100% |
 | M45 | Roadmap & Process System | P09 | 5 | 5 | 100% |

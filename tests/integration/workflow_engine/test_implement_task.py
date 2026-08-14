@@ -222,7 +222,13 @@ async def test_the_happy_path_completes_without_looping(tmp_path: Path, database
         assert qa_test_output["passed"] is True
 
         gate_output = next(s.outputs for s in steps if s.step_name == "quality-gate-tests-pass")
-        assert gate_output == {
+        assert gate_output is not None
+        # `durationMs` is excluded deliberately: `P02-S06-M15-T11` made it
+        # a real measurement, so asserting it by equality would make this
+        # test time-dependent. Its realness is proven directly in
+        # `tests/unit/kernel/workflow_engine/test_quality_gate_step_executor.py`
+        # and against real Postgres in `test_gate_result_recorder.py`.
+        assert {k: v for k, v in gate_output.items() if k != "durationMs"} == {
             "gateId": "quality-gate-tests-pass",
             "sourceStepId": "qa-test",
             "passed": True,
@@ -275,7 +281,10 @@ async def test_a_failing_first_attempt_genuinely_loops_back_and_recovers(
         assert qa_test_by_attempt[2]["passed"] is True
 
         final_gate = next(s.outputs for s in steps if s.step_name == "quality-gate-tests-pass")
-        assert final_gate == {
+        assert final_gate is not None
+        # `durationMs` excluded: `P02-S06-M15-T11` made it a real
+        # measurement, so equality on it would be time-dependent.
+        assert {k: v for k, v in final_gate.items() if k != "durationMs"} == {
             "gateId": "quality-gate-tests-pass",
             "sourceStepId": "qa-test",
             "passed": True,

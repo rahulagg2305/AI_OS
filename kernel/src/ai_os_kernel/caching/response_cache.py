@@ -24,8 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from redis.asyncio import Redis
-
+from ai_os_kernel.caching.cache import Cache
 from ai_os_kernel.llm_gateway.models import LLMRequest, LLMResponse
 from ai_os_kernel.observability.logging import get_logger
 
@@ -66,14 +65,22 @@ def _is_experiment_call(request: LLMRequest) -> bool:
 
 
 class ResponseCache:
-    """Redis-backed cache over real ``LLMRequest`` → ``LLMResponse``
+    """Backend-agnostic cache over real ``LLMRequest`` → ``LLMResponse``
     calls. Adds no HTTP/model logic of its own — purely a real,
-    structured-logging wrapper over the injected Redis client, the
-    identical "thin wrapper over an existing primitive" shape this
-    codebase's own background-loop components already establish."""
+    structured-logging wrapper over the injected `Cache`, the identical
+    "thin wrapper over an existing primitive" shape this codebase's own
+    background-loop components already establish."""
 
-    def __init__(self, client: Redis) -> None:
-        self._client = client
+    def __init__(self, cache: Cache) -> None:
+        """Takes the `Cache` Protocol, not a `Redis` (`P02-S07-M23-T03`).
+
+        This class was bound directly to a real Redis client, so every
+        test touching it needed a real container — the reason nothing
+        outside this package ever exercised caching. `RedisCache` is the
+        production implementation; `InMemoryCache` is the real fake
+        ADR-0004 asks for at this seam.
+        """
+        self._cache = cache
 
     async def get(self, request: LLMRequest) -> LLMResponse | None:
         """A real cache hit or miss, recorded via structured logging.
@@ -88,7 +95,7 @@ class ResponseCache:
             return None
 
         key = _cache_key(request)
-        raw = await self._client.get(key)
+        raw = await self._cache.get(key)
         if raw is None:
             _logger.info("response_cache.miss", key=key)
             return None
@@ -107,4 +114,6 @@ class ResponseCache:
             return
 
         key = _cache_key(request)
-        await self._client.set(key, response.model_dump_json(), ex=RESPONSE_CACHE_TTL_SECONDS)
+        await self._cache.set(
+            key, response.model_dump_json().encode(), ttl_seconds=RESPONSE_CACHE_TTL_SECONDS
+        )

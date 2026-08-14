@@ -21,6 +21,7 @@ import docker.errors
 import pytest
 from testcontainers.community.redis import RedisContainer
 
+from ai_os_kernel.caching.cache import RedisCache
 from ai_os_kernel.caching.client import build_redis_client
 from ai_os_kernel.caching.response_cache import ResponseCache
 from ai_os_kernel.llm_gateway.models import (
@@ -51,7 +52,11 @@ def redis_url() -> Generator[str, None, None]:
 
 @pytest.fixture
 def cache(redis_url: str) -> ResponseCache:
-    return ResponseCache(build_redis_client(redis_url))
+    # `P02-S07-M23-T03`: `ResponseCache` now takes the `Cache`
+    # Protocol, so the real Redis client is wrapped in its real
+    # production adapter. This test still exercises real Redis
+    # end to end — the seam changed, the realism did not.
+    return ResponseCache(RedisCache(build_redis_client(redis_url)))
 
 
 def _request(*, experiment_id: str | None = None, content: str = "hello") -> LLMRequest:

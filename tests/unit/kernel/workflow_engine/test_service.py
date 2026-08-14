@@ -685,6 +685,63 @@ async def test_advance_records_a_failed_attempt_when_the_executor_raises_then_re
 
 
 @pytest.mark.asyncio
+async def test_a_blocking_gates_measured_duration_reaches_the_recorded_error() -> None:
+    """`P02-S06-M15-T11`, closing the half of it that the production
+    path did not actually deliver.
+
+    `QualityGateStepExecutor` sets `duration_ms` on the
+    `QualityGateFailedError` it raises, but `advance` used to build its
+    error dict as `{"type", "message"}` only — so the measurement was
+    written and never read, and `SqlGateResultRecorder` fell back to
+    `completed_at - started_at`, which `record_failed_attempt` stamps
+    from a single `occurred_at`. A blocking gate therefore still
+    persisted `duration_ms = 0`, the exact bug the step exists to fix.
+
+    This asserts the real, produced shape — deliberately *not* a
+    hand-built error dict, which is what let the gap survive.
+    """
+    current = _instance(
+        workflow_id="wf_fake", status=WorkflowInstanceStatus.RUNNING, inputs={}, last_event_seq=2
+    )
+    failure = QualityGateFailedError(
+        "gate failed", gate_step_id="analyze_requirements", duration_ms=137
+    )
+    service, repository, _, _ = _service(
+        instance=current, step_executor=_FakeStepExecutor(error=failure)
+    )
+
+    with pytest.raises(QualityGateFailedError):
+        await service.advance(workflow_id="wf_fake", definition=_DEFINITION)
+
+    assert repository.record_failed_attempt_calls[0]["error"] == {
+        "type": "QualityGateFailedError",
+        "message": "gate failed",
+        "durationMs": 137,
+    }
+
+
+@pytest.mark.asyncio
+async def test_an_unmeasured_failure_adds_no_duration_to_the_recorded_error() -> None:
+    """Zero regression for every other exception type: one that does
+    not measure itself contributes nothing, so the recorder's own
+    timestamp fallback is reached exactly as before."""
+    current = _instance(
+        workflow_id="wf_fake", status=WorkflowInstanceStatus.RUNNING, inputs={}, last_event_seq=2
+    )
+    service, repository, _, _ = _service(
+        instance=current, step_executor=_FakeStepExecutor(error=RuntimeError("boom"))
+    )
+
+    with pytest.raises(RuntimeError):
+        await service.advance(workflow_id="wf_fake", definition=_DEFINITION)
+
+    assert repository.record_failed_attempt_calls[0]["error"] == {
+        "type": "RuntimeError",
+        "message": "boom",
+    }
+
+
+@pytest.mark.asyncio
 async def test_advance_records_no_failed_attempt_when_the_executor_succeeds() -> None:
     """Zero regression, made explicit: a normal, successful advance
     never calls `record_failed_attempt` at all."""

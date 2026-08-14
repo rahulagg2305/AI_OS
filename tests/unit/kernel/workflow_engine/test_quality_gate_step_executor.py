@@ -130,6 +130,35 @@ class _FakeRepository:
         raise NotImplementedError("not exercised by these tests")
 
 
+class _SlowRepository(_FakeRepository):
+    """A `_FakeRepository` whose one real read genuinely takes time.
+
+    Needed because the gate's own work is otherwise sub-millisecond, and
+    a duration assertion against a sub-millisecond gate could not
+    distinguish a real measurement from the structural zero this ticket
+    exists to remove.
+    """
+
+    def __init__(self, records: list[WorkflowStepRecord], *, delay_seconds: float) -> None:
+        super().__init__(records)
+        self._delay_seconds = delay_seconds
+
+    async def list_steps(self, workflow_id: str) -> list[WorkflowStepRecord]:
+        await asyncio.sleep(self._delay_seconds)
+        return await super().list_steps(workflow_id)
+
+
+def _without_duration(outputs: dict[str, object]) -> dict[str, object]:
+    """Every assertion below compares the gate's own semantic outputs.
+
+    `P02-S06-M15-T11` added a real, measured `durationMs`, which is by
+    definition not a fixed value — asserting on it by equality would
+    make these tests time-dependent. Its realness is proven separately
+    and directly by `test_a_passing_gate_reports_a_real_measured_duration`.
+    """
+    return {k: v for k, v in outputs.items() if k != "durationMs"}
+
+
 @pytest.mark.asyncio
 async def test_a_passing_source_step_lets_the_gate_pass() -> None:
     repository = _FakeRepository([_step_record(step_name="test", outputs={"passed": True})])
@@ -137,7 +166,11 @@ async def test_a_passing_source_step_lets_the_gate_pass() -> None:
 
     outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
 
-    assert outputs == {"gateId": "quality-gate-tests-pass", "sourceStepId": "test", "passed": True}
+    assert _without_duration(outputs) == {
+        "gateId": "quality-gate-tests-pass",
+        "sourceStepId": "test",
+        "passed": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -171,7 +204,7 @@ async def test_a_gate_step_absent_from_gate_sources_passes_with_empty_outputs() 
 
     outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
 
-    assert outputs == {}
+    assert _without_duration(outputs) == {}
 
 
 @pytest.mark.asyncio
@@ -198,7 +231,11 @@ async def test_a_custom_success_field_is_honoured_not_just_the_default_passed() 
 
     outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
 
-    assert outputs == {"gateId": "quality-gate-tests-pass", "sourceStepId": "scan", "clean": True}
+    assert _without_duration(outputs) == {
+        "gateId": "quality-gate-tests-pass",
+        "sourceStepId": "scan",
+        "clean": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -237,7 +274,7 @@ async def test_a_registry_resolved_gate_reports_its_real_id_and_version_on_a_pas
 
     outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
 
-    assert outputs == {
+    assert _without_duration(outputs) == {
         "gateId": "se.build_tests_pass",
         "gateVersion": "0.1.0",
         "sourceStepId": "test",
@@ -290,7 +327,7 @@ async def test_a_resolved_warning_severity_gate_genuinely_records_a_failure_with
 
     outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
 
-    assert outputs == {
+    assert _without_duration(outputs) == {
         "gateId": "se.build_tests_pass",
         "gateVersion": "0.1.0",
         "sourceStepId": "test",
@@ -317,7 +354,7 @@ async def test_a_resolved_warning_severity_gate_still_reports_a_genuine_pass_pla
     # A genuine pass carries no "severity" key regardless of the gate's
     # own declared severity -- identical shape to a passing blocking
     # gate, since severity only ever changes the *failure* consequence.
-    assert outputs == {
+    assert _without_duration(outputs) == {
         "gateId": "se.build_tests_pass",
         "gateVersion": "0.1.0",
         "sourceStepId": "test",
@@ -362,7 +399,11 @@ async def test_a_gate_registry_with_no_matching_gate_ids_entry_falls_back_unchan
 
     outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
 
-    assert outputs == {"gateId": "quality-gate-tests-pass", "sourceStepId": "test", "passed": True}
+    assert _without_duration(outputs) == {
+        "gateId": "quality-gate-tests-pass",
+        "sourceStepId": "test",
+        "passed": True,
+    }
 
 
 class _SleepingGateRegistry:
@@ -531,3 +572,47 @@ class TestConcurrentMultiGateEvaluation:
 
         with pytest.raises(ValueError, match="no gate_registry"):
             await executor.execute(_MULTI_GATE_STEP, workflow_id="wf_fake")
+
+
+@pytest.mark.asyncio
+async def test_a_passing_gate_reports_a_real_measured_duration() -> None:
+    """`P02-S06-M15-T11`: `durationMs` is a genuine measurement.
+
+    The bar is deliberately "provably not the old constant": before this,
+    `duration_ms` was derived from `completed_at - started_at`, which both
+    real write paths stamp in the same statement, so it was structurally
+    always `0`. A gate made to take real time must therefore report real
+    time.
+    """
+    slow_repository = _SlowRepository(
+        [_step_record(step_name="test", outputs={"passed": True})], delay_seconds=0.05
+    )
+    executor = QualityGateStepExecutor(
+        slow_repository, gate_sources={"quality-gate-tests-pass": "test"}
+    )
+
+    outputs = await executor.execute(_GATE_STEP, workflow_id="wf_fake")
+
+    assert outputs["passed"] is True
+    assert isinstance(outputs["durationMs"], int)
+    # 50ms of real awaited delay cannot be reported as the old zero.
+    assert outputs["durationMs"] >= 40, outputs["durationMs"]
+
+
+@pytest.mark.asyncio
+async def test_a_blocking_failure_carries_its_duration_on_the_exception() -> None:
+    """The failure path is the one the outputs dict can never serve: a
+    blocking gate raises before any outputs exist, so the exception is
+    the only carrier its real duration has."""
+    slow_repository = _SlowRepository(
+        [_step_record(step_name="test", outputs={"passed": False})], delay_seconds=0.05
+    )
+    executor = QualityGateStepExecutor(
+        slow_repository, gate_sources={"quality-gate-tests-pass": "test"}
+    )
+
+    with pytest.raises(QualityGateFailedError) as caught:
+        await executor.execute(_GATE_STEP, workflow_id="wf_fake")
+
+    assert caught.value.duration_ms is not None
+    assert caught.value.duration_ms >= 40, caught.value.duration_ms

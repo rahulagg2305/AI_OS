@@ -679,7 +679,17 @@ async def test_all_six_agent_steps_and_both_gates_genuinely_chain_through_real_p
             assert row.severity == "blocking"
             assert row.metrics == {"attempt": 1}
             assert row.messages == []
-            assert row.duration_ms == 0  # honest: started_at == completed_at at this write path
+            # `P02-S06-M15-T11`: this column used to be a structural `0`
+            # — it was derived from `completed_at - started_at`, and both
+            # are stamped from one `occurred_at`. It now carries the
+            # gate's own measured duration, asserted against the value
+            # that gate genuinely published rather than a literal, which
+            # would be timing-dependent.
+            gate_outputs = next(s.outputs for s in steps if s.step_name == gate_step_id)
+            assert gate_outputs is not None
+            measured_ms = gate_outputs["durationMs"]
+            assert isinstance(measured_ms, int) and measured_ms >= 0, measured_ms
+            assert row.duration_ms == measured_ms
 
         doc_file = tmp_path / "solution.py.md"
         assert doc_file.is_file()

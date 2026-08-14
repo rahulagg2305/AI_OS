@@ -29,10 +29,45 @@ from ai_os_kernel.workflow_engine.input_validation import (
 )
 from ai_os_kernel.workflow_engine.instance import WorkflowInstance, WorkflowInstanceStatus
 from ai_os_kernel.workflow_engine.models import StepType, WorkflowDefinition, WorkflowStep
-from ai_os_kernel.workflow_engine.quality_gate import _latest_completed_output
+from ai_os_kernel.workflow_engine.quality_gate import _DURATION_MS_FIELD, _latest_completed_output
 from ai_os_kernel.workflow_engine.repository import WorkflowInstanceRepository
 from ai_os_kernel.workflow_engine.run_manifest_recorder import RunManifestRecorder
 from ai_os_kernel.workflow_engine.step_executor import StepExecutor
+
+
+def _step_error_detail(exc: Exception) -> dict[str, Any]:
+    """The real ``workflow_steps.error`` payload for a step whose
+    executor genuinely raised.
+
+    ``type``/``message`` are what every failure has always carried.
+
+    ``durationMs`` is added only when the exception measured itself
+    (``P02-S06-M15-T11``). A *blocking* quality gate raises before any
+    outputs exist, so this dict is the only carrier its real duration
+    has — without it :func:`~ai_os_kernel.workflow_engine.
+    gate_result_recorder._resolve_duration_ms` falls back to
+    ``completed_at - started_at``, and
+    :meth:`~ai_os_kernel.workflow_engine.repository.
+    WorkflowInstanceRepository.record_failed_attempt` stamps those two
+    columns from one ``occurred_at``, so the fallback is structurally
+    always ``0`` — precisely the hole that step exists to close.
+
+    Read generically via ``getattr`` rather than by checking for
+    :class:`~ai_os_kernel.workflow_engine.errors.QualityGateFailedError`:
+    this method is the failure path for *every* kind of step, and it
+    already refuses to special-case exception types (see ``retriable``/
+    ``step_id`` in :class:`~ai_os_kernel.workflow_engine.advance_runner.
+    WorkflowAdvanceRunner`). An exception that does not measure itself
+    simply contributes nothing and is completely unaffected.
+
+    ``bool`` is excluded explicitly because it is an ``int`` subclass in
+    Python, and ``True`` is not a duration.
+    """
+    detail: dict[str, Any] = {"type": type(exc).__name__, "message": str(exc)}
+    measured = getattr(exc, "duration_ms", None)
+    if isinstance(measured, int) and not isinstance(measured, bool) and measured >= 0:
+        detail[_DURATION_MS_FIELD] = measured
+    return detail
 
 
 class WorkflowInstanceService:
@@ -312,7 +347,7 @@ class WorkflowInstanceService:
                     definition_version=definition.version,
                     expected_current_step_id=instance.current_step_id,
                     step=next_step,
-                    error={"type": type(exc).__name__, "message": str(exc)},
+                    error=_step_error_detail(exc),
                 )
                 await self._maybe_record_gate_result(
                     workflow_id=workflow_id, definition=definition, step=next_step
