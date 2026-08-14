@@ -11,9 +11,9 @@
 
 This file is a rollup. **A normal development step must not read it** (`docs/process/standing_rules.md`): read only your own Task ticket and its direct dependencies.
 
-**Ticket-weighted completion: 94%** (264 of 282 Task-equivalents complete) — the share of *currently ticketed* work that is done. A `partial` Task counts half. This number moves very little late in a project: each newly discovered Task adds to the denominator as well as, eventually, the numerator.
+**Ticket-weighted completion: 94%** (265 of 282 Task-equivalents complete) — the share of *currently ticketed* work that is done. A `partial` Task counts half. This number moves very little late in a project: each newly discovered Task adds to the denominator as well as, eventually, the numerator.
 
-**Module-average completion: 61%** (2696 points across 44 modules, unweighted mean; 1704 points remain to 100%) — the share of the *system itself* that exists, from `feature_inventory.md`'s per-module table. A module reaches 100% only when the subsystem is genuinely complete, so this is the harder and more honest of the two.
+**Module-average completion: 62%** (2706 points across 44 modules, unweighted mean; 1694 points remain to 100%) — the share of the *system itself* that exists, from `feature_inventory.md`'s per-module table. A module reaches 100% only when the subsystem is genuinely complete, so this is the harder and more honest of the two.
 
 **Neither number alone is the answer, and the gap between them is the point.** Report both, every time (`docs/process/reporting_format.md`).
 
@@ -28,7 +28,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | P02 (B) | S01 Workflow Execution Core | 18 | 18 | 0 | 0 | 100% |
 | P02 (B) | S02 LLM Gateway | 12 | 12 | 0 | 0 | 100% |
 | P02 (B) | S03 Prompt and Context Assembly | 20 | 19 | 0 | 1 | 95% |
-| P02 (B) | S04 Knowledge, Memory and Retrieval | 20 | 15 | 0 | 5 | 75% |
+| P02 (B) | S04 Knowledge, Memory and Retrieval | 20 | 16 | 0 | 4 | 80% |
 | P02 (B) | S05 Capability Manager and Platform SDK | 20 | 20 | 0 | 0 | 100% |
 | P02 (B) | S06 Quality Gate Engine | 11 | 11 | 0 | 0 | 100% |
 | P02 (B) | S07 Platform Services and Error Model | 13 | 10 | 0 | 3 | 77% |
@@ -62,7 +62,7 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 | Phase | Tasks | Done | % |
 |---|---:|---:|---:|
 | P01 (Stage A) - Platform Skeleton | 48 | 48 | 100% |
-| P02 (Stage B) - Minimum Viable Kernel | 118 | 109 | 92% |
+| P02 (Stage B) - Minimum Viable Kernel | 118 | 110 | 93% |
 | P03 (Stage C) - First Real Capability Pack | 38 | 37 | 99% |
 | P04 (Stage D) - Evaluation and Multi-LLM Experimentation | 26 | 26 | 100% |
 | P05 (Stage E) - Project Intelligence | 11 | 9 | 82% |
@@ -73,9 +73,8 @@ This file is a rollup. **A normal development step must not read it** (`docs/pro
 
 ## Ready to start
 
-11 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
+10 Task(s) whose dependencies are all satisfied (Definition of Ready, `docs/process/ticket_templates.md`):
 
-- `P02-S04-M09-T06` Produce embeddings during indexing
 - `P02-S04-M09-T07` A real production caller for document ingestion
 - `P02-S04-M09-T08` Permission-aware knowledge retrieval
 - `P02-S04-M09-T09` Knowledge Version Manager

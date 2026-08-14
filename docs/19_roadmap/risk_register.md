@@ -1400,7 +1400,7 @@ executable `todo` tickets**:
 | Memory Manager 18% | `M10-T04`, `T05` | The package is one 18-line docstring-only `__init__.py` with zero classes; `MemoryService.write()` (§6's only mediated write path) does not exist; `provenance` is write-through, never computed |
 | Storage Service 25% | `M21-T02`, `T03` | No `StorageService` Protocol; zero production importers; no S3 adapter |
 | Caching 30% | `M23-T03`, `T04` | No `Cache` Protocol, no in-memory adapter; `ResponseCache` never called by production |
-| Knowledge Manager 40% | `M09-T06`–`T09` | `IndexingService` produces no embeddings; `index_document_file` has no production caller; no Access/Filter Layer; no Version Manager |
+| Knowledge Manager 40% | `M09-T07`–`T09` | ~~`IndexingService` produces no embeddings~~ (**closed 2026-08-14, `M09-T06`** — real opt-in in-line embedding, proven vector-searchable end to end); `index_document_file` has no production caller **and does not pass the three embedding parameters through, so nothing enables embedding in production yet**; no Access/Filter Layer; no Version Manager |
 | Quality Gate Engine 40% | `M15-T10`, `T11` | The package emits zero logs/metrics/spans (§5's Observability Hook); `gate_results.duration_ms` is honestly always `0` |
 
 Ready-to-start went **5 → 14**. **Ticket-weighted completion fell 96% →

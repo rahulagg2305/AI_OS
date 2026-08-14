@@ -54,6 +54,42 @@ storage. ``SqlKnowledgeWriter``'s own docstring explicitly assigns this
 computation to "whichever future Indexing Pipeline step calls this
 writer" — this one.
 
+**Embeddings are produced in-line, but only when configured
+(``P02-S04-M09-T06``).** Before that step this service produced no
+embeddings at all, so freshly-indexed content was keyword-searchable
+and never vector-searchable — a real caller wanting vector search had
+to compute and write vectors separately, and nothing did.
+:meth:`IndexingService.index_document` now calls the real, unchanged
+:func:`~ai_os_kernel.retrieval.embedding_writer.embed_chunk` once per
+freshly-written chunk, so the content is genuinely vector-searchable by
+the time the call returns.
+
+*Opt-in, because embedding is billable network work.* ``embedder``,
+``embedding_writer`` and ``embedding_model_alias`` are optional and
+must be supplied **together**; supply none (every caller that existed
+before this step) and the behaviour is byte-identical to before — no
+embed call, no cost, no new failure mode. The "all of them or none of
+them" rule is enforced at construction rather than silently degrading,
+the identical shape ``PlatformConfig``'s own three OIDC fields already
+establish. Product-owner decision, 2026-08-14.
+
+*Two real limitations, stated rather than discovered later.* First,
+**chunks and vectors commit in sequential transactions, not one.**
+ADR-0013 cites "transactional consistency between chunk metadata and
+vectors" as a property pgvector delivers, and this is its intent but
+not its literal letter: :class:`~ai_os_kernel.retrieval.
+embedding_writer.SqlEmbeddingWriter` opens its own transaction per
+embedding, and the alternative — holding one transaction open across N
+billable Gateway calls — is exactly what this codebase avoids elsewhere
+(:meth:`~ai_os_kernel.workflow_engine.service.WorkflowInstanceService.
+advance` runs executors "outside any database transaction" for this
+reason). Second, and following from it: **a failure partway through
+embedding leaves the document and its chunks committed with only some
+vectors written.** The error propagates rather than being swallowed —
+a silent partial index is worse than a loud one — so a caller sees the
+real failure, and the already-real archive-and-replace path makes
+re-indexing the same ``source_uri`` the recovery route.
+
 **``token_count`` is a disclosed, local approximation (~4 characters
 per token), not a real call to the provider token-counting endpoint**
 (:meth:`~ai_os_kernel.llm_gateway.adapters.anthropic.AnthropicAdapter.
@@ -75,8 +111,10 @@ import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ai_os_kernel.llm_gateway.gateway import Embedder
 from ai_os_kernel.persistence.knowledge_schema import documents as documents_table
 from ai_os_kernel.persistence.knowledge_writer import ChunkInput, DocumentRecord, KnowledgeWriter
+from ai_os_kernel.retrieval.embedding_writer import EmbeddingWriter, embed_chunk
 
 # Fixed, versioned chunking strategy id (data_model.md §7's own
 # "chunk_strategy_version stored per chunk" requirement) -- see this
@@ -114,6 +152,15 @@ class IndexResult(BaseModel):
     document: DocumentRecord | None
     skipped: bool
     superseded_document_id: str | None
+
+    embedded_chunk_count: int = 0
+    """How many chunks genuinely got a real vector written
+    (``P02-S04-M09-T06``). ``0`` when this service was built without an
+    embedder — which is a real, correct outcome, not a failure — and
+    equal to ``len(document.chunks)`` on a fully embedded write. Present
+    so a caller can tell "vector search will work over this" from
+    "keyword only", rather than having to query ``knowledge.embeddings``
+    to find out."""
 
 
 def chunk_content(
@@ -166,11 +213,43 @@ class IndexingService:
         writer: KnowledgeWriter,
         chunk_size: int = _CHUNK_SIZE_CHARS,
         chunk_overlap: int = _CHUNK_OVERLAP_CHARS,
+        embedder: Embedder | None = None,
+        embedding_writer: EmbeddingWriter | None = None,
+        embedding_model_alias: str | None = None,
     ) -> None:
+        """``embedder``/``embedding_writer``/``embedding_model_alias``
+        are the opt-in embedding seam (``P02-S04-M09-T06``) and must be
+        supplied together or not at all.
+
+        A partial set is refused here rather than silently treated as
+        "no embedding": a caller that passed two of the three plainly
+        wanted vectors, and quietly indexing without them would produce
+        exactly the keyword-only-index-that-looks-complete this ticket
+        exists to eliminate. ``embedding_model_alias`` is an *alias*,
+        never a literal model id — ADR-0002, and
+        search_vector_search.md §5's "models used for embedding must be
+        configuration-driven"; the real composed value lives in
+        ``bootstrap.py`` against ``config/llm.yaml``, not here.
+        """
+        embedding_parts = (embedder, embedding_writer, embedding_model_alias)
+        if any(part is not None for part in embedding_parts) and not all(
+            part is not None for part in embedding_parts
+        ):
+            raise IndexingError(
+                "embedder, embedding_writer and embedding_model_alias must be supplied "
+                "together (all three) or not at all — got "
+                f"embedder={embedder is not None}, "
+                f"embedding_writer={embedding_writer is not None}, "
+                f"embedding_model_alias={embedding_model_alias is not None}"
+            )
+
         self._engine = engine
         self._writer = writer
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
+        self._embedder = embedder
+        self._embedding_writer = embedding_writer
+        self._embedding_model_alias = embedding_model_alias
 
     async def index_document(
         self,
@@ -233,6 +312,49 @@ class IndexingService:
             chunks=chunks,
             project_id=project_id,
         )
+        embedded_chunk_count = await self._embed_document_chunks(document)
         return IndexResult(
-            document=document, skipped=False, superseded_document_id=superseded_document_id
+            document=document,
+            skipped=False,
+            superseded_document_id=superseded_document_id,
+            embedded_chunk_count=embedded_chunk_count,
         )
+
+    async def _embed_document_chunks(self, document: DocumentRecord) -> int:
+        """Write a real vector for each of ``document``'s freshly-written
+        chunks, via the real, unchanged
+        :func:`~ai_os_kernel.retrieval.embedding_writer.embed_chunk`.
+
+        Returns ``0`` immediately when no embedder was configured — the
+        pre-``P02-S04-M09-T06`` behaviour, unchanged and cost-free.
+
+        Chunks are embedded **sequentially, one Gateway call each**, not
+        concurrently: a burst of parallel embed calls over a large
+        document is exactly the kind of unthrottled provider load the
+        LLM Gateway's own rate limiting exists to prevent, and this
+        service has no budget or concurrency policy of its own to size
+        such a burst against.
+        """
+        if (
+            self._embedder is None
+            or self._embedding_writer is None
+            or self._embedding_model_alias is None
+        ):
+            return 0
+
+        embedded = 0
+        for chunk in document.chunks:
+            # Deliberately unguarded: a failure here propagates with the
+            # document and its earlier chunks already committed. See this
+            # module's own docstring — a loud partial index beats a
+            # silent one, and re-indexing the same `source_uri` is the
+            # real recovery path.
+            await embed_chunk(
+                gateway=self._embedder,
+                writer=self._embedding_writer,
+                chunk_id=chunk.chunk_id,
+                text=chunk.content,
+                model_alias=self._embedding_model_alias,
+            )
+            embedded += 1
+        return embedded
