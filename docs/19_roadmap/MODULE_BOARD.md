@@ -22,7 +22,7 @@ Module numbers are frozen (Phase R1). M35 (Analytics Pack) is permanently retire
 | M07 | Prompt Engine | P02 | 6 | 6 | 100% |
 | M08 | Context Manager | P02 | 14 | 13 | 93% |
 | M09 | Knowledge Manager | P02 | 9 | 5 | 56% |
-| M10 | Memory Manager | P02 | 5 | 2 | 40% |
+| M10 | Memory Manager | P02 | 5 | 4 | 80% |
 | M11 | Retrieval / Search & Vector Search | P02 | 6 | 6 | 100% |
 | M12 | Evaluation Engine | P04 | 16 | 16 | 100% |
 | M13 | Capability Manager | P02 | 8 | 8 | 100% |
