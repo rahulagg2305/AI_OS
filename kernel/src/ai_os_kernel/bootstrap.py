@@ -464,6 +464,7 @@ from ai_os_kernel.event_bus.outbox_relay import (
 )
 from ai_os_kernel.git_integration.default_service import build_git_integration_service_from_env
 from ai_os_kernel.health import ComponentStatus, GracefulShutdownCoordinator, HealthService
+from ai_os_kernel.knowledge_manager.ingestion import run_knowledge_ingestion
 from ai_os_kernel.knowledge_manager.query_engine import QueryEngine
 from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
     PROVIDER_NAME,
@@ -472,7 +473,7 @@ from ai_os_kernel.llm_gateway.adapters.anthropic_adapter import (
 from ai_os_kernel.llm_gateway.adapters.local_adapter import (
     PROVIDER_NAME as LOCAL_PROVIDER_NAME,
 )
-from ai_os_kernel.llm_gateway.adapters.local_adapter import build_local_adapter
+from ai_os_kernel.llm_gateway.adapters.local_adapter import LocalAdapter, build_local_adapter
 from ai_os_kernel.llm_gateway.adapters.model_config import LLMProviderConfig, load_provider_config
 from ai_os_kernel.llm_gateway.backoff import BackoffPolicy
 from ai_os_kernel.llm_gateway.budget_enforcer import (
@@ -509,11 +510,13 @@ from ai_os_kernel.persistence.catalog_schema import agents as catalog_agents
 from ai_os_kernel.persistence.catalog_schema import prompts as catalog_prompts
 from ai_os_kernel.persistence.engine import build_engine
 from ai_os_kernel.persistence.knowledge_keyword_search import SqlKeywordSearcher
+from ai_os_kernel.persistence.knowledge_writer import SqlKnowledgeWriter
 from ai_os_kernel.persistence.memory_writer import MemoryType, SqlMemoryStore
 from ai_os_kernel.persistence.settings import DatabaseSettings
 from ai_os_kernel.prompt_engine.catalog import SqlPromptCatalog
 from ai_os_kernel.prompt_engine.renderer import InMemoryPromptEngine
 from ai_os_kernel.prompted_completion import build_anthropic_prompted_completion_service
+from ai_os_kernel.retrieval.embedding_writer import SqlEmbeddingWriter
 from ai_os_kernel.retrieval.retrieval_service import RetrievalService
 from ai_os_kernel.retrieval.vector_search import SqlVectorSearcher
 from ai_os_kernel.routes.agents import router as agents_router
@@ -1209,6 +1212,31 @@ async def _build_prompted_agent_registry(engine: AsyncEngine) -> AgentRegistry:
     agent = PromptedAgent(service=service, max_output_tokens=_PROMPTED_AGENT_MAX_OUTPUT_TOKENS)
     logger.info("kernel.bootstrap.prompted_agent_registered", agent_id=_PROMPTED_AGENT_ID)
     return InMemoryAgentRegistry({_PROMPTED_AGENT_ID: agent})
+
+
+def _build_ingestion_embedder() -> LocalAdapter | None:
+    """The real ``Embedder`` the startup knowledge scan embeds with
+    (``P02-S04-M09-T07``), or ``None`` when no local embeddings server
+    is configured.
+
+    Built from a fresh ``load_provider_config()`` read, exactly as
+    :func:`_build_knowledge_resolver` below already does for the read
+    side — the identical "cheap to construct a second one" reasoning
+    :func:`_build_router` documents. ``None`` degrades ingestion to
+    keyword-only rather than refusing to ingest: indexed-but-unembedded
+    content is genuinely useful (every existing caller produced exactly
+    that until ``P02-S04-M09-T06``), whereas skipping ingestion because
+    embedding is unavailable would lose real content over an optional
+    enrichment.
+    """
+    provider_config = load_provider_config(Path.cwd() / "config" / "llm.yaml")
+    if provider_config.local_base_url is None:
+        return None
+    return build_local_adapter(
+        base_url=provider_config.local_base_url,
+        router=_build_router(provider_config),
+        pricing=provider_config.pricing,
+    )
 
 
 def _build_knowledge_resolver(engine: AsyncEngine) -> KnowledgeResolver | None:
@@ -2002,6 +2030,44 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         app.state.outbox_relay_task = outbox_relay_task
         shutdown_coordinator.register_task("outbox_relay", outbox_relay_task)
+        # Knowledge Ingestion's real startup scan (`P02-S04-M09-T07`) —
+        # what makes knowledge_manager.md §4's "ingest knowledge from
+        # approved sources" automatic rather than merely callable.
+        # Gated on real configuration, so `None` (every environment
+        # today) starts nothing at all: this reads the filesystem and,
+        # when embedding is configured, spends real money, so it must
+        # never begin because a default said so.
+        #
+        # A one-shot task, not a loop: re-ingesting on an interval would
+        # re-walk the tree forever for content that changes only when
+        # someone edits a file. Registered with the shutdown coordinator
+        # anyway, so a shutdown during a long first scan cancels it
+        # cleanly rather than being waited out.
+        #
+        # Embedding is passed through only when a real local embeddings
+        # server is configured; otherwise ingestion still runs, producing
+        # keyword-searchable content (see `_build_ingestion_embedder`).
+        # All three embedding arguments move together, and
+        # `IndexingService` is the single authority enforcing that.
+        knowledge_source_dirs = app.state.config.knowledge_source_dirs
+        if knowledge_source_dirs:
+            ingestion_embedder = _build_ingestion_embedder()
+            knowledge_ingestion_task = asyncio.create_task(
+                run_knowledge_ingestion(
+                    knowledge_source_dirs,
+                    engine=engine,
+                    writer=SqlKnowledgeWriter(engine),
+                    embedder=ingestion_embedder,
+                    embedding_writer=(
+                        SqlEmbeddingWriter(engine) if ingestion_embedder is not None else None
+                    ),
+                    embedding_model_alias=(
+                        _KNOWLEDGE_EMBEDDING_MODEL_ALIAS if ingestion_embedder is not None else None
+                    ),
+                )
+            )
+            app.state.knowledge_ingestion_task = knowledge_ingestion_task
+            shutdown_coordinator.register_task("knowledge_ingestion", knowledge_ingestion_task)
         # The multi-instance worker loop's own real background loop
         # (P02-S01-M05-T14) — the first of the four P02-S01-M05-T09
         # through T12 "proven, unused" capabilities to move to "proven,

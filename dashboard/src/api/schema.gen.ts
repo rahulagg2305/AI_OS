@@ -1336,6 +1336,8 @@ export interface components {
              * @default 127.0.0.1
              */
             host: string;
+            /** Knowledge Source Dirs */
+            knowledge_source_dirs?: string[] | null;
             /** Lease Reap Interval Seconds */
             lease_reap_interval_seconds?: number | null;
             /**

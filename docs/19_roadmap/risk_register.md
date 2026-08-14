@@ -56,7 +56,7 @@ to that rule, not as evidence it failed.
 | R-016 | No persisted terminal `failed` state; the worker loop retries every step failure unboundedly, forever | M | **Closed** 2026-08-13 (`P02-S01-M05-T17`) — bounded by a platform-default `RetryPolicy`, `failed` now genuinely written | Product owner, 2026-08-10 |
 | R-017 | Manifest-declared Tools were unreachable in production — no caller ever passed a `ToolRegistry` | M | **Closed** 2026-08-11 (`P02-S05-M18-T04`) | — |
 | R-019 | The roadmap ran out of work while the system was 60% built — 0 `todo` tickets across all 264, and the biggest real block (Stage B, 626 module-points) had none | M | **Open — substantially addressed 2026-08-13**: 19 partials re-verified (11 closed, 8 kept, 5 new `todo`), then Stage B planned for its five deepest modules (12 new `todo`, ~347 of 626 points, 7 flagged "expect a design fork"). Ready-to-start 0 → 14; ticket-weighted 96% → 92% as invisible work became counted. Closes when Stage B is planned in full — ~279 points across 11 further modules remain unticketed | Partial-ticket re-verification, 2026-08-13 |
-| R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3, 5 and 8 now closed; 5 further Kernel packages added 2026-08-11; item 8 added *and* closed 2026-08-12, and showed the sweep must measure per module, not per package) | M | **Open — items 4, 6 and 7 formally accepted as disclosed gaps; item 7's five packages re-verified 2026-08-13 and now enforced by `tests/contract/test_production_reachability.py`, which fails in both directions** | Health audit, 2026-08-11 |
+| R-018 | "Proven but idle": real, tested subsystems with zero production reachability (items 1–3, 5 and 8 now closed; 5 further Kernel packages added 2026-08-11; item 8 added *and* closed 2026-08-12, and showed the sweep must measure per module, not per package) | M | **Open — items 4, 6 and 7 formally accepted as disclosed gaps. Item 7 is down to four packages: `document_processing` closed 2026-08-14 (`P02-S04-M09-T07`, a real ingestion caller now imports it), leaving `caching`, `memory_manager`, `speech_gateway`, `storage_service`. Enforced by `tests/contract/test_production_reachability.py`, which fails in both directions — and genuinely did catch this closure in the same step** | Health audit, 2026-08-11 |
 | R-020 | A Task can be marked `done` without its verification ever having been run, and a ticket can claim behaviour the production code does not have. Found 2026-08-14 on the first Stage B batch, left uncommitted: `mypy --strict` failed (3 errors), a stale `assert duration_ms == 0` failed, and `P02-S06-M15-T11`'s own "the recorder reads outputs, then error" was false — `advance` built its error payload as `{type, message}`, so a blocking gate's measured duration was written and never read. Its integration test passed only because it hand-built an error dict production never produces | M | **Open** — all four defects fixed 2026-08-14 before landing, and a hand-built fixture standing in for a real produced shape is now the specific tell to look for. Uncommitted work is invisible to CI, so nothing caught any of it; closes when a `done` flip is gated on evidence rather than assertion | Verification step, 2026-08-14 |
 
 ---
@@ -1276,7 +1276,7 @@ Genuine instances, worst first:
    | Package | Real code | Production importers | Where it is already disclosed |
    |---|---|---|---|
    | `caching` | 4 files (`ResponseCache`, `RedisSettings`) | **0** — `ResponseCache(` is never constructed in production | module 23: "Not wired into `llm_gateway.gateway`'s real call path yet" |
-   | `document_processing` | 7 files, 8 classes | **0** | module 26: "not wired into any real production composition/route" |
+   | ~~`document_processing`~~ | 7 files, 8 classes | **CLOSED 2026-08-14 (`P02-S04-M09-T07`)** | The real knowledge-ingestion startup scan (`knowledge_manager/ingestion.py`, started by `bootstrap._lifespan`) imports it from a genuine production path. Dropped from `KNOWN_IDLE_PACKAGES` in `tests/contract/test_production_reachability.py` — which is the test that caught this, in the same step, exactly as designed. Four packages remain idle. |
    | `speech_gateway` | 5 files, 14 classes | **0** | module 25: "no real caller exists" |
    | `storage_service` | 3 files (`LocalFilesystemArtifactStore`) | **0** | module 21: "nothing in a real Kernel composition constructs this store yet" |
    | `memory_manager` | 1 file, **0 classes** — a docstring-only `__init__.py`; the real store is `persistence/memory_writer.py`'s `SqlMemoryStore` | **0** | `memory_manager.md`: "`memory_manager/` itself is still a docstring-only `__init__.py`" |
@@ -1310,6 +1310,17 @@ Genuine instances, worst first:
    5); and `memory_manager` is a docstring-only `__init__.py` with no
    classes at all — "wiring" it would mean building promotion logic,
    which `feature_inventory.md` already tracks as separately unbuilt.
+
+   **Two of those five reasons have since expired, and each was closed
+   by the step that made it false.** `document_processing`'s "needs an
+   ingestion caller that does not exist" ended 2026-08-14
+   (`P02-S04-M09-T07`) — that caller now exists and imports it, so the
+   package is no longer idle. `memory_manager`'s "docstring-only with no
+   classes at all" ended the same day (`P02-S04-M10-T04`) — it now holds
+   a real `MemoryService`, though it remains idle for a *different* and
+   still-open reason: no production caller writes memory, because no
+   document decides the write trigger. `storage_service`'s half of the
+   ingestion reason is untouched and still true.
 
    `bootstrap.py`'s apparent mentions of `caching` and `memory_manager`
    are **comments only**, not wirings. One package the same sweep flagged
@@ -1400,7 +1411,7 @@ executable `todo` tickets**:
 | Memory Manager 18% | `M10-T04`, `T05` | The package is one 18-line docstring-only `__init__.py` with zero classes; `MemoryService.write()` (§6's only mediated write path) does not exist; `provenance` is write-through, never computed |
 | Storage Service 25% | `M21-T02`, `T03` | No `StorageService` Protocol; zero production importers; no S3 adapter |
 | Caching 30% | `M23-T03`, `T04` | No `Cache` Protocol, no in-memory adapter; `ResponseCache` never called by production |
-| Knowledge Manager 40% | `M09-T07`–`T09` | ~~`IndexingService` produces no embeddings~~ (**closed 2026-08-14, `M09-T06`** — real opt-in in-line embedding, proven vector-searchable end to end); `index_document_file` has no production caller **and does not pass the three embedding parameters through, so nothing enables embedding in production yet**; no Access/Filter Layer; no Version Manager |
+| Knowledge Manager 55% | `M09-T08`–`T09` | ~~`IndexingService` produces no embeddings~~ (**closed 2026-08-14, `M09-T06`**); ~~`index_document_file` has no production caller and does not pass the three embedding parameters through~~ (**closed 2026-08-14, `M09-T07`** — a real startup scan in `bootstrap._lifespan`, gated on `knowledge_source_dirs`, forwarding all three embedding parameters; proven automatic by a real `_lifespan` test); no Access/Filter Layer; no Version Manager |
 | Quality Gate Engine 40% | `M15-T10`, `T11` | The package emits zero logs/metrics/spans (§5's Observability Hook); `gate_results.duration_ms` is honestly always `0` |
 
 Ready-to-start went **5 → 14**. **Ticket-weighted completion fell 96% →
@@ -1468,11 +1479,19 @@ a commit message is a decision that will be re-litigated.
 
 - **PDF and DOCX parsing.** Both need a real new third-party runtime
   dependency (`pypdf`, `python-docx` or equivalent). Declined for now on
-  one concrete ground, not general caution: `document_processing` has
-  **zero production importers** (R-018 item 7, re-verified 2026-08-13
-  and now machine-checked), so adding two supply-chain dependencies
-  would extend the platform's licence and vulnerability surface for code
-  no running process can reach. Routing extraction through the existing
+  one concrete ground, not general caution: `document_processing` had
+  **zero production importers** (R-018 item 7), so adding two
+  supply-chain dependencies would extend the platform's licence and
+  vulnerability surface for code no running process can reach.
+  **⚠ That ground expired 2026-08-14 (`P02-S04-M09-T07`): the stated
+  revisit condition below is now met.** The real knowledge-ingestion
+  startup scan imports `document_processing` from a genuine production
+  path, so `document_processing` is no longer idle and a PDF/DOCX
+  adapter would now buy something reachable — every `.pdf`/`.docx` under
+  a configured `knowledge_source_dirs` root is currently counted as
+  `skipped_unsupported` and silently not ingested. Adding the
+  dependencies remains a **product-owner decision that has not been
+  taken**, recorded here rather than acted on. Routing extraction through the existing
   Docker sandbox was also considered and declined as far larger than an
   adapter — it needs an image, an I/O contract, and would make document
   parsing depend on Docker being available. The honest

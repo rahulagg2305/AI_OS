@@ -1218,6 +1218,20 @@
             "title": "Host",
             "type": "string"
           },
+          "knowledge_source_dirs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Source Dirs"
+          },
           "lease_reap_interval_seconds": {
             "anyOf": [
               {

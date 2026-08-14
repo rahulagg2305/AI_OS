@@ -28,7 +28,9 @@ from ai_os_kernel.document_processing.format_detector import (
 )
 from ai_os_kernel.document_processing.service import parse_document
 from ai_os_kernel.knowledge_manager.indexing import IndexingService, IndexResult
+from ai_os_kernel.llm_gateway.gateway import Embedder
 from ai_os_kernel.persistence.knowledge_writer import KnowledgeWriter
+from ai_os_kernel.retrieval.embedding_writer import EmbeddingWriter
 
 # A real, documented mapping from this package's own closed format
 # vocabulary to a real MIME-style `media_type` string — the identical
@@ -51,6 +53,9 @@ async def index_document_file(
     writer: KnowledgeWriter,
     trust: Literal["trusted", "untrusted"],
     project_id: str | None = None,
+    embedder: Embedder | None = None,
+    embedding_writer: EmbeddingWriter | None = None,
+    embedding_model_alias: str | None = None,
 ) -> IndexResult:
     """Parses ``path`` for real (:func:`~ai_os_kernel.document_processing.
     service.parse_document`) and indexes the result through the real,
@@ -64,10 +69,27 @@ async def index_document_file(
     this function invents — whether a given file is trusted content
     depends on where it came from (a team-authored spec vs. an ingested
     repository), a real fact this function has no way to infer from
-    the file itself (ADR-0016's own provenance-tagging principle)."""
+    the file itself (ADR-0016's own provenance-tagging principle).
+
+    ``embedder``/``embedding_writer``/``embedding_model_alias`` are
+    forwarded straight to :class:`~ai_os_kernel.knowledge_manager.
+    indexing.IndexingService` (``P02-S04-M09-T07``), which enforces its
+    own "all three together or none" rule — deliberately not
+    re-validated here, so there is exactly one place that decides what a
+    valid embedding configuration is. Added because `P02-S04-M09-T06`
+    built the in-line embedding seam and this glue could not reach it:
+    freshly-ingested files would have been keyword-searchable only, no
+    matter how the caller was configured.
+    """
     parsed = parse_document(path)
     media_type = _MEDIA_TYPE_BY_FORMAT[parsed.format]
-    service = IndexingService(engine=engine, writer=writer)
+    service = IndexingService(
+        engine=engine,
+        writer=writer,
+        embedder=embedder,
+        embedding_writer=embedding_writer,
+        embedding_model_alias=embedding_model_alias,
+    )
     return await service.index_document(
         source_uri=parsed.source,
         content=parsed.text,

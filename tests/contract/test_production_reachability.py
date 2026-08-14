@@ -48,14 +48,19 @@ PRODUCTION_ROOTS = (
     REPO_ROOT / "platform_sdk" / "src",
 )
 
-# The five packages risk register R-018 item 7 names, re-verified as
+# The packages risk register R-018 item 7 names, re-verified as
 # genuinely idle on 2026-08-13. Each is real, tested code that no
 # production composition constructs. See the risk register for the
 # per-package reasoning on why each remains disclosed rather than wired.
+#
+# `document_processing` was removed 2026-08-14 (`P02-S04-M09-T07`): the
+# real knowledge-ingestion startup scan in `bootstrap._lifespan` now
+# imports it from a genuine production path, so it is no longer idle.
+# This test caught that in the same step, exactly as intended — four
+# remain.
 KNOWN_IDLE_PACKAGES = frozenset(
     {
         "caching",
-        "document_processing",
         "memory_manager",
         "speech_gateway",
         "storage_service",

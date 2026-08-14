@@ -33,6 +33,24 @@ class PlatformConfig(BaseModel):
     capability_pack_dirs: list[str] = Field(default_factory=lambda: ["capability_packs"])
     """Directories scanned for Capability Packs (filesystem-scan discovery, ADR-0009)."""
 
+    knowledge_source_dirs: list[str] | None = None
+    """Directories the Knowledge Manager ingests at startup
+    (`P02-S04-M09-T07`) — the identical configuration-driven
+    filesystem-scan shape ``capability_pack_dirs`` above already
+    establishes for Capability Packs (ADR-0009).
+    ``knowledge/knowledge_base_structure.md`` §3 fixes *what* is
+    ingestible ("the Constitution, architecture documents, and ADRs live
+    in `docs/` and are ingested by the Knowledge Manager from there"),
+    so this field carries only *which* of those roots a given
+    environment actually wants — never a hardcoded path in code.
+    ``None`` (every environment today) means **no ingestion runs at
+    all**: the "unconfigured means the real feature does not start"
+    shape ``notification_webhook_url``/``oidc_issuer`` already
+    establish, chosen deliberately here because ingestion reads the
+    filesystem and, when embedding is also configured, spends real
+    money — neither should begin because a default said so.
+    Deliberately **not** a default of ``["docs"]``."""
+
     manifest_trust_store_dir: str | None = None
     """Directory of Ed25519 PEM **public** keys used to verify detached
     pack-manifest signatures (FR-117, `P01-S03-M28-T02`). Deliberately a
